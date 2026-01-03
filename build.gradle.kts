@@ -1,13 +1,16 @@
 plugins {
     id("java")
+    id("com.gradleup.shadow") version "9.3.0"
 }
 
 group = "org.example"
 version = "1.0-SNAPSHOT"
 
+val javaVersion: Int = if (project.hasProperty("javaVersion")) (project.property("javaVersion") as String).toInt() else 25
+
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
+        languageVersion.set(JavaLanguageVersion.of(javaVersion))
     }
 }
 
@@ -34,5 +37,12 @@ tasks.test {
         if (project.hasProperty("disableLocal")) {
             excludeTags("local")
         }
+    }
+}
+
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+    archiveClassifier.set("")
+    manifest {
+        attributes("Main-Class" to "riid.app.Main")
     }
 }
