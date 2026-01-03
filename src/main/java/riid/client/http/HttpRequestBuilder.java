@@ -21,6 +21,15 @@ public final class HttpRequestBuilder {
         }
     }
 
+    public static URI buildUri(String scheme, String host, int port, String path, String query) {
+        try {
+            String normalizedPath = path.startsWith("/") ? path : "/" + path;
+            return new URI(scheme, null, host, port, normalizedPath, query, null);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Invalid URI parts", e);
+        }
+    }
+
     public static Map<String, String> withRange(Map<String, String> headers, String rangeValue) {
         Objects.requireNonNull(rangeValue, "range");
         headers.put("Range", rangeValue);

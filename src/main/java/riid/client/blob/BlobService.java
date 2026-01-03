@@ -1,5 +1,6 @@
 package riid.client.blob;
 
+import riid.cache.CacheAdapter;
 import riid.client.auth.AuthService;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
@@ -22,17 +23,24 @@ import java.util.Optional;
 /**
  * Downloads blobs with optional Range and on-the-fly SHA256 validation.
  */
-public final class BlobService {
+public class BlobService {
     private final HttpExecutor http;
     private final AuthService authService;
+    private final CacheAdapter cacheAdapter;
 
     public BlobService(HttpExecutor http, AuthService authService) {
+        this(http, authService, null);
+    }
+
+    public BlobService(HttpExecutor http, AuthService authService, CacheAdapter cacheAdapter) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
+        this.cacheAdapter = cacheAdapter;
     }
 
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, File target, String scope) {
         Objects.requireNonNull(target, "target file");
+
         URI uri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), RegistryApi.blobPath(req.repository(), req.digest()));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
@@ -49,7 +57,16 @@ public final class BlobService {
             validateDigest(digest, req.digest());
             validateSize(target, expectedSize);
             String mediaType = resp.headers().firstValue("Content-Type").orElse(req.mediaType());
-            return new BlobResult(digest, target.length(), mediaType, target.getAbsolutePath());
+            String path = target.getAbsolutePath();
+            if (cacheAdapter != null) {
+                try (FileInputStream fin = new FileInputStream(target)) {
+                    String cachedPath = cacheAdapter.put(digest, fin, target.length(), mediaType);
+                    if (cachedPath != null && !cachedPath.isBlank()) {
+                        path = cachedPath;
+                    }
+                }
+            }
+            return new BlobResult(digest, target.length(), mediaType, path);
         } catch (IOException e) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Blob IO error"),
