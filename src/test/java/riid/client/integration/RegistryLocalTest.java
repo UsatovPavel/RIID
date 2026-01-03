@@ -1,6 +1,7 @@
 package riid.client.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.client.auth.AuthService;
 import riid.client.auth.TokenCache;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 3) Run this test:
  *    ./gradlew test --tests 'riid.client.integration.RegistryLocalTest'
  */
+@Tag("local")
 public class RegistryLocalTest {
 
     private static final RegistryEndpoint LOCAL = new RegistryEndpoint("http", "localhost", 5000, null);

@@ -14,5 +14,5 @@ jobs:
           cache: gradle
       - name: Make gradlew executable
         run: chmod +x gradlew
-      - name: Unit tests
-        run: ./gradlew test
+      - name: Unit tests 
+        run: ./gradlew test -PdisableLocal

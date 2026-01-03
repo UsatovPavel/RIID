@@ -31,5 +31,8 @@ tasks.test {
         if (!project.hasProperty("includeStress")) {
             excludeTags("stress")
         }
+        if (project.hasProperty("disableLocal")) {
+            excludeTags("local")
+        }
     }
 }
