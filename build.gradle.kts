@@ -27,5 +27,9 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        if (!project.hasProperty("includeStress")) {
+            excludeTags("stress")
+        }
+    }
 }

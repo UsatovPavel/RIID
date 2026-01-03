@@ -1,4 +1,4 @@
-package riid.client;
+package riid.client.unit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Disabled;
