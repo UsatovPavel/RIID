@@ -3,8 +3,8 @@ plugins {
     id("com.gradleup.shadow") version "9.3.0"
 }
 
-group = "org.example"
-version = "1.0-SNAPSHOT"
+group = "hse.ru"
+version = "0.1-PROTOTYPE"
 
 val javaVersion: Int = if (project.hasProperty("javaVersion")) (project.property("javaVersion") as String).toInt() else 25
 
