@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 
@@ -86,7 +87,7 @@ class AuthServiceTest {
 
     private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body) throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
-        byte[] bytes = body.getBytes();
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);

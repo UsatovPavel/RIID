@@ -1,7 +1,11 @@
 SHELL := /bin/bash
 
-.PHONY: test test-client
+.PHONY: test test-client build check
 # don't use $(VAR)(hard to understand), only if really need
+check:
+	./gradlew check 
+clean_check:
+	./gradlew clean check spotbugsMain spotbugsTest jacocoTestReport
 test:
 	./gradlew test
 	./gradlew test --tests 'riid.client.integration.StressTest' -PincludeStress

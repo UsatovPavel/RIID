@@ -21,6 +21,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Map;
 import java.util.Optional;
@@ -40,7 +41,7 @@ class BlobServiceTest {
 
     @Test
     void downloadsBlobWithDigestValidation() throws Exception {
-        byte[] data = "hello-blob".getBytes();
+        byte[] data = "hello-blob".getBytes(StandardCharsets.UTF_8);
         String digest = "sha256:" + sha256(data);
         setupServer(exchange -> {
             if ("HEAD".equals(exchange.getRequestMethod())) {
@@ -81,7 +82,7 @@ class BlobServiceTest {
 
     @Test
     void missingContentLengthFails() throws Exception {
-        byte[] data = "no-length".getBytes();
+        byte[] data = "no-length".getBytes(StandardCharsets.UTF_8);
         String digest = "sha256:" + sha256(data);
         setupServer(exchange -> {
             // respond without Content-Length (chunked)
@@ -106,8 +107,8 @@ class BlobServiceTest {
 
     @Test
     void digestMismatchFails() throws Exception {
-        byte[] data = "body".getBytes();
-        String expectedDigest = "sha256:" + sha256("other".getBytes()); // wrong digest
+        byte[] data = "body".getBytes(StandardCharsets.UTF_8);
+        String expectedDigest = "sha256:" + sha256("other".getBytes(StandardCharsets.UTF_8)); // wrong digest
         setupServer(exchange -> {
             exchange.getResponseHeaders().add("Content-Length", String.valueOf(data.length));
             exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");

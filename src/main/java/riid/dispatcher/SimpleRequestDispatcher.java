@@ -1,5 +1,6 @@
 package riid.dispatcher;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
@@ -16,6 +17,7 @@ import java.util.concurrent.Semaphore;
 /**
  * Simple dispatcher: cache -> P2P -> registry (registry concurrency limit is configurable).
  */
+@SuppressFBWarnings({"EI_EXPOSE_REP2"})
 public class SimpleRequestDispatcher implements RequestDispatcher {
     private static final Logger log = LoggerFactory.getLogger(SimpleRequestDispatcher.class);
 
@@ -74,7 +76,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     cache.put(riid.cache.ImageDigest.parse(blob.digest()),
                             riid.cache.CachePayload.of(tmp.toPath(), tmp.length()),
                             riid.cache.CacheMediaType.from(blob.mediaType()));
-                } catch (Exception ignored) {
+                } catch (Exception ex) {
+                    log.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
                 }
             }
             if (p2p != null) {

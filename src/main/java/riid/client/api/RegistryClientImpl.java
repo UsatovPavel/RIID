@@ -1,6 +1,7 @@
 package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import riid.cache.CacheAdapter;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.service.AuthService;
@@ -27,12 +28,15 @@ import java.util.Optional;
  * Default RegistryClient implementation.
  */
 public final class RegistryClientImpl implements RegistryClient {
+    @SuppressWarnings("PMD.CloseResource")
+    private static final String PULL_SCOPE_TEMPLATE = "repository:%s:pull";
+
     private final RegistryEndpoint endpoint;
     private final HttpExecutor http;
     private final AuthService authService;
     private final ManifestService manifestService;
     private final BlobService blobService;
-    private final CacheAdapter cacheAdapter;
+    private final CacheAdapter cache;
     private final ObjectMapper mapper;
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
@@ -45,31 +49,31 @@ public final class RegistryClientImpl implements RegistryClient {
         this.authService = new AuthService(http, mapper, new TokenCache());
         this.manifestService = new ManifestService(http, authService, mapper);
         this.blobService = new BlobService(http, authService, cacheAdapter);
-        this.cacheAdapter = cacheAdapter;
+        this.cache = cacheAdapter;
     }
 
     @Override
     public ManifestResult fetchManifest(String repository, String reference) {
-        String scope = "repository:%s:pull".formatted(repository);
+        String scope = PULL_SCOPE_TEMPLATE.formatted(repository);
         return manifestService.fetchManifest(endpoint, repository, reference, scope);
     }
 
     @Override
     public BlobResult fetchConfig(String repository, Manifest manifest, File target) {
-        String scope = "repository:%s:pull".formatted(repository);
+        String scope = PULL_SCOPE_TEMPLATE.formatted(repository);
         BlobRequest req = new BlobRequest(repository, manifest.config().digest(), manifest.config().size(), manifest.config().mediaType());
         return blobService.fetchBlob(endpoint, req, target, scope);
     }
 
     @Override
     public BlobResult fetchBlob(BlobRequest request, File target) {
-        String scope = "repository:%s:pull".formatted(request.repository());
+        String scope = PULL_SCOPE_TEMPLATE.formatted(request.repository());
         return blobService.fetchBlob(endpoint, request, target, scope);
     }
 
     @Override
     public Optional<Long> headBlob(String repository, String digest) {
-        String scope = "repository:%s:pull".formatted(repository);
+        String scope = PULL_SCOPE_TEMPLATE.formatted(repository);
         return blobService.headBlob(endpoint, repository, digest, scope);
     }
 
@@ -99,7 +103,7 @@ public final class RegistryClientImpl implements RegistryClient {
 
     @Override
     public CacheAdapter cacheAdapter() {
-        return cacheAdapter;
+        return cache;
     }
 }
 

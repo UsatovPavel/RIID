@@ -17,5 +17,8 @@ public record Manifest(
         @JsonProperty("config") Descriptor config,
         @JsonProperty("layers") List<Descriptor> layers
 ) {
+    public Manifest {
+        layers = layers == null ? List.of() : List.copyOf(layers);
+    }
 }
 

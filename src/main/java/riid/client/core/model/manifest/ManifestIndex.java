@@ -16,5 +16,8 @@ public record ManifestIndex(
         @JsonProperty("mediaType") String mediaType,
         @JsonProperty("manifests") List<ManifestRef> manifests
 ) {
+    public ManifestIndex {
+        manifests = manifests == null ? List.of() : List.copyOf(manifests);
+    }
 }
 

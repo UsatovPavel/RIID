@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,7 @@ class RegistryClientImplTest {
 
     @Test
     void fetchManifestBlobAndTagsSuccess() throws Exception {
-        byte[] layer = "layer-data".getBytes();
+        byte[] layer = "layer-data".getBytes(StandardCharsets.UTF_8);
         String layerDigest = "sha256:" + sha256(layer);
         Manifest manifest = manifest(layerDigest, layer.length);
         byte[] manifestBytes = new ObjectMapper().writeValueAsBytes(manifest);
@@ -145,7 +146,7 @@ class RegistryClientImplTest {
     }
 
     private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body) throws IOException {
-        respond(exchange, status, headers, body.getBytes());
+        respond(exchange, status, headers, body.getBytes(StandardCharsets.UTF_8));
     }
 
     private void respond(HttpExchange exchange, int status, Map<String, String> headers, byte[] body) throws IOException {
