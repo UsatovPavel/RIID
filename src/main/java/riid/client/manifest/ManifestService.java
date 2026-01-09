@@ -1,6 +1,8 @@
 package riid.client.manifest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import riid.client.auth.AuthService;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
@@ -29,6 +31,7 @@ import java.util.Optional;
  * Fetches and validates manifests.
  */
 public final class ManifestService {
+    private static final Logger log = LoggerFactory.getLogger(ManifestService.class);
     private static final List<String> ACCEPT = List.of(
             MediaTypes.OCI_IMAGE_MANIFEST,
             MediaTypes.DOCKER_MANIFEST_V2,
@@ -101,8 +104,20 @@ public final class ManifestService {
                     "Manifest HEAD failed: " + resp.statusCode());
         }
         String dcd = resp.headers().firstValue("Docker-Content-Digest").orElse(null);
+        if (dcd == null || dcd.isBlank()) {
+            log.warn("Manifest HEAD missing Docker-Content-Digest for {}/{}", repository, reference);
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Docker-Content-Digest on manifest HEAD"),
+                    "Missing Docker-Content-Digest on manifest HEAD");
+        }
         String mediaType = resp.headers().firstValue("Content-Type").orElse(null);
         long len = resp.headers().firstValueAsLong("Content-Length").orElse(-1);
+        if (len <= 0) {
+            log.warn("Manifest HEAD missing Content-Length for {}/{}", repository, reference);
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length on manifest HEAD"),
+                    "Missing Content-Length on manifest HEAD");
+        }
         return Optional.of(new ManifestResult(dcd, mediaType, len, null));
     }
 

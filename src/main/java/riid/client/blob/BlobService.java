@@ -1,5 +1,7 @@
 package riid.client.blob;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
 import riid.client.auth.AuthService;
 import riid.client.core.config.RegistryEndpoint;
@@ -24,6 +26,8 @@ import java.util.Optional;
  * Downloads blobs with optional Range and on-the-fly SHA256 validation.
  */
 public class BlobService {
+    private static final Logger log = LoggerFactory.getLogger(BlobService.class);
+
     private final HttpExecutor http;
     private final AuthService authService;
     private final CacheAdapter cacheAdapter;
@@ -52,6 +56,12 @@ public class BlobService {
         }
 
         long expectedSize = req.expectedSize() != null ? req.expectedSize() : resp.headers().firstValueAsLong("Content-Length").orElse(-1);
+        if (expectedSize <= 0) {
+            log.warn("Missing Content-Length for blob {}", req.digest());
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length for blob"),
+                    "Missing Content-Length for blob download");
+        }
         try (InputStream is = resp.body(); FileOutputStream fos = new FileOutputStream(target)) {
             String digest = writeAndHashStreaming(is, fos);
             validateDigest(digest, req.digest());
@@ -99,6 +109,7 @@ public class BlobService {
 
     private void validateDigest(String computed, String expected) {
         if (expected != null && !expected.isBlank() && !expected.equals(computed)) {
+            log.warn("Blob digest mismatch: expected {}, got {}", expected, computed);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob digest mismatch"),
                     "Blob digest mismatch: expected %s, got %s".formatted(expected, computed));
@@ -107,6 +118,7 @@ public class BlobService {
 
     private void validateSize(File target, long expected) {
         if (expected > 0 && target.length() != expected) {
+            log.warn("Blob size mismatch: expected {}, got {}", expected, target.length());
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob size mismatch"),
                     "Blob size mismatch: expected %d, got %d".formatted(expected, target.length()));
