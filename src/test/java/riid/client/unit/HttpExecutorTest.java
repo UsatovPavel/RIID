@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -77,7 +76,7 @@ class HttpExecutorTest {
                 true,
                 "test-agent",
                 true);
-        HttpClient client = HttpClientFactory.create(cfg);
+        var client = HttpClientFactory.create(cfg);
         return new HttpExecutor(client, cfg);
     }
 

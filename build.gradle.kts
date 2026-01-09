@@ -50,6 +50,7 @@ dependencies {
     implementation("commons-codec:commons-codec:1.16.1")
     implementation("commons-io:commons-io:2.21.0")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    implementation("org.eclipse.jetty:jetty-client:12.1.5")
 }
 
 tasks.test {

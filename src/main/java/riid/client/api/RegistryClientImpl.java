@@ -16,13 +16,13 @@ import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
+import riid.client.http.HttpResult;
 import riid.client.service.ManifestService;
 import riid.cache.TokenCache;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.Optional;
@@ -110,7 +110,7 @@ public final class RegistryClientImpl implements RegistryClient {
                 endpoint.port(),
                 path,
                 query.isEmpty() ? null : query.toString());
-        HttpResponse<java.io.InputStream> resp = http.get(uri, headers);
+        HttpResult<java.io.InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
         if (status < 200 || status >= 300) {
             throw new ClientException(

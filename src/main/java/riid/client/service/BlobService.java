@@ -7,19 +7,20 @@ import riid.app.StatusCodes;
 import riid.cache.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
+import riid.client.api.BlobSink;
+import riid.client.api.FileBlobSink;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
-import riid.client.http.HttpRequestBuilder;
+import riid.client.http.HttpResult;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpResponse;
+import java.nio.file.Path;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -31,7 +32,7 @@ import java.util.Optional;
 /**
  * Downloads blobs with optional Range and on-the-fly SHA256 validation.
  */
-public class BlobService {
+public class BlobService implements BlobServiceApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(BlobService.class);
 
     private final HttpExecutor http;
@@ -49,17 +50,20 @@ public class BlobService {
         this.cacheAdapter = cacheAdapter;
     }
 
+    @Override
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, File target, String scope) {
         Objects.requireNonNull(target, "target file");
+        return fetchBlob(endpoint, req, new FileBlobSink(target), scope);
+    }
 
-        URI uri = HttpRequestBuilder.buildUri(
-                endpoint.scheme(),
-                endpoint.host(),
-                endpoint.port(),
-                RegistryApi.blobPath(req.repository(), req.digest()));
+    @Override
+    public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, BlobSink sink, String scope) {
+        Objects.requireNonNull(sink, "sink");
+
+        URI uri = endpoint.uri(RegistryApi.blobPath(req.repository(), req.digest()));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
-        HttpResponse<InputStream> resp = http.get(uri, headers);
+        HttpResult<InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
         if (status < 200 || status >= 300) {
             throw new ClientException(
@@ -76,22 +80,27 @@ public class BlobService {
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length for blob"),
                     "Missing Content-Length for blob download");
         }
-        try (InputStream is = resp.body(); FileOutputStream fos = new FileOutputStream(target)) {
-            String digest = writeAndHashStreaming(is, fos);
+        Path sinkPath = null;
+        if (sink instanceof FileBlobSink fbs) {
+            sinkPath = fbs.file().toPath();
+        }
+        try (InputStream is = resp.body(); java.io.OutputStream os = sink.open()) {
+            String digest = writeAndHashStreaming(is, os);
             validateDigest(digest, req.digest());
-            validateSize(target, expectedSize);
+            long actualSize = sinkPath != null ? sinkPath.toFile().length() : expectedSize;
+            validateSize(actualSize, expectedSize);
             String mediaType = resp.headers().firstValue("Content-Type").orElse(req.mediaType());
-            String path = target.getAbsolutePath();
-            if (cacheAdapter != null) {
+            String locator = sink.locator();
+            if (cacheAdapter != null && sinkPath != null) {
                 var entry = cacheAdapter.put(
                         riid.cache.ImageDigest.parse(digest),
-                        riid.cache.CachePayload.of(target.toPath(), target.length()),
+                        riid.cache.CachePayload.of(sinkPath, actualSize),
                         riid.cache.CacheMediaType.from(mediaType));
                 if (entry != null && entry.locator() != null && !entry.locator().isBlank()) {
-                    path = entry.locator();
+                    locator = entry.locator();
                 }
             }
-            return new BlobResult(digest, target.length(), mediaType, path);
+            return new BlobResult(digest, actualSize, mediaType, locator);
         } catch (IOException e) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Blob IO error"),
@@ -101,21 +110,18 @@ public class BlobService {
     }
 
     public Optional<Long> headBlob(RegistryEndpoint endpoint, String repository, String digest, String scope) {
-        URI uri = HttpRequestBuilder.buildUri(
-                endpoint.scheme(),
-                endpoint.host(),
-                endpoint.port(),
-                RegistryApi.blobPath(repository, digest));
+        URI uri = endpoint.uri(RegistryApi.blobPath(repository, digest));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
-        HttpResponse<Void> resp = http.head(uri, headers);
-        if (resp.statusCode() == StatusCodes.NOT_FOUND.code()) {
+        HttpResult<Void> resp = http.head(uri, headers);
+        int code = resp.statusCode();
+        if (code == StatusCodes.NOT_FOUND.code()) {
             return Optional.empty();
         }
-        if (resp.statusCode() != StatusCodes.OK.code()) {
+        if (code < 200 || code >= 300) {
             throw new ClientException(
-                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Blob HEAD failed"),
-                    "Blob HEAD failed: " + resp.statusCode());
+                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, code, "Blob HEAD failed"),
+                    "Blob HEAD failed: " + code);
         }
         return resp.headers().firstValueAsLong("Content-Length").isPresent()
                 ? Optional.of(resp.headers().firstValueAsLong("Content-Length").getAsLong())
@@ -135,16 +141,16 @@ public class BlobService {
         }
     }
 
-    private void validateSize(File target, long expected) {
-        if (expected > 0 && target.length() != expected) {
-            LOGGER.warn("Blob size mismatch: expected {}, got {}", expected, target.length());
+    private void validateSize(long actual, long expected) {
+        if (expected > 0 && actual != expected) {
+            LOGGER.warn("Blob size mismatch: expected {}, got {}", expected, actual);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob size mismatch"),
-                    "Blob size mismatch: expected %d, got %d".formatted(expected, target.length()));
+                    "Blob size mismatch: expected %d, got %d".formatted(expected, actual));
         }
     }
 
-    private String writeAndHashStreaming(InputStream is, FileOutputStream fos) throws IOException {
+    private String writeAndHashStreaming(InputStream is, java.io.OutputStream os) throws IOException {
         MessageDigest md;
         try {
             md = MessageDigest.getInstance("SHA-256");
@@ -161,7 +167,7 @@ public class BlobService {
                 if (read == -1) {
                     break;
                 }
-                fos.write(buf, 0, read);
+                os.write(buf, 0, read);
             }
         }
         String hex = bytesToHex(md.digest());
