@@ -1,0 +1,18 @@
+http:
+  connectTimeout: "PT5S"
+  requestTimeout: "PT30S"
+  maxRetries: 2
+  initialBackoff: "PT0.2S"
+  maxBackoff: "PT2S"
+  retryIdempotentOnly: true
+  userAgent: "riid-client"
+
+dispatcher:
+  maxConcurrentRegistry: 4
+
+registries:
+  - scheme: "https"
+    host: "registry-1.docker.io"
+    port: -1
+    credentials: null
+

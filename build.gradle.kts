@@ -26,6 +26,7 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.13")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.17.2")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.2")
     implementation("commons-codec:commons-codec:1.16.1")
     implementation("commons-io:commons-io:2.21.0")
 }
