@@ -4,7 +4,7 @@ package riid.client.core.model.manifest;
  * Common media type constants for Docker v2 and OCI images.
  */
 public final class MediaTypes {
-    private MediaTypes() {}
+    private MediaTypes() { }
 
     // OCI
     public static final String OCI_IMAGE_MANIFEST = "application/vnd.oci.image.manifest.v1+json";

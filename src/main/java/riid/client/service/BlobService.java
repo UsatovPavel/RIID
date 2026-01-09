@@ -14,12 +14,15 @@ import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpResponse;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.net.URI;
-import java.net.http.HttpResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -29,7 +32,7 @@ import java.util.Optional;
  * Downloads blobs with optional Range and on-the-fly SHA256 validation.
  */
 public class BlobService {
-    private static final Logger log = LoggerFactory.getLogger(BlobService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BlobService.class);
 
     private final HttpExecutor http;
     private final AuthService authService;
@@ -49,7 +52,11 @@ public class BlobService {
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, File target, String scope) {
         Objects.requireNonNull(target, "target file");
 
-        URI uri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), RegistryApi.blobPath(req.repository(), req.digest()));
+        URI uri = HttpRequestBuilder.buildUri(
+                endpoint.scheme(),
+                endpoint.host(),
+                endpoint.port(),
+                RegistryApi.blobPath(req.repository(), req.digest()));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<InputStream> resp = http.get(uri, headers);
@@ -59,9 +66,11 @@ public class BlobService {
                     "Blob fetch failed: " + resp.statusCode());
         }
 
-        long expectedSize = req.expectedSize() != null ? req.expectedSize() : resp.headers().firstValueAsLong("Content-Length").orElse(-1);
+        long expectedSize = req.expectedSize() != null
+                ? req.expectedSize()
+                : resp.headers().firstValueAsLong("Content-Length").orElse(-1);
         if (expectedSize <= 0) {
-            log.warn("Missing Content-Length for blob {}", req.digest());
+            LOGGER.warn("Missing Content-Length for blob {}", req.digest());
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length for blob"),
                     "Missing Content-Length for blob download");
@@ -91,7 +100,11 @@ public class BlobService {
     }
 
     public Optional<Long> headBlob(RegistryEndpoint endpoint, String repository, String digest, String scope) {
-        URI uri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), RegistryApi.blobPath(repository, digest));
+        URI uri = HttpRequestBuilder.buildUri(
+                endpoint.scheme(),
+                endpoint.host(),
+                endpoint.port(),
+                RegistryApi.blobPath(repository, digest));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<Void> resp = http.head(uri, headers);
@@ -114,7 +127,7 @@ public class BlobService {
 
     private void validateDigest(String computed, String expected) {
         if (expected != null && !expected.isBlank() && !expected.equals(computed)) {
-            log.warn("Blob digest mismatch: expected {}, got {}", expected, computed);
+            LOGGER.warn("Blob digest mismatch: expected {}, got {}", expected, computed);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob digest mismatch"),
                     "Blob digest mismatch: expected %s, got %s".formatted(expected, computed));
@@ -123,7 +136,7 @@ public class BlobService {
 
     private void validateSize(File target, long expected) {
         if (expected > 0 && target.length() != expected) {
-            log.warn("Blob size mismatch: expected {}, got {}", expected, target.length());
+            LOGGER.warn("Blob size mismatch: expected {}, got {}", expected, target.length());
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob size mismatch"),
                     "Blob size mismatch: expected %d, got %d".formatted(expected, target.length()));
@@ -139,9 +152,12 @@ public class BlobService {
         }
         try (DigestInputStream dis = new DigestInputStream(is, md)) {
             byte[] buf = new byte[8192];
-            int r;
-            while ((r = dis.read(buf)) != -1) {
-                fos.write(buf, 0, r);
+            while (true) {
+                int read = dis.read(buf);
+                if (read == -1) {
+                    break;
+                }
+                fos.write(buf, 0, read);
             }
         }
         String hex = bytesToHex(md.digest());

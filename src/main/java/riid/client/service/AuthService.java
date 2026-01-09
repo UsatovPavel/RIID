@@ -32,7 +32,7 @@ import java.util.Optional;
  * Handles ping + Bearer token fetching with caching.
  */
 public final class AuthService {
-    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(AuthService.class);
 
     private final HttpExecutor http;
     private final ObjectMapper mapper;
@@ -63,30 +63,39 @@ public final class AuthService {
         }
 
         // Ping to get challenge
-        URI pingUri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), RegistryApi.V2_PING);
+        URI pingUri = HttpRequestBuilder.buildUri(
+                endpoint.scheme(),
+                endpoint.host(),
+                endpoint.port(),
+                RegistryApi.V2_PING);
         HttpResponse<Void> pingResp = http.head(pingUri, Map.of());
         if (pingResp.statusCode() == StatusCodes.OK.code()) {
             return Optional.empty(); // no auth needed
         }
         if (pingResp.statusCode() != StatusCodes.UNAUTHORIZED.code()) {
             throw new ClientException(
-                    new ClientError.Auth(ClientError.AuthKind.UNEXPECTED_PING_STATUS, pingResp.statusCode(), "Unexpected ping status"),
+                    new ClientError.Auth(
+                            ClientError.AuthKind.UNEXPECTED_PING_STATUS,
+                            pingResp.statusCode(),
+                            "Unexpected ping status"),
                     "Unexpected ping status: " + pingResp.statusCode()
             );
         }
         Optional<AuthChallenge> ch = extractChallenge(pingResp.headers());
         if (ch.isEmpty()) {
             throw new ClientException(
-                    new ClientError.Auth(ClientError.AuthKind.MISSING_CHALLENGE, pingResp.statusCode(), "Missing WWW-Authenticate"),
-                    "Missing WWW-Authenticate challenge"
-            );
+                    new ClientError.Auth(
+                            ClientError.AuthKind.MISSING_CHALLENGE,
+                            pingResp.statusCode(),
+                            "Missing WWW-Authenticate"),
+                    "Missing WWW-Authenticate challenge");
         }
         AuthChallenge c = ch.get();
         String token = fetchToken(c, endpoint.credentialsOpt().orElse(null), scope);
         var ttlOpt = ttlFrom(pingResp.headers());
         long ttl = ttlOpt.orElse(defaultTokenTtlSeconds);
         if (ttlOpt.isEmpty()) {
-            log.warn("No token TTL in headers; using default {}s", defaultTokenTtlSeconds);
+            LOGGER.warn("No token TTL in headers; using default {}s", defaultTokenTtlSeconds);
         }
         cache.put(cacheKey, token, ttl); // fallback from config
         return Optional.of("Bearer " + token);
@@ -103,7 +112,8 @@ public final class AuthService {
         try {
             StringBuilder url = new StringBuilder(challenge.realm());
             if (challenge.service() != null) {
-                url.append("?service=").append(URLEncoder.encode(challenge.service(), StandardCharsets.UTF_8));
+                url.append("?service=")
+                        .append(URLEncoder.encode(challenge.service(), StandardCharsets.UTF_8));
             }
             if (scope != null && !scope.isBlank()) {
                 if (!url.toString().contains("?")) {
@@ -111,32 +121,40 @@ public final class AuthService {
                 } else {
                     url.append("&");
                 }
-                url.append("scope=").append(URLEncoder.encode(scope, StandardCharsets.UTF_8));
+                url.append("scope=")
+                        .append(URLEncoder.encode(scope, StandardCharsets.UTF_8));
             }
             var headers = new HashMap<String, String>();
             if (creds != null) {
                 creds.identityToken().ifPresent(id -> headers.put("Authorization", "Bearer " + id));
                 if (headers.isEmpty()) {
                     String basic = creds.username().orElse("") + ":" + creds.password().orElse("");
-                    String enc = java.util.Base64.getEncoder().encodeToString(basic.getBytes(StandardCharsets.UTF_8));
+                    String enc = java.util.Base64.getEncoder()
+                            .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
                     headers.put("Authorization", "Basic " + enc);
                 }
             }
             HttpResponse<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
-            if (resp.statusCode() != 200) {
+            if (resp.statusCode() != StatusCodes.OK.code()) {
                 throw new ClientException(
-                        new ClientError.Auth(ClientError.AuthKind.TOKEN_FAILED, resp.statusCode(), "Token endpoint failed"),
+                        new ClientError.Auth(
+                                ClientError.AuthKind.TOKEN_FAILED,
+                                resp.statusCode(),
+                                "Token endpoint failed"),
                         "Token endpoint status: " + resp.statusCode()
                 );
             }
             TokenResponse tr = mapper.readValue(resp.body(), TokenResponse.class);
             String token = Optional.ofNullable(tr.effectiveToken())
                     .orElseThrow(() -> new ClientException(
-                            new ClientError.Auth(ClientError.AuthKind.NO_TOKEN, resp.statusCode(), "No token in response"),
+                            new ClientError.Auth(
+                                    ClientError.AuthKind.NO_TOKEN,
+                                    resp.statusCode(),
+                                    "No token in response"),
                             "No token in response"));
             long ttl = Optional.ofNullable(tr.expiresInSeconds()).orElse(defaultTokenTtlSeconds);
             if (tr.expiresInSeconds() == null) {
-                log.warn("Token response missing expires_in; using default {}s", defaultTokenTtlSeconds);
+                LOGGER.warn("Token response missing expires_in; using default {}s", defaultTokenTtlSeconds);
             }
             cache.put(cacheKeyFromChallenge(challenge, scope, creds), token, ttl);
             return token;

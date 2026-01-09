@@ -16,9 +16,13 @@ public final class AuthParser {
     }
 
     public static Optional<AuthChallenge> parse(String header) {
-        if (header == null) return Optional.empty();
+        if (header == null) {
+            return Optional.empty();
+        }
         Matcher m = BEARER.matcher(header.trim());
-        if (!m.find()) return Optional.empty();
+        if (!m.find()) {
+            return Optional.empty();
+        }
         String rest = m.group(1);
         Matcher kv = KV.matcher(rest);
         String realm = null;
@@ -31,11 +35,14 @@ public final class AuthParser {
                 case "realm" -> realm = v;
                 case "service" -> service = v;
                 case "scope" -> scope = v;
-                default -> {}
+                default -> { }
             }
         }
-        if (realm == null) return Optional.empty();
+        if (realm == null) {
+            return Optional.empty();
+        }
         return Optional.of(new AuthChallenge(realm, service, scope));
     }
 }
+
 

@@ -8,7 +8,9 @@ import java.util.Optional;
  */
 public final class Credentials {
     private final String usernameValue;
+
     private final String passwordValue;
+
     private final String identityTokenValue;
 
     private Credentials(String username, String password, String identityToken) {

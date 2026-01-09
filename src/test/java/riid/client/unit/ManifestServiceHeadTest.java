@@ -24,13 +24,16 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("PMD.CloseResource")
 class ManifestServiceHeadTest {
 
     private HttpServer server;
 
     @AfterEach
     void tearDown() {
-        if (server != null) server.stop(0);
+        if (server != null) {
+            server.stop(0);
+        }
     }
 
     @Test
@@ -54,7 +57,13 @@ class ManifestServiceHeadTest {
     @Test
     void headSuccess() throws Exception {
         setupServer(exchange -> {
-            respond(exchange, 200, Map.of("Docker-Content-Digest", "sha256:abc", "Content-Length", "5"), "");
+            respond(
+                    exchange,
+                    200,
+                    Map.of(
+                            "Docker-Content-Digest", "sha256:abc",
+                            "Content-Length", "5"),
+                    "");
         });
         ManifestService svc = manifestService();
         assertTrue(svc.headManifest(endpoint(), "repo", "latest", "scope").isPresent());
@@ -74,14 +83,13 @@ class ManifestServiceHeadTest {
 
     private void setupServer(HttpHandler handler) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/v2/", exchange -> {
-            respond(exchange, 200, Map.of(), "");
-        });
+        server.createContext("/v2/", exchange -> respond(exchange, 200, Map.of(), ""));
         server.createContext("/v2/repo/manifests/latest", handler);
         server.start();
     }
 
-    private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body) throws IOException {
+    private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body)
+            throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(status, bytes.length);

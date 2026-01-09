@@ -20,7 +20,9 @@ import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Smoke placeholder: requires a running local registry:2 and creds if needed.
@@ -40,7 +42,8 @@ public class RegistrySmokeTest {
      */
     public static class RegistryLiveTest {
 
-        private static final RegistryEndpoint DOCKER_HUB = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+        private static final RegistryEndpoint DOCKER_HUB =
+                new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         private static final String REPO = "library/alpine";
         private static final String REF = "edge";
         private static final String SCOPE = "repository:library/alpine:pull";

@@ -20,14 +20,16 @@ public enum CacheMediaType {
         return rawValue;
     }
 
-    public static CacheMediaType from(String raw) {
-        if (raw == null || raw.isBlank()) return UNKNOWN;
-        for (CacheMediaType t : values()) {
-            if (!t.rawValue.isEmpty() && t.rawValue.equalsIgnoreCase(raw)) {
-                return t;
+        public static CacheMediaType from(String raw) {
+            if (raw == null || raw.isBlank()) {
+                return UNKNOWN;
             }
+            for (CacheMediaType t : values()) {
+                if (!t.rawValue.isEmpty() && t.rawValue.equalsIgnoreCase(raw)) {
+                    return t;
+                }
+            }
+            return UNKNOWN;
         }
-        return UNKNOWN;
-    }
 }
 

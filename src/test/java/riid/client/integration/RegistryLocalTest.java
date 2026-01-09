@@ -4,19 +4,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import riid.cache.TokenCache;
-import riid.client.service.AuthService;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
-import riid.client.service.BlobService;
+import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
-import riid.client.api.ManifestResult;
+import riid.client.service.AuthService;
+import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
 
 import java.io.File;
@@ -24,8 +25,6 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Integration test against a local registry:2, started via Testcontainers.
@@ -35,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class RegistryLocalTest {
 
     @Container
-    private static final GenericContainer<?> registry = new GenericContainer<>("registry:2")
+    private static final GenericContainer<?> REGISTRY = new GenericContainer<>("registry:2")
             .withExposedPorts(5000);
 
     private static RegistryEndpoint LOCAL;
@@ -53,9 +52,9 @@ public class RegistryLocalTest {
 
     @BeforeAll
     static void startRegistryAndSeed() throws Exception {
-        registry.start();
-        String host = registry.getHost();
-        int port = registry.getMappedPort(5000);
+        REGISTRY.start();
+        String host = REGISTRY.getHost();
+        int port = REGISTRY.getMappedPort(5000);
         LOCAL = new RegistryEndpoint("http", host, port, null);
 
         // Seed registry with hello-world using host docker
@@ -76,21 +75,21 @@ public class RegistryLocalTest {
     @Test
     void fetchManifestAndLayer() throws Exception {
         ManifestResult manifest = manifestService.fetchManifest(LOCAL, REPO, REF, SCOPE);
-        assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
+        Assertions.assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
         BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
 
         Optional<Long> sizeOpt = blobService.headBlob(LOCAL, REPO, layer.digest(), SCOPE);
-        assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
+        Assertions.assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
         File tmp = Files.createTempFile("local-layer", ".tar").toFile();
         tmp.deleteOnExit();
         BlobResult result = blobService.fetchBlob(LOCAL, req, tmp, SCOPE);
 
-        assertEquals(layer.digest(), result.digest(), "digest must match manifest");
-        assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
-        assertTrue(tmp.length() > 0, "downloaded file should not be empty");
+        Assertions.assertEquals(layer.digest(), result.digest(), "digest must match manifest");
+        Assertions.assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
+        Assertions.assertTrue(tmp.length() > 0, "downloaded file should not be empty");
     }
 }
 

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.ManifestIndex;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ManifestParsingTest {
 

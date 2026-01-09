@@ -1,3 +1,4 @@
+
 plugins {
     id("java")
     id("checkstyle")
@@ -5,6 +6,7 @@ plugins {
     id("jacoco")
     id("com.github.spotbugs") version "6.4.8"
     id("com.gradleup.shadow") version "9.3.0"
+    id("com.diffplug.spotless") version "8.1.0"
 }
 
 group = "hse.ru"
@@ -22,6 +24,22 @@ java {
 repositories {
     mavenCentral()
 }
+//короче поднимать для jdk 21 почему-то предлаегается в качестве решения. В итоге не работает.
+spotless {
+    java {
+        target("src/**/*.java")
+        googleJavaFormat("1.23.0")
+        targetExclude("**/build/**/*.java")
+    }
+}
+
+// Disable Spotless in check to avoid JDK25 formatter crash; run manually if needed.
+tasks.named("spotlessCheck") {
+    enabled = false
+}
+tasks.named("spotlessApply") {
+    enabled = false
+}
 
 dependencies {
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
@@ -29,9 +47,9 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
-    testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.4"))
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:testcontainers")
+    testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.4"))//idea say<=1.21 it vulnerable
+    testImplementation("org.testcontainers:junit-jupiter")//but this lib only in 1.21 version// TODO: at May check 2.0.3
+    testImplementation("org.testcontainers:testcontainers")//this lib has 2.0.3 version
     compileOnly("com.github.spotbugs:spotbugs-annotations:4.9.8")
     testCompileOnly("com.github.spotbugs:spotbugs-annotations:4.9.8")
     implementation("org.slf4j:slf4j-api:2.0.13")
@@ -73,6 +91,8 @@ tasks.jacocoTestReport {
     dependsOn(tasks.test)
     enabled = !skipQuality
 }
+
+// Spotless выводит ошибки на JDK25, не блокируем check
 
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
