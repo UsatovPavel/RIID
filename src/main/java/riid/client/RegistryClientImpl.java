@@ -15,6 +15,7 @@ import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 import riid.client.manifest.ManifestResult;
 import riid.client.manifest.ManifestService;
+import riid.cache.TokenCache;
 
 import java.io.File;
 import java.io.IOException;
@@ -44,7 +45,7 @@ public final class RegistryClientImpl implements RegistryClient {
         this.mapper = new ObjectMapper();
         var client = HttpClientFactory.create(httpConfig);
         this.http = new HttpExecutor(client, httpConfig);
-        this.authService = new AuthService(http, mapper, new riid.client.auth.TokenCache());
+        this.authService = new AuthService(http, mapper, new TokenCache());
         this.manifestService = new ManifestService(http, authService, mapper);
         this.blobService = new BlobService(http, authService, cacheAdapter);
         this.cacheAdapter = cacheAdapter;

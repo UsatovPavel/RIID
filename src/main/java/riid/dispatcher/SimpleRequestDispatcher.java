@@ -25,7 +25,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     private final Semaphore registryLimiter; // limits concurrent downloads from regisry-client
 
     public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p) {
-        this(client, cache, p2p, DispatcherConfig.builder().build());
+        this(client, cache, p2p, new DispatcherConfig());
     }
 
     public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p, DispatcherConfig config) {

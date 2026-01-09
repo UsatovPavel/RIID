@@ -10,6 +10,7 @@ import riid.client.core.error.ClientException;
 import riid.client.core.protocol.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
+import riid.cache.TokenCache;
 
 import java.io.IOException;
 import java.net.URI;
