@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: test test-client
-
+# don't use $(VAR)(hard to understand), only if really need
 test:
 	./gradlew test
 	./gradlew test --tests 'riid.client.integration.StressTest' -PincludeStress

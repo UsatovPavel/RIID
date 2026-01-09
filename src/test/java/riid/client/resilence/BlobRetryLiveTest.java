@@ -26,7 +26,7 @@ public class BlobRetryLiveTest {
     @Test
     void retryAfterConnectionDrop() throws Exception {
         RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        HttpClientConfig cfg = HttpClientConfig.builder().build();
+        HttpClientConfig cfg = new HttpClientConfig();
         var client = new RegistryClientImpl(hub, cfg, null);
 
         String repo = "library/alpine";
