@@ -19,10 +19,10 @@ public final class Credentials {
         this.identityTokenValue = identityToken;
     }
 
-    public static Credentials basic(String user, String pass) {
+    public static Credentials basic(String user, String password) {
         Objects.requireNonNull(user, "user");
-        Objects.requireNonNull(pass, "pass");
-        return new Credentials(user, pass, null);
+        Objects.requireNonNull(password, "password");
+        return new Credentials(user, password, null);
     }
 
     public static Credentials identityToken(String token) {

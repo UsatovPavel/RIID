@@ -6,7 +6,7 @@ package riid.client.api;
 public record BlobRequest(
         String repository,
         String digest,
-        Long expectedSize,
+        Long expectedSizeBytes,
         String mediaType
 ) {
 }

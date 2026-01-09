@@ -41,6 +41,4 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-#logs
-#.log
-#out.txt
+#TODO at end of dev all make builded files

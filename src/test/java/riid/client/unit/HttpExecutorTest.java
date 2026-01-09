@@ -75,7 +75,8 @@ class HttpExecutorTest {
                 Duration.ofMillis(10),
                 Duration.ofMillis(10),
                 true,
-                "test-agent");
+                "test-agent",
+                true);
         HttpClient client = HttpClientFactory.create(cfg);
         return new HttpExecutor(client, cfg);
     }

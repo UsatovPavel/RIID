@@ -2,8 +2,10 @@ package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import riid.cache.CacheAdapter;
 import riid.app.StatusCodes;
+import riid.cache.CacheAdapter;
+import riid.client.core.error.ClientError;
+import riid.client.core.error.ClientException;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.service.AuthService;
 import riid.client.service.BlobService;
@@ -42,9 +44,6 @@ public final class RegistryClientImpl implements RegistryClient {
 
     private final BlobService blobService;
 
-    @SuppressFBWarnings({"EI_EXPOSE_REP2"})
-    private final CacheAdapter cache;
-
     private final ObjectMapper mapper;
 
     @SuppressWarnings("PMD.CloseResource")
@@ -58,7 +57,6 @@ public final class RegistryClientImpl implements RegistryClient {
         this.authService = new AuthService(http, mapper, new TokenCache());
         this.manifestService = new ManifestService(http, authService, mapper);
         this.blobService = new BlobService(http, authService, cacheAdapter);
-        this.cache = cacheAdapter;
     }
 
     @Override
@@ -113,20 +111,25 @@ public final class RegistryClientImpl implements RegistryClient {
                 path,
                 query.isEmpty() ? null : query.toString());
         HttpResponse<java.io.InputStream> resp = http.get(uri, headers);
-        if (resp.statusCode() != StatusCodes.OK.code()) {
-            throw new RuntimeException("Tag list failed: " + resp.statusCode());
+        int status = resp.statusCode();
+        if (status < 200 || status >= 300) {
+            throw new ClientException(
+                    new riid.client.core.error.ClientError.Http(
+                            riid.client.core.error.ClientError.HttpKind.BAD_STATUS,
+                            status,
+                            "Tag list failed"),
+                    "Tag list failed: " + status);
         }
         try (var body = resp.body()) {
             return mapper.readValue(body, TagList.class);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to parse tag list", e);
+            throw new ClientException(
+                    new riid.client.core.error.ClientError.Parse(
+                            riid.client.core.error.ClientError.ParseKind.MANIFEST,
+                            "Failed to parse tag list"),
+                    "Failed to parse tag list",
+                    e);
         }
-    }
-
-    @Override
-    @SuppressFBWarnings({"EI_EXPOSE_REP"})
-    public CacheAdapter cacheAdapter() {
-        return cache;
     }
 }
 

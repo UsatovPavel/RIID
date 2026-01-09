@@ -13,7 +13,9 @@ public final class HttpClientFactory {
         return HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(config.connectTimeout())
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(config.followRedirects()
+                        ? HttpClient.Redirect.NORMAL
+                        : HttpClient.Redirect.NEVER)
                 .build();
     }
 }

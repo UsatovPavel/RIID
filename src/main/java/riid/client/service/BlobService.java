@@ -60,14 +60,15 @@ public class BlobService {
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<InputStream> resp = http.get(uri, headers);
-        if (resp.statusCode() != StatusCodes.OK.code()) {
+        int status = resp.statusCode();
+        if (status < 200 || status >= 300) {
             throw new ClientException(
-                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Blob fetch failed"),
-                    "Blob fetch failed: " + resp.statusCode());
+                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Blob fetch failed"),
+                    "Blob fetch failed: " + status);
         }
 
-        long expectedSize = req.expectedSize() != null
-                ? req.expectedSize()
+        long expectedSize = req.expectedSizeBytes() != null
+                ? req.expectedSizeBytes()
                 : resp.headers().firstValueAsLong("Content-Length").orElse(-1);
         if (expectedSize <= 0) {
             LOGGER.warn("Missing Content-Length for blob {}", req.digest());
@@ -93,7 +94,7 @@ public class BlobService {
             return new BlobResult(digest, target.length(), mediaType, path);
         } catch (IOException e) {
             throw new ClientException(
-                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Blob IO error"),
+                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Blob IO error"),
                     "Blob IO error",
                     e);
         }
@@ -148,7 +149,10 @@ public class BlobService {
         try {
             md = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "SHA-256 not available"),
+                    "SHA-256 not available",
+                    e);
         }
         try (DigestInputStream dis = new DigestInputStream(is, md)) {
             byte[] buf = new byte[8192];

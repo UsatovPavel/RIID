@@ -4,15 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import riid.cache.TokenCache;
-import riid.client.service.AuthService;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
-import riid.client.service.BlobService;
+import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
-import riid.client.api.ManifestResult;
+import riid.client.service.AuthService;
+import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
 
 import java.io.File;
@@ -20,9 +20,7 @@ import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Smoke placeholder: requires a running local registry:2 and creds if needed.
