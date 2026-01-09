@@ -1,6 +1,5 @@
 package riid.cache;
 
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,12 +38,15 @@ public final class FileCacheAdapter implements CacheAdapter {
         if (!Files.exists(p)) {
             return Optional.empty();
         }
-        String ct = null;
+        String contentType = null;
         try {
-            ct = Files.probeContentType(p);
+            contentType = Files.probeContentType(p);
         } catch (IOException ignored) {
+            // ignore probe failures, default to UNKNOWN media type
         }
-        return Optional.of(new CacheEntry(digest, p.toFile().length(), CacheMediaType.from(ct), p.toString()));
+        long sizeBytes = p.toFile().length();
+        CacheMediaType mediaType = CacheMediaType.from(contentType);
+        return Optional.of(new CacheEntry(digest, sizeBytes, mediaType, p.toString()));
     }
 
     @Override

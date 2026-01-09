@@ -11,5 +11,8 @@ public record TagList(
         @JsonProperty("name") String name,
         @JsonProperty("tags") List<String> tags
 ) {
+    public TagList {
+        tags = tags == null ? List.of() : List.copyOf(tags);
+    }
 }
 

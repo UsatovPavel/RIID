@@ -13,5 +13,8 @@ public record ClientConfig(
         @JsonProperty("auth") AuthConfig auth,
         @JsonProperty("registries") List<RegistryEndpoint> registries
 ) {
+    public ClientConfig {
+        registries = registries == null ? List.of() : List.copyOf(registries);
+    }
 }
 

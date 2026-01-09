@@ -12,6 +12,10 @@ import java.util.List;
 public record ErrorResponse(
         @JsonProperty("errors") List<Item> errors
 ) {
+    public ErrorResponse {
+        errors = errors == null ? List.of() : List.copyOf(errors);
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Item(
             @JsonProperty("code") String code,

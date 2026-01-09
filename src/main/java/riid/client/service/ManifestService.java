@@ -3,6 +3,7 @@ package riid.client.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import riid.app.StatusCodes;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
@@ -45,7 +46,7 @@ public final class ManifestService {
     public ManifestService(HttpExecutor http, AuthService authService, ObjectMapper mapper) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
-        this.mapper = Objects.requireNonNull(mapper);
+        this.mapper = Objects.requireNonNull(mapper).copy();
     }
 
     public ManifestResult fetchManifest(RegistryEndpoint endpoint, String repository, String reference, String scope) {
@@ -53,7 +54,7 @@ public final class ManifestService {
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<java.io.InputStream> resp = http.get(uri, headers);
-        if (resp.statusCode() != 200) {
+        if (resp.statusCode() != StatusCodes.OK.code()) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest fetch failed"),
                     "Manifest fetch failed: " + resp.statusCode());
@@ -94,10 +95,10 @@ public final class ManifestService {
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<Void> resp = http.head(uri, headers);
-        if (resp.statusCode() == 404) {
+        if (resp.statusCode() == StatusCodes.NOT_FOUND.code()) {
             return Optional.empty();
         }
-        if (resp.statusCode() != 200) {
+        if (resp.statusCode() != StatusCodes.OK.code()) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest HEAD failed"),
                     "Manifest HEAD failed: " + resp.statusCode());

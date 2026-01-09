@@ -10,20 +10,20 @@ public enum CacheMediaType {
     CONFIG("application/vnd.docker.container.image.v1+json"),
     UNKNOWN("");
 
-    private final String value;
+    private final String rawValue;
 
-    CacheMediaType(String value) {
-        this.value = value;
+    CacheMediaType(String rawValue) {
+        this.rawValue = rawValue;
     }
 
     public String value() {
-        return value;
+        return rawValue;
     }
 
     public static CacheMediaType from(String raw) {
         if (raw == null || raw.isBlank()) return UNKNOWN;
         for (CacheMediaType t : values()) {
-            if (!t.value.isEmpty() && t.value.equalsIgnoreCase(raw)) {
+            if (!t.rawValue.isEmpty() && t.rawValue.equalsIgnoreCase(raw)) {
                 return t;
             }
         }

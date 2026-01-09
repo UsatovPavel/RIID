@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -47,7 +48,7 @@ class HttpExecutorTest {
         HttpExecutor exec = executor(1); // allow 1 retry => 2 attempts
         var resp = exec.get(uri("/ok"), Map.of());
         assertEquals(200, resp.statusCode());
-        String body = new String(resp.body().readAllBytes());
+        String body = new String(resp.body().readAllBytes(), StandardCharsets.UTF_8);
         assertEquals("ok", body);
         assertEquals(2, calls.get(), "should retry once then succeed");
     }
@@ -90,7 +91,7 @@ class HttpExecutorTest {
 
     private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body) throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
-        byte[] bytes = body.getBytes();
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);

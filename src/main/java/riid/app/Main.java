@@ -15,7 +15,8 @@ public final class Main {
 
         RegistryEndpoint endpoint = RegistryEndpoint.https("registry-1.docker.io");
         HttpClientConfig httpConfig = new HttpClientConfig();
-        CacheAdapter cache = new riid.cache.FileCacheAdapter("/var/cache/riid");
+        String cacheDir = System.getenv().getOrDefault("RIID_CACHE_DIR", "/var/cache/riid");
+        CacheAdapter cache = new riid.cache.FileCacheAdapter(cacheDir);
 
         RegistryClientImpl client = new RegistryClientImpl(endpoint, httpConfig, cache);
 

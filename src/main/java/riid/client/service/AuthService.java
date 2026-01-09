@@ -3,6 +3,8 @@ package riid.client.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import riid.app.StatusCodes;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import riid.client.core.model.auth.AuthChallenge;
 import riid.client.core.model.auth.AuthParser;
 import riid.client.core.model.auth.TokenResponse;
@@ -42,9 +44,10 @@ public final class AuthService {
         this(http, mapper, cache, riid.client.core.config.AuthConfig.DEFAULT_TTL);
     }
 
+    @SuppressFBWarnings({"EI_EXPOSE_REP2"})
     public AuthService(HttpExecutor http, ObjectMapper mapper, TokenCache cache, long defaultTokenTtlSeconds) {
         this.http = Objects.requireNonNull(http);
-        this.mapper = Objects.requireNonNull(mapper);
+        this.mapper = Objects.requireNonNull(mapper).copy();
         this.cache = Objects.requireNonNull(cache);
         this.defaultTokenTtlSeconds = defaultTokenTtlSeconds;
     }
@@ -62,10 +65,10 @@ public final class AuthService {
         // Ping to get challenge
         URI pingUri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), RegistryApi.V2_PING);
         HttpResponse<Void> pingResp = http.head(pingUri, Map.of());
-        if (pingResp.statusCode() == 200) {
+        if (pingResp.statusCode() == StatusCodes.OK.code()) {
             return Optional.empty(); // no auth needed
         }
-        if (pingResp.statusCode() != 401) {
+        if (pingResp.statusCode() != StatusCodes.UNAUTHORIZED.code()) {
             throw new ClientException(
                     new ClientError.Auth(ClientError.AuthKind.UNEXPECTED_PING_STATUS, pingResp.statusCode(), "Unexpected ping status"),
                     "Unexpected ping status: " + pingResp.statusCode()

@@ -1,7 +1,9 @@
 package riid.client.service;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import riid.app.StatusCodes;
 import riid.cache.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
@@ -37,6 +39,7 @@ public class BlobService {
         this(http, authService, null);
     }
 
+    @SuppressFBWarnings({"EI_EXPOSE_REP2"})
     public BlobService(HttpExecutor http, AuthService authService, CacheAdapter cacheAdapter) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
@@ -50,7 +53,7 @@ public class BlobService {
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<InputStream> resp = http.get(uri, headers);
-        if (resp.statusCode() != 200) {
+        if (resp.statusCode() != StatusCodes.OK.code()) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Blob fetch failed"),
                     "Blob fetch failed: " + resp.statusCode());
@@ -92,10 +95,10 @@ public class BlobService {
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<Void> resp = http.head(uri, headers);
-        if (resp.statusCode() == 404) {
+        if (resp.statusCode() == StatusCodes.NOT_FOUND.code()) {
             return Optional.empty();
         }
-        if (resp.statusCode() != 200) {
+        if (resp.statusCode() != StatusCodes.OK.code()) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Blob HEAD failed"),
                     "Blob HEAD failed: " + resp.statusCode());
