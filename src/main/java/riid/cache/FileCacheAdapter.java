@@ -23,32 +23,41 @@ public final class FileCacheAdapter implements CacheAdapter {
         }
     }
 
-    private Path pathFor(String digest) {
+    private Path pathFor(ImageDigest digest) {
         // sanitize digest -> use as filename
-        return root.resolve(digest.replace(':', '_'));
+        return root.resolve(digest.toString().replace(':', '_'));
     }
 
     @Override
-    public boolean has(String digest) {
+    public boolean has(ImageDigest digest) {
         return Files.exists(pathFor(digest));
     }
 
     @Override
-    public Optional<String> getPath(String digest) {
+    public Optional<CacheEntry> get(ImageDigest digest) {
         Path p = pathFor(digest);
-        return Files.exists(p) ? Optional.of(p.toString()) : Optional.empty();
+        if (!Files.exists(p)) {
+            return Optional.empty();
+        }
+        String ct = null;
+        try {
+            ct = Files.probeContentType(p);
+        } catch (IOException ignored) {
+        }
+        return Optional.of(new CacheEntry(digest, p.toFile().length(), CacheMediaType.from(ct), p.toString()));
     }
 
     @Override
-    public String put(String digest, InputStream data, long size, String mediaType) throws IOException {
+    public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException {
         Path p = pathFor(digest);
-        try (var out = new FileOutputStream(p.toFile())) {
+        try (InputStream data = payload.open(); var out = new FileOutputStream(p.toFile())) {
             byte[] buf = new byte[8192];
             int r;
             while ((r = data.read(buf)) != -1) {
                 out.write(buf, 0, r);
             }
         }
-        return p.toString();
+        long size = payload.sizeBytes() > 0 ? payload.sizeBytes() : p.toFile().length();
+        return new CacheEntry(digest, size, mediaType, p.toString());
     }
 }

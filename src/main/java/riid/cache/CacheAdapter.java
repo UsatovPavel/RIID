@@ -8,15 +8,17 @@ import java.util.Optional;
  * Interface to an external cache module.
  */
 public interface CacheAdapter {
-    boolean has(String digest);
+    boolean has(ImageDigest digest);
 
-    Optional<String> getPath(String digest);
+    Optional<CacheEntry> get(ImageDigest digest);
 
     /**
-     * Store blob stream under digest.
+     * Store blob stream under digest. Implementation is responsible for closing the stream.
      *
-     * @return path to stored blob (if available)
+     * @param payload   source of bytes
+     * @param mediaType blob media type (typed)
+     * @return cache entry/locator (if available)
      */
-    String put(String digest, InputStream data, long size, String mediaType) throws IOException;
+    CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException;
 }
 
