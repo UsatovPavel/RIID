@@ -77,7 +77,7 @@ public final class HttpExecutor {
     }
 
     private boolean shouldRetry(int status, int attempts, boolean idempotent) {
-        if (attempts > 1 + config.maxRetries()) {
+        if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
@@ -87,7 +87,7 @@ public final class HttpExecutor {
     }
 
     private boolean shouldRetryIOException(int attempts, boolean idempotent) {
-        if (attempts > 1 + config.maxRetries()) {
+        if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
