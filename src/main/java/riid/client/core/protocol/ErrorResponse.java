@@ -1,0 +1,22 @@
+package riid.client.core.protocol;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.util.List;
+
+/**
+ * Registry error response wrapper.
+ */
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record ErrorResponse(
+        @JsonProperty("errors") List<Item> errors
+) {
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Item(
+            @JsonProperty("code") String code,
+            @JsonProperty("message") String message,
+            @JsonProperty("detail") Object detail
+    ) {}
+}
+
