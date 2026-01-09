@@ -1,4 +1,4 @@
-package riid.client.core.protocol;
+package riid.client.core.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;

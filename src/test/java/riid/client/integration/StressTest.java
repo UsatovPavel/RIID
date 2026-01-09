@@ -1,20 +1,17 @@
 package riid.client.integration;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
 import riid.cache.CacheAdapter;
-import riid.cache.TokenCache;
-import riid.client.RegistryClient;
-import riid.client.RegistryClientImpl;
-import riid.client.blob.BlobRequest;
+import riid.client.api.RegistryClient;
+import riid.client.api.RegistryClientImpl;
+import riid.client.api.BlobRequest;
 import riid.client.core.config.RegistryEndpoint;
-import riid.client.core.protocol.Manifest;
+import riid.client.core.model.manifest.Manifest;
 import riid.client.http.HttpClientConfig;
 
 import java.io.File;

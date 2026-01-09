@@ -1,20 +1,20 @@
-package riid.client.core.protocol;
+package riid.client.core.model.manifest;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
-import java.util.List;
+import riid.client.core.model.Platform;
 
 /**
- * OCI/Docker manifest list (index).
+ * Entry in a manifest list / index.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ManifestIndex(
-        @JsonProperty("schemaVersion") int schemaVersion,
+public record ManifestRef(
         @JsonProperty("mediaType") String mediaType,
-        @JsonProperty("manifests") List<ManifestRef> manifests
+        @JsonProperty("digest") String digest,
+        @JsonProperty("size") long size,
+        @JsonProperty("platform") Platform platform
 ) {
 }
 

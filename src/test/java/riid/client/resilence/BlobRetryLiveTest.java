@@ -1,18 +1,14 @@
 package riid.client.resilence;
 
 import org.junit.jupiter.api.Test;
-import riid.client.RegistryClientImpl;
-import riid.client.blob.BlobRequest;
-import riid.client.blob.BlobResult;
+import riid.client.api.RegistryClientImpl;
+import riid.client.api.BlobRequest;
+import riid.client.api.BlobResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 
 import java.io.File;
-import java.io.FilterInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;

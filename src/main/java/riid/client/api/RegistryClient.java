@@ -1,11 +1,8 @@
-package riid.client;
+package riid.client.api;
 
 import riid.cache.CacheAdapter;
-import riid.client.blob.BlobRequest;
-import riid.client.blob.BlobResult;
-import riid.client.core.protocol.Manifest;
-import riid.client.core.protocol.TagList;
-import riid.client.manifest.ManifestResult;
+import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.TagList;
 
 import java.io.File;
 import java.util.Optional;

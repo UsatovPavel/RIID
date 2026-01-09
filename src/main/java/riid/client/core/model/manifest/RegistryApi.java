@@ -1,4 +1,4 @@
-package riid.client.core.protocol;
+package riid.client.core.model.manifest;
 
 /**
  * Helper with path templates for Docker Registry API v2 (pull).

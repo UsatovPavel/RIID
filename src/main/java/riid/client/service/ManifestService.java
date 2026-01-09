@@ -1,18 +1,18 @@
-package riid.client.manifest;
+package riid.client.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.client.auth.AuthService;
+import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
-import riid.client.core.protocol.Manifest;
-import riid.client.core.protocol.ManifestIndex;
-import riid.client.core.protocol.ManifestRef;
-import riid.client.core.protocol.MediaTypes;
-import riid.client.core.protocol.RegistryApi;
-import riid.client.core.util.Digests;
+import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.ManifestIndex;
+import riid.client.core.model.manifest.ManifestRef;
+import riid.client.core.model.manifest.MediaTypes;
+import riid.client.core.model.manifest.RegistryApi;
+import riid.client.core.model.Digests;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 
@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

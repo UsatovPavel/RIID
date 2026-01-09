@@ -1,13 +1,14 @@
-package riid.client.blob;
+package riid.client.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
-import riid.client.auth.AuthService;
+import riid.client.api.BlobRequest;
+import riid.client.api.BlobResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
-import riid.client.core.protocol.RegistryApi;
+import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 
