@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * - 100 мелких образов 740.2 kB (busybox:latest) скачиваются параллельно, проверка digest/size.
  */
 @Tag("stress")
+@SuppressWarnings("deprecation")
 public class StressTest {
 
     private static RegistryClient CLIENT;
