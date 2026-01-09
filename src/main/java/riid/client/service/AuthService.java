@@ -1,21 +1,21 @@
 package riid.client.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.app.StatusCodes;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import riid.client.core.model.auth.AuthChallenge;
-import riid.client.core.model.auth.AuthParser;
-import riid.client.core.model.auth.TokenResponse;
+import riid.cache.TokenCache;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
+import riid.client.core.model.auth.AuthChallenge;
+import riid.client.core.model.auth.AuthParser;
+import riid.client.core.model.auth.TokenResponse;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
-import riid.cache.TokenCache;
 
 import java.io.IOException;
 import java.net.URI;

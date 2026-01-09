@@ -1,4 +1,8 @@
-
+// Usage:
+// ./gradlew allReports for run code quality utils and save report in one file
+//  ./gradlew testAll for run all tests
+// ./gradlew testStress for run only stress tests
+// ./gradlew testLocal for run only local tests
 plugins {
     id("java")
     id("checkstyle")
@@ -77,6 +81,104 @@ tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
     enabled = !skipQuality
+}
+
+tasks.withType<Test>().configureEach {
+    // Always rerun tests by default 
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Test>("testStress") {
+    group = "verification"
+    description = "Run stress-tagged tests"
+    useJUnitPlatform {
+        includeTags("stress")
+    }
+}
+
+tasks.register<Test>("testLocal") {
+    group = "verification"
+    description = "Run local-tagged tests (e.g., Testcontainers registry)"
+    useJUnitPlatform {
+        includeTags("local")
+    }
+}
+
+tasks.register("testAll") {
+    group = "verification"
+    description = "Run default tests and stress tests"
+    dependsOn("test", "testStress")
+}
+
+tasks.register("allReports") {
+    group = "verification"
+    description = "Run check and merge quality reports into build/reports/all-reports.html"
+    dependsOn("check")
+    doLast {
+        val reports = listOf(
+            "checkstyle/main.html",
+            "checkstyle/test.html",
+            "pmd/main.html",
+            "pmd/test.html",
+            "spotbugs/main.html",
+            "spotbugs/test.html",
+            "problems/problems-report.html"
+        )
+        val reportsDir = layout.buildDirectory.dir("reports").get().asFile
+        reportsDir.mkdirs()
+        val out = reportsDir.resolve("all-reports.html")
+        out.writeText(
+            """
+            <html><head><meta charset='UTF-8'><title>All Reports</title></head><body><h1>Quality Reports</h1>
+            """.trimIndent()
+        )
+        reports.forEach { rel ->
+            val f = reportsDir.resolve(rel)
+            if (f.exists()) {
+                out.appendText(
+                    """
+                    <section><h2>$rel</h2><iframe src='$rel' style='width:100%;height:600px;border:1px solid #ccc;'></iframe></section><hr/>
+                    """.trimIndent()
+                )
+            }
+        }
+        out.appendText("</body></html>")
+        println("Combined report generated at ${out.absolutePath}")
+    }
+}
+//для запуска Docker у тасок вывод некрасивый по сравнению с Makefile
+tasks.register<Exec>("dockerBuild") {
+    group = "docker"
+    description = "Build demo image (riid-demo)"
+    commandLine("docker", "build", "-t", "riid-demo", ".")
+}
+
+val dockerBuildTestImage = tasks.register<Exec>("dockerBuildTestImage") {
+    group = "docker"
+    description = "Build test image (builder target)"
+    commandLine(
+        "docker", "build",
+        "--target", "builder",
+        "-t", "riid-test", "."
+    )
+}
+
+val dockerRunTestsInContainer = tasks.register<Exec>("dockerRunTestsInContainer") {
+    group = "docker"
+    description = "Run gradlew test inside riid-test container"
+    dependsOn(dockerBuildTestImage)
+    commandLine(
+        "docker", "run", "--rm",
+        "-v", "gradle-cache:/root/.gradle",
+        "riid-test",
+        "./gradlew", "test", "-PdisableLocal"
+    )
+}
+
+tasks.register("dockerTest") {
+    group = "docker"
+    description = "Build test image and run tests inside it"
+    dependsOn(dockerRunTestsInContainer)
 }
 
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {

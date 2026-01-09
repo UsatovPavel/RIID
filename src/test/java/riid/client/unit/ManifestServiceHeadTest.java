@@ -7,11 +7,11 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import riid.cache.TokenCache;
-import riid.client.service.AuthService;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
+import riid.client.service.AuthService;
 import riid.client.service.ManifestService;
 
 import java.io.IOException;

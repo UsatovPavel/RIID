@@ -7,12 +7,12 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import riid.cache.TokenCache;
-import riid.client.service.AuthService;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
+import riid.client.service.AuthService;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -22,9 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthServiceTest {
 

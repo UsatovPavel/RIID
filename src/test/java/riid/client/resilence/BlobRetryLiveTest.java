@@ -1,9 +1,9 @@
 package riid.client.resilence;
 
 import org.junit.jupiter.api.Test;
-import riid.client.api.RegistryClientImpl;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
+import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 

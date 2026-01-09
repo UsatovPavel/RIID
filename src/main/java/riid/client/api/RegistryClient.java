@@ -1,6 +1,5 @@
 package riid.client.api;
 
-import riid.cache.CacheAdapter;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.TagList;
 
@@ -21,6 +20,5 @@ public interface RegistryClient {
 
     TagList listTags(String repository, Integer n, String last);
 
-    CacheAdapter cacheAdapter();
 }
 

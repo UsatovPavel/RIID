@@ -14,8 +14,8 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: gradle
-      - name: Code quality (make check)
-        run: make check
+      - name: Code quality (checkstyle/pmd/spotbugs + reports)
+        run: ./gradlew allReports
 
   test:
     runs-on: ubuntu-latest
