@@ -1,34 +1,19 @@
 package riid.dispatcher;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Configuration for RequestDispatcher.
  */
-public final class DispatcherConfig {
-    private final int maxConcurrentRegistry;
+public record DispatcherConfig(@JsonProperty("maxConcurrentRegistry") int maxConcurrentRegistry) {
+    private static final int DEFAULT_MAX_CONCURRENT = 4;
 
-    private DispatcherConfig(Builder b) {
-        this.maxConcurrentRegistry = b.maxConcurrentRegistry;
+    public DispatcherConfig() {
+        this(DEFAULT_MAX_CONCURRENT);
     }
 
-    public int maxConcurrentRegistry() {
-        return maxConcurrentRegistry;
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    public static final class Builder {
-        private int maxConcurrentRegistry = 4; // default concurrency limit to registry
-
-        public Builder maxConcurrentRegistry(int v) {
-            this.maxConcurrentRegistry = v;
-            return this;
-        }
-
-        public DispatcherConfig build() {
-            return new DispatcherConfig(this);
-        }
+    public DispatcherConfig(int maxConcurrentRegistry) {
+        this.maxConcurrentRegistry = maxConcurrentRegistry > 0 ? maxConcurrentRegistry : DEFAULT_MAX_CONCURRENT;
     }
 }
 

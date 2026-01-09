@@ -1,109 +1,48 @@
 package riid.client.http;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.Duration;
-import java.util.Objects;
 
 /**
  * HTTP client configuration for registry calls.
  */
-public final class HttpClientConfig {
-    private final Duration connectTimeout;
-    private final Duration requestTimeout;
-    private final int maxRetries;
-    private final Duration initialBackoff;
-    private final Duration maxBackoff;
-    private final boolean retryIdempotentOnly;
-    private final String userAgent;
+public record HttpClientConfig(
+        @JsonProperty("connectTimeout") Duration connectTimeout,
+        @JsonProperty("requestTimeout") Duration requestTimeout,
+        @JsonProperty("maxRetries") int maxRetries,
+        @JsonProperty("initialBackoff") Duration initialBackoff,
+        @JsonProperty("maxBackoff") Duration maxBackoff,
+        @JsonProperty("retryIdempotentOnly") boolean retryIdempotentOnly,
+        @JsonProperty("userAgent") String userAgent
+) {
+    private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private static final int DEFAULT_MAX_RETRIES = 2;
+    private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofMillis(200);
+    private static final Duration DEFAULT_MAX_BACKOFF = Duration.ofSeconds(2);
+    private static final boolean DEFAULT_RETRY_IDEMPOTENT_ONLY = true;
+    private static final String DEFAULT_USER_AGENT = "riid-registry-client";
 
-    private HttpClientConfig(Builder b) {
-        this.connectTimeout = b.connectTimeout;
-        this.requestTimeout = b.requestTimeout;
-        this.maxRetries = b.maxRetries;
-        this.initialBackoff = b.initialBackoff;
-        this.maxBackoff = b.maxBackoff;
-        this.retryIdempotentOnly = b.retryIdempotentOnly;
-        this.userAgent = b.userAgent;
+    public HttpClientConfig() {
+        this(DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES,
+                DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT);
     }
 
-    public Duration connectTimeout() {
-        return connectTimeout;
-    }
-
-    public Duration requestTimeout() {
-        return requestTimeout;
-    }
-
-    public int maxRetries() {
-        return maxRetries;
-    }
-
-    public Duration initialBackoff() {
-        return initialBackoff;
-    }
-
-    public Duration maxBackoff() {
-        return maxBackoff;
-    }
-
-    public boolean retryIdempotentOnly() {
-        return retryIdempotentOnly;
-    }
-
-    public String userAgent() {
-        return userAgent;
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    public static final class Builder {
-        private Duration connectTimeout = Duration.ofSeconds(5);
-        private Duration requestTimeout = Duration.ofSeconds(30);
-        private int maxRetries = 2;
-        private Duration initialBackoff = Duration.ofMillis(200);
-        private Duration maxBackoff = Duration.ofSeconds(2);
-        private boolean retryIdempotentOnly = true;
-        private String userAgent = "riid-registry-client";
-
-        public Builder connectTimeout(Duration v) {
-            this.connectTimeout = Objects.requireNonNull(v);
-            return this;
-        }
-
-        public Builder requestTimeout(Duration v) {
-            this.requestTimeout = Objects.requireNonNull(v);
-            return this;
-        }
-
-        public Builder maxRetries(int v) {
-            this.maxRetries = v;
-            return this;
-        }
-
-        public Builder initialBackoff(Duration v) {
-            this.initialBackoff = Objects.requireNonNull(v);
-            return this;
-        }
-
-        public Builder maxBackoff(Duration v) {
-            this.maxBackoff = Objects.requireNonNull(v);
-            return this;
-        }
-
-        public Builder retryIdempotentOnly(boolean v) {
-            this.retryIdempotentOnly = v;
-            return this;
-        }
-
-        public Builder userAgent(String v) {
-            this.userAgent = Objects.requireNonNull(v);
-            return this;
-        }
-
-        public HttpClientConfig build() {
-            return new HttpClientConfig(this);
-        }
+    public HttpClientConfig(Duration connectTimeout,
+                            Duration requestTimeout,
+                            int maxRetries,
+                            Duration initialBackoff,
+                            Duration maxBackoff,
+                            boolean retryIdempotentOnly,
+                            String userAgent) {
+        this.connectTimeout = connectTimeout != null ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
+        this.requestTimeout = requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_TIMEOUT;
+        this.maxRetries = maxRetries > 0 ? maxRetries : DEFAULT_MAX_RETRIES;
+        this.initialBackoff = initialBackoff != null ? initialBackoff : DEFAULT_INITIAL_BACKOFF;
+        this.maxBackoff = maxBackoff != null ? maxBackoff : DEFAULT_MAX_BACKOFF;
+        this.retryIdempotentOnly = retryIdempotentOnly;
+        this.userAgent = userAgent != null ? userAgent : DEFAULT_USER_AGENT;
     }
 }
 
