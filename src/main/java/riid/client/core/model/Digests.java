@@ -1,4 +1,4 @@
-package riid.client.core.util;
+package riid.client.core.model;
 
 import org.apache.commons.codec.digest.DigestUtils;
 

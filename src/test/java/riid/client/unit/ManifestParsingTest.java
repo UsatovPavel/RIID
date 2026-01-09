@@ -2,8 +2,8 @@ package riid.client.unit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import riid.client.core.protocol.Manifest;
-import riid.client.core.protocol.ManifestIndex;
+import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.ManifestIndex;
 
 import static org.junit.jupiter.api.Assertions.*;
 

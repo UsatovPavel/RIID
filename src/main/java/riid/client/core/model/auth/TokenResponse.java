@@ -1,4 +1,4 @@
-package riid.client.auth;
+package riid.client.core.model.auth;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

@@ -1,20 +1,18 @@
-package riid.client;
+package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import riid.cache.CacheAdapter;
-import riid.client.auth.AuthService;
-import riid.client.blob.BlobRequest;
-import riid.client.blob.BlobResult;
-import riid.client.blob.BlobService;
+import riid.client.core.model.manifest.RegistryApi;
+import riid.client.service.AuthService;
+import riid.client.service.BlobService;
 import riid.client.core.config.RegistryEndpoint;
-import riid.client.core.protocol.Manifest;
-import riid.client.core.protocol.TagList;
+import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.TagList;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
-import riid.client.manifest.ManifestResult;
-import riid.client.manifest.ManifestService;
+import riid.client.service.ManifestService;
 import riid.cache.TokenCache;
 
 import java.io.File;
@@ -22,7 +20,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -81,7 +78,7 @@ public final class RegistryClientImpl implements RegistryClient {
         String scope = "repository:%s:pull".formatted(repository);
         var headers = new HashMap<String, String>();
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
-        String path = riid.client.core.protocol.RegistryApi.tagListPath(repository);
+        String path = RegistryApi.tagListPath(repository);
         StringBuilder query = new StringBuilder();
         if (n != null) query.append("n=").append(n);
         if (last != null && !last.isBlank()) {

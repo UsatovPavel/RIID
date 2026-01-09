@@ -1,4 +1,4 @@
-package riid.client.blob;
+package riid.client.api;
 
 /**
  * Result of blob fetch.
