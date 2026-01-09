@@ -3,10 +3,10 @@ package riid.dispatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
-import riid.client.RegistryClient;
-import riid.client.blob.BlobRequest;
-import riid.client.blob.BlobResult;
-import riid.client.manifest.ManifestResult;
+import riid.client.api.BlobRequest;
+import riid.client.api.BlobResult;
+import riid.client.api.ManifestResult;
+import riid.client.api.RegistryClient;
 import riid.p2p.P2PExecutor;
 
 import java.io.File;
