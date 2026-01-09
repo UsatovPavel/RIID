@@ -22,3 +22,9 @@ docker-build:
 docker-test:
 	docker build --target builder -t riid-test .
 	docker run --rm -v gradle-cache:/root/.gradle riid-test ./gradlew test -PdisableLocal
+
+test-coverage:
+	./gradlew jacocoTestReport
+	rm -rf coverage-report
+	mkdir -p coverage-report
+	cp -r build/reports/jacoco/test/html/* coverage-report/
