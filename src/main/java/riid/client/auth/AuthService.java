@@ -1,6 +1,8 @@
 package riid.client.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
@@ -24,14 +26,23 @@ import java.util.Optional;
  * Handles ping + Bearer token fetching with caching.
  */
 public final class AuthService {
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
     private final HttpExecutor http;
     private final ObjectMapper mapper;
     private final TokenCache cache;
 
+    private final long defaultTokenTtlSeconds;
+
     public AuthService(HttpExecutor http, ObjectMapper mapper, TokenCache cache) {
+        this(http, mapper, cache, riid.client.core.config.AuthConfig.DEFAULT_TTL);
+    }
+
+    public AuthService(HttpExecutor http, ObjectMapper mapper, TokenCache cache, long defaultTokenTtlSeconds) {
         this.http = Objects.requireNonNull(http);
         this.mapper = Objects.requireNonNull(mapper);
         this.cache = Objects.requireNonNull(cache);
+        this.defaultTokenTtlSeconds = defaultTokenTtlSeconds;
     }
 
     /**
@@ -65,7 +76,12 @@ public final class AuthService {
         }
         AuthChallenge c = ch.get();
         String token = fetchToken(c, endpoint.credentialsOpt().orElse(null), scope);
-        cache.put(cacheKey, token, ttlFrom(pingResp.headers()).orElse(300L)); // fallback 5m
+        var ttlOpt = ttlFrom(pingResp.headers());
+        long ttl = ttlOpt.orElse(defaultTokenTtlSeconds);
+        if (ttlOpt.isEmpty()) {
+            log.warn("No token TTL in headers; using default {}s", defaultTokenTtlSeconds);
+        }
+        cache.put(cacheKey, token, ttl); // fallback from config
         return Optional.of("Bearer " + token);
     }
 
@@ -111,7 +127,10 @@ public final class AuthService {
                     .orElseThrow(() -> new ClientException(
                             new ClientError.Auth(ClientError.AuthKind.NO_TOKEN, resp.statusCode(), "No token in response"),
                             "No token in response"));
-            long ttl = Optional.ofNullable(tr.expiresInSeconds()).orElse(300L);
+            long ttl = Optional.ofNullable(tr.expiresInSeconds()).orElse(defaultTokenTtlSeconds);
+            if (tr.expiresInSeconds() == null) {
+                log.warn("Token response missing expires_in; using default {}s", defaultTokenTtlSeconds);
+            }
             cache.put(cacheKeyFromChallenge(challenge, scope, creds), token, ttl);
             return token;
         } catch (IOException e) {
