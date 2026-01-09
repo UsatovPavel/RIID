@@ -11,7 +11,6 @@ test-client:
 
 .PHONY: test-local
 test-local:
-	./scripts/run_local_registry.sh
 	./gradlew test --tests 'riid.client.integration.RegistryLocalTest'
 
 .PHONY: docker-build

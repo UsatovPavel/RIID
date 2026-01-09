@@ -69,11 +69,12 @@ public class BlobService {
             String mediaType = resp.headers().firstValue("Content-Type").orElse(req.mediaType());
             String path = target.getAbsolutePath();
             if (cacheAdapter != null) {
-                try (FileInputStream fin = new FileInputStream(target)) {
-                    String cachedPath = cacheAdapter.put(digest, fin, target.length(), mediaType);
-                    if (cachedPath != null && !cachedPath.isBlank()) {
-                        path = cachedPath;
-                    }
+                var entry = cacheAdapter.put(
+                        riid.cache.ImageDigest.parse(digest),
+                        riid.cache.CachePayload.of(target.toPath(), target.length()),
+                        riid.cache.CacheMediaType.from(mediaType));
+                if (entry != null && entry.locator() != null && !entry.locator().isBlank()) {
+                    path = entry.locator();
                 }
             }
             return new BlobResult(digest, target.length(), mediaType, path);

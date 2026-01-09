@@ -43,8 +43,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
         // 2) Try cache for each layer
         var layer = manifest.manifest().layers().getFirst();
-        String cachedPath = (cache != null && cache.has(layer.digest()))
-                ? cache.getPath(layer.digest()).orElse(null)
+        var digest = riid.cache.ImageDigest.parse(layer.digest());
+        String cachedPath = (cache != null && cache.has(digest))
+                ? cache.get(digest).map(riid.cache.CacheEntry::locator).orElse(null)
                 : null;
         if (cachedPath != null) {
             log.info("cache hit for layer {}", layer.digest());
@@ -69,8 +70,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
             // 5) Publish to P2P/cache
             if (cache != null) {
-                try (var in = new java.io.FileInputStream(tmp)) {
-                    cache.put(blob.digest(), in, blob.size(), blob.mediaType());
+                try {
+                    cache.put(riid.cache.ImageDigest.parse(blob.digest()),
+                            riid.cache.CachePayload.of(tmp.toPath(), tmp.length()),
+                            riid.cache.CacheMediaType.from(blob.mediaType()));
                 } catch (Exception ignored) {
                 }
             }
