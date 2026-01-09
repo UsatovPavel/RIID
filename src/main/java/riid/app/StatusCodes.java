@@ -8,14 +8,14 @@ public enum StatusCodes {
     UNAUTHORIZED(401),
     NOT_FOUND(404);
 
-    private final int code;
+    private final int statusCodeValue;
 
     StatusCodes(int code) {
-        this.code = code;
+        this.statusCodeValue = code;
     }
 
     public int code() {
-        return code;
+        return statusCodeValue;
     }
 }
 

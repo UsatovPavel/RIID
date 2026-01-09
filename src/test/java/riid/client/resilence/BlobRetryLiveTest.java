@@ -37,10 +37,8 @@ public class BlobRetryLiveTest {
         File tmp = Files.createTempFile("alpine-layer-retry", ".tar").toFile();
         tmp.deleteOnExit();
 
-        // Обёртка InputStream для симуляции обрыва соединения при первом запросе
-        var blobService = client.cacheAdapter() == null ? client.fetchBlob(req, tmp) : null;
-
-        BlobResult result = client.fetchBlob(req, tmp); // просто обычный GET, первый раз может "упасть", retry внутри клиента
+        // обычный GET; при сбое сработает retry внутри клиента
+        BlobResult result = client.fetchBlob(req, tmp);
 
         assertEquals(layer.digest(), result.digest(), "Digest должен совпадать");
         assertEquals(layer.size(), result.size(), "Размер должен совпадать");

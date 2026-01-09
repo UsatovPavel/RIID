@@ -13,7 +13,7 @@ import java.nio.file.Path;
 public final class ConfigLoader {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
-    private ConfigLoader() {}
+    private ConfigLoader() { }
 
     public static AppConfig load(Path path) {
         if (!Files.exists(path)) {

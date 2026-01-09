@@ -14,16 +14,15 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpExecutorTest {
+    private static final int FIRST_CALL = 1;
 
     private HttpServer server;
 
@@ -39,7 +38,7 @@ class HttpExecutorTest {
         AtomicInteger calls = new AtomicInteger();
         setupServer(exchange -> {
             int n = calls.incrementAndGet();
-            if (n == 1) {
+            if (n == FIRST_CALL) {
                 respond(exchange, 503, Map.of(), "");
             } else {
                 respond(exchange, 200, Map.of(), "ok");
@@ -48,7 +47,9 @@ class HttpExecutorTest {
         HttpExecutor exec = executor(1); // allow 1 retry => 2 attempts
         var resp = exec.get(uri("/ok"), Map.of());
         assertEquals(200, resp.statusCode());
-        String body = new String(resp.body().readAllBytes(), StandardCharsets.UTF_8);
+        String body = new String(
+                resp.body().readAllBytes(),
+                StandardCharsets.UTF_8);
         assertEquals("ok", body);
         assertEquals(2, calls.get(), "should retry once then succeed");
     }
@@ -89,7 +90,10 @@ class HttpExecutorTest {
         return URI.create("http://localhost:" + server.getAddress().getPort() + path);
     }
 
-    private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body) throws IOException {
+    private void respond(HttpExchange exchange,
+                         int status,
+                         Map<String, String> headers,
+                         String body) throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(status, bytes.length);

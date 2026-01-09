@@ -1,8 +1,8 @@
 package riid.app;
 
 import riid.cache.CacheAdapter;
-import riid.client.api.RegistryClientImpl;
 import riid.client.api.BlobRequest;
+import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 

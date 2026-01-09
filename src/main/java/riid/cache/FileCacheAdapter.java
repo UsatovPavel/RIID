@@ -54,9 +54,12 @@ public final class FileCacheAdapter implements CacheAdapter {
         Path p = pathFor(digest);
         try (InputStream data = payload.open(); var out = new FileOutputStream(p.toFile())) {
             byte[] buf = new byte[8192];
-            int r;
-            while ((r = data.read(buf)) != -1) {
-                out.write(buf, 0, r);
+            while (true) {
+                int read = data.read(buf);
+                if (read == -1) {
+                    break;
+                }
+                out.write(buf, 0, read);
             }
         }
         long size = payload.sizeBytes() > 0 ? payload.sizeBytes() : p.toFile().length();

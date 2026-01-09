@@ -2,7 +2,6 @@ package riid.client.unit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -21,51 +20,64 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RegistryClientImplTest {
+    private static final String SHA_PREFIX = "sha256:";
+    private static final String REPO = "repo";
+    private static final String OCTET = "application/octet-stream";
+    private static final String CONTENT_TYPE = "Content-Type";
+    private static final String METHOD_GET = "GET";
+    private static final String METHOD_HEAD = "HEAD";
+    private static final String API_PREFIX = "/v2/";
+    private static final int STATUS_OK = 200;
+    private static final int STATUS_NOT_FOUND = 404;
+    private static final int STATUS_METHOD_NOT_ALLOWED = 405;
 
     private HttpServer server;
 
     @AfterEach
     void tearDown() {
-        if (server != null) server.stop(0);
+        if (server != null) {
+            server.stop(0);
+        }
     }
 
     @Test
     void fetchManifestBlobAndTagsSuccess() throws Exception {
         byte[] layer = "layer-data".getBytes(StandardCharsets.UTF_8);
-        String layerDigest = "sha256:" + sha256(layer);
+        String layerDigest = SHA_PREFIX + sha256(layer);
         Manifest manifest = manifest(layerDigest, layer.length);
         byte[] manifestBytes = new ObjectMapper().writeValueAsBytes(manifest);
-        String manifestDigest = "sha256:" + sha256(manifestBytes);
+        String manifestDigest = SHA_PREFIX + sha256(manifestBytes);
 
         startServer(layer, layerDigest, manifestBytes, manifestDigest, 200, 200);
 
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
         RegistryClient client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null);
 
-        var mf = client.fetchManifest("repo", "latest");
+        var mf = client.fetchManifest(REPO, "latest");
         assertEquals(manifestDigest, mf.digest());
         assertEquals(1, mf.manifest().layers().size());
         assertEquals(layerDigest, mf.manifest().layers().getFirst().digest());
 
         File tmp = File.createTempFile("blob-", ".bin");
         tmp.deleteOnExit();
-        BlobRequest req = new BlobRequest("repo", layerDigest, (long) layer.length, "application/octet-stream");
+        BlobRequest req = new BlobRequest(REPO, layerDigest, (long) layer.length, OCTET);
         BlobResult br = client.fetchBlob(req, tmp);
         assertEquals(layerDigest, br.digest());
         assertEquals(layer.length, br.size());
         assertTrue(tmp.length() > 0);
 
-        TagList tags = client.listTags("repo", null, null);
-        assertEquals("repo", tags.name());
+        TagList tags = client.listTags(REPO, null, null);
+        assertEquals(REPO, tags.name());
         assertTrue(tags.tags().contains("latest"));
         assertTrue(tags.tags().contains("edge"));
     }
@@ -75,7 +87,7 @@ class RegistryClientImplTest {
         startServer(new byte[0], "sha256:dead", new byte[0], "sha256:dead", 500, 500);
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
         RegistryClient client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null);
-        assertThrows(RuntimeException.class, () -> client.listTags("repo", null, null));
+        assertThrows(RuntimeException.class, () -> client.listTags(REPO, null, null));
     }
 
     @Test
@@ -84,7 +96,7 @@ class RegistryClientImplTest {
         startServerHeadOnly404();
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
         RegistryClient client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null);
-        assertTrue(client.headBlob("repo", "sha256:missing").isEmpty());
+        assertTrue(client.headBlob(REPO, SHA_PREFIX + "missing").isEmpty());
     }
 
     private void startServer(byte[] layer,
@@ -94,62 +106,65 @@ class RegistryClientImplTest {
                              int tagsStatus,
                              int blobStatus) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/v2/", exchange -> respond(exchange, 200, Map.of(), ""));
-        server.createContext("/v2/repo/manifests/latest", exchange -> {
-            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
-                respond(exchange, 405, Map.of(), "");
+        server.createContext(API_PREFIX, exchange -> respond(exchange, STATUS_OK, Map.of(), ""));
+        server.createContext(API_PREFIX + REPO + "/manifests/latest", exchange -> {
+            if (!exchange.getRequestMethod().equalsIgnoreCase(METHOD_GET)) {
+                respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), "");
                 return;
             }
             Map<String, String> headers = Map.of(
-                    "Content-Type", "application/vnd.docker.distribution.manifest.v2+json",
+                    CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json",
                     "Docker-Content-Digest", manifestDigest
             );
-            respond(exchange, 200, headers, manifestBytes);
+            respond(exchange, STATUS_OK, headers, manifestBytes);
         });
-        server.createContext("/v2/repo/blobs/" + layerDigest, exchange -> {
-            if ("HEAD".equals(exchange.getRequestMethod())) {
-                if (blobStatus == 404) {
-                    respond(exchange, 404, Map.of(), new byte[0]);
+        server.createContext(API_PREFIX + REPO + "/blobs/" + layerDigest, exchange -> {
+            if (METHOD_HEAD.equals(exchange.getRequestMethod())) {
+                if (blobStatus == STATUS_NOT_FOUND) {
+                    respond(exchange, STATUS_NOT_FOUND, Map.of(), new byte[0]);
                     return;
                 }
-                respond(exchange, 200, Map.of(
+                respond(exchange, STATUS_OK, Map.of(
                         "Content-Length", String.valueOf(layer.length),
-                        "Content-Type", "application/octet-stream"
+                        CONTENT_TYPE, OCTET
                 ), new byte[0]);
                 return;
             }
-            if ("GET".equals(exchange.getRequestMethod())) {
+            if (METHOD_GET.equals(exchange.getRequestMethod())) {
                 respond(exchange, blobStatus, Map.of(
                         "Content-Length", String.valueOf(layer.length),
-                        "Content-Type", "application/octet-stream"
+                        CONTENT_TYPE, OCTET
                 ), layer);
                 return;
             }
-            respond(exchange, 405, Map.of(), new byte[0]);
+            respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), new byte[0]);
         });
-        server.createContext("/v2/repo/tags/list", exchange -> {
-            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
-                respond(exchange, 405, Map.of(), "");
+        server.createContext(API_PREFIX + REPO + "/tags/list", exchange -> {
+            if (!exchange.getRequestMethod().equalsIgnoreCase(METHOD_GET)) {
+                respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), "");
                 return;
             }
-            String body = "{\"name\":\"repo\",\"tags\":[\"latest\",\"edge\"]}";
-            respond(exchange, tagsStatus, Map.of("Content-Type", "application/json"), body);
+            String body = "{\"name\":\"" + REPO + "\",\"tags\":[\"latest\",\"edge\"]}";
+            respond(exchange, tagsStatus, Map.of(CONTENT_TYPE, "application/json"), body);
         });
         server.start();
     }
 
     private void startServerHeadOnly404() throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/v2/", exchange -> respond(exchange, 200, Map.of(), ""));
-        server.createContext("/v2/repo/blobs/sha256:missing", exchange -> respond(exchange, 404, Map.of(), new byte[0]));
+        server.createContext(API_PREFIX, exchange -> respond(exchange, STATUS_OK, Map.of(), ""));
+        server.createContext(API_PREFIX + REPO + "/blobs/" + SHA_PREFIX + "missing",
+                exchange -> respond(exchange, STATUS_NOT_FOUND, Map.of(), new byte[0]));
         server.start();
     }
 
-    private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body) throws IOException {
+    private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body)
+            throws IOException {
         respond(exchange, status, headers, body.getBytes(StandardCharsets.UTF_8));
     }
 
-    private void respond(HttpExchange exchange, int status, Map<String, String> headers, byte[] body) throws IOException {
+    private void respond(HttpExchange exchange, int status, Map<String, String> headers, byte[] body)
+            throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
         exchange.sendResponseHeaders(status, body.length);
         try (OutputStream os = exchange.getResponseBody()) {

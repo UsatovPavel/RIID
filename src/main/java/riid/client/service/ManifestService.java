@@ -8,12 +8,12 @@ import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
+import riid.client.core.model.Digests;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.ManifestIndex;
 import riid.client.core.model.manifest.ManifestRef;
 import riid.client.core.model.manifest.MediaTypes;
 import riid.client.core.model.manifest.RegistryApi;
-import riid.client.core.model.Digests;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 
@@ -31,7 +31,7 @@ import java.util.Optional;
  * Fetches and validates manifests.
  */
 public final class ManifestService {
-    private static final Logger log = LoggerFactory.getLogger(ManifestService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ManifestService.class);
     private static final List<String> ACCEPT = List.of(
             MediaTypes.OCI_IMAGE_MANIFEST,
             MediaTypes.DOCKER_MANIFEST_V2,
@@ -49,10 +49,16 @@ public final class ManifestService {
         this.mapper = Objects.requireNonNull(mapper).copy();
     }
 
-    public ManifestResult fetchManifest(RegistryEndpoint endpoint, String repository, String reference, String scope) {
-        URI uri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), RegistryApi.manifestPath(repository, reference));
+    public ManifestResult fetchManifest(
+            RegistryEndpoint endpoint, String repository, String reference, String scope) {
+        URI uri = HttpRequestBuilder.buildUri(
+                endpoint.scheme(),
+                endpoint.host(),
+                endpoint.port(),
+                RegistryApi.manifestPath(repository, reference));
         Map<String, String> headers = defaultHeaders();
-        authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
+        authService.getAuthHeader(endpoint, repository, scope)
+                .ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<java.io.InputStream> resp = http.get(uri, headers);
         if (resp.statusCode() != StatusCodes.OK.code()) {
             throw new ClientException(
@@ -78,7 +84,8 @@ public final class ManifestService {
 
             String computedDigest = "sha256:" + Digests.sha256Hex(bytes);
             Manifest manifest = mapper.readValue(bytes, Manifest.class);
-            String mediaType = Optional.ofNullable(contentType).orElse(manifest.mediaType());
+            String mediaType = Optional.ofNullable(contentType)
+                    .orElse(manifest.mediaType());
             long len = bytes.length;
             validateDigestHeader(resp.headers(), computedDigest);
             return new ManifestResult(computedDigest, mediaType, len, manifest);
@@ -90,10 +97,16 @@ public final class ManifestService {
         }
     }
 
-    public Optional<ManifestResult> headManifest(RegistryEndpoint endpoint, String repository, String reference, String scope) {
-        URI uri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), RegistryApi.manifestPath(repository, reference));
+    public Optional<ManifestResult> headManifest(
+            RegistryEndpoint endpoint, String repository, String reference, String scope) {
+        URI uri = HttpRequestBuilder.buildUri(
+                endpoint.scheme(),
+                endpoint.host(),
+                endpoint.port(),
+                RegistryApi.manifestPath(repository, reference));
         Map<String, String> headers = defaultHeaders();
-        authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
+        authService.getAuthHeader(endpoint, repository, scope)
+                .ifPresent(v -> headers.put("Authorization", v));
         HttpResponse<Void> resp = http.head(uri, headers);
         if (resp.statusCode() == StatusCodes.NOT_FOUND.code()) {
             return Optional.empty();
@@ -105,15 +118,17 @@ public final class ManifestService {
         }
         String dcd = resp.headers().firstValue("Docker-Content-Digest").orElse(null);
         if (dcd == null || dcd.isBlank()) {
-            log.warn("Manifest HEAD missing Docker-Content-Digest for {}/{}", repository, reference);
+            LOGGER.warn("Manifest HEAD missing Docker-Content-Digest for {}/{}", repository, reference);
             throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Docker-Content-Digest on manifest HEAD"),
+                    new ClientError.Parse(
+                            ClientError.ParseKind.MANIFEST,
+                            "Missing Docker-Content-Digest on manifest HEAD"),
                     "Missing Docker-Content-Digest on manifest HEAD");
         }
         String mediaType = resp.headers().firstValue("Content-Type").orElse(null);
         long len = resp.headers().firstValueAsLong("Content-Length").orElse(-1);
         if (len <= 0) {
-            log.warn("Manifest HEAD missing Content-Length for {}/{}", repository, reference);
+            LOGGER.warn("Manifest HEAD missing Content-Length for {}/{}", repository, reference);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length on manifest HEAD"),
                     "Missing Content-Length on manifest HEAD");
@@ -137,8 +152,11 @@ public final class ManifestService {
     }
 
     private boolean isIndexMediaType(String mediaType) {
-        if (mediaType == null) return false;
-        return mediaType.contains(MediaTypes.OCI_IMAGE_INDEX) || mediaType.contains(MediaTypes.DOCKER_MANIFEST_LIST);
+        if (mediaType == null) {
+            return false;
+        }
+        return mediaType.contains(MediaTypes.OCI_IMAGE_INDEX)
+                || mediaType.contains(MediaTypes.DOCKER_MANIFEST_LIST);
     }
 
     private boolean looksLikeIndex(byte[] bytes) {
@@ -147,10 +165,13 @@ public final class ManifestService {
     }
 
     private ManifestRef selectEntry(ManifestIndex index) {
-        if (index.manifests() == null || index.manifests().isEmpty()) return null;
-        // Prefer linux/amd64 if available, else first
+        if (index.manifests() == null || index.manifests().isEmpty()) {
+            return null;
+        }
         return index.manifests().stream()
-                .filter(m -> m.platform() != null && "linux".equalsIgnoreCase(m.platform().os()) && "amd64".equalsIgnoreCase(m.platform().architecture()))
+                .filter(m -> m.platform() != null
+                        && "linux".equalsIgnoreCase(m.platform().os())
+                        && "amd64".equalsIgnoreCase(m.platform().architecture()))
                 .findFirst()
                 .orElse(index.manifests().getFirst());
     }

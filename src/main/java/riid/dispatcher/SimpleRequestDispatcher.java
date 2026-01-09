@@ -12,6 +12,7 @@ import riid.p2p.P2PExecutor;
 
 import java.io.File;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -19,23 +20,26 @@ import java.util.concurrent.Semaphore;
  */
 @SuppressFBWarnings({"EI_EXPOSE_REP2"})
 public class SimpleRequestDispatcher implements RequestDispatcher {
-    private static final Logger log = LoggerFactory.getLogger(SimpleRequestDispatcher.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SimpleRequestDispatcher.class);
 
     private final RegistryClient client;
     private final CacheAdapter cache;
     private final P2PExecutor p2p;
-    private final Semaphore registryLimiter; // limits concurrent downloads from regisry-client
+    private final Optional<Semaphore> registryLimiter; // limits concurrent downloads from registry
 
     public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p) {
         this(client, cache, p2p, new DispatcherConfig());
     }
 
-    public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p, DispatcherConfig config) {
+    public SimpleRequestDispatcher(RegistryClient client,
+                                   CacheAdapter cache,
+                                   P2PExecutor p2p,
+                                   DispatcherConfig config) {
         this.client = Objects.requireNonNull(client);
         this.cache = cache;
         this.p2p = p2p;
         int maxConc = config != null ? config.maxConcurrentRegistry() : 0;
-        this.registryLimiter = maxConc > 0 ? new Semaphore(maxConc) : null;
+        this.registryLimiter = maxConc > 0 ? Optional.of(new Semaphore(maxConc)) : Optional.empty();
     }
 
     @Override
@@ -50,7 +54,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 ? cache.get(digest).map(riid.cache.CacheEntry::locator).orElse(null)
                 : null;
         if (cachedPath != null) {
-            log.info("cache hit for layer {}", layer.digest());
+            LOGGER.info("cache hit for layer {}", layer.digest());
             return new FetchResult(layer.digest(), layer.mediaType(), cachedPath);
         }
 
@@ -58,7 +62,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         if (p2p != null) {
             var p2pPath = p2p.fetch(layer.digest(), layer.size(), layer.mediaType());
             if (p2pPath.isPresent()) {
-                log.info("p2p hit for layer {}", layer.digest());
+                LOGGER.info("p2p hit for layer {}", layer.digest());
                 return new FetchResult(layer.digest(), layer.mediaType(), p2pPath.get());
             }
         }
@@ -67,8 +71,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         acquireRegistry();
         try {
             File tmp = createTemp();
-            BlobResult blob = client.fetchBlob(new BlobRequest(ref.repository(), layer.digest(), layer.size(), layer.mediaType()), tmp);
-            log.info("downloaded layer {} from registry", layer.digest());
+            BlobResult blob = client.fetchBlob(
+                    new BlobRequest(ref.repository(), layer.digest(), layer.size(), layer.mediaType()),
+                    tmp);
+            LOGGER.info("downloaded layer {} from registry", layer.digest());
 
             // 5) Publish to P2P/cache
             if (cache != null) {
@@ -77,7 +83,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                             riid.cache.CachePayload.of(tmp.toPath(), tmp.length()),
                             riid.cache.CacheMediaType.from(blob.mediaType()));
                 } catch (Exception ex) {
-                    log.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
+                    LOGGER.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
                 }
             }
             if (p2p != null) {
@@ -101,19 +107,18 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     }
 
     private void acquireRegistry() {
-        if (registryLimiter == null) return;
-        try {
-            registryLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while waiting for registry slot", e);
-        }
+        registryLimiter.ifPresent(limiter -> {
+            try {
+                limiter.acquire();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting for registry slot", e);
+            }
+        });
     }
 
     private void releaseRegistry() {
-        if (registryLimiter != null) {
-            registryLimiter.release();
-        }
+        registryLimiter.ifPresent(Semaphore::release);
     }
 }
 

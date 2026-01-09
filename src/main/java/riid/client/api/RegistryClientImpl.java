@@ -3,6 +3,7 @@ package riid.client.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import riid.cache.CacheAdapter;
+import riid.app.StatusCodes;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.service.AuthService;
 import riid.client.service.BlobService;
@@ -32,13 +33,21 @@ public final class RegistryClientImpl implements RegistryClient {
     private static final String PULL_SCOPE_TEMPLATE = "repository:%s:pull";
 
     private final RegistryEndpoint endpoint;
+
     private final HttpExecutor http;
+
     private final AuthService authService;
+
     private final ManifestService manifestService;
+
     private final BlobService blobService;
+
+    @SuppressFBWarnings({"EI_EXPOSE_REP2"})
     private final CacheAdapter cache;
+
     private final ObjectMapper mapper;
 
+    @SuppressWarnings("PMD.CloseResource")
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter) {
@@ -61,7 +70,11 @@ public final class RegistryClientImpl implements RegistryClient {
     @Override
     public BlobResult fetchConfig(String repository, Manifest manifest, File target) {
         String scope = PULL_SCOPE_TEMPLATE.formatted(repository);
-        BlobRequest req = new BlobRequest(repository, manifest.config().digest(), manifest.config().size(), manifest.config().mediaType());
+        BlobRequest req = new BlobRequest(
+                repository,
+                manifest.config().digest(),
+                manifest.config().size(),
+                manifest.config().mediaType());
         return blobService.fetchBlob(endpoint, req, target, scope);
     }
 
@@ -84,14 +97,23 @@ public final class RegistryClientImpl implements RegistryClient {
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         String path = RegistryApi.tagListPath(repository);
         StringBuilder query = new StringBuilder();
-        if (n != null) query.append("n=").append(n);
+        if (n != null) {
+            query.append("n=").append(n);
+        }
         if (last != null && !last.isBlank()) {
-            if (!query.isEmpty()) query.append("&");
+            if (!query.isEmpty()) {
+                query.append("&");
+            }
             query.append("last=").append(last);
         }
-        URI uri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), path, query.isEmpty() ? null : query.toString());
+        URI uri = HttpRequestBuilder.buildUri(
+                endpoint.scheme(),
+                endpoint.host(),
+                endpoint.port(),
+                path,
+                query.isEmpty() ? null : query.toString());
         HttpResponse<java.io.InputStream> resp = http.get(uri, headers);
-        if (resp.statusCode() != 200) {
+        if (resp.statusCode() != StatusCodes.OK.code()) {
             throw new RuntimeException("Tag list failed: " + resp.statusCode());
         }
         try (var body = resp.body()) {
@@ -102,6 +124,7 @@ public final class RegistryClientImpl implements RegistryClient {
     }
 
     @Override
+    @SuppressFBWarnings({"EI_EXPOSE_REP"})
     public CacheAdapter cacheAdapter() {
         return cache;
     }
