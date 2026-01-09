@@ -3,8 +3,8 @@ package riid.client.unit;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import riid.cache.TokenCache;
 import riid.client.auth.AuthService;
-import riid.client.auth.TokenCache;
 import riid.client.blob.BlobRequest;
 import riid.client.blob.BlobResult;
 import riid.client.blob.BlobService;
@@ -46,7 +46,7 @@ public class RegistrySmokeTest {
         private static final String SCOPE = "repository:library/alpine:pull";
 
         private final ObjectMapper mapper = new ObjectMapper();
-        private final HttpClientConfig httpConfig = HttpClientConfig.builder().build();
+        private final HttpClientConfig httpConfig = new HttpClientConfig();
         private final HttpClient httpClient = HttpClientFactory.create(httpConfig);
         private final HttpExecutor http = new HttpExecutor(httpClient, httpConfig);
         private final AuthService authService = new AuthService(http, mapper, new TokenCache());

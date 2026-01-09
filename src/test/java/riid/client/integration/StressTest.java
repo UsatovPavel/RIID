@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
 import riid.cache.CacheAdapter;
+import riid.cache.TokenCache;
 import riid.client.RegistryClient;
 import riid.client.RegistryClientImpl;
 import riid.client.blob.BlobRequest;
@@ -47,7 +48,7 @@ public class StressTest {
     @BeforeAll
     static void setup() {
         RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        HttpClientConfig cfg = HttpClientConfig.builder().maxRetries(2).build();
+        HttpClientConfig cfg = new HttpClientConfig(null, null, 2, null, null, true, null);
         client = new RegistryClientImpl(hub, cfg, (CacheAdapter) null);
     }
 

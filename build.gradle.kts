@@ -1,5 +1,9 @@
 plugins {
     id("java")
+    id("checkstyle")
+    id("pmd")
+    id("jacoco")
+    id("com.github.spotbugs") version "6.4.8"
     id("com.gradleup.shadow") version "9.3.0"
 }
 
@@ -7,6 +11,7 @@ group = "hse.ru"
 version = "0.1-PROTOTYPE"
 
 val javaVersion: Int = if (project.hasProperty("javaVersion")) (project.property("javaVersion") as String).toInt() else 25
+val skipQuality: Boolean = project.hasProperty("skipQuality")
 
 java {
     toolchain {
@@ -23,6 +28,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
+    testImplementation("org.testcontainers:junit-jupiter:1.21.4")
+    testImplementation("org.testcontainers:testcontainers:1.21.4")
     implementation("org.slf4j:slf4j-api:2.0.13")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.17.2")
@@ -40,7 +48,27 @@ tasks.test {
         if (project.hasProperty("disableLocal")) {
             excludeTags("local")
         }
+        if (skipQuality) {
+            excludeTags("archunit")
+        }
     }
+}
+
+tasks.withType<Checkstyle>().configureEach {
+    enabled = !skipQuality
+}
+
+tasks.withType<Pmd>().configureEach {
+    enabled = !skipQuality
+}
+
+tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
+    enabled = !skipQuality
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    enabled = !skipQuality
 }
 
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
