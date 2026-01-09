@@ -27,5 +27,13 @@ public record RegistryEndpoint(
     public Optional<Credentials> credentialsOpt() {
         return Optional.ofNullable(credentials);
     }
+
+    public java.net.URI uri(String path) {
+        return riid.client.http.HttpRequestBuilder.buildUri(scheme, host, port, path);
+    }
+
+    public java.net.URI uri(String path, String query) {
+        return riid.client.http.HttpRequestBuilder.buildUri(scheme, host, port, path, query);
+    }
 }
 

@@ -11,18 +11,17 @@ import riid.client.core.error.ClientException;
 import riid.client.core.model.Digests;
 import riid.client.core.model.manifest.*;
 import riid.client.http.HttpExecutor;
-import riid.client.http.HttpRequestBuilder;
+import riid.client.http.HttpResult;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpHeaders;
-import java.net.http.HttpResponse;
 import java.util.*;
+import java.net.http.HttpHeaders;
 
 /**
  * Fetches and validates manifests.
  */
-public final class ManifestService {
+public final class ManifestService implements ManifestServiceApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(ManifestService.class);
     private static final List<String> ACCEPT = List.of(
             MediaTypes.OCI_IMAGE_MANIFEST,
@@ -41,17 +40,14 @@ public final class ManifestService {
         this.mapper = Objects.requireNonNull(mapper).copy();
     }
 
+    @Override
     public ManifestResult fetchManifest(
             RegistryEndpoint endpoint, String repository, String reference, String scope) {
-        URI uri = HttpRequestBuilder.buildUri(
-                endpoint.scheme(),
-                endpoint.host(),
-                endpoint.port(),
-                RegistryApi.manifestPath(repository, reference));
+        URI uri = endpoint.uri(RegistryApi.manifestPath(repository, reference));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope)
                 .ifPresent(v -> headers.put("Authorization", v));
-        HttpResponse<java.io.InputStream> resp = http.get(uri, headers);
+        HttpResult<java.io.InputStream> resp = http.get(uri, headers);
         if (resp.statusCode() != StatusCodes.OK.code()) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest fetch failed"),
@@ -89,17 +85,14 @@ public final class ManifestService {
         }
     }
 
+    @Override
     public Optional<ManifestResult> headManifest(
             RegistryEndpoint endpoint, String repository, String reference, String scope) {
-        URI uri = HttpRequestBuilder.buildUri(
-                endpoint.scheme(),
-                endpoint.host(),
-                endpoint.port(),
-                RegistryApi.manifestPath(repository, reference));
+        URI uri = endpoint.uri(RegistryApi.manifestPath(repository, reference));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope)
                 .ifPresent(v -> headers.put("Authorization", v));
-        HttpResponse<Void> resp = http.head(uri, headers);
+        HttpResult<Void> resp = http.head(uri, headers);
         if (resp.statusCode() == StatusCodes.NOT_FOUND.code()) {
             return Optional.empty();
         }

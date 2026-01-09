@@ -16,13 +16,13 @@ import riid.client.core.model.auth.TokenResponse;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
+import riid.client.http.HttpResult;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpHeaders;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.net.http.HttpHeaders;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -68,7 +68,7 @@ public final class AuthService {
                 endpoint.host(),
                 endpoint.port(),
                 RegistryApi.V2_PING);
-        HttpResponse<Void> pingResp = http.head(pingUri, Map.of());
+        HttpResult<Void> pingResp = http.head(pingUri, Map.of());
         if (pingResp.statusCode() == StatusCodes.OK.code()) {
             return Optional.empty(); // no auth needed
         }
@@ -101,7 +101,7 @@ public final class AuthService {
         return Optional.of("Bearer " + token);
     }
 
-    private Optional<AuthChallenge> extractChallenge(HttpHeaders headers) {
+    private Optional<AuthChallenge> extractChallenge(java.net.http.HttpHeaders headers) {
         return headers.allValues("WWW-Authenticate").stream()
                 .map(AuthParser::parse)
                 .flatMap(Optional::stream)
@@ -134,7 +134,7 @@ public final class AuthService {
                     headers.put("Authorization", "Basic " + enc);
                 }
             }
-            HttpResponse<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
+            HttpResult<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
             if (resp.statusCode() != StatusCodes.OK.code()) {
                 throw new ClientException(
                         new ClientError.Auth(
