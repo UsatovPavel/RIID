@@ -6,7 +6,6 @@ plugins {
     id("jacoco")
     id("com.github.spotbugs") version "6.4.8"
     id("com.gradleup.shadow") version "9.3.0"
-    id("com.diffplug.spotless") version "8.1.0"
 }
 
 group = "hse.ru"
@@ -24,23 +23,6 @@ java {
 repositories {
     mavenCentral()
 }
-//короче поднимать для jdk 21 почему-то предлаегается в качестве решения. В итоге не работает.
-spotless {
-    java {
-        target("src/**/*.java")
-        googleJavaFormat("1.23.0")
-        targetExclude("**/build/**/*.java")
-    }
-}
-
-// Disable Spotless in check to avoid JDK25 formatter crash; run manually if needed.
-tasks.named("spotlessCheck") {
-    enabled = false
-}
-tasks.named("spotlessApply") {
-    enabled = false
-}
-
 dependencies {
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -91,8 +73,6 @@ tasks.jacocoTestReport {
     dependsOn(tasks.test)
     enabled = !skipQuality
 }
-
-// Spotless выводит ошибки на JDK25, не блокируем check
 
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
