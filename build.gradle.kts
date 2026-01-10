@@ -175,13 +175,50 @@ tasks.register("allReports") {
         val reportsDir = layout.buildDirectory.dir("reports").get().asFile
         reportsDir.mkdirs()
         val out = reportsDir.resolve("all-reports.html")
-        out.writeText("") // clear
-        reports.forEach { rel ->
-            val f = reportsDir.resolve(rel)
-            if (f.exists()) {
-                out.appendText(f.readText())
-            }
+        val header = """
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <title>Riid combined reports</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 1.5rem; }
+                h1 { margin-bottom: 0.5rem; }
+                h2 { margin-top: 2rem; }
+                .missing { color: #888; }
+                .section { border-top: 1px solid #ccc; padding-top: 1rem; }
+              </style>
+            </head>
+            <body>
+            <h1>Combined quality reports</h1>
+        """.trimIndent()
+        val footer = """
+            </body>
+            </html>
+        """.trimIndent()
+
+        fun extractBody(html: String): String {
+            val bodyRegex = Regex("(?is)<body[^>]*>(.*)</body>")
+            val body = bodyRegex.find(html)?.groups?.get(1)?.value ?: html
+            val headRegex = Regex("(?is)<head[^>]*>.*?</head>")
+            return headRegex.replace(body, "")
         }
+
+        val content = buildString {
+            append(header)
+            reports.forEach { rel ->
+                val f = reportsDir.resolve(rel)
+                append("""<div class="section">""")
+                append("<h2>${rel}</h2>")
+                if (f.exists()) {
+                    append(extractBody(f.readText()))
+                } else {
+                    append("""<p class="missing">Report not found: $rel</p>""")
+                }
+                append("</div>")
+            }
+            append(footer)
+        }
+        out.writeText(content)
         println("Concatenated report generated at ${out.absolutePath}")
     }
 }

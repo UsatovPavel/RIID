@@ -43,8 +43,11 @@ public class StressTest {
     @BeforeAll
     static void setup() {
         RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        HttpClientConfig cfg = new HttpClientConfig(
-                null, null, 2, null, null, true, null, true);
+        HttpClientConfig cfg = HttpClientConfig.builder()
+                .maxRetries(2)
+                .retryIdempotentOnly(true)
+                .followRedirects(true)
+                .build();
         CLIENT = new RegistryClientImpl(hub, cfg, (CacheAdapter) null);
     }
 
