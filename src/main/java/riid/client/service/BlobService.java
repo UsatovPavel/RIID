@@ -73,7 +73,7 @@ public class BlobService implements BlobServiceApi {
 
         long expectedSize = req.expectedSizeBytes() != null
                 ? req.expectedSizeBytes()
-                : resp.headers().firstValueAsLong("Content-Length").orElse(-1);
+                : resp.firstHeaderAsLong("Content-Length").orElse(-1);
         if (expectedSize <= 0) {
             LOGGER.warn("Missing Content-Length for blob {}", req.digest());
             throw new ClientException(
@@ -89,7 +89,7 @@ public class BlobService implements BlobServiceApi {
             validateDigest(digest, req.digest());
             long actualSize = sinkPath != null ? sinkPath.toFile().length() : expectedSize;
             validateSize(actualSize, expectedSize);
-            String mediaType = resp.headers().firstValue("Content-Type").orElse(req.mediaType());
+            String mediaType = resp.firstHeader("Content-Type").orElse(req.mediaType());
             String locator = sink.locator();
             if (cacheAdapter != null && sinkPath != null) {
                 var entry = cacheAdapter.put(
@@ -123,8 +123,8 @@ public class BlobService implements BlobServiceApi {
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, code, "Blob HEAD failed"),
                     "Blob HEAD failed: " + code);
         }
-        return resp.headers().firstValueAsLong("Content-Length").isPresent()
-                ? Optional.of(resp.headers().firstValueAsLong("Content-Length").getAsLong())
+        return resp.firstHeaderAsLong("Content-Length").isPresent()
+                ? Optional.of(resp.firstHeaderAsLong("Content-Length").getAsLong())
                 : Optional.empty();
     }
 

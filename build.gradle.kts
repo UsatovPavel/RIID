@@ -113,7 +113,7 @@ tasks.register("testAll") {
 
 tasks.register("allReports") {
     group = "verification"
-    description = "Run check and merge quality reports into build/reports/all-reports.html"
+    description = "Concatenate quality reports into build/reports/all-reports.html"
     dependsOn("check")
     doLast {
         val reports = listOf(
@@ -122,29 +122,19 @@ tasks.register("allReports") {
             "pmd/main.html",
             "pmd/test.html",
             "spotbugs/main.html",
-            "spotbugs/test.html",
-            "problems/problems-report.html"
+            "spotbugs/test.html"
         )
         val reportsDir = layout.buildDirectory.dir("reports").get().asFile
         reportsDir.mkdirs()
         val out = reportsDir.resolve("all-reports.html")
-        out.writeText(
-            """
-            <html><head><meta charset='UTF-8'><title>All Reports</title></head><body><h1>Quality Reports</h1>
-            """.trimIndent()
-        )
+        out.writeText("") // clear
         reports.forEach { rel ->
             val f = reportsDir.resolve(rel)
             if (f.exists()) {
-                out.appendText(
-                    """
-                    <section><h2>$rel</h2><iframe src='$rel' style='width:100%;height:600px;border:1px solid #ccc;'></iframe></section><hr/>
-                    """.trimIndent()
-                )
+                out.appendText(f.readText())
             }
         }
-        out.appendText("</body></html>")
-        println("Combined report generated at ${out.absolutePath}")
+        println("Concatenated report generated at ${out.absolutePath}")
     }
 }
 //для запуска Docker у тасок вывод некрасивый по сравнению с Makefile

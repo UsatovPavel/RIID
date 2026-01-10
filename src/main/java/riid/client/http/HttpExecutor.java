@@ -4,34 +4,33 @@ import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.InputStreamResponseListener;
 import org.eclipse.jetty.client.Request;
-import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
-import java.net.http.HttpHeaders;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
  */
 public final class HttpExecutor {
+    private static final String METHOD_HEAD = "HEAD";
     private static final List<Integer> RETRY_STATUSES = List.of(429, 502, 503, 504);
 
     private final HttpClient client;
     private final HttpClientConfig config;
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "Jetty client lifecycle managed by caller")
+    @SuppressWarnings("PMD.EI_EXPOSE_REP2")
     public HttpExecutor(HttpClient client, HttpClientConfig config) {
         this.client = Objects.requireNonNull(client);
         this.config = Objects.requireNonNull(config);
@@ -73,17 +72,17 @@ public final class HttpExecutor {
     private HttpResult<InputStream> execute(String method,
                                             URI uri,
                                             Map<String, String> headers) throws IOException {
-        if ("HEAD".equalsIgnoreCase(method)) {
+        if (METHOD_HEAD.equalsIgnoreCase(method)) {
             try {
                 Request req = client.newRequest(uri)
-                        .method("HEAD")
+                        .method(METHOD_HEAD)
                         .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
                         .headers(h -> {
                             headers.forEach(h::add);
                             applyUserAgent(h, headers);
                         });
                 ContentResponse response = req.send();
-                HttpHeaders httpHeaders = toHttpHeaders(response.getHeaders());
+                HttpFields httpHeaders = response.getHeaders();
                 return new HttpResult<>(response.getStatus(), httpHeaders, null, uri);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
@@ -93,6 +92,7 @@ public final class HttpExecutor {
             }
         }
 
+        @SuppressWarnings("PMD.CloseResource")
         InputStreamResponseListener listener = new InputStreamResponseListener();
         Request request = client.newRequest(uri)
                 .method(method)
@@ -104,7 +104,7 @@ public final class HttpExecutor {
         request.send(listener);
         try {
             var response = listener.get(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS);
-            HttpHeaders httpHeaders = toHttpHeaders(response.getHeaders());
+            HttpFields httpHeaders = response.getHeaders();
             return new HttpResult<>(response.getStatus(), httpHeaders, listener.getInputStream(), uri);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
@@ -118,14 +118,6 @@ public final class HttpExecutor {
         if (config.userAgent() != null && !config.userAgent().isBlank() && !headers.containsKey("User-Agent")) {
             fields.add("User-Agent", config.userAgent());
         }
-    }
-
-    private HttpHeaders toHttpHeaders(HttpFields httpFields) {
-        Map<String, List<String>> map = new HashMap<>();
-        for (HttpField field : httpFields) {
-            map.computeIfAbsent(field.getName(), k -> new ArrayList<>()).add(field.getValue());
-        }
-        return HttpHeaders.of(map, (k, v) -> true);
     }
 
     private boolean shouldRetry(int status, int attempts, boolean idempotent) {

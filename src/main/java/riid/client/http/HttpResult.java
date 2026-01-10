@@ -1,15 +1,26 @@
 package riid.client.http;
 
+import org.eclipse.jetty.http.HttpFields;
+
 import java.net.URI;
-import java.net.http.HttpHeaders;
+import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Lightweight HTTP response DTO returned by HttpExecutor.
+ * Lightweight HTTP response DTO returned by HttpExecutor (Jetty-based).
  */
-public record HttpResult<T>(int statusCode, HttpHeaders headers, T body, URI uri) {
+public record HttpResult<T>(int statusCode, HttpFields headers, T body, URI uri) {
+    public Optional<String> firstHeader(String name) {
+        return Optional.ofNullable(headers.get(name));
+    }
+
+    public List<String> allHeaders(String name) {
+        return headers.getValuesList(name);
+    }
+
     public OptionalLong firstHeaderAsLong(String name) {
-        var opt = headers.firstValue(name);
+        Optional<String> opt = firstHeader(name);
         if (opt.isEmpty()) {
             return OptionalLong.empty();
         }
