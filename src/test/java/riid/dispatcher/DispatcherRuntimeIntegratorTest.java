@@ -16,8 +16,8 @@ class DispatcherRuntimeIntegratorTest {
     void importsIntoRuntimeAfterValidation() throws Exception {
         Path temp = Files.createTempFile("fetch-", ".bin");
         Files.writeString(temp, "data");
-        RecordingDispatcher dispatcher = new RecordingDispatcher(new FetchResult("sha256:" + "a".repeat(64),
-                "application/octet-stream", temp.toString()));
+        FetchResult ok = new FetchResult(digestA(), media(), temp.toString());
+        RecordingDispatcher dispatcher = new RecordingDispatcher(ok);
         RecordingRuntimeAdapter runtime = new RecordingRuntimeAdapter();
 
         DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(dispatcher);
@@ -29,12 +29,38 @@ class DispatcherRuntimeIntegratorTest {
 
     @Test
     void failsWhenFileMissing() {
-        RecordingDispatcher dispatcher = new RecordingDispatcher(new FetchResult("sha256:" + "a".repeat(64),
-                "application/octet-stream", "/non/existent/file"));
+        RecordingDispatcher dispatcher = new RecordingDispatcher(
+                new FetchResult(digestA(), media(), "/non/existent/file"));
         DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(dispatcher);
 
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("repo", "ref", true), new RecordingRuntimeAdapter()));
+    }
+
+    @Test
+    void failsOnBlankFields() {
+        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
+                new RecordingDispatcher(new FetchResult("", "", "")));
+        assertThrows(DispatcherRuntimeException.class,
+                () -> integrator.fetchAndLoad(new ImageRef("r", "t", true), new RecordingRuntimeAdapter()));
+    }
+
+    @Test
+    void failsOnDirectoryPath() throws Exception {
+        Path dir = Files.createTempDirectory("not-file");
+        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
+                new RecordingDispatcher(new FetchResult(digestB(), media(), dir.toString())));
+        assertThrows(DispatcherRuntimeException.class,
+                () -> integrator.fetchAndLoad(new ImageRef("r", "t", true), new RecordingRuntimeAdapter()));
+    }
+
+    @Test
+    void failsOnEmptyFile() throws Exception {
+        Path empty = Files.createTempFile("empty-", ".bin");
+        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
+                new RecordingDispatcher(new FetchResult(digestC(), media(), empty.toString())));
+        assertThrows(DispatcherRuntimeException.class,
+                () -> integrator.fetchAndLoad(new ImageRef("r", "t", true), new RecordingRuntimeAdapter()));
     }
 
     private record RecordingDispatcher(FetchResult result) implements RequestDispatcher {
@@ -61,6 +87,22 @@ class DispatcherRuntimeIntegratorTest {
         public void importImage(Path imagePath) throws IOException {
             this.importedPath = imagePath;
         }
+    }
+
+    private static String digestA() {
+        return "sha256:" + "a".repeat(64);
+    }
+
+    private static String digestB() {
+        return "sha256:" + "b".repeat(64);
+    }
+
+    private static String digestC() {
+        return "sha256:" + "c".repeat(64);
+    }
+
+    private static String media() {
+        return "application/octet-stream";
     }
 }
 

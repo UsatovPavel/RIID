@@ -27,8 +27,8 @@ public final class ConfigValidator {
         require(cfg.auth() != null, "client.auth is required");
         validate(cfg.auth());
 
-        List<RegistryEndpoint> registries = cfg.registries();
-        require(registries != null && !registries.isEmpty(), "client.registries must be non-empty");
+        List<RegistryEndpoint> registries = Objects.requireNonNull(cfg.registries(), "client.registries is required");
+        require(!registries.isEmpty(), "client.registries must be non-empty");
         registries.forEach(this::validate);
     }
 

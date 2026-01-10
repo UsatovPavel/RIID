@@ -2,6 +2,7 @@ package riid.runtime;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -31,22 +32,28 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
                 "-i",
                 imagePath.toAbsolutePath().toString()
         );
-        ProcessBuilder pb = new ProcessBuilder(cmd);
-        Process p = pb.start();
+        Process p = startProcess(cmd);
         String output;
         try (var in = p.getInputStream()) {
-            output = new String(in.readAllBytes());
+            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
         int code = p.waitFor();
         if (code != 0) {
             String err;
             try (var es = p.getErrorStream()) {
-                err = new String(es.readAllBytes());
+                err = new String(es.readAllBytes(), StandardCharsets.UTF_8);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
             throw new IOException("podman load failed (exit " + code + "): " + output + err);
         }
+    }
+
+    /**
+     * Hook for tests to override process creation.
+     */
+    protected Process startProcess(List<String> command) throws IOException {
+        return new ProcessBuilder(command).start();
     }
 }
 

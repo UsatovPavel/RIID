@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -58,10 +59,10 @@ public final class ImageLoadService {
             runtime.importImage(archive);
             LOGGER.info("Loaded {}@{} into runtime {} at {}", repository, reference, runtimeId, archive);
             return runtimeRef(repository, reference);
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new UncheckedAppException("Failed to load image into runtime " + runtimeId, e);
+        } catch (IOException e) {
             throw new UncheckedAppException("Failed to load image into runtime " + runtimeId, e);
         }
     }
@@ -78,7 +79,9 @@ public final class ImageLoadService {
      * Assemble OCI archive from manifest + blobs fetched via RegistryClient.
      * Uses cache if provided to store blobs.
      */
-    private Path buildOciArchive(String repository, String reference, ManifestResult manifestResult) throws IOException, InterruptedException {
+    private Path buildOciArchive(String repository,
+                                 String reference,
+                                 ManifestResult manifestResult) throws IOException, InterruptedException {
         Manifest manifest = manifestResult.manifest();
         Path ociDir = Files.createTempDirectory("oci-layout");
         Path blobsDir = ociDir.resolve("blobs").resolve("sha256");
@@ -103,21 +106,24 @@ public final class ImageLoadService {
 
         // index.json with ref name
         String refName = runtimeRef(repository, reference);
-        String index = """
-                {
-                  "schemaVersion": 2,
-                  "manifests": [
-                    {
-                      "mediaType": "application/vnd.oci.image.manifest.v1+json",
-                      "size": %d,
-                      "digest": "sha256:%s",
-                      "annotations": {
-                        "org.opencontainers.image.ref.name": "%s"
-                      }
-                    }
-                  ]
-                }
-                """.formatted(manifestBytes.length, manifestResult.digest().replace("sha256:", ""), refName);
+        String index = String.format(
+                Locale.ROOT,
+                "{%n"
+                        + "  \"schemaVersion\": 2,%n"
+                        + "  \"manifests\": [%n"
+                        + "    {%n"
+                        + "      \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\",%n"
+                        + "      \"size\": %d,%n"
+                        + "      \"digest\": \"sha256:%s\",%n"
+                        + "      \"annotations\": {%n"
+                        + "        \"org.opencontainers.image.ref.name\": \"%s\"%n"
+                        + "      }%n"
+                        + "    }%n"
+                        + "  ]%n"
+                        + "}",
+                manifestBytes.length,
+                manifestResult.digest().replace("sha256:", ""),
+                refName);
         Files.writeString(ociDir.resolve("index.json"), index);
 
         Path archive = Files.createTempFile("oci-archive", ".tar");

@@ -2,6 +2,7 @@ package riid.client.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.eclipse.jetty.http.HttpFields;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.app.StatusCodes;
@@ -17,7 +18,6 @@ import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 import riid.client.http.HttpResult;
-import org.eclipse.jetty.http.HttpFields;
 
 import java.io.IOException;
 import java.net.URI;

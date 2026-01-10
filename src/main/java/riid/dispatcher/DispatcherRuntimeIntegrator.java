@@ -41,10 +41,12 @@ public final class DispatcherRuntimeIntegrator {
             runtime.importImage(imagePath);
             return result;
         } catch (IOException e) {
-            throw new DispatcherRuntimeException("Failed to import image into runtime " + runtime.runtimeId(), e);
+            throw new DispatcherRuntimeException(
+                    "Failed to import image into runtime " + runtime.runtimeId(), e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new DispatcherRuntimeException("Interrupted while importing image into runtime " + runtime.runtimeId(), e);
+            throw new DispatcherRuntimeException(
+                    "Interrupted while importing image into runtime " + runtime.runtimeId(), e);
         }
     }
 

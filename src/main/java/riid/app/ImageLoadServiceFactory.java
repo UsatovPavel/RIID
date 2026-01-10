@@ -22,6 +22,7 @@ public final class ImageLoadServiceFactory {
 
     private ImageLoadServiceFactory() {}
 
+    @SuppressWarnings("PMD.CloseResource") // cache lifecycle is managed by the returned service
     public static ImageLoadService createFromConfig(Path configPath) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         AppConfig config = ConfigLoader.load(configPath);

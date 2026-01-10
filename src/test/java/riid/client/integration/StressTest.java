@@ -73,14 +73,22 @@ public class StressTest {
                     }
                 }, pool));
             }
-            for (var f : futures) {
-                f.join();
-            }
-            pool.shutdown();
-            pool.awaitTermination(1, TimeUnit.MINUTES);
+            joinAndShutdown(futures, pool);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while awaiting executor termination", ie);
+            throw new RuntimeException(
+                    "Interrupted while awaiting executor termination", ie);
+        }
+    }
+
+    private void joinAndShutdown(List<CompletableFuture<File>> futures,
+                                 ExecutorService pool) throws InterruptedException {
+        for (var f : futures) {
+            f.join();
+        }
+        pool.shutdown();
+        if (!pool.awaitTermination(1, TimeUnit.MINUTES)) {
+            throw new RuntimeException("Executor did not terminate");
         }
     }
 }

@@ -1,5 +1,6 @@
 package riid.client.http;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.InputStreamResponseListener;
@@ -17,7 +18,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
