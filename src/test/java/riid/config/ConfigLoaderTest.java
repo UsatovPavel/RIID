@@ -22,7 +22,7 @@ class ConfigLoaderTest {
                     maxRetries: 2
                     retryIdempotentOnly: true
                     followRedirects: true
-                    initialBackoff: PT200MS
+                    initialBackoff: PT0.2S
                     maxBackoff: PT2S
                   auth:
                     defaultTokenTtlSeconds: 600
@@ -78,7 +78,7 @@ class ConfigLoaderTest {
                     connectTimeout: PT3S
                     requestTimeout: PT7S
                     maxRetries: 5
-                    initialBackoff: PT150MS
+                    initialBackoff: PT0.15S
                     maxBackoff: PT3S
                     retryIdempotentOnly: false
                     userAgent: "riid-test-agent"
