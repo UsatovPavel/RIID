@@ -7,6 +7,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,13 +28,21 @@ class PortoRuntimeAdapterTest {
     @EnabledIfEnvironmentVariable(named = "PORTO_LAYER_TAR", matches = ".*")
     void importsLayerViaPortoctl() throws Exception {
         String tar = System.getenv("PORTO_LAYER_TAR");
+        if (tar == null) {
+            throw new IllegalStateException("PORTO_LAYER_TAR is not set");
+        }
         Path archive = Path.of(tar);
         if (!Files.exists(archive)) {
             throw new IOException("Layer archive missing: " + archive);
         }
+        var fileName = archive.getFileName();
+        if (fileName == null) {
+            throw new IOException("Layer archive has no filename: " + archive);
+        }
+        String layerName = fileName.toString();
 
         // best-effort cleanup: try remove by filename
-        runIgnoreErrors(List.of("portoctl", "layer", "-R", archive.getFileName().toString()));
+        runIgnoreErrors(List.of("portoctl", "layer", "-R", layerName));
 
         PortoRuntimeAdapter adapter = new PortoRuntimeAdapter();
         adapter.importImage(archive);
@@ -41,10 +50,10 @@ class PortoRuntimeAdapterTest {
         Process p = new ProcessBuilder("portoctl", "layer", "-L")
                 .redirectErrorStream(true)
                 .start();
-        String out = new String(p.getInputStream().readAllBytes());
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
         assertEquals(0, code, "portoctl layer -L failed: " + out);
-        assertTrue(out.contains(archive.getFileName().toString()), "Imported layer not listed: " + out);
+        assertTrue(out.contains(layerName), "Imported layer not listed: " + out);
     }
 
     private static void runIgnoreErrors(List<String> cmd) {

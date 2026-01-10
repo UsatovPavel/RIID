@@ -1,8 +1,8 @@
 package riid.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
 import org.eclipse.jetty.client.HttpClient;
+import org.junit.jupiter.api.Test;
 import riid.cache.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;

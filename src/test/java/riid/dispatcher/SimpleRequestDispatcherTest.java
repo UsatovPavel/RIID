@@ -50,7 +50,7 @@ class SimpleRequestDispatcherTest {
 
     @Test
     void returnsCacheHit() {
-        cache.has = true;
+        cache.hasEntry = true;
         cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
 
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p);
@@ -115,7 +115,9 @@ class SimpleRequestDispatcherTest {
         @Override
         public BlobResult fetchBlob(BlobRequest request, File target) {
             blobCalls++;
-            return blobResult != null ? blobResult : new BlobResult(request.digest(), 0, request.mediaType(), target.getAbsolutePath());
+            return blobResult != null
+                    ? blobResult
+                    : new BlobResult(request.digest(), 0, request.mediaType(), target.getAbsolutePath());
         }
 
         @Override
@@ -135,13 +137,13 @@ class SimpleRequestDispatcherTest {
     }
 
     private static final class RecordingCacheAdapter implements CacheAdapter {
-        boolean has;
+        boolean hasEntry;
         CacheEntry entry;
         boolean putCalled;
 
         @Override
         public boolean has(ImageDigest digest) {
-            return has;
+            return hasEntry;
         }
 
         @Override

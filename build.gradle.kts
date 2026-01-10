@@ -1,5 +1,6 @@
 // Usage:
-// ./gradlew allReports for run code quality utils and save report in one file
+// ./gradlew check for run code quality utils and save report in one file
+//  ./gradlew jacocoTestReport for get test coverage
 //  ./gradlew testAll for run all tests
 // ./gradlew testStress for run only stress tests
 // ./gradlew testLocal for run only local tests
@@ -78,11 +79,14 @@ tasks.withType<Pmd>().configureEach {
 
 tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
     enabled = !skipQuality
+    reports.create("html") {
+        required.set(true)   // всегда генерить html-отчёт
+    }
 }
 
 tasks.jacocoTestReport {
-    dependsOn(tasks.test)
     enabled = !skipQuality
+    dependsOn(tasks.test) // jacoco runs only when explicitly invoked, but needs tests
 }
 
 tasks.withType<Test>().configureEach {
@@ -183,7 +187,19 @@ tasks.register("allReports") {
 }
 
 // Always attempt concatenation after check (even if check fails)
+// Detach tests from check: run tests/jacoco explicitly when needed
 tasks.named("check") {
+    // Explicit quality-only dependencies; tests are not part of check
+    setDependsOn(
+        listOf(
+            tasks.named("checkstyleMain"),
+            tasks.named("checkstyleTest"),
+            tasks.named("pmdMain"),
+            tasks.named("pmdTest"),
+            tasks.named("spotbugsMain"),
+            tasks.named("spotbugsTest")
+        )
+    )
     finalizedBy("allReports")
 }
 

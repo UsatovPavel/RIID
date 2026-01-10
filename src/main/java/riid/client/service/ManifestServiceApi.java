@@ -1,7 +1,7 @@
 package riid.client.service;
 
-import riid.client.core.config.RegistryEndpoint;
 import riid.client.api.ManifestResult;
+import riid.client.core.config.RegistryEndpoint;
 
 import java.util.Optional;
 

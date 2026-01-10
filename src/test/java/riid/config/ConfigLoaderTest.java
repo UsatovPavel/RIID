@@ -5,12 +5,14 @@ import riid.client.core.config.RegistryEndpoint;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ConfigLoaderTest {
+
+    private static final String TMP_PREFIX = "config-";
+    private static final String TMP_SUFFIX = ".yaml";
 
     @Test
     void loadsValidConfig() throws Exception {
@@ -33,7 +35,7 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 3
                 """;
-        Path tmp = Files.createTempFile("config-", ".yaml");
+        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
         Files.writeString(tmp, yaml);
 
         AppConfig cfg = ConfigLoader.load(tmp);
@@ -50,7 +52,7 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile("config-", ".yaml");
+        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
         Files.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -65,7 +67,7 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile("config-", ".yaml");
+        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
         Files.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -100,18 +102,23 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 10
                 """;
-        Path tmp = Files.createTempFile("config-", ".yaml");
+        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
         Files.writeString(tmp, yaml);
 
         AppConfig cfg = ConfigLoader.load(tmp);
         assertEquals(2, cfg.client().registries().size());
-        assertEquals("example.org", cfg.client().registries().get(0).host());
-        assertEquals(5000, cfg.client().registries().get(0).port());
-        assertEquals("user1", cfg.client().registries().get(0).credentialsOpt().flatMap(c -> c.usernameOpt()).orElse(null));
-        assertEquals("pass1", cfg.client().registries().get(0).credentialsOpt().flatMap(c -> c.passwordOpt()).orElse(null));
-        assertEquals("http", cfg.client().registries().get(1).scheme());
-        assertEquals("another.example", cfg.client().registries().get(1).host());
-        assertEquals("token-123", cfg.client().registries().get(1).credentialsOpt().flatMap(c -> c.identityTokenOpt()).orElse(null));
+        var first = cfg.client().registries().get(0);
+        var firstCreds = first.credentialsOpt();
+        assertEquals("example.org", first.host());
+        assertEquals(5000, first.port());
+        assertEquals("user1", firstCreds.flatMap(c -> c.usernameOpt()).orElse(null));
+        assertEquals("pass1", firstCreds.flatMap(c -> c.passwordOpt()).orElse(null));
+
+        var second = cfg.client().registries().get(1);
+        var secondCreds = second.credentialsOpt();
+        assertEquals("http", second.scheme());
+        assertEquals("another.example", second.host());
+        assertEquals("token-123", secondCreds.flatMap(c -> c.identityTokenOpt()).orElse(null));
 
         assertEquals(5, cfg.client().http().maxRetries());
         assertEquals(false, cfg.client().http().retryIdempotentOnly());
