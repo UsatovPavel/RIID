@@ -49,39 +49,46 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
         // 2) Try cache for each layer
         var layer = manifest.manifest().layers().getFirst();
-        var digest = riid.cache.ImageDigest.parse(layer.digest());
-        String cachedPath = (cache != null && cache.has(digest))
-                ? cache.get(digest).map(riid.cache.CacheEntry::locator).orElse(null)
+        return fetchLayer(ref.repository(), layer.digest(), layer.size(), layer.mediaType());
+    }
+
+    @Override
+    public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
+        Objects.requireNonNull(repository);
+        Objects.requireNonNull(digest);
+        // 1) cache
+        riid.cache.ImageDigest imgDigest = riid.cache.ImageDigest.parse(digest);
+        String cachedPath = (cache != null && cache.has(imgDigest))
+                ? cache.get(imgDigest).map(riid.cache.CacheEntry::locator).orElse(null)
                 : null;
         if (cachedPath != null) {
-            LOGGER.info("cache hit for layer {}", layer.digest());
-            return new FetchResult(layer.digest(), layer.mediaType(), cachedPath);
+            LOGGER.info("cache hit for layer {}", digest);
+            return new FetchResult(digest, mediaType, cachedPath);
         }
 
-        // 3) Try P2P (if wired)
+        // 2) P2P
         if (p2p != null) {
-            var p2pPath = p2p.fetch(layer.digest(), layer.size(), layer.mediaType());
+            var p2pPath = p2p.fetch(digest, sizeBytes, mediaType);
             if (p2pPath.isPresent()) {
-                LOGGER.info("p2p hit for layer {}", layer.digest());
-                return new FetchResult(layer.digest(), layer.mediaType(), p2pPath.get());
+                LOGGER.info("p2p hit for layer {}", digest);
+                return new FetchResult(digest, mediaType, p2pPath.get());
             }
         }
 
-        // 4) Registry download (with limiter if set)
+        // 3) Registry download
         acquireRegistry();
         try {
             File tmp = createTemp();
             BlobResult blob = client.fetchBlob(
-                    new BlobRequest(ref.repository(), layer.digest(), layer.size(), layer.mediaType()),
+                    new BlobRequest(repository, digest, sizeBytes, mediaType),
                     tmp);
-            LOGGER.info("downloaded layer {} from registry", layer.digest());
+            LOGGER.info("downloaded layer {} from registry", digest);
 
-            // 5) Publish to P2P/cache
             if (cache != null) {
                 try {
-                    cache.put(riid.cache.ImageDigest.parse(blob.digest()),
+                    cache.put(imgDigest,
                             riid.cache.CachePayload.of(tmp.toPath(), tmp.length()),
-                            riid.cache.CacheMediaType.from(blob.mediaType()));
+                            riid.cache.CacheMediaType.from(mediaType));
                 } catch (Exception ex) {
                     LOGGER.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
                 }

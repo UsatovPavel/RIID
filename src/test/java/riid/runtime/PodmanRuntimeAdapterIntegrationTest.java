@@ -3,23 +3,21 @@ package riid.runtime;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import riid.app.ImageLoadService;
 import riid.cache.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.model.manifest.Manifest;
-import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
 import riid.client.service.AuthService;
 import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
-import riid.client.core.config.Credentials;
+import riid.p2p.P2PExecutor;
 import riid.client.core.config.RegistryEndpoint;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -27,7 +25,6 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,6 +113,30 @@ class PodmanRuntimeAdapterIntegrationTest {
                 || images.contains("docker.io/library/alpine:edge")
                 || images.contains(refName);
         assertTrue(found, "Expected alpine:edge in podman images, got: " + images);
+    }
+
+    /**
+     * End-to-end using App facade: load via dispatcher/runtime and then run with podman.
+     */
+    @Test
+    void oneShotLoadAndRun() throws Exception {
+        // Build app with podman runtime only; dispatcher falls back to registry
+        var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+        var httpConfig = new HttpClientConfig();
+        var httpClient = HttpClientFactory.create(httpConfig);
+        var http = new HttpExecutor(httpClient, httpConfig);
+        var mapper = new ObjectMapper();
+        var auth = new AuthService(http, mapper, new TokenCache());
+        var manifestService = new ManifestService(http, auth, mapper);
+        var blobService = new BlobService(http, auth);
+        var client = new RegistryClientImpl(endpoint, httpConfig, null);
+
+        var app = ImageLoadService.createDefault(endpoint, null, new P2PExecutor.NoOp(),
+                java.util.Map.of("podman", new PodmanRuntimeAdapter()));
+
+        String refName = app.load(REPO, REF, "podman");
+        // Verify the image can run a trivial command
+        run(List.of("podman", "run", "--rm", refName, "true"));
     }
 
     private Path downloadBlob(BlobService blobService,

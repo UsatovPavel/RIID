@@ -8,6 +8,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.core.error.ClientException;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
@@ -61,6 +62,13 @@ public class RegistryLiveTest {
         assertEquals(layer.digest(), result.digest(), "digest must match manifest");
         assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
         assertTrue(tmp.length() > 0, "downloaded file should not be empty");
+    }
+
+    @Test
+    void missingManifestReturns404() {
+        assertThrows(ClientException.class,
+                () -> manifestService.fetchManifest(DOCKER_HUB, REPO, "definitely-missing-tag-zzz", SCOPE),
+                "missing tag should raise ClientException (404)");
     }
 }
 

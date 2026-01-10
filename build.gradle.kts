@@ -33,6 +33,7 @@ checkstyle {
 }
 
 dependencies {
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
@@ -111,6 +112,48 @@ tasks.register("testAll") {
     dependsOn("test", "testStress")
 }
 
+fun registerModuleTest(name: String, pattern: String, descriptionText: String) {
+    tasks.register<Test>(name) {
+        group = "verification"
+        description = descriptionText
+        useJUnitPlatform()
+        filter {
+            includeTestsMatching("riid.${pattern}.*")
+        }
+    }
+}
+
+registerModuleTest(
+    name = "testApp",
+    pattern = "app",
+    descriptionText = "Run tests under riid.app"
+)
+
+tasks.register<Test>("testConfig") {
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("riid.config.*")
+    }
+}
+
+registerModuleTest(
+    name = "testClient",
+    pattern = "client",
+    descriptionText = "Run tests under riid.client"
+)
+
+registerModuleTest(
+    name = "testDispatcher",
+    pattern = "dispatcher",
+    descriptionText = "Run tests under riid.dispatcher"
+)
+
+registerModuleTest(
+    name = "testRuntime",
+    pattern = "runtime",
+    descriptionText = "Run tests under riid.runtime"
+)
+
 tasks.register("allReports") {
     group = "verification"
     description = "Concatenate quality reports into build/reports/all-reports.html"
@@ -175,6 +218,6 @@ tasks.register("dockerTest") {
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
     manifest {
-        attributes("Main-Class" to "riid.app.Main")
+        attributes("Main-Class" to "riid.app.ImageLoadServiceFactory")
     }
 }
