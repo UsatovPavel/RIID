@@ -1,7 +1,9 @@
 package riid.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.gradle.internal.impldep.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,7 +13,9 @@ import java.nio.file.Path;
  * Loads AppConfig from YAML file.
  */
 public final class ConfigLoader {
-    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory())
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private ConfigLoader() { }
 
@@ -20,7 +24,9 @@ public final class ConfigLoader {
             throw new IllegalArgumentException("Config file not found: " + path);
         }
         try {
-            return YAML_MAPPER.readValue(path.toFile(), AppConfig.class);
+            AppConfig config = YAML_MAPPER.readValue(path.toFile(), AppConfig.class);
+            new ConfigValidator().validate(config);
+            return config;
         } catch (IOException e) {
             throw new RuntimeException("Failed to load config from " + path, e);
         }

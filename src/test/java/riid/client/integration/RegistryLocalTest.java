@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.function.Executable;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -14,6 +15,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.core.error.ClientException;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
@@ -90,6 +92,12 @@ public class RegistryLocalTest {
         Assertions.assertEquals(layer.digest(), result.digest(), "digest must match manifest");
         Assertions.assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
         Assertions.assertTrue(tmp.length() > 0, "downloaded file should not be empty");
+    }
+
+    @Test
+    void manifestNotFoundReturns404() {
+        Executable call = () -> manifestService.fetchManifest(LOCAL, "missing-repo", "missing", SCOPE);
+        Assertions.assertThrows(ClientException.class, call, "fetching missing manifest should throw");
     }
 }
 
