@@ -9,24 +9,24 @@ import java.io.OutputStream;
  * File-based BlobSink.
  */
 public final class FileBlobSink implements BlobSink {
-    private final File file;
+    private final File targetFile;
 
     public FileBlobSink(File file) {
-        this.file = file;
+        this.targetFile = file;
     }
 
     @Override
     public OutputStream open() throws IOException {
-        return new FileOutputStream(file);
+        return new FileOutputStream(targetFile);
     }
 
     @Override
     public String locator() {
-        return file.getAbsolutePath();
+        return targetFile.getAbsolutePath();
     }
 
     public File file() {
-        return file;
+        return targetFile;
     }
 }
 

@@ -14,9 +14,10 @@ import riid.client.http.HttpExecutor;
 import riid.client.http.HttpResult;
 
 import java.io.IOException;
+import org.eclipse.jetty.http.HttpFields;
+
 import java.net.URI;
 import java.util.*;
-import java.net.http.HttpHeaders;
 
 /**
  * Fetches and validates manifests.
@@ -55,7 +56,7 @@ public final class ManifestService implements ManifestServiceApi {
         }
         try (var body = resp.body()) {
             byte[] bytes = body.readAllBytes();
-            String contentType = resp.headers().firstValue("Content-Type").orElse(null);
+            String contentType = resp.firstHeader("Content-Type").orElse(null);
             // Detect manifest list / index
             boolean isIndex = isIndexMediaType(contentType) || looksLikeIndex(bytes);
             if (isIndex) {
@@ -101,7 +102,7 @@ public final class ManifestService implements ManifestServiceApi {
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest HEAD failed"),
                     "Manifest HEAD failed: " + resp.statusCode());
         }
-        String dcd = resp.headers().firstValue("Docker-Content-Digest").orElse(null);
+        String dcd = resp.firstHeader("Docker-Content-Digest").orElse(null);
         if (dcd == null || dcd.isBlank()) {
             LOGGER.warn("Manifest HEAD missing Docker-Content-Digest for {}/{}", repository, reference);
             throw new ClientException(
@@ -110,8 +111,8 @@ public final class ManifestService implements ManifestServiceApi {
                             "Missing Docker-Content-Digest on manifest HEAD"),
                     "Missing Docker-Content-Digest on manifest HEAD");
         }
-        String mediaType = resp.headers().firstValue("Content-Type").orElse(null);
-        long len = resp.headers().firstValueAsLong("Content-Length").orElse(-1);
+        String mediaType = resp.firstHeader("Content-Type").orElse(null);
+        long len = resp.firstHeaderAsLong("Content-Length").orElse(-1);
         if (len <= 0) {
             LOGGER.warn("Manifest HEAD missing Content-Length for {}/{}", repository, reference);
             throw new ClientException(
@@ -127,12 +128,12 @@ public final class ManifestService implements ManifestServiceApi {
         return h;
     }
 
-    private void validateDigestHeader(HttpHeaders headers, String computed) {
-        Optional<String> header = headers.firstValue("Docker-Content-Digest");
-        if (header.isPresent() && !header.get().equals(computed)) {
+    private void validateDigestHeader(HttpFields headers, String computed) {
+        String header = headers.get("Docker-Content-Digest");
+        if (header != null && !header.equals(computed)) {
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Digest mismatch"),
-                    "Manifest digest mismatch: header=%s computed=%s".formatted(header.get(), computed));
+                    "Manifest digest mismatch: header=%s computed=%s".formatted(header, computed));
         }
     }
 

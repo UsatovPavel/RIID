@@ -1,10 +1,7 @@
 package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import riid.app.StatusCodes;
 import riid.cache.CacheAdapter;
-import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.service.AuthService;

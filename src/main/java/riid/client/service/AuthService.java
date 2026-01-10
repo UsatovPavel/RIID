@@ -17,12 +17,12 @@ import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 import riid.client.http.HttpResult;
+import org.eclipse.jetty.http.HttpFields;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.net.http.HttpHeaders;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -101,8 +101,8 @@ public final class AuthService {
         return Optional.of("Bearer " + token);
     }
 
-    private Optional<AuthChallenge> extractChallenge(java.net.http.HttpHeaders headers) {
-        return headers.allValues("WWW-Authenticate").stream()
+    private Optional<AuthChallenge> extractChallenge(HttpFields headers) {
+        return headers.getValuesList("WWW-Authenticate").stream()
                 .map(AuthParser::parse)
                 .flatMap(Optional::stream)
                 .findFirst();
@@ -175,8 +175,16 @@ public final class AuthService {
         return (ch.realm() + "|" + ch.service() + "|" + scope + "|" + (creds == null ? 0 : creds.hashCode()));
     }
 
-    private Optional<Long> ttlFrom(HttpHeaders headers) {
-        return headers.firstValue("Docker-Token-Expires-In").map(Long::parseLong);
+    private Optional<Long> ttlFrom(HttpFields headers) {
+        String v = headers.get("Docker-Token-Expires-In");
+        if (v == null || v.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Long.parseLong(v));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 }
 
