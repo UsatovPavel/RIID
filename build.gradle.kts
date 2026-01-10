@@ -132,17 +132,11 @@ registerModuleTest(
     descriptionText = "Run tests under riid.app"
 )
 
-tasks.register<Test>("testConfig") {
-    group = "verification"
-    description = "Run tests under riid.config"
-    dependsOn(tasks.testClasses)
-    testClassesDirs = sourceSets.test.get().output.classesDirs
-    classpath = sourceSets.test.get().runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching("riid.config.*")
-    }
-}
+registerModuleTest (
+    name = "testConfig",
+    pattern = "config",
+    descriptionText = "Run tests under riid.config"
+)
 
 registerModuleTest(
     name = "testClient",
@@ -164,8 +158,7 @@ registerModuleTest(
 
 tasks.register("allReports") {
     group = "verification"
-    description = "Concatenate quality reports into build/reports/all-reports.html"
-    dependsOn("check")
+    description = "Concatenate quality reports into build/reports/all-reports.html (best effort, no dependsOn check)"
     doLast {
         val reports = listOf(
             "checkstyle/main.html",
@@ -186,6 +179,25 @@ tasks.register("allReports") {
             }
         }
         println("Concatenated report generated at ${out.absolutePath}")
+    }
+}
+
+// Always attempt concatenation after check (even if check fails)
+tasks.named("check") {
+    finalizedBy("allReports")
+}
+
+// Ensure allReports runs after individual quality tasks too (even on failure)
+listOf(
+    "pmdMain",
+    "pmdTest",
+    "spotbugsMain",
+    "spotbugsTest",
+    "checkstyleMain",
+    "checkstyleTest"
+).forEach { taskName ->
+    tasks.matching { it.name == taskName }.configureEach {
+        finalizedBy("allReports")
     }
 }
 //для запуска Docker у тасок вывод некрасивый по сравнению с Makefile
