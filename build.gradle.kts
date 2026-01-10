@@ -116,6 +116,9 @@ fun registerModuleTest(name: String, pattern: String, descriptionText: String) {
     tasks.register<Test>(name) {
         group = "verification"
         description = descriptionText
+        dependsOn(tasks.testClasses)
+        testClassesDirs = sourceSets.test.get().output.classesDirs
+        classpath = sourceSets.test.get().runtimeClasspath
         useJUnitPlatform()
         filter {
             includeTestsMatching("riid.${pattern}.*")
@@ -130,6 +133,11 @@ registerModuleTest(
 )
 
 tasks.register<Test>("testConfig") {
+    group = "verification"
+    description = "Run tests under riid.config"
+    dependsOn(tasks.testClasses)
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform()
     filter {
         includeTestsMatching("riid.config.*")
