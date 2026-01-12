@@ -10,13 +10,21 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.Digests;
-import riid.client.core.model.manifest.*;
+import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.ManifestIndex;
+import riid.client.core.model.manifest.ManifestRef;
+import riid.client.core.model.manifest.MediaTypes;
+import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpResult;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Fetches and validates manifests.

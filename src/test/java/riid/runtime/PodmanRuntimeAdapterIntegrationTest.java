@@ -9,9 +9,9 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.p2p.P2PExecutor;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
