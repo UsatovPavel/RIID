@@ -13,8 +13,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.time.Duration;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 

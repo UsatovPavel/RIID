@@ -1,23 +1,30 @@
 package riid.client.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.app.StatusCodes;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.Digests;
-import riid.client.core.model.manifest.*;
+import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.ManifestIndex;
+import riid.client.core.model.manifest.ManifestRef;
+import riid.client.core.model.manifest.MediaTypes;
+import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpResult;
 
 import java.io.IOException;
-import org.eclipse.jetty.http.HttpFields;
-
 import java.net.URI;
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Fetches and validates manifests.
@@ -49,7 +56,7 @@ public final class ManifestService implements ManifestServiceApi {
         authService.getAuthHeader(endpoint, repository, scope)
                 .ifPresent(v -> headers.put("Authorization", v));
         HttpResult<java.io.InputStream> resp = http.get(uri, headers);
-        if (resp.statusCode() != StatusCodes.OK.code()) {
+        if (resp.statusCode() != HttpStatus.OK_200) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest fetch failed"),
                     "Manifest fetch failed: " + resp.statusCode());
@@ -94,10 +101,10 @@ public final class ManifestService implements ManifestServiceApi {
         authService.getAuthHeader(endpoint, repository, scope)
                 .ifPresent(v -> headers.put("Authorization", v));
         HttpResult<Void> resp = http.head(uri, headers);
-        if (resp.statusCode() == StatusCodes.NOT_FOUND.code()) {
+        if (resp.statusCode() == HttpStatus.NOT_FOUND_404) {
             return Optional.empty();
         }
-        if (resp.statusCode() != StatusCodes.OK.code()) {
+        if (resp.statusCode() != HttpStatus.OK_200) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest HEAD failed"),
                     "Manifest HEAD failed: " + resp.statusCode());

@@ -2,20 +2,20 @@ package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import riid.cache.CacheAdapter;
-import riid.client.core.error.ClientException;
-import riid.client.core.model.manifest.RegistryApi;
-import riid.client.service.AuthService;
-import riid.client.service.BlobService;
+import riid.cache.TokenCache;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.core.error.ClientException;
 import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.RegistryApi;
 import riid.client.core.model.manifest.TagList;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 import riid.client.http.HttpResult;
+import riid.client.service.AuthService;
+import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
-import riid.cache.TokenCache;
 
 import java.io.File;
 import java.io.IOException;
