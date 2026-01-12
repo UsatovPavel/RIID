@@ -41,7 +41,7 @@ public final class AuthService {
     private final long defaultTokenTtlSeconds;
 
     public AuthService(HttpExecutor http, ObjectMapper mapper, TokenCache cache) {
-        this(http, mapper, cache, riid.client.core.config.AuthConfig.DEFAULT_TTL);
+        this(http, mapper, cache, riid.client.core.config.AuthConfig.DEFAULT_TTL_SECONDS);
     }
 
     @SuppressFBWarnings({"EI_EXPOSE_REP2"})

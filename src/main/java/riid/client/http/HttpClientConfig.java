@@ -42,12 +42,34 @@ public record HttpClientConfig(
                             boolean followRedirects) {
         this.connectTimeout = connectTimeout != null ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         this.requestTimeout = requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_TIMEOUT;
-        this.maxRetries = maxRetries > 0 ? maxRetries : DEFAULT_MAX_RETRIES;
+        this.maxRetries = maxRetries >= 0 ? maxRetries : DEFAULT_MAX_RETRIES;
         this.initialBackoff = initialBackoff != null ? initialBackoff : DEFAULT_INITIAL_BACKOFF;
         this.maxBackoff = maxBackoff != null ? maxBackoff : DEFAULT_MAX_BACKOFF;
         this.retryIdempotentOnly = retryIdempotentOnly;
         this.userAgent = userAgent != null ? userAgent : DEFAULT_USER_AGENT;
         this.followRedirects = followRedirects;
+        validate();
+    }
+
+    private void validate() {
+        if (connectTimeout.isNegative()) {
+            throw new IllegalArgumentException("connectTimeout must be non-negative");
+        }
+        if (requestTimeout.isNegative()) {
+            throw new IllegalArgumentException("requestTimeout must be non-negative");
+        }
+        if (initialBackoff.isNegative() || maxBackoff.isNegative()) {
+            throw new IllegalArgumentException("backoff must be non-negative");
+        }
+        if (maxBackoff.compareTo(initialBackoff) < 0) {
+            throw new IllegalArgumentException("maxBackoff must be >= initialBackoff");
+        }
+        if (maxRetries < 0) {
+            throw new IllegalArgumentException("maxRetries must be >= 0");
+        }
+        if (userAgent.isBlank()) {
+            throw new IllegalArgumentException("userAgent must not be blank");
+        }
     }
 }
 

@@ -27,8 +27,19 @@ public final class ConfigLoader {
             AppConfig config = YAML_MAPPER.readValue(path.toFile(), AppConfig.class);
             ConfigValidator.validate(config);
             return config;
+        } catch (ConfigValidationException e) {
+            throw e;
         } catch (IOException e) {
+            Throwable root = e.getCause();
+            if (root instanceof ConfigValidationException cve) {
+                throw cve;
+            }
+            if (root instanceof IllegalArgumentException iae) {
+                throw new ConfigValidationException(iae.getMessage(), iae);
+            }
             throw new RuntimeException("Failed to load config from " + path, e);
+        } catch (IllegalArgumentException e) {
+            throw new ConfigValidationException(e.getMessage(), e);
         }
     }
 }
