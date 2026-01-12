@@ -4,6 +4,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
+import riid.cache.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
@@ -11,6 +12,7 @@ import riid.client.api.RegistryClient;
 import riid.p2p.P2PExecutor;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
@@ -44,10 +46,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
     @Override
     public FetchResult fetchImage(ImageRef ref) {
-        // 1) Manifest from registry
-        ManifestResult manifest = client.fetchManifest(ref.repository(), ref.reference());
-
-        // 2) Try cache for each layer
+        String reference = ref.digest() != null && !ref.digest().isBlank() ? ref.digest() : ref.tag();
+        ManifestResult manifest = client.fetchManifest(ref.repository(), reference);
         var layer = manifest.manifest().layers().getFirst();
         return fetchLayer(ref.repository(), layer.digest(), layer.size(), layer.mediaType());
     }
@@ -56,11 +56,17 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
         Objects.requireNonNull(repository);
         Objects.requireNonNull(digest);
-        // 1) cache
+
         riid.cache.ImageDigest imgDigest = riid.cache.ImageDigest.parse(digest);
-        String cachedPath = (cache != null && cache.has(imgDigest))
-                ? cache.get(imgDigest).map(riid.cache.CacheEntry::locator).orElse(null)
-                : null;
+
+        // 1) cache
+        String cachedPath = null;
+        if (cache != null && cache.has(imgDigest)) {
+            cachedPath = cache.get(imgDigest)
+                    .flatMap(entry -> cache.resolve(entry.key()))
+                    .map(Path::toString)
+                    .orElse(null);
+        }
         if (cachedPath != null) {
             LOGGER.info("cache hit for layer {}", digest);
             return new FetchResult(digest, mediaType, cachedPath);
@@ -68,10 +74,14 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
         // 2) P2P
         if (p2p != null) {
-            var p2pPath = p2p.fetch(digest, sizeBytes, mediaType);
-            if (p2pPath.isPresent()) {
-                LOGGER.info("p2p hit for layer {}", digest);
-                return new FetchResult(digest, mediaType, p2pPath.get());
+            try {
+                var p2pPath = p2p.fetch(imgDigest, sizeBytes, riid.cache.CacheMediaType.from(mediaType));
+                if (p2pPath.isPresent()) {
+                    LOGGER.info("p2p hit for layer {}", digest);
+                    return new FetchResult(digest, mediaType, p2pPath.get().toString());
+                }
+            } catch (Exception ex) {
+                LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
             }
         }
 
@@ -86,15 +96,27 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
             if (cache != null) {
                 try {
-                    cache.put(imgDigest,
-                            riid.cache.CachePayload.of(tmp.toPath(), tmp.length()),
-                            riid.cache.CacheMediaType.from(mediaType));
+                    cache.put(riid.cache.ImageDigest.parse(blob.digest()),
+                            riid.cache.PathCachePayload.of(tmp.toPath(), tmp.length()),
+                            riid.cache.CacheMediaType.from(blob.mediaType()));
+                } catch (ValidationException ve) {
+                    LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
+                } catch (IllegalArgumentException iae) {
+                    LOGGER.warn("Unsupported media type for cache put ({}): {}", blob.mediaType(), iae.getMessage());
                 } catch (Exception ex) {
                     LOGGER.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
                 }
             }
             if (p2p != null) {
-                p2p.publish(blob.digest(), blob.path(), blob.size(), blob.mediaType());
+                try {
+                    p2p.publish(
+                            riid.cache.ImageDigest.parse(blob.digest()),
+                            Path.of(blob.path()),
+                            blob.size(),
+                            riid.cache.CacheMediaType.from(blob.mediaType()));
+                } catch (Exception ex) {
+                    LOGGER.warn("P2P publish failed for {}: {}", blob.digest(), ex.getMessage());
+                }
             }
 
             return new FetchResult(blob.digest(), blob.mediaType(), blob.path());

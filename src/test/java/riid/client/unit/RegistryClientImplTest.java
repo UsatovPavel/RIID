@@ -61,7 +61,7 @@ class RegistryClientImplTest {
         startServer(layer, layerDigest, manifestBytes, manifestDigest, 200, 200);
 
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
-        RegistryClient client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null);
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
 
         var mf = client.fetchManifest(REPO, "latest");
         assertEquals(manifestDigest, mf.digest());
@@ -80,14 +80,16 @@ class RegistryClientImplTest {
         assertEquals(REPO, tags.name());
         assertTrue(tags.tags().contains("latest"));
         assertTrue(tags.tags().contains("edge"));
+        }
     }
 
     @Test
     void listTagsErrorThrows() throws Exception {
         startServer(new byte[0], "sha256:dead", new byte[0], "sha256:dead", 500, 500);
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
-        RegistryClient client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null);
-        assertThrows(RuntimeException.class, () -> client.listTags(REPO, null, null));
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+            assertThrows(RuntimeException.class, () -> client.listTags(REPO, null, null));
+        }
     }
 
     @Test
@@ -95,8 +97,9 @@ class RegistryClientImplTest {
         // only HEAD returns 404
         startServerHeadOnly404();
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
-        RegistryClient client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null);
-        assertTrue(client.headBlob(REPO, SHA_PREFIX + "missing").isEmpty());
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+            assertTrue(client.headBlob(REPO, SHA_PREFIX + "missing").isEmpty());
+        }
     }
 
     private void startServer(byte[] layer,

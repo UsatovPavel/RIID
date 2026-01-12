@@ -20,16 +20,19 @@ public enum CacheMediaType {
         return rawValue;
     }
 
+    /**
+     * Resolves media type or throws if unsupported.
+     */
         public static CacheMediaType from(String raw) {
             if (raw == null || raw.isBlank()) {
-                return UNKNOWN;
+            throw new IllegalArgumentException("Media type is blank");
             }
             for (CacheMediaType t : values()) {
                 if (!t.rawValue.isEmpty() && t.rawValue.equalsIgnoreCase(raw)) {
                     return t;
                 }
             }
-            return UNKNOWN;
+        throw new IllegalArgumentException("Unsupported cache media type: " + raw);
         }
 }
 

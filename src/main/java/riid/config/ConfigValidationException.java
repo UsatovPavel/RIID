@@ -14,5 +14,3 @@ public class ConfigValidationException extends RuntimeException {
         super(message, cause);
     }
 }
-
-
