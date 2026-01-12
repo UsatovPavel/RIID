@@ -33,21 +33,21 @@ public final class Main {
         HttpClientConfig httpConfig = new HttpClientConfig();
         CacheAdapter cache = new FileCacheAdapter(resolveCacheDir());
 
-        RegistryClientImpl client = new RegistryClientImpl(endpoint, httpConfig, cache);
-
-        var manifestResult = client.fetchManifest(repo, refForFetch);
-        LOGGER.info("Fetched manifest: {} ({})", manifestResult.digest(), manifestResult.mediaType());
-        var manifest = manifestResult.manifest();
-        var layers = manifest.layers();
-        LOGGER.info("Layers count: {}", layers == null ? 0 : layers.size());
-        if (layers != null && !layers.isEmpty()) {
-            var first = layers.get(0);
-            LOGGER.info("Fetching first layer: {}", first.digest());
-            File tmp = File.createTempFile("riid-blob-", ".bin");
-            var res = client.fetchBlob(new BlobRequest(repo, first.digest(), first.size(), first.mediaType()), tmp);
-            LOGGER.info("Blob saved to: {}", res.path());
+        try (RegistryClientImpl client = new RegistryClientImpl(endpoint, httpConfig, cache)) {
+            var manifestResult = client.fetchManifest(repo, refForFetch);
+            LOGGER.info("Fetched manifest: {} ({})", manifestResult.digest(), manifestResult.mediaType());
+            var manifest = manifestResult.manifest();
+            var layers = manifest.layers();
+            LOGGER.info("Layers count: {}", layers == null ? 0 : layers.size());
+            if (layers != null && !layers.isEmpty()) {
+                var first = layers.get(0);
+                LOGGER.info("Fetching first layer: {}", first.digest());
+                File tmp = File.createTempFile("riid-blob-", ".bin");
+                var res = client.fetchBlob(new BlobRequest(repo, first.digest(), first.size(), first.mediaType()), tmp);
+                LOGGER.info("Blob saved to: {}", res.path());
+            }
+            LOGGER.info("Done.");
         }
-        LOGGER.info("Done.");
     }
 
     private static String resolveCacheDir() throws Exception {

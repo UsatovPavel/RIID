@@ -9,6 +9,7 @@ import java.io.InputStream;
 public interface CachePayload {
 
     InputStream open() throws IOException;
+
     long sizeBytes() throws IOException;
 }
 
