@@ -39,6 +39,9 @@ bin/
 
 #TODO at end of dev all make builded files
 *.txt
-textDocs/*
 
+###Internal artifacts###
+internalDocs/*
 docs/Ликбез*
+План*
+Презентация.md
