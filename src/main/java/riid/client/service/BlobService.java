@@ -1,9 +1,9 @@
 package riid.client.service;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.app.StatusCodes;
 import riid.cache.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
@@ -92,12 +92,19 @@ public class BlobService implements BlobServiceApi {
             String mediaType = resp.firstHeader("Content-Type").orElse(req.mediaType());
             String locator = sink.locator();
             if (cacheAdapter != null && sinkPath != null) {
-                var entry = cacheAdapter.put(
-                        riid.cache.ImageDigest.parse(digest),
-                        riid.cache.CachePayload.of(sinkPath, actualSize),
-                        riid.cache.CacheMediaType.from(mediaType));
-                if (entry != null && entry.locator() != null && !entry.locator().isBlank()) {
-                    locator = entry.locator();
+                try {
+                    var entry = cacheAdapter.put(
+                            riid.cache.ImageDigest.parse(digest),
+                            riid.cache.CachePayload.of(sinkPath, actualSize),
+                            riid.cache.CacheMediaType.from(mediaType));
+                    if (entry != null && entry.locator() != null && !entry.locator().isBlank()) {
+                        locator = entry.locator();
+                    }
+                } catch (IllegalArgumentException iae) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, iae.getMessage()),
+                            "Invalid blob media type: " + mediaType,
+                            iae);
                 }
             }
             return new BlobResult(digest, actualSize, mediaType, locator);
@@ -115,7 +122,7 @@ public class BlobService implements BlobServiceApi {
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResult<Void> resp = http.head(uri, headers);
         int code = resp.statusCode();
-        if (code == StatusCodes.NOT_FOUND.code()) {
+        if (code == HttpStatus.NOT_FOUND_404) {
             return Optional.empty();
         }
         if (code < 200 || code >= 300) {

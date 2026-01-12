@@ -1,5 +1,8 @@
 package riid.client.core.config;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Objects;
 import java.util.Optional;
 
@@ -8,12 +11,14 @@ import java.util.Optional;
  */
 public final class Credentials {
     private final String usernameValue;
-
     private final String passwordValue;
-
     private final String identityTokenValue;
 
-    private Credentials(String username, String password, String identityToken) {
+    @JsonCreator
+    public Credentials(
+            @JsonProperty("username") String username,
+            @JsonProperty("password") String password,
+            @JsonProperty("identityToken") String identityToken) {
         this.usernameValue = username;
         this.passwordValue = password;
         this.identityTokenValue = identityToken;
@@ -42,4 +47,3 @@ public final class Credentials {
         return Optional.ofNullable(identityTokenValue);
     }
 }
-

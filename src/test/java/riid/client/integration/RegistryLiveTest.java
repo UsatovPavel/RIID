@@ -1,8 +1,8 @@
 package riid.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
 import org.eclipse.jetty.client.HttpClient;
+import org.junit.jupiter.api.Test;
 import riid.cache.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
@@ -19,7 +19,9 @@ import java.io.File;
 import java.nio.file.Files;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Live smoke against Docker Hub for alpine:edge.

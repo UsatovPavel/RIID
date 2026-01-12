@@ -45,7 +45,12 @@ public final class FileCacheAdapter implements CacheAdapter {
             // ignore probe failures, default to UNKNOWN media type
         }
         long sizeBytes = p.toFile().length();
-        CacheMediaType mediaType = CacheMediaType.from(contentType);
+        CacheMediaType mediaType;
+        try {
+            mediaType = CacheMediaType.from(contentType);
+        } catch (IllegalArgumentException iae) {
+            mediaType = CacheMediaType.UNKNOWN;
+        }
         return Optional.of(new CacheEntry(digest, sizeBytes, mediaType, p.toString()));
     }
 

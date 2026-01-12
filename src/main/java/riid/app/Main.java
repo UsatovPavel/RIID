@@ -1,37 +1,61 @@
 package riid.app;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
+import riid.cache.FileCacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+/**
+ * Simple CLI bootstrap for demo purposes.
+ */
 public final class Main {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
+
+    private Main() {
+    }
+
     public static void main(String[] args) throws Exception {
-        String repo = System.getenv().getOrDefault("RIID_REPO", "library/busybox");
-        String ref = System.getenv().getOrDefault("RIID_REF", "latest");
+        String repo = RiidEnv.repo();
+        String tag = RiidEnv.tag();
+        String digest = RiidEnv.digest();
+
+        String refForFetch = digest != null ? digest : tag;
 
         RegistryEndpoint endpoint = RegistryEndpoint.https("registry-1.docker.io");
         HttpClientConfig httpConfig = new HttpClientConfig();
-        String cacheDir = System.getenv().getOrDefault("RIID_CACHE_DIR", "/var/cache/riid");
-        CacheAdapter cache = new riid.cache.FileCacheAdapter(cacheDir);
+        CacheAdapter cache = new FileCacheAdapter(resolveCacheDir());
 
         RegistryClientImpl client = new RegistryClientImpl(endpoint, httpConfig, cache);
 
-        var manifestResult = client.fetchManifest(repo, ref);
-        System.out.println("Fetched manifest: " + manifestResult.digest() + " (" + manifestResult.mediaType() + ")");
+        var manifestResult = client.fetchManifest(repo, refForFetch);
+        LOGGER.info("Fetched manifest: {} ({})", manifestResult.digest(), manifestResult.mediaType());
         var manifest = manifestResult.manifest();
         var layers = manifest.layers();
-        System.out.println("Layers count: " + (layers == null ? 0 : layers.size()));
+        LOGGER.info("Layers count: {}", layers == null ? 0 : layers.size());
         if (layers != null && !layers.isEmpty()) {
             var first = layers.get(0);
-            System.out.println("Fetching first layer: " + first.digest());
+            LOGGER.info("Fetching first layer: {}", first.digest());
             File tmp = File.createTempFile("riid-blob-", ".bin");
             var res = client.fetchBlob(new BlobRequest(repo, first.digest(), first.size(), first.mediaType()), tmp);
-            System.out.println("Blob saved to: " + res.path());
+            LOGGER.info("Blob saved to: {}", res.path());
         }
-        System.out.println("Done.");
+        LOGGER.info("Done.");
+    }
+
+    private static String resolveCacheDir() throws Exception {
+        String env = RiidEnv.cacheDir();
+        if (env != null && !env.isBlank()) {
+            return env;
+        }
+        Path tmp = Files.createTempDirectory("riid-cache");
+        return tmp.toAbsolutePath().toString();
     }
 }

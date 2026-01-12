@@ -2,9 +2,10 @@ package riid.client.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.app.StatusCodes;
 import riid.cache.TokenCache;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
@@ -17,7 +18,6 @@ import riid.client.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 import riid.client.http.HttpResult;
-import org.eclipse.jetty.http.HttpFields;
 
 import java.io.IOException;
 import java.net.URI;
@@ -69,10 +69,10 @@ public final class AuthService {
                 endpoint.port(),
                 RegistryApi.V2_PING);
         HttpResult<Void> pingResp = http.head(pingUri, Map.of());
-        if (pingResp.statusCode() == StatusCodes.OK.code()) {
+        if (pingResp.statusCode() == HttpStatus.OK_200) {
             return Optional.empty(); // no auth needed
         }
-        if (pingResp.statusCode() != StatusCodes.UNAUTHORIZED.code()) {
+        if (pingResp.statusCode() != HttpStatus.UNAUTHORIZED_401) {
             throw new ClientException(
                     new ClientError.Auth(
                             ClientError.AuthKind.UNEXPECTED_PING_STATUS,
@@ -135,7 +135,7 @@ public final class AuthService {
                 }
             }
             HttpResult<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
-            if (resp.statusCode() != StatusCodes.OK.code()) {
+            if (resp.statusCode() != HttpStatus.OK_200) {
                 throw new ClientException(
                         new ClientError.Auth(
                                 ClientError.AuthKind.TOKEN_FAILED,

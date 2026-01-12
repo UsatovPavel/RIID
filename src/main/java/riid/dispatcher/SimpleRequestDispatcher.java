@@ -82,6 +82,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     cache.put(riid.cache.ImageDigest.parse(blob.digest()),
                             riid.cache.CachePayload.of(tmp.toPath(), tmp.length()),
                             riid.cache.CacheMediaType.from(blob.mediaType()));
+                } catch (IllegalArgumentException iae) {
+                    LOGGER.warn("Unsupported media type for cache put ({}): {}", blob.mediaType(), iae.getMessage());
                 } catch (Exception ex) {
                     LOGGER.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
                 }
