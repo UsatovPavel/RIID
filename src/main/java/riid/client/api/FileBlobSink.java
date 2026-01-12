@@ -28,5 +28,10 @@ public final class FileBlobSink implements BlobSink {
     public File file() {
         return targetFile;
     }
+
+    @Override
+    public void close() {
+        // nothing to close; stream is owned by caller
+    }
 }
 

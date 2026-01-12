@@ -1,5 +1,9 @@
 package riid.p2p;
 
+import riid.cache.CacheMediaType;
+import riid.cache.ImageDigest;
+
+import java.nio.file.Path;
 import java.util.Optional;
 
 /**
@@ -10,24 +14,10 @@ public interface P2PExecutor {
      * Try to fetch blob from peers.
      * @return path if found, empty otherwise
      */
-    Optional<String> fetch(String digest, long size, String mediaType);
+    Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType);
 
     /**
      * Publish blob to peers (best effort).
      */
-    void publish(String digest, String path, long size, String mediaType);
-
-    class NoOp implements P2PExecutor {
-        @Override
-        public Optional<String> fetch(String digest, long size, String mediaType) {
-            return Optional.empty();
-        }
-
-        @Override
-        public void publish(String digest, String path, long size, String mediaType) {
-            // no-op
-        }
-    }
+    void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType);
 }
-
-

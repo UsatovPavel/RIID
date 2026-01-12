@@ -1,25 +1,29 @@
 package riid.cache;
 
-import java.io.FileOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 
 /**
  * Simple filesystem-backed CacheAdapter used for the demo container.
  */
 public final class FileCacheAdapter implements CacheAdapter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(FileCacheAdapter.class);
+
     private final Path root;
 
-    public FileCacheAdapter(String root) {
+    public FileCacheAdapter(String root) throws IOException {
         this.root = Path.of(root);
-        try {
             Files.createDirectories(this.root);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to create cache directory", e);
-        }
     }
 
     private Path pathFor(ImageDigest digest) {
@@ -41,33 +45,52 @@ public final class FileCacheAdapter implements CacheAdapter {
         String contentType = null;
         try {
             contentType = Files.probeContentType(p);
-        } catch (IOException ignored) {
-            // ignore probe failures, default to UNKNOWN media type
+        } catch (IOException probeError) {
+            LOGGER.debug("Failed to probe content type for {}: {}", p, probeError.getMessage());
         }
-        long sizeBytes = p.toFile().length();
+        long sizeBytes;
+        try {
+            sizeBytes = Files.size(p);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read size for cache entry {}: {}", p, e.getMessage());
+            return Optional.empty();
+        }
         CacheMediaType mediaType;
         try {
             mediaType = CacheMediaType.from(contentType);
         } catch (IllegalArgumentException iae) {
             mediaType = CacheMediaType.UNKNOWN;
         }
-        return Optional.of(new CacheEntry(digest, sizeBytes, mediaType, p.toString()));
+        String key = root.relativize(p).toString();
+        return Optional.of(new CacheEntry(digest, sizeBytes, mediaType, key));
+    }
+
+    @Override
+    public Optional<Path> resolve(String key) {
+        if (key == null || key.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(root.resolve(key));
     }
 
     @Override
     public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException {
-        Path p = pathFor(digest);
-        try (InputStream data = payload.open(); var out = new FileOutputStream(p.toFile())) {
-            byte[] buf = new byte[8192];
-            while (true) {
-                int read = data.read(buf);
-                if (read == -1) {
-                    break;
-                }
-                out.write(buf, 0, read);
-            }
+        Path target = pathFor(digest);
+        Path temp = Files.createTempFile(root, "cache-", ".tmp");
+        try (InputStream data = payload.open();
+             OutputStream out = new BufferedOutputStream(Files.newOutputStream(temp))) {
+            data.transferTo(out);
+        } catch (IOException ex) {
+            Files.deleteIfExists(temp);
+            throw ex;
         }
-        long size = payload.sizeBytes() > 0 ? payload.sizeBytes() : p.toFile().length();
-        return new CacheEntry(digest, size, mediaType, p.toString());
+        long size = payload.sizeBytes() > 0 ? payload.sizeBytes() : Files.size(temp);
+        try {
+            Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+        String key = root.relativize(target).toString();
+        return new CacheEntry(digest, size, mediaType, key);
     }
 }
