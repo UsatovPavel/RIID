@@ -43,4 +43,3 @@ public record Credentials(
         return Optional.ofNullable(identityToken);
     }
 }
-

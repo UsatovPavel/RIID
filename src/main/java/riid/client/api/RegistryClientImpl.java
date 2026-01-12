@@ -20,6 +20,7 @@ import riid.client.service.ManifestService;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,30 +28,25 @@ import java.util.Optional;
 /**
  * Default RegistryClient implementation.
  */
-public final class RegistryClientImpl implements RegistryClient {
-    @SuppressWarnings("PMD.CloseResource")
+public final class RegistryClientImpl implements RegistryClient, AutoCloseable {
     private static final String PULL_SCOPE_TEMPLATE = "repository:%s:pull";
 
     private final RegistryEndpoint endpoint;
-
+    private final org.eclipse.jetty.client.HttpClient jettyClient;
     private final HttpExecutor http;
-
     private final AuthService authService;
-
     private final ManifestService manifestService;
-
     private final BlobService blobService;
-
     private final ObjectMapper mapper;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    @SuppressWarnings("PMD.CloseResource")
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
-        var client = HttpClientFactory.create(httpConfig);
-        this.http = new HttpExecutor(client, httpConfig);
+        this.jettyClient = HttpClientFactory.create(httpConfig);
+        this.http = new HttpExecutor(jettyClient, httpConfig);
         this.authService = new AuthService(http, mapper, new TokenCache());
         this.manifestService = new ManifestService(http, authService, mapper);
         this.blobService = new BlobService(http, authService, cacheAdapter);
@@ -58,13 +54,13 @@ public final class RegistryClientImpl implements RegistryClient {
 
     @Override
     public ManifestResult fetchManifest(String repository, String reference) {
-        String scope = PULL_SCOPE_TEMPLATE.formatted(repository);
+        String scope = pullScope(repository);
         return manifestService.fetchManifest(endpoint, repository, reference, scope);
     }
 
     @Override
     public BlobResult fetchConfig(String repository, Manifest manifest, File target) {
-        String scope = PULL_SCOPE_TEMPLATE.formatted(repository);
+        String scope = pullScope(repository);
         BlobRequest req = new BlobRequest(
                 repository,
                 manifest.config().digest(),
@@ -75,38 +71,29 @@ public final class RegistryClientImpl implements RegistryClient {
 
     @Override
     public BlobResult fetchBlob(BlobRequest request, File target) {
-        String scope = PULL_SCOPE_TEMPLATE.formatted(request.repository());
+        String scope = pullScope(request.repository());
         return blobService.fetchBlob(endpoint, request, target, scope);
     }
 
     @Override
     public Optional<Long> headBlob(String repository, String digest) {
-        String scope = PULL_SCOPE_TEMPLATE.formatted(repository);
+        String scope = pullScope(repository);
         return blobService.headBlob(endpoint, repository, digest, scope);
     }
 
     @Override
     public TagList listTags(String repository, Integer n, String last) {
-        String scope = "repository:%s:pull".formatted(repository);
+        String scope = pullScope(repository);
         var headers = new HashMap<String, String>();
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         String path = RegistryApi.tagListPath(repository);
-        StringBuilder query = new StringBuilder();
-        if (n != null) {
-            query.append("n=").append(n);
-        }
-        if (last != null && !last.isBlank()) {
-            if (!query.isEmpty()) {
-                query.append("&");
-            }
-            query.append("last=").append(last);
-        }
+        String query = buildTagQuery(n, last);
         URI uri = HttpRequestBuilder.buildUri(
                 endpoint.scheme(),
                 endpoint.host(),
                 endpoint.port(),
                 path,
-                query.isEmpty() ? null : query.toString());
+                query);
         HttpResult<java.io.InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
         if (status < 200 || status >= 300) {
@@ -127,6 +114,31 @@ public final class RegistryClientImpl implements RegistryClient {
                     "Failed to parse tag list",
                     e);
         }
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (closed.compareAndSet(false, true)) {
+            jettyClient.stop();
+        }
+    }
+
+    private static String pullScope(String repository) {
+        return PULL_SCOPE_TEMPLATE.formatted(repository);
+    }
+
+    private String buildTagQuery(Integer n, String last) {
+        StringBuilder query = new StringBuilder();
+        if (n != null) {
+            query.append("n=").append(n);
+        }
+        if (last != null && !last.isBlank()) {
+            if (!query.isEmpty()) {
+                query.append("&");
+            }
+            query.append("last=").append(last);
+        }
+        return query.isEmpty() ? null : query.toString();
     }
 }
 

@@ -1,15 +1,16 @@
 package riid.client.service;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.app.StatusCodes;
 import riid.cache.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.BlobSink;
 import riid.client.api.FileBlobSink;
 import riid.client.core.config.RegistryEndpoint;
+import riid.cache.ValidationException;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.manifest.RegistryApi;
@@ -53,10 +54,14 @@ public class BlobService implements BlobServiceApi {
     @Override
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, File target, String scope) {
         Objects.requireNonNull(target, "target file");
-        return fetchBlob(endpoint, req, new FileBlobSink(target), scope);
+        BlobSink sink = new FileBlobSink(target);
+        return fetchBlob(endpoint, req, sink, scope);
     }
 
     @Override
+    @SuppressWarnings("PMD.CloseResource")
+    //рефакторинг после убирания этого supress в RegistryClientImpl провалился.
+    //неочевидно как без supresss здесь реализовывать
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, BlobSink sink, String scope) {
         Objects.requireNonNull(sink, "sink");
 
@@ -84,7 +89,11 @@ public class BlobService implements BlobServiceApi {
         if (sink instanceof FileBlobSink fbs) {
             sinkPath = fbs.file().toPath();
         }
-        try (InputStream is = resp.body(); java.io.OutputStream os = sink.open()) {
+        InputStream is = null;
+        java.io.OutputStream os = null;
+        try {
+            is = resp.body();
+            os = sink.open();
             String digest = writeAndHashStreaming(is, os);
             validateDigest(digest, req.digest());
             long actualSize = sinkPath != null ? sinkPath.toFile().length() : expectedSize;
@@ -92,12 +101,24 @@ public class BlobService implements BlobServiceApi {
             String mediaType = resp.firstHeader("Content-Type").orElse(req.mediaType());
             String locator = sink.locator();
             if (cacheAdapter != null && sinkPath != null) {
-                var entry = cacheAdapter.put(
-                        riid.cache.ImageDigest.parse(digest),
-                        riid.cache.CachePayload.of(sinkPath, actualSize),
-                        riid.cache.CacheMediaType.from(mediaType));
-                if (entry != null && entry.locator() != null && !entry.locator().isBlank()) {
-                    locator = entry.locator();
+                try {
+                    var entry = cacheAdapter.put(
+                            riid.cache.ImageDigest.parse(digest),
+                            riid.cache.PathCachePayload.of(sinkPath, actualSize),
+                            riid.cache.CacheMediaType.from(mediaType));
+                    if (entry != null && entry.key() != null && !entry.key().isBlank()) {
+                        locator = cacheAdapter.resolve(entry.key()).map(Path::toString).orElse(locator);
+                    }
+                } catch (ValidationException ve) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, ve.getMessage()),
+                            "Invalid blob media type: " + mediaType,
+                            ve);
+                } catch (IllegalArgumentException iae) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, iae.getMessage()),
+                            "Invalid blob media type: " + mediaType,
+                            iae);
                 }
             }
             return new BlobResult(digest, actualSize, mediaType, locator);
@@ -106,6 +127,26 @@ public class BlobService implements BlobServiceApi {
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Blob IO error"),
                     "Blob IO error",
                     e);
+        } finally {
+            try {
+                sink.close();
+            } catch (Exception closeEx) {
+                LOGGER.warn("Failed to close sink: {}", closeEx.getMessage());
+            }
+            if (os != null) {
+                try {
+                    os.close();
+                } catch (IOException ignore) {
+                    LOGGER.warn("Failed to close sink stream: {}", ignore.getMessage());
+                }
+            }
+            if (is != null) {
+                try {
+                    is.close();
+                } catch (IOException ignore) {
+                    LOGGER.warn("Failed to close response stream: {}", ignore.getMessage());
+                }
+            }
         }
     }
 
@@ -115,7 +156,7 @@ public class BlobService implements BlobServiceApi {
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResult<Void> resp = http.head(uri, headers);
         int code = resp.statusCode();
-        if (code == StatusCodes.NOT_FOUND.code()) {
+        if (code == HttpStatus.NOT_FOUND_404) {
             return Optional.empty();
         }
         if (code < 200 || code >= 300) {
@@ -161,14 +202,7 @@ public class BlobService implements BlobServiceApi {
                     e);
         }
         try (DigestInputStream dis = new DigestInputStream(is, md)) {
-            byte[] buf = new byte[8192];
-            while (true) {
-                int read = dis.read(buf);
-                if (read == -1) {
-                    break;
-                }
-                os.write(buf, 0, read);
-            }
+            dis.transferTo(os);
         }
         String hex = bytesToHex(md.digest());
         return "sha256:" + hex;

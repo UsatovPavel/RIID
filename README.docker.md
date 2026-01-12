@@ -1,5 +1,6 @@
-TODO: create normal readme
-# Docker: build and run
+## Status
+- Local (non-Docker) packaging isn’t ready yet; this image is a temporary wrapper to run the client in a container.
+## Docker: build and run
 
 Build the container image (from repository root):
 
@@ -20,6 +21,15 @@ docker run --rm riid-demo
 ```bash
 docker compose up --build
 ```
+## What this image does
+- Builds the app with the Shadow plugin and runs the bundled JAR (`riid.app.Main` entrypoint).
+- Pulls images from a registry using `RIID_REPO` and `RIID_REF` (or `RIID_TAG`/`RIID_DIGEST`) env vars.
+- Stores cache under `/var/cache/riid` (mount as a named volume in compose).
+
+## Configuration
+- `RIID_REPO` (required): repository, e.g. `library/busybox`.
+- `RIID_REF` (optional): tag or digest to pull; can also use `RIID_TAG` or `RIID_DIGEST`.
+- `RIID_CACHE_DIR` (optional): override cache path; default `/var/cache/riid`.
 
 Notes:
 - The container builds an executable uber-JAR using the Shadow plugin and runs `riid.app.ImageLoadServiceFactory`.

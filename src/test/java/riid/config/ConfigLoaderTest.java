@@ -1,10 +1,13 @@
 package riid.config;
 
 import org.junit.jupiter.api.Test;
+import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.http.HttpClientConfig;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,7 +43,7 @@ class ConfigLoaderTest {
 
         AppConfig cfg = ConfigLoader.load(tmp);
         assertEquals(1, cfg.client().registries().size());
-        RegistryEndpoint ep = cfg.client().registries().getFirst();
+        RegistryEndpoint ep = cfg.client().registries().get(0);
         assertEquals("https", ep.scheme());
         assertEquals("registry-1.docker.io", ep.host());
         assertEquals(3, cfg.dispatcher().maxConcurrentRegistry());
@@ -111,14 +114,14 @@ class ConfigLoaderTest {
         var firstCreds = first.credentialsOpt();
         assertEquals("example.org", first.host());
         assertEquals(5000, first.port());
-        assertEquals("user1", firstCreds.flatMap(c -> c.usernameOpt()).orElse(null));
-        assertEquals("pass1", firstCreds.flatMap(c -> c.passwordOpt()).orElse(null));
+        assertEquals("user1", firstCreds.flatMap(Credentials::usernameOpt).orElse(null));
+        assertEquals("pass1", firstCreds.flatMap(Credentials::passwordOpt).orElse(null));
 
         var second = cfg.client().registries().get(1);
         var secondCreds = second.credentialsOpt();
         assertEquals("http", second.scheme());
         assertEquals("another.example", second.host());
-        assertEquals("token-123", secondCreds.flatMap(c -> c.identityTokenOpt()).orElse(null));
+        assertEquals("token-123", secondCreds.flatMap(Credentials::identityTokenOpt).orElse(null));
 
         assertEquals(5, cfg.client().http().maxRetries());
         assertEquals(false, cfg.client().http().retryIdempotentOnly());
@@ -127,6 +130,51 @@ class ConfigLoaderTest {
         assertEquals(900, cfg.client().auth().defaultTokenTtlSeconds());
         assertEquals(10, cfg.dispatcher().maxConcurrentRegistry());
     }
-}
 
+    @Test
+    void defaultsHttpConfigWhenMissing() throws Exception {
+        String yaml = """
+                client:
+                  auth: {}
+                  registries:
+                    - scheme: https
+                      host: example.org
+                      port: -1
+                dispatcher:
+                  maxConcurrentRegistry: 2
+                """;
+        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        Files.writeString(tmp, yaml);
+
+        AppConfig cfg = ConfigLoader.load(tmp);
+        HttpClientConfig http = cfg.client().http();
+        assertEquals(Duration.ofSeconds(5), http.connectTimeout());
+        assertEquals(Duration.ofSeconds(30), http.requestTimeout());
+        assertEquals(2, http.maxRetries());
+        assertEquals(Duration.ofMillis(200), http.initialBackoff());
+        assertEquals(Duration.ofSeconds(2), http.maxBackoff());
+        assertEquals("riid-registry-client", http.userAgent());
+        assertEquals(true, http.followRedirects());
+    }
+
+    @Test
+    void invalidHttpConnectTimeoutFailsValidation() throws Exception {
+        String yaml = """
+                client:
+                  http:
+                    connectTimeout: -PT5S
+                  auth: {}
+                  registries:
+                    - scheme: https
+                      host: example.org
+                      port: -1
+                dispatcher:
+                  maxConcurrentRegistry: 1
+                """;
+        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        Files.writeString(tmp, yaml);
+
+        assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+    }
+}
 

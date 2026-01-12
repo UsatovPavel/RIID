@@ -1,6 +1,7 @@
 package riid.cache;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Optional;
 
 /**
@@ -10,6 +11,11 @@ public interface CacheAdapter {
     boolean has(ImageDigest digest);
 
     Optional<CacheEntry> get(ImageDigest digest);
+
+    /**
+     * Resolve cache entry key to an absolute path.
+     */
+    Optional<Path> resolve(String key);
 
     /**
      * Store blob stream under digest. Implementation is responsible for closing the stream.

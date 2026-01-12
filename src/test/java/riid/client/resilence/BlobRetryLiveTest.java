@@ -23,7 +23,7 @@ public class BlobRetryLiveTest {
     void retryAfterConnectionDrop() throws Exception {
         RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         HttpClientConfig cfg = new HttpClientConfig();
-        var client = new RegistryClientImpl(hub, cfg, null);
+        try (var client = new RegistryClientImpl(hub, cfg, null)) {
 
         String repo = "library/alpine";
         String ref = "edge";
@@ -43,5 +43,6 @@ public class BlobRetryLiveTest {
         assertEquals(layer.digest(), result.digest(), "Digest должен совпадать");
         assertEquals(layer.size(), result.size(), "Размер должен совпадать");
         assertTrue(tmp.length() > 0, "Файл должен быть не пустой");
+        }
     }
 }

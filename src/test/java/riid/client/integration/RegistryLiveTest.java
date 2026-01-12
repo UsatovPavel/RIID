@@ -22,7 +22,10 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+<<<<<<< HEAD
 import static org.junit.jupiter.api.Assertions.assertThrows;
+=======
+>>>>>>> feature/basic-app
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
