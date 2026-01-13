@@ -45,7 +45,10 @@ public final class CliApplication {
     public static CliApplication createDefault() {
         return new CliApplication(
                 options -> {
-                    ImageLoadService service = ImageLoadServiceFactory.createFromConfig(options.configPath());
+                    ImageLoadService service = ImageLoadServiceFactory.createFromConfig(
+                            options.configPath(),
+                            options.credentials()
+                    );
                     return service::load;
                 },
                 ImageLoadServiceFactory.defaultRuntimes(),

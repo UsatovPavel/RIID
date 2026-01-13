@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -54,7 +55,8 @@ class CliEndToEndLiveTest {
                             endpoint,
                             new TempFileCacheAdapter(),
                             new P2PExecutor.NoOp(),
-                            Map.of(runtime.runtimeId(), runtime)
+                            Map.of(runtime.runtimeId(), runtime),
+                            cfg.client().auth().defaultTokenTtlSeconds()
                     );
                     return svc::load;
                 },

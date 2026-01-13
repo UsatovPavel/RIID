@@ -1,13 +1,12 @@
-package riid.client.unit;
+package riid.client.http;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
-import riid.client.http.HttpExecutor;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -19,6 +18,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpExecutorTest {
     private static final int FIRST_CALL = 1;
@@ -30,6 +32,34 @@ class HttpExecutorTest {
         if (server != null) {
             server.stop(0);
         }
+    }
+
+    @Test
+    void retriesOnlyIdempotentWhenConfigured() throws Exception {
+        HttpClient client = new HttpClient();
+        HttpClientConfig config = new HttpClientConfig(
+                Duration.ofSeconds(1),
+                Duration.ofSeconds(1),
+                1,
+                Duration.ofMillis(100),
+                Duration.ofMillis(200),
+                true,
+                "ua",
+                true
+        );
+        HttpExecutor exec = new HttpExecutor(client, config);
+
+        assertThrows(IllegalStateException.class, () -> exec.shouldRetry(503, 1, false));
+        assertThrows(IllegalStateException.class, () -> exec.shouldRetryIOException(1, false));
+    }
+
+    @Test
+    void retriesLimitedByAttemptsAndStatus() throws Exception {
+        HttpExecutor exec = new HttpExecutor(new HttpClient(), new HttpClientConfig());
+
+        assertTrue(exec.shouldRetry(503, 1, true));
+        assertFalse(exec.shouldRetry(200, 1, true));
+        assertFalse(exec.shouldRetry(503, 5, true)); // exceeds maxRetries (default 2)
     }
 
     @Test
@@ -46,9 +76,7 @@ class HttpExecutorTest {
         HttpExecutor exec = executor(1); // allow 1 retry => 2 attempts
         var resp = exec.get(uri("/ok"), Map.of());
         assertEquals(200, resp.statusCode());
-        String body = new String(
-                resp.body().readAllBytes(),
-                StandardCharsets.UTF_8);
+        String body = new String(resp.body().readAllBytes(), StandardCharsets.UTF_8);
         assertEquals("ok", body);
         assertEquals(2, calls.get(), "should retry once then succeed");
     }

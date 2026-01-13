@@ -31,7 +31,7 @@ import java.util.Optional;
 /**
  * Handles ping + Bearer token fetching with caching.
  */
-public final class AuthService {
+public class AuthService {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthService.class);
 
     private final HttpExecutor http;

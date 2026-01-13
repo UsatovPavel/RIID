@@ -42,7 +42,7 @@ public record HttpClientConfig(
                             boolean followRedirects) {
         this.connectTimeout = connectTimeout != null ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         this.requestTimeout = requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_TIMEOUT;
-        this.maxRetries = maxRetries >= 0 ? maxRetries : DEFAULT_MAX_RETRIES;
+        this.maxRetries = maxRetries;
         this.initialBackoff = initialBackoff != null ? initialBackoff : DEFAULT_INITIAL_BACKOFF;
         this.maxBackoff = maxBackoff != null ? maxBackoff : DEFAULT_MAX_BACKOFF;
         this.retryIdempotentOnly = retryIdempotentOnly;
@@ -145,7 +145,7 @@ public record HttpClientConfig(
             return new HttpClientConfig(
                     connectTimeoutValue != null ? connectTimeoutValue : DEFAULT_CONNECT_TIMEOUT,
                     requestTimeoutValue != null ? requestTimeoutValue : DEFAULT_REQUEST_TIMEOUT,
-                    maxRetriesValue != null && maxRetriesValue > 0 ? maxRetriesValue : DEFAULT_MAX_RETRIES,
+                    maxRetriesValue != null ? maxRetriesValue : DEFAULT_MAX_RETRIES,
                     initialBackoffValue != null ? initialBackoffValue : DEFAULT_INITIAL_BACKOFF,
                     maxBackoffValue != null ? maxBackoffValue : DEFAULT_MAX_BACKOFF,
                     retryIdempotentOnlyValue != null ? retryIdempotentOnlyValue : DEFAULT_RETRY_IDEMPOTENT_ONLY,

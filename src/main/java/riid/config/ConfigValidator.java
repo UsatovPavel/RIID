@@ -9,6 +9,8 @@ import riid.dispatcher.DispatcherConfig;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * Validates application configuration.
@@ -82,11 +84,24 @@ public final class ConfigValidator {
         if (auth.defaultTokenTtlSeconds() <= 0) {
             throw new ConfigValidationException("auth.defaultTokenTtlSeconds must be > 0");
         }
+        validatePathIfPresent(auth.certPath(), "client.auth.certPath");
+        validatePathIfPresent(auth.keyPath(), "client.auth.keyPath");
+        validatePathIfPresent(auth.caPath(), "client.auth.caPath");
     }
 
     private static void checkDuration(Duration value, String field) {
         if (value == null || value.isZero() || value.isNegative()) {
             throw new ConfigValidationException(field + " must be positive");
+        }
+    }
+
+    private static void validatePathIfPresent(String value, String field) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        Path p = Path.of(value);
+        if (!Files.exists(p)) {
+            throw new ConfigValidationException(field + " must point to existing file: " + value);
         }
     }
 }

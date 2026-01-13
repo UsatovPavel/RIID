@@ -63,8 +63,6 @@ public class BlobService implements BlobServiceApi {
 
     @Override
     @SuppressWarnings("PMD.CloseResource")
-    //рефакторинг после убирания этого supress в RegistryClientImpl провалился.
-    //неочевидно как без supresss здесь реализовывать
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, BlobSink sink, String scope) {
         Objects.requireNonNull(sink, "sink");
 

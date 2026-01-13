@@ -22,7 +22,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
  */
-public final class HttpExecutor {
+public class HttpExecutor {
     private static final String METHOD_HEAD = "HEAD";
     private static final List<Integer> RETRY_STATUSES = List.of(429, 502, 503, 504);
 
@@ -120,22 +120,22 @@ public final class HttpExecutor {
         }
     }
 
-    private boolean shouldRetry(int status, int attempts, boolean idempotent) {
+    boolean shouldRetry(int status, int attempts, boolean idempotent) {
         if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
-            return false;
+            throw new IllegalStateException("Retries are limited to idempotent requests by configuration");
         }
         return RETRY_STATUSES.contains(status);
     }
 
-    private boolean shouldRetryIOException(int attempts, boolean idempotent) {
+    boolean shouldRetryIOException(int attempts, boolean idempotent) {
         if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
-            return false;
+            throw new IllegalStateException("Retries are limited to idempotent requests by configuration");
         }
         return true;
     }

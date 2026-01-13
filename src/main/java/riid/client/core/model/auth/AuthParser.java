@@ -4,10 +4,11 @@ import org.apache.hc.client5.http.auth.AuthChallenge;
 import org.apache.hc.client5.http.auth.ChallengeType;
 import org.apache.hc.client5.http.impl.auth.AuthChallengeParser;
 import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.message.ParserCursor;
 import org.apache.hc.core5.http.NameValuePair;
+import org.apache.hc.core5.http.message.ParserCursor;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 public final class AuthParser {
@@ -15,6 +16,10 @@ public final class AuthParser {
 
     public static Optional<riid.client.core.model.auth.AuthChallenge> parse(String header) {
         if (header == null || header.isBlank()) {
+            return Optional.empty();
+        }
+        long quoteCount = header.chars().filter(ch -> ch == '"').count();
+        if ((quoteCount % 2) != 0) {
             return Optional.empty();
         }
         AuthChallengeParser parser = AuthChallengeParser.INSTANCE;

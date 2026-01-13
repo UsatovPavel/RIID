@@ -78,6 +78,10 @@ class ConfigLoaderTest {
 
     @Test
     void loadsAllHttpAndAuthFields() throws Exception {
+        Path cert = Files.createTempFile("cert-", ".pem");
+        Path key = Files.createTempFile("key-", ".pem");
+        Path ca = Files.createTempFile("ca-", ".pem");
+
         String yaml = """
                 client:
                   http:
@@ -91,6 +95,9 @@ class ConfigLoaderTest {
                     followRedirects: false
                   auth:
                     defaultTokenTtlSeconds: 900
+                    certPath: %s
+                    keyPath: %s
+                    caPath: %s
                   registries:
                     - scheme: https
                       host: example.org
@@ -107,7 +114,7 @@ class ConfigLoaderTest {
                   maxConcurrentRegistry: 10
                 """;
         Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Files.writeString(tmp, yaml.formatted(cert.toString(), key.toString(), ca.toString()));
 
         AppConfig cfg = ConfigLoader.load(tmp);
         assertEquals(2, cfg.client().registries().size());
@@ -129,6 +136,9 @@ class ConfigLoaderTest {
         assertEquals("riid-test-agent", cfg.client().http().userAgent());
         assertEquals(false, cfg.client().http().followRedirects());
         assertEquals(900, cfg.client().auth().defaultTokenTtlSeconds());
+        assertEquals(cert.toString(), cfg.client().auth().certPath());
+        assertEquals(key.toString(), cfg.client().auth().keyPath());
+        assertEquals(ca.toString(), cfg.client().auth().caPath());
         assertEquals(10, cfg.dispatcher().maxConcurrentRegistry());
     }
 
