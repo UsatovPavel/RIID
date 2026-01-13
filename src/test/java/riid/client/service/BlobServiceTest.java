@@ -25,6 +25,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@SuppressWarnings("PMD.CloseResource")
 class BlobServiceTest {
 
     private final RegistryEndpoint endpoint = RegistryEndpoint.https("registry-1.docker.io");
@@ -98,6 +99,7 @@ class BlobServiceTest {
 
     private static final class RecordingSink implements BlobSink {
         enum State { OPENED, CLOSED }
+
         private final ByteArrayOutputStreamWithClose out = new ByteArrayOutputStreamWithClose();
         State state = null;
 

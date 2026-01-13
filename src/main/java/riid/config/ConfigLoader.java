@@ -17,7 +17,8 @@ public final class ConfigLoader {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    private ConfigLoader() { }
+    private ConfigLoader() {
+    }
 
     public static AppConfig load(Path path) {
         if (!Files.exists(path)) {

@@ -47,6 +47,7 @@ public final class TokenCache {
         cache.put(key, new Entry(token, ttlSeconds));
     }
 
-    private record Entry(String token, long ttlSeconds) { }
+    private record Entry(String token, long ttlSeconds) {
+    }
 }
 

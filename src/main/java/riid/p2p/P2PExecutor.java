@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface P2PExecutor {
     /**
      * Try to fetch blob from peers.
+     *
      * @return path if found, empty otherwise
      */
     Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType);

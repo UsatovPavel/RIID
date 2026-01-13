@@ -23,7 +23,7 @@ public final class FileCacheAdapter implements CacheAdapter {
 
     public FileCacheAdapter(String root) throws IOException {
         this.root = Path.of(root);
-            Files.createDirectories(this.root);
+        Files.createDirectories(this.root);
     }
 
     private Path pathFor(ImageDigest digest) {

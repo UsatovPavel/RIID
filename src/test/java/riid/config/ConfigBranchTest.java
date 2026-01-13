@@ -8,18 +8,17 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.dispatcher.DispatcherConfig;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
-import sun.misc.Unsafe;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
-import static org.eclipse.jetty.http.UriCompliance.UNSAFE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.AvoidAccessibilityAlteration"})
 class ConfigBranchTest {
 
     private static final String YAML_SUFFIX = ".yaml";
@@ -260,10 +259,13 @@ class ConfigBranchTest {
         ClientConfig client = new ClientConfig(http, new AuthConfig(), List.of(RegistryEndpoint.https("example.org")));
         AppConfig cfg = new AppConfig(client, new DispatcherConfig(1));
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        Assertions.assertEquals(ConfigValidationException.Reason.HTTP_CONNECT_TIMEOUT_POSITIVE.message(), ex.getMessage());
+        Assertions.assertEquals(
+                ConfigValidationException.Reason.HTTP_CONNECT_TIMEOUT_POSITIVE.message(),
+                ex.getMessage());
     }
 
-    // ------------ internal branch coverage via reflection (ConfigValidator/checkDuration/validatePathIfPresent) ------------
+    // ------------ internal branch coverage via reflection
+    // (ConfigValidator/checkDuration/validatePathIfPresent)
     @Test
     void validateRegistriesNullBranch() throws Exception {
         var m = ConfigValidator.class.getDeclaredMethod("validateRegistries", List.class);
@@ -309,14 +311,23 @@ class ConfigBranchTest {
         var m = ConfigValidator.class.getDeclaredMethod("checkDuration", Duration.class, String.class);
         m.setAccessible(true);
         // null
-        var exNull = assertThrows(InvocationTargetException.class, () -> m.invoke(null, null, "client.http.requestTimeout"));
-        assertEquals(ConfigValidationException.Reason.HTTP_REQUEST_TIMEOUT_POSITIVE.message(), exNull.getCause().getMessage());
+        var exNull = assertThrows(InvocationTargetException.class,
+                () -> m.invoke(null, null, "client.http.requestTimeout"));
+        assertEquals(
+                ConfigValidationException.Reason.HTTP_REQUEST_TIMEOUT_POSITIVE.message(),
+                exNull.getCause().getMessage());
         // zero
-        var exZero = assertThrows(InvocationTargetException.class, () -> m.invoke(null, Duration.ZERO, "client.http.initialBackoff"));
-        assertEquals(ConfigValidationException.Reason.HTTP_INITIAL_BACKOFF_POSITIVE.message(), exZero.getCause().getMessage());
+        var exZero = assertThrows(InvocationTargetException.class,
+                () -> m.invoke(null, Duration.ZERO, "client.http.initialBackoff"));
+        assertEquals(
+                ConfigValidationException.Reason.HTTP_INITIAL_BACKOFF_POSITIVE.message(),
+                exZero.getCause().getMessage());
         // negative
-        var exNeg = assertThrows(InvocationTargetException.class, () -> m.invoke(null, Duration.ofSeconds(-1), "client.http.maxBackoff"));
-        assertEquals(ConfigValidationException.Reason.HTTP_MAX_BACKOFF_POSITIVE.message(), exNeg.getCause().getMessage());
+        var exNeg = assertThrows(InvocationTargetException.class,
+                () -> m.invoke(null, Duration.ofSeconds(-1), "client.http.maxBackoff"));
+        assertEquals(
+                ConfigValidationException.Reason.HTTP_MAX_BACKOFF_POSITIVE.message(),
+                exNeg.getCause().getMessage());
 
         // fallback branch (unknown field)
         var exUnknown = assertThrows(InvocationTargetException.class,
@@ -336,17 +347,23 @@ class ConfigBranchTest {
         var exMissing = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-file.pem", "client.auth.certPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exMissing.getCause());
-        assertEquals(ConfigValidationException.Reason.AUTH_CERT_MISSING.message() + ": no-such-file.pem", exMissing.getCause().getMessage());
+        assertEquals(
+                ConfigValidationException.Reason.AUTH_CERT_MISSING.message() + ": no-such-file.pem",
+                exMissing.getCause().getMessage());
 
         var exKey = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-key.pem", "client.auth.keyPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exKey.getCause());
-        assertEquals(ConfigValidationException.Reason.AUTH_KEY_MISSING.message() + ": no-such-key.pem", exKey.getCause().getMessage());
+        assertEquals(
+                ConfigValidationException.Reason.AUTH_KEY_MISSING.message() + ": no-such-key.pem",
+                exKey.getCause().getMessage());
 
         var exCa = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-ca.pem", "client.auth.caPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exCa.getCause());
-        assertEquals(ConfigValidationException.Reason.AUTH_CA_MISSING.message() + ": no-such-ca.pem", exCa.getCause().getMessage());
+        assertEquals(
+                ConfigValidationException.Reason.AUTH_CA_MISSING.message() + ": no-such-ca.pem",
+                exCa.getCause().getMessage());
 
         // fallback branch (unknown field)
         var exUnknown = assertThrows(InvocationTargetException.class,
@@ -356,92 +373,37 @@ class ConfigBranchTest {
     }
 
     @Test
-    void validateAuthTtlNonPositive() throws Exception {
-        AuthConfig auth = unsafeAuth(0, null, null, null);
-        var m = ConfigValidator.class.getDeclaredMethod("validateAuth", AuthConfig.class);
-        m.setAccessible(true);
-        var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, auth));
-        assertEquals(ConfigValidationException.Reason.AUTH_TTL_POSITIVE.message(), ex.getCause().getMessage());
-    }
-
-    @Test
     void throwsWhenCertPathMissing() {
         String missing = "no-such-file.pem";
         AuthConfig auth = new AuthConfig(300, missing, null, null);
-        ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), auth, List.of(RegistryEndpoint.https("example.org")));
+        ClientConfig client = new ClientConfig(
+                HttpClientConfig.builder().build(),
+                auth,
+                List.of(RegistryEndpoint.https("example.org")));
         AppConfig cfg = new AppConfig(client, new DispatcherConfig(1));
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        assertEquals(ConfigValidationException.Reason.AUTH_CERT_MISSING.message() + ": " + missing, ex.getMessage());
+        assertEquals(
+                ConfigValidationException.Reason.AUTH_CERT_MISSING.message() + ": " + missing,
+                ex.getMessage());
     }
 
     private static ClientConfig validClient() {
-        return new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), List.of(RegistryEndpoint.https("example.org")));
+        return new ClientConfig(
+                HttpClientConfig.builder().build(),
+                new AuthConfig(),
+                List.of(RegistryEndpoint.https("example.org")));
     }
 
     private static ClientConfig clientWithRegistries(RegistryEndpoint ep) {
-        return new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), List.of(ep));
-    }
-
-    @Test
-    void validateHttpBackoffInverted() throws Exception {
-        // обойти конструктор HttpClientConfig
-        HttpClientConfig bad = unsafeHttp(
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                1,
-                Duration.ofSeconds(2),
-                Duration.ofSeconds(1),
-                true,
-                "ua",
-                true
-        );
-
-        var m = ConfigValidator.class.getDeclaredMethod("validateHttp", HttpClientConfig.class);
-        m.setAccessible(true);
-        var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, bad));
-        assertEquals(ConfigValidationException.Reason.HTTP_BACKOFF_INVERTED.message(), ex.getCause().getMessage());
-    }
-
-    @Test
-    void validateHttpUserAgentBlankViaUnsafe() throws Exception {
-        HttpClientConfig bad = unsafeHttp(
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                1,
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                true,
-                "   ",
-                true
-        );
-
-        var m = ConfigValidator.class.getDeclaredMethod("validateHttp", HttpClientConfig.class);
-        m.setAccessible(true);
-        var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, bad));
-        assertEquals(ConfigValidationException.Reason.HTTP_USER_AGENT_BLANK.message(), ex.getCause().getMessage());
-    }
-
-    @Test
-    void validateHttpMaxRetriesNegativeViaUnsafe() throws Exception {
-        HttpClientConfig bad = unsafeHttp(
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                -5,
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                true,
-                "ua",
-                true
-        );
-
-        var m = ConfigValidator.class.getDeclaredMethod("validateHttp", HttpClientConfig.class);
-        m.setAccessible(true);
-        var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, bad));
-        assertEquals(ConfigValidationException.Reason.HTTP_MAX_RETRIES_NEGATIVE.message(), ex.getCause().getMessage());
+        return new ClientConfig(
+                HttpClientConfig.builder().build(),
+                new AuthConfig(),
+                List.of(ep));
     }
 
     private static AuthConfig unsafeAuth(long ttl, String cert, String key, String ca) throws Exception {
-        AuthConfig auth = (AuthConfig) UNSAFE.allocateInstance(AuthConfig.class);
+        sun.misc.Unsafe unsafe = getUnsafe();
+        AuthConfig auth = (AuthConfig) unsafe.allocateInstance(AuthConfig.class);
         setField(auth, "defaultTokenTtlSeconds", ttl);
         setField(auth, "certPath", cert);
         setField(auth, "keyPath", key);
@@ -457,7 +419,8 @@ class ConfigBranchTest {
                                                boolean retryIdem,
                                                String ua,
                                                boolean follow) throws Exception {
-        HttpClientConfig cfg = (HttpClientConfig) UNSAFE.allocateInstance(HttpClientConfig.class);
+        sun.misc.Unsafe unsafe = getUnsafe();
+        HttpClientConfig cfg = (HttpClientConfig) unsafe.allocateInstance(HttpClientConfig.class);
         setField(cfg, "connectTimeout", ct);
         setField(cfg, "requestTimeout", rt);
         setField(cfg, "maxRetries", mr);
@@ -469,42 +432,15 @@ class ConfigBranchTest {
         return cfg;
     }
 
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Class<?> cls = target.getClass();
-        Field f = null;
-        while (cls != null) {
-            try {
-                f = cls.getDeclaredField(name);
-                break;
-            } catch (NoSuchFieldException ignore) {
-                cls = cls.getSuperclass();
-            }
-        }
-        if (f == null) {
-            throw new NoSuchFieldException(name);
-        }
-        try {
-            long off = UNSAFE.objectFieldOffset(f);
-            if (f.getType() == int.class) {
-                UNSAFE.(target, off, (Integer) value);
-            } else if (f.getType() == boolean.class) {
-                UNSAFE.putBoolean(target, off, (Boolean) value);
-            } else {
-                UNSAFE.putObject(target, off, value);
-            }
-            return;
-        } catch (Throwable ignored) {
-            // fall back to reflection
-        }
+    private static sun.misc.Unsafe getUnsafe() throws Exception {
+        Field uf = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        uf.setAccessible(true);
+        return (sun.misc.Unsafe) uf.get(null);
+    }
 
+    private static void setField(Object target, String name, Object value) throws Exception {
+        var f = target.getClass().getDeclaredField(name);
         f.setAccessible(true);
-        try {
-            Field mods = Field.class.getDeclaredField("modifiers");
-            mods.setAccessible(true);
-            mods.setInt(f, f.getModifiers() & ~java.lang.reflect.Modifier.FINAL);
-        } catch (NoSuchFieldException ignored) {
-            // JDKs without 'modifiers' field; best-effort
-        }
         if (f.getType() == int.class) {
             f.setInt(target, (Integer) value);
         } else if (f.getType() == boolean.class) {

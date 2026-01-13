@@ -32,9 +32,11 @@ class ManifestServiceTest {
 
     @Test
     void throwsOnEmptyManifestList() {
-        byte[] body = """
+        String template = """
                 {"schemaVersion":2,"mediaType":"%s","manifests":[]}
-                """.formatted(MediaTypes.OCI_IMAGE_INDEX).getBytes(StandardCharsets.UTF_8);
+                """.replace("\n", "%n");
+        byte[] body = template.formatted(MediaTypes.OCI_IMAGE_INDEX)
+                .getBytes(StandardCharsets.UTF_8);
         HttpFields.Mutable headers = HttpFields.build();
         headers.add("Content-Type", MediaTypes.OCI_IMAGE_INDEX);
 
@@ -49,14 +51,16 @@ class ManifestServiceTest {
 
     @Test
     void parsesRegularManifest() {
-        byte[] body = """
+        String template = """
                 {
                   "schemaVersion": 2,
                   "mediaType": "%s",
                   "config": {"mediaType":"application/vnd.oci.image.config.v1+json","digest":"sha256:dead","size":12},
                   "layers": [{"mediaType":"application/vnd.oci.image.layer.v1.tar","digest":"sha256:beef","size":34}]
                 }
-                """.formatted(MediaTypes.OCI_IMAGE_MANIFEST).getBytes(StandardCharsets.UTF_8);
+                """.replace("\n", "%n");
+        byte[] body = template.formatted(MediaTypes.OCI_IMAGE_MANIFEST)
+                .getBytes(StandardCharsets.UTF_8);
         HttpFields.Mutable headers = HttpFields.build();
         headers.add("Content-Type", MediaTypes.OCI_IMAGE_MANIFEST);
 

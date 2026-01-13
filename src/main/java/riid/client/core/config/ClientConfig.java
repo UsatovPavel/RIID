@@ -3,9 +3,9 @@ package riid.client.core.config;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import riid.client.http.HttpClientConfig;
 
-import java.util.List;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Aggregated client module configuration.

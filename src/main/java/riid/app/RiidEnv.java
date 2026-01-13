@@ -1,7 +1,8 @@
 package riid.app;
 
 final class RiidEnv {
-    private RiidEnv() { }
+    private RiidEnv() {
+    }
 
     static String repo() {
         return System.getenv().getOrDefault("RIID_REPO", "library/busybox");

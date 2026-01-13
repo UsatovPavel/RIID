@@ -112,9 +112,12 @@ class ConfigLoaderTest {
                         identityToken: token-123
                 dispatcher:
                   maxConcurrentRegistry: 10
-                """;
+                """.replace("\n", "%n");
         Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml.formatted(cert.toString(), key.toString(), ca.toString()));
+        Files.writeString(tmp, yaml.formatted(
+                cert.toString(),
+                key.toString(),
+                ca.toString()));
 
         AppConfig cfg = ConfigLoader.load(tmp);
         assertEquals(2, cfg.client().registries().size());

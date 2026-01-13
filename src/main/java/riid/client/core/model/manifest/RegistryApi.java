@@ -4,7 +4,8 @@ package riid.client.core.model.manifest;
  * Helper with path templates for Docker Registry API v2 (pull).
  */
 public final class RegistryApi {
-    private RegistryApi() { }
+    private RegistryApi() {
+    }
 
     public static final String V2_PING = "/v2/";
     public static final String MANIFEST = "/v2/%s/manifests/%s"; // repo, ref

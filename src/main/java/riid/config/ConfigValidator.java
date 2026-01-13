@@ -6,17 +6,18 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.dispatcher.DispatcherConfig;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Validates application configuration.
  */
 public final class ConfigValidator {
-    private ConfigValidator() { }
+    private ConfigValidator() {
+    }
 
     public static void validate(AppConfig config) {
         Objects.requireNonNull(config, "config");
@@ -43,7 +44,7 @@ public final class ConfigValidator {
         if (registries.isEmpty()) {
             throw new ConfigValidationException(ConfigValidationException.Reason.NO_REGISTRIES.message());
         }
-    
+
         registries.forEach(ep -> {
             if (ep == null) {
                 throw new ConfigValidationException(ConfigValidationException.Reason.NULL_REGISTRY.message());

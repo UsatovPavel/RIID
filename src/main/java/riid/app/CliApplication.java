@@ -135,13 +135,15 @@ public final class CliApplication {
         }
     }
 
-    record ParseResult(CliOptions options, boolean showHelp, String errorMessage) { }
+    record ParseResult(CliOptions options, boolean showHelp, String errorMessage) {
+    }
 
     /**
      * Parses CLI arguments and performs basic validation.
      */
     static final class CliParser {
-        private CliParser() { }
+        private CliParser() {
+        }
 
         static ParseResult parse(String[] args) {
             if (args == null || args.length == 0) {

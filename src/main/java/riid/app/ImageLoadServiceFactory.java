@@ -29,8 +29,9 @@ public final class ImageLoadServiceFactory {
     }
 
     @SuppressWarnings("PMD.CloseResource") // cache lifecycle is managed by the returned service
-    public static ImageLoadService createFromConfig(Path configPath,
-                                                    riid.client.core.config.Credentials credentialsOverride) throws Exception {
+    public static ImageLoadService createFromConfig(
+            Path configPath,
+            riid.client.core.config.Credentials credentialsOverride) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         AppConfig config = ConfigLoader.load(configPath);
 

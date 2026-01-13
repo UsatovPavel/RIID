@@ -6,8 +6,6 @@ import com.sun.net.httpserver.HttpServer;
 import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import riid.client.http.HttpClientFactory;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -22,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("PMD.CloseResource")
 class HttpExecutorTest {
     private static final int FIRST_CALL = 1;
 

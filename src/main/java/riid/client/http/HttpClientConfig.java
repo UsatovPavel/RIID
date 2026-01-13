@@ -104,42 +104,42 @@ public record HttpClientConfig(
 
         public Builder connectTimeout(Duration v) {
             this.connectTimeoutValue = v;
-            return this; 
+            return this;
         }
 
         public Builder requestTimeout(Duration v) {
             this.requestTimeoutValue = v;
-            return this; 
+            return this;
         }
 
         public Builder maxRetries(int v) {
             this.maxRetriesValue = v;
-            return this; 
+            return this;
         }
 
         public Builder initialBackoff(Duration v) {
             this.initialBackoffValue = v;
-            return this; 
+            return this;
         }
 
         public Builder maxBackoff(Duration v) {
             this.maxBackoffValue = v;
-            return this; 
+            return this;
         }
 
         public Builder retryIdempotentOnly(boolean v) {
             this.retryIdempotentOnlyValue = v;
-            return this; 
+            return this;
         }
 
         public Builder userAgent(String v) {
             this.userAgentValue = v;
-            return this; 
+            return this;
         }
 
         public Builder followRedirects(boolean v) {
             this.followRedirectsValue = v;
-            return this; 
+            return this;
         }
 
         public HttpClientConfig build() {

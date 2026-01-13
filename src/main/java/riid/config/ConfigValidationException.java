@@ -27,14 +27,14 @@ public class ConfigValidationException extends RuntimeException {
         AUTH_KEY_MISSING("client.auth.keyPath must point to existing file"),
         AUTH_CA_MISSING("client.auth.caPath must point to existing file");
 
-        private final String message;
+        private final String reasonMessage;
 
         Reason(String message) {
-            this.message = message;
+            this.reasonMessage = message;
         }
 
         public String message() {
-            return message;
+            return reasonMessage;
         }
     }
 

@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class CliApplicationTest {
     private static final String RUNTIME_PODMAN = "podman";
     private static final String REPO_BUSYBOX = "library/busybox";
