@@ -33,7 +33,9 @@ public final class ImageLoadServiceFactory {
         TempFileCacheAdapter cache = new TempFileCacheAdapter();
         Map<String, RuntimeAdapter> runtimes = new HashMap<>(defaultRuntimes());
 
-        ImageLoadService app = ImageLoadService.createDefault(endpoint, cache, new P2PExecutor.NoOp(), runtimes);
+        long ttl = config.client().auth().defaultTokenTtlSeconds();
+        ImageLoadService app = ImageLoadService.createDefault(
+                endpoint, cache, new P2PExecutor.NoOp(), runtimes, ttl);
         LOGGER.info("ImageLoadService initialized with endpoint {}://{}", endpoint.scheme(), endpoint.host());
         return app;
     }

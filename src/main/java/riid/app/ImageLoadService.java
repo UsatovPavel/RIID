@@ -160,9 +160,10 @@ public final class ImageLoadService {
     public static ImageLoadService createDefault(RegistryEndpoint endpoint,
                                                  CacheAdapter cache,
                                                  P2PExecutor p2p,
-                                                 Map<String, RuntimeAdapter> runtimes) {
+                                                 Map<String, RuntimeAdapter> runtimes,
+                                                 long defaultTokenTtlSeconds) {
         HttpClientConfig httpConfig = new HttpClientConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, defaultTokenTtlSeconds);
         RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
         return new ImageLoadService(dispatcher, registry, client);

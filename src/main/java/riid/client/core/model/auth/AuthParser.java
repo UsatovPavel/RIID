@@ -8,7 +8,6 @@ import org.apache.hc.core5.http.message.ParserCursor;
 import org.apache.hc.core5.http.NameValuePair;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 public final class AuthParser {

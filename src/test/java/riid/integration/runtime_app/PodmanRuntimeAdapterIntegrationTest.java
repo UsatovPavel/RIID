@@ -79,7 +79,8 @@ class PodmanRuntimeAdapterIntegrationTest {
                 endpoint,
                 new TempFileCacheAdapter(),
                 new P2PExecutor.NoOp(),
-                java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));
+                java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()),
+                riid.client.core.config.AuthConfig.DEFAULT_TTL_SECONDS);
 
         String refName = app.load(REPO, REF, "podman");
         // Verify the image can run a trivial command
