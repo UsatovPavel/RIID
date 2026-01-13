@@ -24,7 +24,6 @@ class PodmanRuntimeAdapterIntegrationTest {
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final String PODMAN = "podman";
-
     @Test
     void downloadsImageAndLoadsIntoPodman() throws Exception {
         // Clean up image if already present

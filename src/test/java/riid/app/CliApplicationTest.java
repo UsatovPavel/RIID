@@ -1,20 +1,21 @@
 package riid.app;
 
 import org.junit.jupiter.api.Test;
-import riid.app.CliApplication;
-import riid.app.ImageLoadServiceFactory;
 import riid.runtime.PodmanRuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CliApplicationTest {
+    private static final String RUNTIME_PODMAN = "podman";
+    private static final String REPO_BUSYBOX = "library/busybox";
 
     @Test
     void failsWithUsageWhenNoArgs() {
@@ -22,14 +23,15 @@ class CliApplicationTest {
         CliApplication appWithErr = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
                 ImageLoadServiceFactory.defaultRuntimes(),
-                new PrintWriter(new ByteArrayOutputStream()),
-                new PrintWriter(errBuf, true)
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8)),
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
 
         int code = appWithErr.run(new String[]{});
 
         assertEquals(CliApplication.EXIT_USAGE, code);
-        assertTrue(errBuf.toString().contains("Usage"), errBuf.toString());
+        assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Usage"),
+                errBuf.toString(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -38,14 +40,14 @@ class CliApplicationTest {
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
                 ImageLoadServiceFactory.defaultRuntimes(),
-                new PrintWriter(new ByteArrayOutputStream(), true),
-                new PrintWriter(errBuf, true)
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
 
-        int code = app.run(new String[]{"--runtime", "podman"});
+        int code = app.run(new String[]{"--runtime", RUNTIME_PODMAN});
 
         assertEquals(CliApplication.EXIT_USAGE, code);
-        assertTrue(errBuf.toString().contains("Repository is required"));
+        assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Repository is required"));
     }
 
     @Test
@@ -54,14 +56,14 @@ class CliApplicationTest {
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
                 ImageLoadServiceFactory.defaultRuntimes(),
-                new PrintWriter(new ByteArrayOutputStream(), true),
-                new PrintWriter(errBuf, true)
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
 
-        int code = app.run(new String[]{"--repo", "library/busybox"});
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX});
 
         assertEquals(CliApplication.EXIT_USAGE, code);
-        assertTrue(errBuf.toString().contains("Runtime id is required"));
+        assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Runtime id is required"));
     }
 
     @Test
@@ -71,15 +73,15 @@ class CliApplicationTest {
                 options -> {
                     throw new AssertionError("Service factory must not be invoked on invalid runtime");
                 },
-                Map.of("podman", new PodmanRuntimeAdapter()),
-                new PrintWriter(new ByteArrayOutputStream(), true),
-                new PrintWriter(errBuf, true)
+                Map.of(RUNTIME_PODMAN, new PodmanRuntimeAdapter()),
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
 
-        int code = app.run(new String[]{"--repo", "library/busybox", "--runtime", "unknown"});
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", "unknown"});
 
         assertEquals(CliApplication.EXIT_RUNTIME_NOT_FOUND, code);
-        assertTrue(errBuf.toString().contains("Unknown runtime"));
+        assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Unknown runtime"));
     }
 
     @Test
@@ -100,22 +102,22 @@ class CliApplicationTest {
                     };
                 },
                 ImageLoadServiceFactory.defaultRuntimes(),
-                new PrintWriter(new ByteArrayOutputStream(), true),
-                new PrintWriter(new ByteArrayOutputStream(), true)
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
         );
 
         int code = app.run(new String[]{
                 "--config", "config.yaml",
-                "--repo", "library/busybox",
+                "--repo", REPO_BUSYBOX,
                 "--tag", "latest",
-                "--runtime", "podman"
+                "--runtime", RUNTIME_PODMAN
         });
 
         assertEquals(CliApplication.EXIT_OK, code);
         assertEquals(Path.of("config.yaml"), configSeen.get());
-        assertEquals("library/busybox", repoSeen.get());
+        assertEquals(REPO_BUSYBOX, repoSeen.get());
         assertEquals("latest", refSeen.get());
-        assertEquals("podman", runtimeSeen.get());
+        assertEquals(RUNTIME_PODMAN, runtimeSeen.get());
     }
 }
 

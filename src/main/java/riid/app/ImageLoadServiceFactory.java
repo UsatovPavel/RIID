@@ -3,7 +3,6 @@ package riid.app;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.oci.TempFileCacheAdapter;
-import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.config.AppConfig;
 import riid.config.ConfigLoader;
@@ -26,23 +25,10 @@ public final class ImageLoadServiceFactory {
 
     @SuppressWarnings("PMD.CloseResource") // cache lifecycle is managed by the returned service
     public static ImageLoadService createFromConfig(Path configPath) throws Exception {
-        return createFromConfig(configPath, null);
-    }
-
-    @SuppressWarnings("PMD.CloseResource") // cache lifecycle is managed by the returned service
-    public static ImageLoadService createFromConfig(Path configPath, Credentials credentialsOverride) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         AppConfig config = ConfigLoader.load(configPath);
 
         RegistryEndpoint endpoint = config.client().registries().getFirst();
-        if (credentialsOverride != null) {
-            endpoint = new RegistryEndpoint(
-                    endpoint.scheme(),
-                    endpoint.host(),
-                    endpoint.port(),
-                    credentialsOverride
-            );
-        }
 
         TempFileCacheAdapter cache = new TempFileCacheAdapter();
         Map<String, RuntimeAdapter> runtimes = new HashMap<>(defaultRuntimes());

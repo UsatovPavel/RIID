@@ -4,7 +4,9 @@ import riid.client.core.config.Credentials;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -16,12 +18,14 @@ import java.util.Set;
  * Minimal CLI parser/runner for ImageLoadService.
  */
 public final class CliApplication {
-     static final int EXIT_OK = 0;//public for test
-     static final int EXIT_USAGE = 64;
-     static final int EXIT_RUNTIME_NOT_FOUND = 65;
-     static final int EXIT_FAILURE = 1;
+    // package-visible for tests
+    static final int EXIT_OK = 0;
+    static final int EXIT_USAGE = 64;
+    static final int EXIT_RUNTIME_NOT_FOUND = 65;
+    static final int EXIT_FAILURE = 1;
 
     private static final Path DEFAULT_CONFIG_PATH = Paths.get("config.yaml");
+    private static final int MAX_PASSWORD_SOURCES = 1;
 
     private final ServiceFactory serviceFactory;
     private final PrintWriter out;
@@ -41,15 +45,12 @@ public final class CliApplication {
     public static CliApplication createDefault() {
         return new CliApplication(
                 options -> {
-                    ImageLoadService service = ImageLoadServiceFactory.createFromConfig(
-                            options.configPath(),
-                            options.credentials()
-                    );
+                    ImageLoadService service = ImageLoadServiceFactory.createFromConfig(options.configPath());
                     return service::load;
                 },
                 ImageLoadServiceFactory.defaultRuntimes(),
-                new PrintWriter(System.out, true),
-                new PrintWriter(System.err, true)
+                new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
+                new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true)
         );
     }
 
@@ -66,13 +67,22 @@ public final class CliApplication {
         }
         CliOptions options = result.options;
         if (!availableRuntimes.contains(options.runtimeId())) {
-            err.printf("Unknown runtime '%s'. Available: %s%n", options.runtimeId(), String.join(", ", availableRuntimes));
+            err.printf(
+                    "Unknown runtime '%s'. Available: %s%n",
+                    options.runtimeId(),
+                    String.join(", ", availableRuntimes)
+            );
             return EXIT_RUNTIME_NOT_FOUND;
         }
         try {
             ImageLoader loader = serviceFactory.create(options);
             loader.load(options.repository(), options.reference(), options.runtimeId());
-            out.printf("Loaded %s (%s) into runtime %s%n", options.repository(), options.reference(), options.runtimeId());
+            out.printf(
+                    "Loaded %s (%s) into runtime %s%n",
+                    options.repository(),
+                    options.reference(),
+                    options.runtimeId()
+            );
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
             }
@@ -84,23 +94,28 @@ public final class CliApplication {
     }
 
     private void printUsage(PrintWriter writer) {
-        writer.println("Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>");
-        writer.println("           [--config <path>] [--username <user> (--password <pwd>|--password-env <VAR>|--password-file <path>)]");
-        writer.println("           [--cert-path <path>] [--key-path <path>] [--ca-path <path>] [--help]");
-        writer.println("Flags:");
-        writer.println("  --repo           Repository name (e.g., library/busybox)");
-        writer.println("  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided");
-        writer.println("  --digest         Digest to pull (format: sha256:...)");
-        writer.println("  --runtime        Runtime id (available: " + String.join(", ", availableRuntimes) + ")");
-        writer.println("  --config         Path to YAML config (default: " + DEFAULT_CONFIG_PATH + ")");
-        writer.println("  --username       Registry username for basic auth");
-        writer.println("  --password       Registry password (mutually exclusive with --password-env/--password-file)");
-        writer.println("  --password-env   Name of env var containing the registry password");
-        writer.println("  --password-file  Path to file containing the registry password");
-        writer.println("  --cert-path      Path to client certificate (validated to exist, not used yet)");
-        writer.println("  --key-path       Path to client private key (validated to exist, not used yet)");
-        writer.println("  --ca-path        Path to CA certificate (validated to exist, not used yet)");
-        writer.println("  --help           Show this message");
+        String usage = """
+                Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>%n\
+                       [--config <path>] [--username <user>%n\
+                        (--password <pwd>|--password-env <VAR>|--password-file <path>)]%n\
+                       [--cert-path <path>] [--key-path <path>] [--ca-path <path>] [--help]%n\
+                Flags:%n\
+                  --repo           Repository name (e.g., library/busybox)%n\
+                  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided%n\
+                  --digest         Digest to pull (format: sha256:...)%n\
+                  --runtime        Runtime id (available: %s)%n\
+                  --config         Path to YAML config (default: %s)%n\
+                  --username       Registry username for basic auth%n\
+                  --password       Registry password (mutually exclusive with%n\
+                                     --password-env/--password-file)%n\
+                  --password-env   Name of env var containing the registry password%n\
+                  --password-file  Path to file containing the registry password%n\
+                  --cert-path      Path to client certificate (validated to exist, not used yet)%n\
+                  --key-path       Path to client private key (validated to exist, not used yet)%n\
+                  --ca-path        Path to CA certificate (validated to exist, not used yet)%n\
+                  --help           Show this message
+                """.formatted(String.join(", ", availableRuntimes), DEFAULT_CONFIG_PATH);
+        writer.println(usage);
         writer.flush();
     }
 
@@ -179,7 +194,7 @@ public final class CliApplication {
                 return new ParseResult(null, false, "Runtime id is required (--runtime)");
             }
 
-            if (countNonNull(password, passwordEnv, passwordFile) > 1) {
+            if (countNonNull(password, passwordEnv, passwordFile) > MAX_PASSWORD_SOURCES) {
                 return new ParseResult(null, false, "Use only one of --password, --password-env or --password-file");
             }
             String resolvedPassword = password;
