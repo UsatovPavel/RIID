@@ -9,6 +9,7 @@ import riid.config.ConfigLoader;
 import riid.p2p.P2PExecutor;
 import riid.runtime.PodmanRuntimeAdapter;
 import riid.runtime.PortoRuntimeAdapter;
+import riid.runtime.RuntimeAdapter;
 
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -30,12 +31,20 @@ public final class ImageLoadServiceFactory {
         RegistryEndpoint endpoint = config.client().registries().getFirst();
 
         TempFileCacheAdapter cache = new TempFileCacheAdapter();
-        Map<String, riid.runtime.RuntimeAdapter> runtimes = new HashMap<>();
-        runtimes.put("podman", new PodmanRuntimeAdapter());
-        runtimes.put("porto", new PortoRuntimeAdapter());
+        Map<String, RuntimeAdapter> runtimes = new HashMap<>(defaultRuntimes());
 
         ImageLoadService app = ImageLoadService.createDefault(endpoint, cache, new P2PExecutor.NoOp(), runtimes);
         LOGGER.info("ImageLoadService initialized with endpoint {}://{}", endpoint.scheme(), endpoint.host());
         return app;
+    }
+
+    /**
+     * Default runtime adapters used by the CLI and factory.
+     */
+    public static Map<String, RuntimeAdapter> defaultRuntimes() {
+        Map<String, RuntimeAdapter> runtimes = new HashMap<>();
+        runtimes.put("podman", new PodmanRuntimeAdapter());
+        runtimes.put("porto", new PortoRuntimeAdapter());
+        return Map.copyOf(runtimes);
     }
 }

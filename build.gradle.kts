@@ -292,6 +292,6 @@ tasks.register("dockerTest") {
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
     manifest {
-        attributes("Main-Class" to "riid.app.ImageLoadServiceFactory")
+        attributes("Main-Class" to "riid.app.RiidCli")
     }
 }
