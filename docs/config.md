@@ -1,9 +1,9 @@
-## Модуль config
+## Config module
 
-### Назначение
-Парсинг и валидация YAML-конфигурации приложения (клиент реестра + диспетчер). Загрузка — `ConfigLoader`, правила — `ConfigValidator`.
+### Purpose
+Parse and validate the application YAML config (registry client + dispatcher). Loader: `ConfigLoader`, rules: `ConfigValidator`.
 
-### Минимальный валидный пример
+### Minimal valid example
 ```yaml
 client:
   http: {}
@@ -17,7 +17,7 @@ dispatcher:
   maxConcurrentRegistry: 1
 ```
 
-### Дефолты (по выводу smoke-теста)
+### Defaults (from smoke test)
 - client.http.connectTimeout = PT5S
 - client.http.requestTimeout = PT30S
 - client.http.maxRetries = 0
@@ -30,17 +30,17 @@ dispatcher:
 - client.auth.certPath / keyPath / caPath = null
 - client.registries.size = 1
 
-### Правила валидации (ConfigValidator)
-- Обязательны `client`, `dispatcher`, `registries`; минимум один registry с `scheme` и `host`.
+### Validation rules (ConfigValidator)
+- `client`, `dispatcher`, `registries` required; at least one registry with `scheme` and `host`.
 - `dispatcher.maxConcurrentRegistry` > 0.
-- `client.http`: таймауты/бэкоффы > 0, `initialBackoff <= maxBackoff`, `userAgent` не пустой, `maxRetries` < 0 запрещён (валидация падает).
-- `client.auth.defaultTokenTtlSeconds` > 0; пути cert/key/ca, если заданы, должны существовать.
+- `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `userAgent` not blank, `maxRetries` must be >= 0.
+- `client.auth.defaultTokenTtlSeconds` > 0; cert/key/ca paths, if provided, must exist.
 
-### Известные особенности
-- Отсутствие `registries` приводит к `ConfigValidationException`.
+### Known notes
+- Missing `registries` throws `ConfigValidationException`.
 
-### Тесты
-- `ConfigBranchTest`: ветвления валидации (включая maxRetries < 0, отсутствие http/auth/registries/dispatcher).
-- `ConfigLoaderTest` (integration/config_client): загрузка/валидация файлов.
-- Smoke: `smokePrintsDefaultsFromMinimalConfig` — печать фактических дефолтов после загрузки минимального валидного YAML.
+### Tests
+- `ConfigBranchTest`: validation branches (including maxRetries < 0, missing http/auth/registries/dispatcher).
+- `ConfigLoaderTest` (integration/config_client): loading/validation from files.
+- Smoke: `smokePrintsDefaultsFromMinimalConfig` — prints actual defaults after loading minimal valid YAML.
 

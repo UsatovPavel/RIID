@@ -1,22 +1,22 @@
 ## Registry Client
 
-### Конфиг
-- Registry endpoints задаются через `RegistryEndpoint` (scheme/host/port/creds), список приходит из внешнего конфига/Orchestrator.
-- HTTP-клиент: `HttpClientConfig` (таймауты, ретраи идемпотентных GET, backoff, User-Agent).
-- Кэш: внешний `CacheAdapter` (опционально), клиент только пишет в кэш после скачивания; выбор источника (cache/P2P/registry) — за Orchestrator.
+### Config
+- Registry endpoints via `RegistryEndpoint` (scheme/host/port/creds); list provided by external config/Orchestrator.
+- HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, User-Agent).
+- Cache: external `CacheAdapter` (optional); client writes to cache after download. Source choice (cache/P2P/registry) is up to Orchestrator.
 
-### Поддерживаемые операции
-- `fetchManifest(repo, ref)` → `ManifestResult` (валидирует digest, умеет manifest list/индексы).
-- `fetchBlob(request, file)` → `BlobResult` (SHA256, размер, Range/ретраи).
+### Supported operations
+- `fetchManifest(repo, ref)` → `ManifestResult` (validates digest, handles manifest list/index).
+- `fetchBlob(request, file)` → `BlobResult` (SHA256, size, Range/retries).
 - `headBlob(repo, digest)` → Optional size.
-- `fetchConfig(repo, manifest, file)` → blob по config.digest.
-- `listTags(repo, n, last)` (HTTP к registry).
+- `fetchConfig(repo, manifest, file)` → blob by config.digest.
+- `listTags(repo, n, last)` (HTTP to registry).
 
-### Как использовать
+### Usage
 ```java
 RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
 HttpClientConfig httpCfg = HttpClientConfig.builder().maxRetries(2).build();
-CacheAdapter cache = null;// TODO
+CacheAdapter cache = null; // optional
 RegistryClient client = new RegistryClientImpl(endpoint, httpCfg, cache);
 
 var manifest = client.fetchManifest("library/busybox", "latest").manifest();
@@ -25,18 +25,18 @@ File tmp = Files.createTempFile("layer", ".tar").toFile();
 var res = client.fetchBlob(new BlobRequest("library/busybox", layer.digest(), layer.size(), layer.mediaType()), tmp);
 ```
 
-### Медиатипы
-- OCI: manifest/index/config/layers (zstd/gzip/тар).
+### Media types
+- OCI: manifest/index/config/layers (zstd/gzip/tar).
 - Docker schema2: manifest/list/config/layers.
-Accept заголовок включает OCI и Docker.
+- Accept header includes OCI and Docker.
 
-### Тесты
-- Юнит: парсинг манифестов/индексов, WWW-Authenticate, URI/Range, digest/size.
-- Интеграция  — `RegistryLocalTest` 
-- Публичный (Docker Hub) — `RegistryLiveTest` (alpine/busybox) — можно запускать локально.
-- Стресс (tag `stress`, не в CI): массовые скачивания маленьких слоёв, ретраи.
+### Tests
+- Unit: manifest/index parsing, WWW-Authenticate, URI/Range, digest/size.
+- Integration — `RegistryLocalTest`.
+- Live (Docker Hub) — `RegistryLiveTest` (alpine/busybox), runnable locally.
+- Stress (tag `stress`, not in CI): many small layer downloads, retries.
 
-### Ограничения/архитектура
-- Клиент не выбирает источник (cache/P2P/registry) и не знает о runtime; это делает Orchestrator/Runtime Adapter.
-- Клиент валидирует digest/size при скачивании; финальная проверка/импорт — на уровне Runtime Adapter.
+### Constraints / architecture
+- Client does not choose source (cache/P2P/registry) and is runtime-agnostic; Orchestrator/Runtime Adapter decides.
+- Client validates digest/size on download; final verification/import is in the Runtime Adapter layer.
 
