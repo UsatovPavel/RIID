@@ -34,6 +34,11 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     }
 
     @Override
+    public Optional<Path> resolve(String key) {
+        return delegate.resolve(key);
+    }
+
+    @Override
     public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException {
         return delegate.put(digest, payload, mediaType);
     }

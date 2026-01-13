@@ -30,14 +30,17 @@ class TempFileCacheAdapterTest {
         Path tmp = Files.createTempFile("cache-", ".bin");
         Files.writeString(tmp, "hello");
 
-        CachePayload payload = CachePayload.of(tmp, Files.size(tmp));
+        CachePayload payload = PathCachePayload.of(tmp, Files.size(tmp));
         CacheEntry entry = cache.put(digest, payload, CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));
         var loaded = cache.get(digest).orElseThrow();
-        assertEquals(entry.locator(), loaded.locator());
+        Path loadedPath = cache.resolve(loaded.key()).orElseThrow();
+        assertEquals(cache.resolve(entry.key()).orElseThrow(), loadedPath);
         // media type is derived from probeContentType; just ensure not null
-        assertEquals(CacheMediaType.from(Files.probeContentType(Path.of(loaded.locator()))), loaded.mediaType());
+        assertEquals(
+                CacheMediaType.from(Files.probeContentType(loadedPath)),
+                loaded.mediaType());
         assertEquals(Files.size(tmp), loaded.sizeBytes());
     }
 

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import riid.cache.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
-import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.model.manifest.Descriptor;

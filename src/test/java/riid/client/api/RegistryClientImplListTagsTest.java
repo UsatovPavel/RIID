@@ -43,45 +43,45 @@ class RegistryClientImplListTagsTest {
     }
 
     @Test
-    void listTagsSuccess() {
+    void listTagsSuccess() throws Exception {
         server.createContext(V2, new JsonHandler("", 200));
         String body = String.format("{\"name\":\"%s\",\"tags\":[\"latest\",\"edge\"]}", REPO);
         server.createContext(V2 + REPO + "/tags/list", new JsonHandler(body, 200));
 
-        RegistryClient client = new RegistryClientImpl(
+        try (RegistryClient client = new RegistryClientImpl(
                 new RegistryEndpoint("http", "localhost", port, null),
                 new HttpClientConfig(),
-                null);
-
-        TagList list = client.listTags(REPO, null, null);
-        assertEquals(REPO, list.name());
-        assertEquals(2, list.tags().size());
+                null)) {
+            TagList list = client.listTags(REPO, null, null);
+            assertEquals(REPO, list.name());
+            assertEquals(2, list.tags().size());
+        }
     }
 
     @Test
-    void listTagsBadStatusThrows() {
+    void listTagsBadStatusThrows() throws Exception {
         server.createContext(V2, new JsonHandler("", 200));
         server.createContext(V2 + REPO + "/tags/list", new JsonHandler("{}", 503));
 
-        RegistryClient client = new RegistryClientImpl(
+        try (RegistryClient client = new RegistryClientImpl(
                 new RegistryEndpoint("http", "localhost", port, null),
                 new HttpClientConfig(),
-                null);
-
-        assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
+                null)) {
+            assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
+        }
     }
 
     @Test
-    void listTagsParseErrorThrows() {
+    void listTagsParseErrorThrows() throws Exception {
         server.createContext(V2, new JsonHandler("", 200));
         server.createContext(V2 + REPO + "/tags/list", new JsonHandler("{not-json", 200));
 
-        RegistryClient client = new RegistryClientImpl(
+        try (RegistryClient client = new RegistryClientImpl(
                 new RegistryEndpoint("http", "localhost", port, null),
                 new HttpClientConfig(),
-                null);
-
-        assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
+                null)) {
+            assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
+        }
     }
 
     private static final class JsonHandler implements HttpHandler {

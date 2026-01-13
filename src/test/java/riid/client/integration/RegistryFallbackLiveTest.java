@@ -39,17 +39,17 @@ class RegistryFallbackLiveTest {
             .build();
 
     @Test
-    void fallsBackWhenFirstRegistryUnavailable() {
-        RegistryClient badClient = new RegistryClientImpl(BAD, CFG, null);
-        RegistryClient hubClient = new RegistryClientImpl(HUB, CFG, null);
+    void fallsBackWhenFirstRegistryUnavailable() throws Exception {
+        try (RegistryClient badClient = new RegistryClientImpl(BAD, CFG, null);
+             RegistryClient hubClient = new RegistryClientImpl(HUB, CFG, null)) {
+            RuntimeException ex = assertThrows(RuntimeException.class, () -> badClient.fetchManifest(REPO, REF));
+            LOGGER.info("Fallback: first registry failed with {}: {}", ex.getClass().getSimpleName(), ex.getMessage());
+            Throwable root = rootCause(ex);
+            LOGGER.info("Fallback: root cause {}: {}", root.getClass().getSimpleName(), root.getMessage());
 
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> badClient.fetchManifest(REPO, REF));
-        LOGGER.info("Fallback: first registry failed with {}: {}", ex.getClass().getSimpleName(), ex.getMessage());
-        Throwable root = rootCause(ex);
-        LOGGER.info("Fallback: root cause {}: {}", root.getClass().getSimpleName(), root.getMessage());
-
-        ManifestResult manifest = hubClient.fetchManifest(REPO, REF);
-        assertFalse(manifest.manifest().layers().isEmpty(), "manifest should contain layers");
+            ManifestResult manifest = hubClient.fetchManifest(REPO, REF);
+            assertFalse(manifest.manifest().layers().isEmpty(), "manifest should contain layers");
+        }
     }
 
     private static Throwable rootCause(Throwable t) {

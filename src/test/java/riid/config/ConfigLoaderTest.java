@@ -3,11 +3,9 @@ package riid.config;
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
-import riid.client.http.HttpClientConfig;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -132,7 +130,7 @@ class ConfigLoaderTest {
     }
 
     @Test
-    void defaultsHttpConfigWhenMissing() throws Exception {
+    void noDefaultHttpConfigWhenMissing() throws Exception {
         String yaml = """
                 client:
                   auth: {}
@@ -146,15 +144,7 @@ class ConfigLoaderTest {
         Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
         Files.writeString(tmp, yaml);
 
-        AppConfig cfg = ConfigLoader.load(tmp);
-        HttpClientConfig http = cfg.client().http();
-        assertEquals(Duration.ofSeconds(5), http.connectTimeout());
-        assertEquals(Duration.ofSeconds(30), http.requestTimeout());
-        assertEquals(2, http.maxRetries());
-        assertEquals(Duration.ofMillis(200), http.initialBackoff());
-        assertEquals(Duration.ofSeconds(2), http.maxBackoff());
-        assertEquals("riid-registry-client", http.userAgent());
-        assertEquals(true, http.followRedirects());
+        assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
     @Test
