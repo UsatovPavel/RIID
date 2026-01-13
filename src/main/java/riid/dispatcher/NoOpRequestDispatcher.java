@@ -11,6 +11,11 @@ public final class NoOpRequestDispatcher implements RequestDispatcher {
         Objects.requireNonNull(ref);
         throw new UnsupportedOperationException("Dispatcher not implemented");
     }
+
+    @Override
+    public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
+        throw new UnsupportedOperationException("Dispatcher not implemented");
+    }
 }
 
 

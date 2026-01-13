@@ -39,12 +39,12 @@ class FileCacheAdapterTest {
         Files.writeString(tmp, "hello");
         CacheEntry entry = cache.put(
                 digest,
-                CachePayload.of(tmp, Files.size(tmp)),
+                PathCachePayload.of(tmp, Files.size(tmp)),
                 CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));
         CacheEntry loaded = cache.get(digest).orElseThrow();
-        assertEquals(entry.locator(), loaded.locator());
+        assertEquals(cache.resolve(entry.key()).orElseThrow(), cache.resolve(loaded.key()).orElseThrow());
         assertEquals(Files.size(tmp), loaded.sizeBytes());
     }
 

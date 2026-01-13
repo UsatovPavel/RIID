@@ -39,6 +39,7 @@ class ConfigBranchTest {
         Path tmp = Files.createTempFile("cfg-null-http", YAML_SUFFIX);
         Files.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        //Client config must not have side-effect(get http from default HttpConfig)
     }
 
     @Test

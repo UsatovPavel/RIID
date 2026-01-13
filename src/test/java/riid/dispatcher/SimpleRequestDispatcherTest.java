@@ -20,6 +20,7 @@ import riid.p2p.P2PExecutor;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,7 +55,7 @@ class SimpleRequestDispatcherTest {
         cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
 
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p);
-        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", true));
+        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
         assertEquals("/tmp/cached", result.path());
         assertEquals(1, registry.manifestCalls);
@@ -64,10 +65,10 @@ class SimpleRequestDispatcherTest {
 
     @Test
     void returnsP2PWhenCacheMiss() {
-        p2p.fetchResult = Optional.of("/tmp/p2p-layer");
+        p2p.fetchResult = Optional.of(Path.of("/tmp/p2p-layer"));
 
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p);
-        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", true));
+        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
         assertEquals("/tmp/p2p-layer", result.path());
         assertEquals(1, registry.manifestCalls);
@@ -82,7 +83,7 @@ class SimpleRequestDispatcherTest {
         registry.blobResult = new BlobResult(DIGEST, tmp.length(), MEDIA_LAYER, tmp.getAbsolutePath());
 
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, new DispatcherConfig(1));
-        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", true));
+        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
         assertEquals(tmp.getAbsolutePath(), result.path());
         assertEquals(1, registry.blobCalls);
@@ -152,25 +153,36 @@ class SimpleRequestDispatcherTest {
         }
 
         @Override
+        public Optional<Path> resolve(String key) {
+            return key == null ? Optional.empty() : Optional.of(Path.of(key));
+        }
+
+        @Override
         public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) {
             putCalled = true;
-            return new CacheEntry(digest, payload.sizeBytes(), mediaType, "/tmp/cache/" + digest.hex());
+            long size;
+            try {
+                size = payload.sizeBytes();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            return new CacheEntry(digest, size, mediaType, "/tmp/cache/" + digest.hex());
         }
     }
 
     private static final class RecordingP2PExecutor implements P2PExecutor {
         boolean fetchCalled;
         boolean publishCalled;
-        Optional<String> fetchResult = Optional.empty();
+        Optional<Path> fetchResult = Optional.empty();
 
         @Override
-        public Optional<String> fetch(String digest, long size, String mediaType) {
+        public Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType) {
             fetchCalled = true;
             return fetchResult;
         }
 
         @Override
-        public void publish(String digest, String path, long size, String mediaType) {
+        public void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType) {
             publishCalled = true;
         }
     }

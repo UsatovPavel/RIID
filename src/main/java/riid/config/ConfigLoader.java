@@ -28,19 +28,27 @@ public final class ConfigLoader {
             ConfigValidator.validate(config);
             return config;
         } catch (ConfigValidationException e) {
-            throw e;//да-да
+            throw withPath(e, path);
         } catch (IOException e) {
             Throwable root = e.getCause();
             if (root instanceof ConfigValidationException cve) {
-                throw cve;
+                throw withPath(cve, path);
             }
             if (root instanceof IllegalArgumentException iae) {
-                throw new ConfigValidationException(iae.getMessage(), iae);
+                throw new ConfigValidationException("Invalid configuration in " + path + ": " + iae.getMessage(), iae);
             }
             throw new RuntimeException("Failed to load config from " + path, e);
         } catch (IllegalArgumentException e) {
-            throw new ConfigValidationException(e.getMessage(), e);
+            throw new ConfigValidationException("Invalid configuration in " + path + ": " + e.getMessage(), e);
         }
+    }
+
+    private static ConfigValidationException withPath(ConfigValidationException e, Path path) {
+        String msg = e.getMessage();
+        if (msg != null && msg.contains(path.toString())) {
+            return e;
+        }
+        return new ConfigValidationException("Invalid configuration in " + path + ": " + msg, e);
     }
 }
 

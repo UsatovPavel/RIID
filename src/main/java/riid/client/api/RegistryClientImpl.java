@@ -1,6 +1,7 @@
 package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.jetty.client.HttpClient;
 import riid.cache.CacheAdapter;
 import riid.cache.TokenCache;
 import riid.client.core.config.RegistryEndpoint;
@@ -20,19 +21,19 @@ import riid.client.service.ManifestService;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Default RegistryClient implementation.
+ * Default RegistryClient implementation through jetty. Throw exception on close.
  */
 public final class RegistryClientImpl implements RegistryClient, AutoCloseable {
     private static final String PULL_SCOPE_TEMPLATE = "repository:%s:pull";
 
     private final RegistryEndpoint endpoint;
-    private final org.eclipse.jetty.client.HttpClient jettyClient;
+    private final HttpClient jettyClient;
     private final HttpExecutor http;
     private final AuthService authService;
     private final ManifestService manifestService;

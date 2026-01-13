@@ -21,7 +21,7 @@ class DispatcherRuntimeIntegratorTest {
         RecordingRuntimeAdapter runtime = new RecordingRuntimeAdapter();
 
         DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(dispatcher);
-        FetchResult result = integrator.fetchAndLoad(new ImageRef("repo", "ref", true), runtime);
+        FetchResult result = integrator.fetchAndLoad(new ImageRef("repo", "ref", null), runtime);
 
         assertEquals(temp.toString(), result.path());
         assertEquals(temp, runtime.importedPath);
@@ -34,7 +34,7 @@ class DispatcherRuntimeIntegratorTest {
         DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(dispatcher);
 
         assertThrows(DispatcherRuntimeException.class,
-                () -> integrator.fetchAndLoad(new ImageRef("repo", "ref", true), new RecordingRuntimeAdapter()));
+                () -> integrator.fetchAndLoad(new ImageRef("repo", "ref", null), new RecordingRuntimeAdapter()));
     }
 
     @Test
@@ -42,7 +42,7 @@ class DispatcherRuntimeIntegratorTest {
         DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
                 new RecordingDispatcher(new FetchResult("", "", "")));
         assertThrows(DispatcherRuntimeException.class,
-                () -> integrator.fetchAndLoad(new ImageRef("r", "t", true), new RecordingRuntimeAdapter()));
+                () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
     }
 
     @Test
@@ -51,7 +51,7 @@ class DispatcherRuntimeIntegratorTest {
         DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
                 new RecordingDispatcher(new FetchResult(digestB(), media(), dir.toString())));
         assertThrows(DispatcherRuntimeException.class,
-                () -> integrator.fetchAndLoad(new ImageRef("r", "t", true), new RecordingRuntimeAdapter()));
+                () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
     }
 
     @Test
@@ -60,7 +60,7 @@ class DispatcherRuntimeIntegratorTest {
         DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
                 new RecordingDispatcher(new FetchResult(digestC(), media(), empty.toString())));
         assertThrows(DispatcherRuntimeException.class,
-                () -> integrator.fetchAndLoad(new ImageRef("r", "t", true), new RecordingRuntimeAdapter()));
+                () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
     }
 
     private record RecordingDispatcher(FetchResult result) implements RequestDispatcher {

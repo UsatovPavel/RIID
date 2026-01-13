@@ -56,7 +56,9 @@ public final class ConfigValidator {
     }
 
     private static void validateHttp(HttpClientConfig http) {
-        Objects.requireNonNull(http, "client.http is required");
+        if (http == null) {
+            throw new ConfigValidationException("client.http is required");
+        }
         checkDuration(http.connectTimeout(), "client.http.connectTimeout");
         checkDuration(http.requestTimeout(), "client.http.requestTimeout");
         if (http.maxRetries() < 0) {
