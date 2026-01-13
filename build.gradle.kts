@@ -34,6 +34,10 @@ checkstyle {
 }
 
 dependencies {
+    // HTTP/Auth parsing (Apache HttpClient 5 + core)
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.3.1")
+    implementation("org.apache.httpcomponents.core5:httpcore5:5.2.4")
+
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")

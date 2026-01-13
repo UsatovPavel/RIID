@@ -1,48 +1,57 @@
 package riid.client.core.model.auth;
 
+import org.apache.hc.client5.http.auth.AuthChallenge;
+import org.apache.hc.client5.http.auth.ChallengeType;
+import org.apache.hc.client5.http.impl.auth.AuthChallengeParser;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.message.ParserCursor;
+import org.apache.hc.core5.http.NameValuePair;
+
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-/**
- * Parser for WWW-Authenticate: Bearer ...
- */
 public final class AuthParser {
-    private static final Pattern BEARER = Pattern.compile("Bearer\\s+(.*)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern KV = Pattern.compile("([a-zA-Z0-9_]+)=\"([^\"]*)\"");
+    private AuthParser() {}
 
-    private AuthParser() {
-    }
-
-    public static Optional<AuthChallenge> parse(String header) {
-        if (header == null) {
+    public static Optional<riid.client.core.model.auth.AuthChallenge> parse(String header) {
+        if (header == null || header.isBlank()) {
             return Optional.empty();
         }
-        Matcher m = BEARER.matcher(header.trim());
-        if (!m.find()) {
-            return Optional.empty();
-        }
-        String rest = m.group(1);
-        Matcher kv = KV.matcher(rest);
-        String realm = null;
-        String service = null;
-        String scope = null;
-        while (kv.find()) {
-            String k = kv.group(1).toLowerCase(Locale.ROOT);
-            String v = kv.group(2);
-            switch (k) {
-                case "realm" -> realm = v;
-                case "service" -> service = v;
-                case "scope" -> scope = v;
-                default -> { }
+        AuthChallengeParser parser = AuthChallengeParser.INSTANCE;
+        ParserCursor cursor = new ParserCursor(0, header.length());
+        try {
+            List<AuthChallenge> challenges = parser.parse(ChallengeType.TARGET, header, cursor);
+            for (AuthChallenge ch : challenges) {
+                if (!"bearer".equalsIgnoreCase(ch.getSchemeName())) {
+                    continue;
+                }
+                String realm = ch.getValue();
+                String service = null;
+                String scope = null;
+                List<NameValuePair> params = ch.getParams();
+                if (params != null) {
+                    for (NameValuePair p : params) {
+                        String name = p.getName();
+                        String val = p.getValue();
+                        if (name == null) {
+                            continue;
+                        }
+                        switch (name.toLowerCase(Locale.ROOT)) {
+                            case "realm" -> realm = val;
+                            case "service" -> service = val;
+                            case "scope" -> scope = val;
+                            default -> { }
+                        }
+                    }
+                }
+                if (realm != null) {
+                    return Optional.of(new riid.client.core.model.auth.AuthChallenge(realm, service, scope));
+                }
             }
-        }
-        if (realm == null) {
+            return Optional.empty();
+        } catch (ParseException e) {
             return Optional.empty();
         }
-        return Optional.of(new AuthChallenge(realm, service, scope));
     }
 }
-
-
