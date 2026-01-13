@@ -15,11 +15,16 @@ public record ClientConfig(
         @JsonProperty("registries") List<RegistryEndpoint> registries
 ) {
     public ClientConfig {
-        registries = registries == null ? null : List.copyOf(registries);
+        if (registries != null) {
+            registries = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(registries));
+        }
     }
 
     @Override
     public List<RegistryEndpoint> registries() {
-        return registries == null ? null : List.copyOf(registries);
+        if (registries == null) {
+            return null;
+        }
+        return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(registries));
     }
 }

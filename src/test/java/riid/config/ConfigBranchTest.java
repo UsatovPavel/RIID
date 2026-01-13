@@ -167,7 +167,7 @@ class ConfigBranchTest {
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), null);
         AppConfig cfg = new AppConfig(client, new DispatcherConfig(1));
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        assertEquals(ConfigValidationException.Reason.NO_REGISTRIES.message(), ex.getMessage());
+        assertEquals(ConfigValidationException.Reason.MISSING_REGISTRIES.message(), ex.getMessage());
     }
 
     @Test
