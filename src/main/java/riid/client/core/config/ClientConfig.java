@@ -3,8 +3,7 @@ package riid.client.core.config;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import riid.client.http.HttpClientConfig;
 
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.List;
 import java.util.List;
 
 /**
@@ -16,10 +15,11 @@ public record ClientConfig(
         @JsonProperty("registries") List<RegistryEndpoint> registries
 ) {
     public ClientConfig {
-        if (registries == null) {
-            registries = List.of();
-        } else {
-            registries = Collections.unmodifiableList(new ArrayList<>(registries));
-        }
+        registries = registries == null ? null : List.copyOf(registries);
+    }
+
+    @Override
+    public List<RegistryEndpoint> registries() {
+        return registries == null ? null : List.copyOf(registries);
     }
 }

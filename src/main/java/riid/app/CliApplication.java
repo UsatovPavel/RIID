@@ -97,27 +97,27 @@ public final class CliApplication {
     }
 
     private void printUsage(PrintWriter writer) {
-        String usage = """
-                Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>%n\
-                       [--config <path>] [--username <user>%n\
-                        (--password <pwd>|--password-env <VAR>|--password-file <path>)]%n\
-                       [--cert-path <path>] [--key-path <path>] [--ca-path <path>] [--help]%n\
-                Flags:%n\
-                  --repo           Repository name (e.g., library/busybox)%n\
-                  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided%n\
-                  --digest         Digest to pull (format: sha256:...)%n\
-                  --runtime        Runtime id (available: %s)%n\
-                  --config         Path to YAML config (default: %s)%n\
-                  --username       Registry username for basic auth%n\
-                  --password       Registry password (mutually exclusive with%n\
-                                     --password-env/--password-file)%n\
-                  --password-env   Name of env var containing the registry password%n\
-                  --password-file  Path to file containing the registry password%n\
-                  --cert-path      Path to client certificate (validated to exist, not used yet)%n\
-                  --key-path       Path to client private key (validated to exist, not used yet)%n\
-                  --ca-path        Path to CA certificate (validated to exist, not used yet)%n\
-                  --help           Show this message
-                """.formatted(String.join(", ", availableRuntimes), DEFAULT_CONFIG_PATH);
+        String usage = String.join("%n",
+                "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
+                "       [--config <path>] [--username <user>",
+                "        (--password <pwd>|--password-env <VAR>|--password-file <path>)]",
+                "       [--cert-path <path>] [--key-path <path>] [--ca-path <path>] [--help]",
+                "Flags:",
+                "  --repo           Repository name (e.g., library/busybox)",
+                "  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided",
+                "  --digest         Digest to pull (format: sha256:...)",
+                "  --runtime        Runtime id (available: %s)".formatted(String.join(", ", availableRuntimes)),
+                "  --config         Path to YAML config (default: %s)".formatted(DEFAULT_CONFIG_PATH),
+                "  --username       Registry username for basic auth",
+                "  --password       Registry password (mutually exclusive with",
+                "                     --password-env/--password-file)",
+                "  --password-env   Name of env var containing the registry password",
+                "  --password-file  Path to file containing the registry password",
+                "  --cert-path      Path to client certificate (validated to exist, not used yet)",
+                "  --key-path       Path to client private key (validated to exist, not used yet)",
+                "  --ca-path        Path to CA certificate (validated to exist, not used yet)",
+                "  --help           Show this message"
+        );
         writer.println(usage);
         writer.flush();
     }
