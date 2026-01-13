@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
+import static org.eclipse.jetty.http.UriCompliance.UNSAFE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -440,10 +441,7 @@ class ConfigBranchTest {
     }
 
     private static AuthConfig unsafeAuth(long ttl, String cert, String key, String ca) throws Exception {
-        var unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
-        unsafeField.setAccessible(true);
-        Unsafe unsafe = (Unsafe) unsafeField.get(null);
-        AuthConfig auth = (AuthConfig) unsafe.allocateInstance(AuthConfig.class);
+        AuthConfig auth = (AuthConfig) UNSAFE.allocateInstance(AuthConfig.class);
         setField(auth, "defaultTokenTtlSeconds", ttl);
         setField(auth, "certPath", cert);
         setField(auth, "keyPath", key);
@@ -459,10 +457,7 @@ class ConfigBranchTest {
                                                boolean retryIdem,
                                                String ua,
                                                boolean follow) throws Exception {
-        var unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
-        unsafeField.setAccessible(true);
-        Unsafe unsafe = (Unsafe) unsafeField.get(null);
-        HttpClientConfig cfg = (HttpClientConfig) unsafe.allocateInstance(HttpClientConfig.class);
+        HttpClientConfig cfg = (HttpClientConfig) UNSAFE.allocateInstance(HttpClientConfig.class);
         setField(cfg, "connectTimeout", ct);
         setField(cfg, "requestTimeout", rt);
         setField(cfg, "maxRetries", mr);
@@ -476,7 +471,7 @@ class ConfigBranchTest {
 
     private static void setField(Object target, String name, Object value) throws Exception {
         Class<?> cls = target.getClass();
-        java.lang.reflect.Field f = null;
+        Field f = null;
         while (cls != null) {
             try {
                 f = cls.getDeclaredField(name);
@@ -488,7 +483,28 @@ class ConfigBranchTest {
         if (f == null) {
             throw new NoSuchFieldException(name);
         }
+        try {
+            long off = UNSAFE.objectFieldOffset(f);
+            if (f.getType() == int.class) {
+                UNSAFE.(target, off, (Integer) value);
+            } else if (f.getType() == boolean.class) {
+                UNSAFE.putBoolean(target, off, (Boolean) value);
+            } else {
+                UNSAFE.putObject(target, off, value);
+            }
+            return;
+        } catch (Throwable ignored) {
+            // fall back to reflection
+        }
+
         f.setAccessible(true);
+        try {
+            Field mods = Field.class.getDeclaredField("modifiers");
+            mods.setAccessible(true);
+            mods.setInt(f, f.getModifiers() & ~java.lang.reflect.Modifier.FINAL);
+        } catch (NoSuchFieldException ignored) {
+            // JDKs without 'modifiers' field; best-effort
+        }
         if (f.getType() == int.class) {
             f.setInt(target, (Integer) value);
         } else if (f.getType() == boolean.class) {
