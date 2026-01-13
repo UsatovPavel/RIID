@@ -32,6 +32,7 @@ public record HttpClientConfig(
                 DEFAULT_FOLLOW_REDIRECTS);
     }
 
+    @Deprecated
     public HttpClientConfig(Duration connectTimeout,
                             Duration requestTimeout,
                             int maxRetries,

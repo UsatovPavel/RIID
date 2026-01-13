@@ -11,12 +11,10 @@ class HttpClientConfigTest {
 
     @Test
     void defaultsFillNulls() {
-        HttpClientConfig cfg = new HttpClientConfig(
-                null, null, 0, null, null, true, null, true
-        );
+        HttpClientConfig cfg = HttpClientConfig.builder().build();
         assertEquals(Duration.ofSeconds(5), cfg.connectTimeout());
         assertEquals(Duration.ofSeconds(30), cfg.requestTimeout());
-        assertEquals(0, cfg.maxRetries());
+        assertEquals(2, cfg.maxRetries());
         assertEquals(Duration.ofMillis(200), cfg.initialBackoff());
         assertEquals(Duration.ofSeconds(2), cfg.maxBackoff());
         assertEquals("riid-registry-client", cfg.userAgent());
@@ -25,16 +23,16 @@ class HttpClientConfigTest {
     @Test
     void negativeMaxRetriesThrows() {
         assertThrows(IllegalArgumentException.class, () ->
-                new HttpClientConfig(
-                        Duration.ofSeconds(1),
-                        Duration.ofSeconds(1),
-                        -1,
-                        Duration.ofMillis(100),
-                        Duration.ofMillis(200),
-                        true,
-                        "ua",
-                        true
-                ));
+                HttpClientConfig.builder()
+                        .connectTimeout(Duration.ofSeconds(1))
+                        .requestTimeout(Duration.ofSeconds(1))
+                        .maxRetries(-1)
+                        .initialBackoff(Duration.ofMillis(100))
+                        .maxBackoff(Duration.ofMillis(200))
+                        .retryIdempotentOnly(true)
+                        .userAgent("ua")
+                        .followRedirects(true)
+                        .build());
     }
 
     @Test
