@@ -1,4 +1,4 @@
-package riid.cache;
+package riid.cache.oci;
 
 /**
  * Cached blob descriptor.

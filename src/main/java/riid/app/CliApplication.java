@@ -8,7 +8,6 @@ import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -17,10 +16,10 @@ import java.util.Set;
  * Minimal CLI parser/runner for ImageLoadService.
  */
 public final class CliApplication {
-    static final int EXIT_OK = 0;
-    static final int EXIT_USAGE = 64;
-    static final int EXIT_RUNTIME_NOT_FOUND = 65;
-    static final int EXIT_FAILURE = 1;
+     static final int EXIT_OK = 0;//public for test
+     static final int EXIT_USAGE = 64;
+     static final int EXIT_RUNTIME_NOT_FOUND = 65;
+     static final int EXIT_FAILURE = 1;
 
     private static final Path DEFAULT_CONFIG_PATH = Paths.get("config.yaml");
 
@@ -41,8 +40,11 @@ public final class CliApplication {
 
     public static CliApplication createDefault() {
         return new CliApplication(
-                configPath -> {
-                    ImageLoadService service = ImageLoadServiceFactory.createFromConfig(configPath);
+                options -> {
+                    ImageLoadService service = ImageLoadServiceFactory.createFromConfig(
+                            options.configPath(),
+                            options.credentials()
+                    );
                     return service::load;
                 },
                 ImageLoadServiceFactory.defaultRuntimes(),
@@ -68,7 +70,7 @@ public final class CliApplication {
             return EXIT_RUNTIME_NOT_FOUND;
         }
         try {
-            ImageLoader loader = serviceFactory.create(options.configPath());
+            ImageLoader loader = serviceFactory.create(options);
             loader.load(options.repository(), options.reference(), options.runtimeId());
             out.printf("Loaded %s (%s) into runtime %s%n", options.repository(), options.reference(), options.runtimeId());
             if (options.hasCerts()) {
@@ -257,7 +259,7 @@ public final class CliApplication {
 
     @FunctionalInterface
     interface ServiceFactory {
-        ImageLoader create(Path configPath) throws Exception;
+        ImageLoader create(CliOptions options) throws Exception;
     }
 
     @FunctionalInterface

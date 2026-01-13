@@ -1,10 +1,11 @@
-package riid.client.unit;
+package riid.integration.client_cache.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import riid.cache.TokenCache;
+import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
@@ -40,7 +41,8 @@ public class RegistrySmokeTest {
      * Live smoke against Docker Hub for alpine:edge.
      * Requires internet access; no docker-compose.
      */
-    public static class RegistryLiveTest {
+    @Nested
+    class RegistryLiveTest {
 
         private static final RegistryEndpoint DOCKER_HUB =
                 new RegistryEndpoint("https", "registry-1.docker.io", -1, null);

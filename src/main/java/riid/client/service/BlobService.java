@@ -4,8 +4,11 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.cache.CacheAdapter;
-import riid.cache.ValidationException;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.ImageDigest;
+import riid.cache.oci.PathCachePayload;
+import riid.cache.oci.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.BlobSink;
@@ -103,9 +106,9 @@ public class BlobService implements BlobServiceApi {
             if (cacheAdapter != null && sinkPath != null) {
                 try {
                     var entry = cacheAdapter.put(
-                            riid.cache.ImageDigest.parse(digest),
-                            riid.cache.PathCachePayload.of(sinkPath, actualSize),
-                            riid.cache.CacheMediaType.from(mediaType));
+                            ImageDigest.parse(digest),
+                            PathCachePayload.of(sinkPath, actualSize),
+                            CacheMediaType.from(mediaType));
                     if (entry != null && entry.key() != null && !entry.key().isBlank()) {
                         locator = cacheAdapter.resolve(entry.key()).map(Path::toString).orElse(locator);
                     }

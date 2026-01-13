@@ -1,6 +1,8 @@
 package riid.cache;
 
 import org.junit.jupiter.api.Test;
+import riid.cache.oci.CachePayload;
+import riid.cache.oci.PathCachePayload;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

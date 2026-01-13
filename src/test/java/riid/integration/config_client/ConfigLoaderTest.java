@@ -1,8 +1,11 @@
-package riid.config;
+package riid.integration.config_client;
 
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
+import riid.config.AppConfig;
+import riid.config.ConfigLoader;
+import riid.config.ConfigValidationException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

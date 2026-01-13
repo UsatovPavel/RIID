@@ -2,8 +2,8 @@ package riid.app;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.cache.CacheAdapter;
-import riid.cache.ImageDigest;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.ImageDigest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;

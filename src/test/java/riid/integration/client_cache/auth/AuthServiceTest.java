@@ -1,4 +1,4 @@
-package riid.client.unit;
+package riid.integration.client_cache.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -7,7 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import riid.cache.TokenCache;
+import riid.cache.auth.TokenCache;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;

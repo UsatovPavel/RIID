@@ -1,12 +1,13 @@
-package riid.runtime;
+package riid.integration.runtime_app;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.app.ImageLoadService;
 import riid.app.ImageLoadServiceFactory;
-import riid.cache.TempFileCacheAdapter;
+import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
 import riid.p2p.P2PExecutor;
+import riid.runtime.PodmanRuntimeAdapter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

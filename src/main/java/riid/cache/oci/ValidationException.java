@@ -1,4 +1,4 @@
-package riid.cache;
+package riid.cache.oci;
 
 /**
  * Uniform validation error for cache-related value objects.

@@ -2,8 +2,8 @@ package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.client.HttpClient;
-import riid.cache.CacheAdapter;
-import riid.cache.TokenCache;
+import riid.cache.auth.TokenCache;
+import riid.cache.oci.CacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.manifest.Manifest;

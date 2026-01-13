@@ -3,8 +3,11 @@ package riid.dispatcher;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.cache.CacheAdapter;
-import riid.cache.ValidationException;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.ImageDigest;
+import riid.cache.oci.PathCachePayload;
+import riid.cache.oci.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
@@ -57,7 +60,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         Objects.requireNonNull(repository);
         Objects.requireNonNull(digest);
 
-        riid.cache.ImageDigest imgDigest = riid.cache.ImageDigest.parse(digest);
+        ImageDigest imgDigest = ImageDigest.parse(digest);
 
         // 1) cache
         String cachedPath = null;
@@ -75,7 +78,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         // 2) P2P
         if (p2p != null) {
             try {
-                var p2pPath = p2p.fetch(imgDigest, sizeBytes, riid.cache.CacheMediaType.from(mediaType));
+                var p2pPath = p2p.fetch(imgDigest, sizeBytes, CacheMediaType.from(mediaType));
                 if (p2pPath.isPresent()) {
                     LOGGER.info("p2p hit for layer {}", digest);
                     return new FetchResult(digest, mediaType, p2pPath.get().toString());
@@ -96,9 +99,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
             if (cache != null) {
                 try {
-                    cache.put(riid.cache.ImageDigest.parse(blob.digest()),
-                            riid.cache.PathCachePayload.of(tmp.toPath(), tmp.length()),
-                            riid.cache.CacheMediaType.from(blob.mediaType()));
+                    cache.put(ImageDigest.parse(blob.digest()),
+                            PathCachePayload.of(tmp.toPath(), tmp.length()),
+                            CacheMediaType.from(blob.mediaType()));
                 } catch (ValidationException ve) {
                     LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
                 } catch (IllegalArgumentException iae) {
@@ -110,10 +113,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             if (p2p != null) {
                 try {
                     p2p.publish(
-                            riid.cache.ImageDigest.parse(blob.digest()),
+                            ImageDigest.parse(blob.digest()),
                             Path.of(blob.path()),
                             blob.size(),
-                            riid.cache.CacheMediaType.from(blob.mediaType()));
+                            CacheMediaType.from(blob.mediaType()));
                 } catch (Exception ex) {
                     LOGGER.warn("P2P publish failed for {}: {}", blob.digest(), ex.getMessage());
                 }

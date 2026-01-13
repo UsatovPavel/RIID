@@ -2,6 +2,12 @@ package riid.cache;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import riid.cache.oci.CacheEntry;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.CachePayload;
+import riid.cache.oci.ImageDigest;
+import riid.cache.oci.PathCachePayload;
+import riid.cache.oci.TempFileCacheAdapter;
 
 import java.io.IOException;
 import java.nio.file.Files;

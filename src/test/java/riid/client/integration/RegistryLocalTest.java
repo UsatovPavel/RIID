@@ -10,7 +10,7 @@ import org.junit.jupiter.api.function.Executable;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import riid.cache.TokenCache;
+import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;

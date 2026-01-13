@@ -1,11 +1,11 @@
-package riid.client.unit;
+package riid.integration.client_cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import riid.cache.CacheAdapter;
+import riid.cache.oci.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.RegistryClientImpl;

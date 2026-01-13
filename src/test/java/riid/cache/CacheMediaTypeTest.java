@@ -1,6 +1,7 @@
 package riid.cache;
 
 import org.junit.jupiter.api.Test;
+import riid.cache.oci.CacheMediaType;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

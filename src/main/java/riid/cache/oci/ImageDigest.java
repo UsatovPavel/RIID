@@ -1,4 +1,4 @@
-package riid.cache;
+package riid.cache.oci;
 
 import java.util.List;
 import java.util.Objects;

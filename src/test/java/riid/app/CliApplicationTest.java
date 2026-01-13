@@ -1,6 +1,8 @@
 package riid.app;
 
 import org.junit.jupiter.api.Test;
+import riid.app.CliApplication;
+import riid.app.ImageLoadServiceFactory;
 import riid.runtime.PodmanRuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
@@ -18,7 +20,7 @@ class CliApplicationTest {
     void failsWithUsageWhenNoArgs() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication appWithErr = new CliApplication(
-                path -> (repo, ref, runtime) -> "ignored",
+                options -> (repo, ref, runtime) -> "ignored",
                 ImageLoadServiceFactory.defaultRuntimes(),
                 new PrintWriter(new ByteArrayOutputStream()),
                 new PrintWriter(errBuf, true)
@@ -34,7 +36,7 @@ class CliApplicationTest {
     void failsWhenRepoMissing() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
-                path -> (repo, ref, runtime) -> "ignored",
+                options -> (repo, ref, runtime) -> "ignored",
                 ImageLoadServiceFactory.defaultRuntimes(),
                 new PrintWriter(new ByteArrayOutputStream(), true),
                 new PrintWriter(errBuf, true)
@@ -50,7 +52,7 @@ class CliApplicationTest {
     void failsWhenRuntimeMissing() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
-                path -> (repo, ref, runtime) -> "ignored",
+                options -> (repo, ref, runtime) -> "ignored",
                 ImageLoadServiceFactory.defaultRuntimes(),
                 new PrintWriter(new ByteArrayOutputStream(), true),
                 new PrintWriter(errBuf, true)
@@ -66,7 +68,7 @@ class CliApplicationTest {
     void failsOnUnknownRuntime() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
-                path -> {
+                options -> {
                     throw new AssertionError("Service factory must not be invoked on invalid runtime");
                 },
                 Map.of("podman", new PodmanRuntimeAdapter()),
@@ -88,8 +90,8 @@ class CliApplicationTest {
         AtomicReference<String> runtimeSeen = new AtomicReference<>();
 
         CliApplication app = new CliApplication(
-                configPath -> {
-                    configSeen.set(configPath);
+                options -> {
+                    configSeen.set(options.configPath());
                     return (repo, ref, runtime) -> {
                         repoSeen.set(repo);
                         refSeen.set(ref);

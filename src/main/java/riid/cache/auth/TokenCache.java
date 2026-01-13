@@ -1,4 +1,4 @@
-package riid.cache;
+package riid.cache.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;

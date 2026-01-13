@@ -1,13 +1,13 @@
-package riid.dispatcher;
+package riid.integration.dispatcher_cache;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import riid.cache.CacheAdapter;
-import riid.cache.CacheEntry;
-import riid.cache.CacheMediaType;
-import riid.cache.CachePayload;
-import riid.cache.ImageDigest;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.CacheEntry;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.CachePayload;
+import riid.cache.oci.ImageDigest;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
@@ -15,6 +15,10 @@ import riid.client.api.RegistryClient;
 import riid.client.core.model.manifest.Descriptor;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.TagList;
+import riid.dispatcher.DispatcherConfig;
+import riid.dispatcher.FetchResult;
+import riid.dispatcher.ImageRef;
+import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
 
 import java.io.File;

@@ -1,9 +1,9 @@
-package riid.client.integration;
+package riid.integration.client_cache;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import riid.cache.CacheAdapter;
+import riid.cache.oci.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;

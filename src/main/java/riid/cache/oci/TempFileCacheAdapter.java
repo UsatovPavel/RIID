@@ -1,4 +1,4 @@
-package riid.cache;
+package riid.cache.oci;
 
 import java.io.IOException;
 import java.nio.file.Files;

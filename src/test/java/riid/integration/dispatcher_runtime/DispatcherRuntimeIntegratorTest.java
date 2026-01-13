@@ -1,6 +1,11 @@
-package riid.dispatcher;
+package riid.integration.dispatcher_runtime;
 
 import org.junit.jupiter.api.Test;
+import riid.dispatcher.DispatcherRuntimeException;
+import riid.dispatcher.DispatcherRuntimeIntegrator;
+import riid.dispatcher.FetchResult;
+import riid.dispatcher.ImageRef;
+import riid.dispatcher.RequestDispatcher;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.IOException;

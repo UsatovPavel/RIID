@@ -1,4 +1,4 @@
-package riid.cache;
+package riid.cache.oci;
 
 /**
  * Limited media types for cached blobs.
