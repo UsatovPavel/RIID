@@ -20,6 +20,31 @@ class RuntimeAdaptersTest {
     private static final String ERR = "err";
 
     @Test
+    void dockerFailsOnMissingFile() {
+        DockerRuntimeAdapter adapter = new DockerRuntimeAdapter();
+        Path missing = Path.of("non-existent-docker-image.tar");
+        assertThrows(IOException.class, () -> adapter.importImage(missing));
+    }
+
+    @Test
+    void dockerThrowsOnNonZeroExit() throws Exception {
+        Path tmp = Files.createTempFile("docker-", TAR_SUFFIX);
+        Files.writeString(tmp, PAYLOAD);
+        DockerRuntimeAdapter adapter = new TestDockerAdapter(2, "o", ERR);
+        IOException ex = assertThrows(IOException.class, () -> adapter.importImage(tmp));
+        assertContains(ex.getMessage(), "docker load failed");
+        assertContains(ex.getMessage(), "err");
+    }
+
+    @Test
+    void dockerSuccess() throws Exception {
+        Path tmp = Files.createTempFile("docker-", TAR_SUFFIX);
+        Files.writeString(tmp, PAYLOAD);
+        DockerRuntimeAdapter adapter = new TestDockerAdapter(0, "ok", "");
+        assertDoesNotThrow(() -> adapter.importImage(tmp));
+    }
+
+    @Test
     void podmanFailsOnMissingFile() {
         PodmanRuntimeAdapter adapter = new PodmanRuntimeAdapter();
         Path missing = Path.of("non-existent-image.tar");
@@ -72,6 +97,24 @@ class RuntimeAdaptersTest {
     private static void assertContains(String msg, String fragment) {
         if (msg == null || !msg.contains(fragment)) {
             throw new AssertionError("Expected \"" + fragment + "\" in: " + msg);
+        }
+    }
+
+    @SuppressWarnings("PMD.TestClassWithoutTestCases")
+    private static final class TestDockerAdapter extends DockerRuntimeAdapter {
+        private final int exitCode;
+        private final String stdout;
+        private final String stderr;
+
+        private TestDockerAdapter(int exitCode, String stdout, String stderr) {
+            this.exitCode = exitCode;
+            this.stdout = stdout;
+            this.stderr = stderr;
+        }
+
+        @Override
+        protected Process startProcess(List<String> command) {
+            return new FakeProcess(exitCode, stdout, stderr);
         }
     }
 
