@@ -7,6 +7,7 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.config.AppConfig;
 import riid.config.ConfigLoader;
 import riid.p2p.P2PExecutor;
+import riid.runtime.DockerRuntimeAdapter;
 import riid.runtime.PodmanRuntimeAdapter;
 import riid.runtime.PortoRuntimeAdapter;
 import riid.runtime.RuntimeAdapter;
@@ -61,6 +62,7 @@ public final class ImageLoadServiceFactory {
     public static Map<String, RuntimeAdapter> defaultRuntimes() {
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
+        runtimes.put("docker", new DockerRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
         return Map.copyOf(runtimes);
     }
