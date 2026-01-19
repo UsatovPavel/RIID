@@ -4,12 +4,15 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
+import riid.cache.FilesystemCachePayload;
 import riid.cache.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.p2p.P2PExecutor;
+import riid.cache.CacheMediaType;
+import riid.cache.ImageDigest;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -52,7 +55,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
         // 2) Try cache for each layer
         var layer = manifest.manifest().layers().getFirst();
-        var digest = riid.cache.ImageDigest.parse(layer.digest());
+        var digest = ImageDigest.parse(layer.digest());
         String cachedPath = null;
         if (cache != null && cache.has(digest)) {
             cachedPath = cache.get(digest)
@@ -68,7 +71,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         // 3) Try P2P (if wired)
         if (p2p != null) {
             try {
-                var p2pPath = p2p.fetch(digest, layer.size(), riid.cache.CacheMediaType.from(layer.mediaType()));
+                var p2pPath = p2p.fetch(digest, layer.size(), CacheMediaType.from(layer.mediaType()));
                 if (p2pPath.isPresent()) {
                     LOGGER.info("p2p hit for layer {}", layer.digest());
                     return new FetchResult(layer.digest(), layer.mediaType(), p2pPath.get().toString());
@@ -85,14 +88,14 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             BlobResult blob = client.fetchBlob(
                     new BlobRequest(ref.repository(), layer.digest(), layer.size(), layer.mediaType()),
                     tmp);
-            LOGGER.info("downloaded layer {} from registry", layer.digest());
+            LOGGER.info("Downloaded layer {} from registry", layer.digest());
 
             // 5) Publish to P2P/cache
             if (cache != null) {
                 try {
-                    cache.put(riid.cache.ImageDigest.parse(blob.digest()),
-                            riid.cache.PathCachePayload.of(tmp.toPath(), tmp.length()),
-                            riid.cache.CacheMediaType.from(blob.mediaType()));
+                    cache.put(ImageDigest.parse(blob.digest()),
+                            FilesystemCachePayload.of(tmp.toPath(), tmp.length()),
+                            CacheMediaType.from(blob.mediaType()));
                 } catch (ValidationException ve) {
                     LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
                 } catch (IllegalArgumentException iae) {
@@ -104,10 +107,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             if (p2p != null) {
                 try {
                     p2p.publish(
-                            riid.cache.ImageDigest.parse(blob.digest()),
+                            ImageDigest.parse(blob.digest()),
                             Path.of(blob.path()),
                             blob.size(),
-                            riid.cache.CacheMediaType.from(blob.mediaType()));
+                            CacheMediaType.from(blob.mediaType()));
                 } catch (Exception ex) {
                     LOGGER.warn("P2P publish failed for {}: {}", blob.digest(), ex.getMessage());
                 }

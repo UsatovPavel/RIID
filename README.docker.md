@@ -34,3 +34,9 @@ docker compose up --build
 
 ## TODO
 - Replace this stub README with README in PR 3, where App improves.
+## Gradlew commands 
+// Usage:
+// ./gradlew allReports for run code quality utils and save report in one file
+//  ./gradlew testAll for run all tests
+// ./gradlew testStress for run only stress tests
+// ./gradlew testLocal for run only local tests

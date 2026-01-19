@@ -2,6 +2,7 @@ package riid.client.core.config;
 
 import java.util.Objects;
 import java.util.Optional;
+import riid.client.http.HttpRequestBuilder;
 
 /**
  * Registry endpoint configuration.
@@ -29,11 +30,11 @@ public record RegistryEndpoint(
     }
 
     public java.net.URI uri(String path) {
-        return riid.client.http.HttpRequestBuilder.buildUri(scheme, host, port, path);
+        return HttpRequestBuilder.buildUri(scheme, host, port, path);
     }
 
     public java.net.URI uri(String path, String query) {
-        return riid.client.http.HttpRequestBuilder.buildUri(scheme, host, port, path, query);
+        return HttpRequestBuilder.buildUri(scheme, host, port, path, query);
     }
 }
 

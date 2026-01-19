@@ -24,6 +24,10 @@ final class RiidEnv {
     }
 
     static String cacheDir() {
-        return System.getenv("RIID_CACHE_DIR");
+        String v = System.getenv("RIID_CACHE_DIR");
+        if (v == null || v.isBlank()) {
+            throw new IllegalStateException("RIID_CACHE_DIR is not set");
+        }
+        return v;
     }
 }

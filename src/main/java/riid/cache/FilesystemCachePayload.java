@@ -9,21 +9,21 @@ import java.util.Objects;
 /**
  * Cache payload backed by a filesystem path.
  */
-public final class PathCachePayload implements CachePayload {
+public final class FilesystemCachePayload implements CachePayload {
     private final Path path;
     private final Long knownSize;
 
-    private PathCachePayload(Path path, Long knownSize) {
+    private FilesystemCachePayload(Path path, Long knownSize) {
         this.path = Objects.requireNonNull(path, "path");
         this.knownSize = knownSize;
     }
 
-    public static PathCachePayload of(Path path) {
-        return new PathCachePayload(path, null);
+    public static FilesystemCachePayload of(Path path) {
+        return new FilesystemCachePayload(path, null);
     }
 
-    public static PathCachePayload of(Path path, long sizeBytes) {
-        return new PathCachePayload(path, sizeBytes > 0 ? sizeBytes : null);
+    public static FilesystemCachePayload of(Path path, long sizeBytes) {
+        return new FilesystemCachePayload(path, sizeBytes > 0 ? sizeBytes : null);
     }
 
     @Override

@@ -5,6 +5,7 @@ import riid.cache.CacheAdapter;
 import riid.cache.TokenCache;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
+import riid.client.core.error.ClientError;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.RegistryApi;
 import riid.client.core.model.manifest.TagList;
@@ -98,8 +99,8 @@ public final class RegistryClientImpl implements RegistryClient, AutoCloseable {
         int status = resp.statusCode();
         if (status < 200 || status >= 300) {
             throw new ClientException(
-                    new riid.client.core.error.ClientError.Http(
-                            riid.client.core.error.ClientError.HttpKind.BAD_STATUS,
+                    new ClientError.Http(
+                            ClientError.HttpKind.BAD_STATUS,
                             status,
                             "Tag list failed"),
                     "Tag list failed: " + status);
@@ -108,8 +109,8 @@ public final class RegistryClientImpl implements RegistryClient, AutoCloseable {
             return mapper.readValue(body, TagList.class);
         } catch (IOException e) {
             throw new ClientException(
-                    new riid.client.core.error.ClientError.Parse(
-                            riid.client.core.error.ClientError.ParseKind.MANIFEST,
+                    new ClientError.Parse(
+                            ClientError.ParseKind.MANIFEST,
                             "Failed to parse tag list"),
                     "Failed to parse tag list",
                     e);

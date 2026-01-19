@@ -5,6 +5,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.CacheAdapter;
+import riid.cache.FilesystemCachePayload;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.BlobSink;
@@ -104,7 +105,7 @@ public class BlobService implements BlobServiceApi {
                 try {
                     var entry = cacheAdapter.put(
                             riid.cache.ImageDigest.parse(digest),
-                            riid.cache.PathCachePayload.of(sinkPath, actualSize),
+                            FilesystemCachePayload.of(sinkPath, actualSize),
                             riid.cache.CacheMediaType.from(mediaType));
                     if (entry != null && entry.key() != null && !entry.key().isBlank()) {
                         locator = cacheAdapter.resolve(entry.key()).map(Path::toString).orElse(locator);

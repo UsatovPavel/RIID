@@ -28,6 +28,7 @@ import java.util.Optional;
 
 /**
  * Integration test against a local registry:2, started via Testcontainers.
+ * VPN sensitive
  */
 @Tag("local")
 @Testcontainers
@@ -65,10 +66,14 @@ public class RegistryLocalTest {
     }
 
     private static void run(String... cmd) throws IOException, InterruptedException {
-        Process p = new ProcessBuilder(cmd).inheritIO().start();
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        String output = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         int code = p.waitFor();
         if (code != 0) {
-            throw new IllegalStateException("Command failed: " + String.join(" ", cmd));
+            throw new IllegalStateException("Command failed (%d): %s%nOutput:%n%s"
+                    .formatted(code, String.join(" ", cmd), output));
         }
     }
 

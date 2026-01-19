@@ -3,6 +3,8 @@ package riid.client.core.model.manifest;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 
 import java.util.List;
 
@@ -14,7 +16,9 @@ import java.util.List;
 public record ManifestIndex(
         @JsonProperty("schemaVersion") int schemaVersion,
         @JsonProperty("mediaType") String mediaType,
-        @JsonProperty("manifests") List<ManifestRef> manifests
+        @JsonProperty("manifests")
+        @JsonSetter(nulls = Nulls.AS_EMPTY)
+        List<ManifestRef> manifests
 ) {
     public ManifestIndex {
         manifests = manifests == null ? List.of() : List.copyOf(manifests);
