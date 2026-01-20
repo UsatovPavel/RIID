@@ -13,5 +13,3 @@ public class ValidationException extends IllegalArgumentException {
         super(message, cause);
     }
 }
-
-

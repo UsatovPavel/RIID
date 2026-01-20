@@ -30,7 +30,7 @@ class TempFileCacheAdapterTest {
         Path tmp = Files.createTempFile("cache-", ".bin");
         Files.writeString(tmp, "hello");
 
-        CachePayload payload = PathCachePayload.of(tmp, Files.size(tmp));
+        CachePayload payload = FilesystemCachePayload.of(tmp, Files.size(tmp));
         CacheEntry entry = cache.put(digest, payload, CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));

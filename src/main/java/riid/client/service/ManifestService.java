@@ -45,7 +45,7 @@ public final class ManifestService implements ManifestServiceApi {
     public ManifestService(HttpExecutor http, AuthService authService, ObjectMapper mapper) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
-        this.mapper = Objects.requireNonNull(mapper).copy();
+        this.mapper = Objects.requireNonNull(mapper).copy(); //M V EI2  may expose internal 
     }
 
     @Override

@@ -6,6 +6,7 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.InputStreamResponseListener;
 import org.eclipse.jetty.client.Request;
 import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpMethod;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,7 +24,7 @@ import java.util.concurrent.TimeoutException;
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
  */
 public final class HttpExecutor {
-    private static final String METHOD_HEAD = "HEAD";
+    private static final String METHOD_HEAD = HttpMethod.HEAD.asString();
     private static final List<Integer> RETRY_STATUSES = List.of(429, 502, 503, 504);
 
     private final HttpClient client;
