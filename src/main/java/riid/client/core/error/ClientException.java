@@ -1,23 +1,28 @@
 package riid.client.core.error;
 
+import java.io.Serial;
+
 /**
  * Domain exception carrying a ClientError.
  */
 public class ClientException extends RuntimeException {
-    private final ClientError error;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private final ClientError clientError;
 
     public ClientException(ClientError error, String message) {
         super(message);
-        this.error = error;
+        this.clientError = error;
     }
 
     public ClientException(ClientError error, String message, Throwable cause) {
         super(message, cause);
-        this.error = error;
+        this.clientError = error;
     }
 
     public ClientError error() {
-        return error;
+        return clientError;
     }
 }
 

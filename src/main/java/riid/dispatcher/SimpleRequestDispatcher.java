@@ -1,0 +1,156 @@
+package riid.dispatcher;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.ImageDigest;
+import riid.cache.oci.PathCachePayload;
+import riid.cache.oci.ValidationException;
+import riid.client.api.BlobRequest;
+import riid.client.api.BlobResult;
+import riid.client.api.ManifestResult;
+import riid.client.api.RegistryClient;
+import riid.p2p.P2PExecutor;
+
+import java.io.File;
+import java.nio.file.Path;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.Semaphore;
+
+/**
+ * Simple dispatcher: cache -> P2P -> registry (registry concurrency limit is configurable).
+ */
+@SuppressFBWarnings({"EI_EXPOSE_REP2"})
+public class SimpleRequestDispatcher implements RequestDispatcher {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SimpleRequestDispatcher.class);
+
+    private final RegistryClient client;
+    private final CacheAdapter cache;
+    private final P2PExecutor p2p;
+    private final Optional<Semaphore> registryLimiter; // limits concurrent downloads from registry
+
+    public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p) {
+        this(client, cache, p2p, new DispatcherConfig());
+    }
+
+    public SimpleRequestDispatcher(RegistryClient client,
+                                   CacheAdapter cache,
+                                   P2PExecutor p2p,
+                                   DispatcherConfig config) {
+        this.client = Objects.requireNonNull(client);
+        this.cache = cache;
+        this.p2p = p2p;
+        int maxConc = config != null ? config.maxConcurrentRegistry() : 0;
+        this.registryLimiter = maxConc > 0 ? Optional.of(new Semaphore(maxConc)) : Optional.empty();
+    }
+
+    @Override
+    public FetchResult fetchImage(ImageRef ref) {
+        String reference = ref.digest() != null && !ref.digest().isBlank() ? ref.digest() : ref.tag();
+        ManifestResult manifest = client.fetchManifest(ref.repository(), reference);
+        var layer = manifest.manifest().layers().getFirst();
+        return fetchLayer(ref.repository(), layer.digest(), layer.size(), layer.mediaType());
+    }
+
+    @Override
+    public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
+        Objects.requireNonNull(repository);
+        Objects.requireNonNull(digest);
+
+        ImageDigest imgDigest = ImageDigest.parse(digest);
+
+        // 1) cache
+        String cachedPath = null;
+        if (cache != null && cache.has(imgDigest)) {
+            cachedPath = cache.get(imgDigest)
+                    .flatMap(entry -> cache.resolve(entry.key()))
+                    .map(Path::toString)
+                    .orElse(null);
+        }
+        if (cachedPath != null) {
+            LOGGER.info("cache hit for layer {}", digest);
+            return new FetchResult(digest, mediaType, cachedPath);
+        }
+
+        // 2) P2P
+        if (p2p != null) {
+            try {
+                var p2pPath = p2p.fetch(imgDigest, sizeBytes, CacheMediaType.from(mediaType));
+                if (p2pPath.isPresent()) {
+                    LOGGER.info("p2p hit for layer {}", digest);
+                    return new FetchResult(digest, mediaType, p2pPath.get().toString());
+                }
+            } catch (Exception ex) {
+                LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
+            }
+        }
+
+        // 3) Registry download
+        acquireRegistry();
+        try {
+            File tmp = createTemp();
+            BlobResult blob = client.fetchBlob(
+                    new BlobRequest(repository, digest, sizeBytes, mediaType),
+                    tmp);
+            LOGGER.info("downloaded layer {} from registry", digest);
+
+            if (cache != null) {
+                try {
+                    cache.put(ImageDigest.parse(blob.digest()),
+                            PathCachePayload.of(tmp.toPath(), tmp.length()),
+                            CacheMediaType.from(blob.mediaType()));
+                } catch (ValidationException ve) {
+                    LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
+                } catch (IllegalArgumentException iae) {
+                    LOGGER.warn("Unsupported media type for cache put ({}): {}", blob.mediaType(), iae.getMessage());
+                } catch (Exception ex) {
+                    LOGGER.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
+                }
+            }
+            if (p2p != null) {
+                try {
+                    p2p.publish(
+                            ImageDigest.parse(blob.digest()),
+                            Path.of(blob.path()),
+                            blob.size(),
+                            CacheMediaType.from(blob.mediaType()));
+                } catch (Exception ex) {
+                    LOGGER.warn("P2P publish failed for {}: {}", blob.digest(), ex.getMessage());
+                }
+            }
+
+            return new FetchResult(blob.digest(), blob.mediaType(), blob.path());
+        } finally {
+            releaseRegistry();
+        }
+    }
+
+    private File createTemp() {
+        try {
+            File f = File.createTempFile("layer-", ".bin");
+            f.deleteOnExit();
+            return f;
+        } catch (Exception e) {
+            throw new RuntimeException("Cannot create temp file", e);
+        }
+    }
+
+    private void acquireRegistry() {
+        registryLimiter.ifPresent(limiter -> {
+            try {
+                limiter.acquire();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting for registry slot", e);
+            }
+        });
+    }
+
+    private void releaseRegistry() {
+        registryLimiter.ifPresent(Semaphore::release);
+    }
+}
+

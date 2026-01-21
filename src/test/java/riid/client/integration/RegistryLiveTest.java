@@ -1,26 +1,28 @@
-package riid.client;
+package riid.client.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.Test;
-import riid.client.auth.AuthService;
-import riid.client.auth.TokenCache;
-import riid.client.blob.BlobRequest;
-import riid.client.blob.BlobResult;
-import riid.client.blob.BlobService;
+import riid.cache.auth.TokenCache;
+import riid.client.api.BlobRequest;
+import riid.client.api.BlobResult;
+import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.core.error.ClientException;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
-import riid.client.manifest.ManifestResult;
-import riid.client.manifest.ManifestService;
+import riid.client.service.AuthService;
+import riid.client.service.BlobService;
+import riid.client.service.ManifestService;
 
 import java.io.File;
-import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -35,7 +37,7 @@ public class RegistryLiveTest {
     private static final String SCOPE = "repository:library/alpine:pull";
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final HttpClientConfig httpConfig = HttpClientConfig.builder().build();
+    private final HttpClientConfig httpConfig = new HttpClientConfig();
     private final HttpClient httpClient = HttpClientFactory.create(httpConfig);
     private final HttpExecutor http = new HttpExecutor(httpClient, httpConfig);
     private final AuthService authService = new AuthService(http, mapper, new TokenCache());
@@ -63,6 +65,13 @@ public class RegistryLiveTest {
         assertEquals(layer.digest(), result.digest(), "digest must match manifest");
         assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
         assertTrue(tmp.length() > 0, "downloaded file should not be empty");
+    }
+
+    @Test
+    void missingManifestReturns404() {
+        assertThrows(ClientException.class,
+                () -> manifestService.fetchManifest(DOCKER_HUB, REPO, "definitely-missing-tag-zzz", SCOPE),
+                "missing tag should raise ClientException (404)");
     }
 }
 

@@ -1,0 +1,98 @@
+package riid.app;
+
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import riid.cache.oci.TempFileCacheAdapter;
+import riid.client.core.config.RegistryEndpoint;
+import riid.config.ConfigLoader;
+import riid.p2p.P2PExecutor;
+import riid.runtime.RuntimeAdapter;
+
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+/**
+ * Full-flow smoke: CLI args -> ConfigLoader -> ImageLoadServiceFactory -> dispatcher -> registry -> runtime (stub).
+ * Live: hits Docker Hub for library/busybox:latest.
+ */
+@Tag("e2e")
+@Tag("live")
+class CliEndToEndLiveTest {
+
+    @Test
+    void cliDownloadsAndInvokesRuntimeStub() throws Exception {
+        Path config = Files.createTempFile("config-", ".yaml");
+        Files.writeString(config, """
+                client:
+                  http: {}
+                  auth: {}
+                  registries:
+                    - scheme: https
+                      host: registry-1.docker.io
+                      port: -1
+                dispatcher:
+                  maxConcurrentRegistry: 2
+                """);
+
+        RecordingRuntimeAdapter runtime = new RecordingRuntimeAdapter();
+        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+
+        CliApplication cli = new CliApplication(
+                opts -> {
+                    var cfg = ConfigLoader.load(opts.configPath());
+                    RegistryEndpoint endpoint = cfg.client().registries().getFirst();
+                    var svc = ImageLoadService.createDefault(
+                            endpoint,
+                            new TempFileCacheAdapter(),
+                            new P2PExecutor.NoOp(),
+                            Map.of(runtime.runtimeId(), runtime),
+                            cfg.client().auth().defaultTokenTtlSeconds()
+                    );
+                    return svc::load;
+                },
+                Map.of(runtime.runtimeId(), runtime),
+                new PrintWriter(new OutputStreamWriter(outBuf, java.nio.charset.StandardCharsets.UTF_8), true),
+                new PrintWriter(new OutputStreamWriter(errBuf, java.nio.charset.StandardCharsets.UTF_8), true)
+        );
+
+        int code = cli.run(new String[]{
+                "--config", config.toString(),
+                "--repo", "library/busybox",
+                "--tag", "latest",
+                "--runtime", runtime.runtimeId()
+        });
+
+        if (code != 0) {
+            fail("CLI exit code " + code + "\nSTDOUT:\n" + outBuf + "\nSTDERR:\n" + errBuf);
+        }
+        assertTrue(runtime.called.get(), "runtime should be invoked");
+        assertTrue(Files.exists(runtime.lastArchive), "archive must exist");
+        assertTrue(Files.size(runtime.lastArchive) > 0, "archive must be non-empty");
+    }
+
+    private static final class RecordingRuntimeAdapter implements RuntimeAdapter {
+        private final AtomicBoolean called = new AtomicBoolean(false);
+        private Path lastArchive;
+
+        @Override
+        public String runtimeId() {
+            return "stub";
+        }
+
+        @Override
+        public void importImage(Path archive) {
+            this.called.set(true);
+            this.lastArchive = archive;
+        }
+    }
+}
+

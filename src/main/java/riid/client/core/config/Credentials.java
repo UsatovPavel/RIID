@@ -1,43 +1,45 @@
 package riid.client.core.config;
 
-import java.util.Objects;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Optional;
 
 /**
  * Registry credentials (basic or identity token).
  */
-public final class Credentials {
-    private final String username;
-    private final String password;
-    private final String identityToken;
-
-    private Credentials(String username, String password, String identityToken) {
-        this.username = username;
-        this.password = password;
-        this.identityToken = identityToken;
+public record Credentials(
+        @JsonProperty("username") String username,
+        @JsonProperty("password") String password,
+        @JsonProperty("identityToken") String identityToken
+) {
+    public Credentials {
+        boolean hasBasic = username != null || password != null;
+        boolean hasToken = identityToken != null;
+        if (hasBasic && hasToken) {
+            throw new IllegalArgumentException("Use either basic (username/password) or identityToken, not both");
+        }
+        if (hasBasic && (username == null || password == null)) {
+            throw new IllegalArgumentException("Both username and password must be set for basic auth");
+        }
     }
 
-    public static Credentials basic(String user, String pass) {
-        Objects.requireNonNull(user, "user");
-        Objects.requireNonNull(pass, "pass");
-        return new Credentials(user, pass, null);
+    public static Credentials basic(String user, String password) {
+        return new Credentials(user, password, null);
     }
 
     public static Credentials identityToken(String token) {
-        Objects.requireNonNull(token, "token");
         return new Credentials(null, null, token);
     }
 
-    public Optional<String> username() {
+    public Optional<String> usernameOpt() {
         return Optional.ofNullable(username);
     }
 
-    public Optional<String> password() {
+    public Optional<String> passwordOpt() {
         return Optional.ofNullable(password);
     }
 
-    public Optional<String> identityToken() {
+    public Optional<String> identityTokenOpt() {
         return Optional.ofNullable(identityToken);
     }
 }
-

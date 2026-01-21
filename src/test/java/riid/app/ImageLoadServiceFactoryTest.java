@@ -1,0 +1,33 @@
+package riid.app;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+class ImageLoadServiceFactoryTest {
+
+    @Test
+    void createsServiceFromConfig() throws Exception {
+        String yaml = """
+                client:
+                  http: {}
+                  auth: {}
+                  registries:
+                    - scheme: https
+                      host: registry-1.docker.io
+                      port: -1
+                dispatcher:
+                  maxConcurrentRegistry: 2
+                """;
+        Path tmp = Files.createTempFile("config-", ".yaml");
+        Files.writeString(tmp, yaml);
+
+        ImageLoadService svc = ImageLoadServiceFactory.createFromConfig(tmp);
+        assertNotNull(svc);
+    }
+}
+
+
