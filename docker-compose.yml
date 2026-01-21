@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  riid:
+    build: .
+    environment:
+      - RIID_REPO=library/busybox
+      - RIID_REF=latest
+    volumes:
+      - riid_cache:/var/cache/riid
+    ports:
+      - "8080:8080"
+
+volumes:
+  riid_cache:

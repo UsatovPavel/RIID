@@ -1,12 +1,13 @@
 package riid.client.unit;
 
 import org.junit.jupiter.api.Test;
-import riid.client.auth.AuthChallenge;
-import riid.client.auth.AuthParser;
+import riid.client.core.model.auth.AuthChallenge;
+import riid.client.core.model.auth.AuthParser;
 
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuthParserTest {
 

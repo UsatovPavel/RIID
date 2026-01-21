@@ -1,5 +1,8 @@
 package riid.client.core.config;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Objects;
 import java.util.Optional;
 
@@ -7,20 +10,24 @@ import java.util.Optional;
  * Registry credentials (basic or identity token).
  */
 public final class Credentials {
-    private final String username;
-    private final String password;
-    private final String identityToken;
+    private final String usernameValue;
+    private final String passwordValue;
+    private final String identityTokenValue;
 
-    private Credentials(String username, String password, String identityToken) {
-        this.username = username;
-        this.password = password;
-        this.identityToken = identityToken;
+    @JsonCreator
+    public Credentials(
+            @JsonProperty("username") String username,
+            @JsonProperty("password") String password,
+            @JsonProperty("identityToken") String identityToken) {
+        this.usernameValue = username;
+        this.passwordValue = password;
+        this.identityTokenValue = identityToken;
     }
 
-    public static Credentials basic(String user, String pass) {
+    public static Credentials basic(String user, String password) {
         Objects.requireNonNull(user, "user");
-        Objects.requireNonNull(pass, "pass");
-        return new Credentials(user, pass, null);
+        Objects.requireNonNull(password, "password");
+        return new Credentials(user, password, null);
     }
 
     public static Credentials identityToken(String token) {
@@ -29,15 +36,14 @@ public final class Credentials {
     }
 
     public Optional<String> username() {
-        return Optional.ofNullable(username);
+        return Optional.ofNullable(usernameValue);
     }
 
     public Optional<String> password() {
-        return Optional.ofNullable(password);
+        return Optional.ofNullable(passwordValue);
     }
 
     public Optional<String> identityToken() {
-        return Optional.ofNullable(identityToken);
+        return Optional.ofNullable(identityTokenValue);
     }
 }
-

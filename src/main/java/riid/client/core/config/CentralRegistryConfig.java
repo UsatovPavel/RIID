@@ -8,15 +8,15 @@ import java.util.Objects;
  * Configuration holder for Central Registry endpoints available to the client/dispatcher.
  */
 public final class CentralRegistryConfig {
-    private final List<RegistryEndpoint> endpoints;
+    private final List<RegistryEndpoint> endpointsList;
 
     public CentralRegistryConfig(List<RegistryEndpoint> endpoints) {
         Objects.requireNonNull(endpoints, "endpoints");
-        this.endpoints = List.copyOf(endpoints);
+        this.endpointsList = List.copyOf(endpoints);
     }
 
     public List<RegistryEndpoint> endpoints() {
-        return Collections.unmodifiableList(endpoints);
+        return Collections.unmodifiableList(endpointsList);
     }
 }
 

@@ -1,22 +1,29 @@
 package riid.cache;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.file.Path;
 import java.util.Optional;
 
 /**
  * Interface to an external cache module.
  */
 public interface CacheAdapter {
-    boolean has(String digest);
+    boolean has(ImageDigest digest);
 
-    Optional<String> getPath(String digest);
+    Optional<CacheEntry> get(ImageDigest digest);
 
     /**
-     * Store blob stream under digest.
-     *
-     * @return path to stored blob (if available)
+     * Resolve cache entry key to an absolute path.
      */
-    String put(String digest, InputStream data, long size, String mediaType) throws IOException;
+    Optional<Path> resolve(String key);
+
+    /**
+     * Store blob stream under digest. Implementation is responsible for closing the stream.
+     *
+     * @param payload   source of bytes
+     * @param mediaType blob media type (typed)
+     * @return cache entry/locator (if available)
+     */
+    CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException;
 }
 

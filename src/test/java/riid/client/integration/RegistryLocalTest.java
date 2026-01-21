@@ -1,74 +1,100 @@
 package riid.client.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.jetty.client.HttpClient;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import riid.client.auth.AuthService;
-import riid.client.auth.TokenCache;
-import riid.client.blob.BlobRequest;
-import riid.client.blob.BlobResult;
-import riid.client.blob.BlobService;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import riid.cache.TokenCache;
+import riid.client.api.BlobRequest;
+import riid.client.api.BlobResult;
+import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
-import riid.client.manifest.ManifestResult;
-import riid.client.manifest.ManifestService;
+import riid.client.service.AuthService;
+import riid.client.service.BlobService;
+import riid.client.service.ManifestService;
 
 import java.io.File;
-import java.net.http.HttpClient;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 /**
- * Integration test against local registry:2 (requires running registry and a pushed image).
- *
- * How to run locally:
- * 1) Start registry:2:
- *    docker run -d -p 5000:5000 --name reg registry:2
- * 2) Pull/push a small image:
- *    docker pull hello-world
- *    docker tag hello-world localhost:5000/hello-world
- *    docker push localhost:5000/hello-world
- * 3) Run this test:
- *    ./gradlew test --tests 'riid.client.integration.RegistryLocalTest'
+ * Integration test against a local registry:2, started via Testcontainers.
+ * VPN sensitive
  */
 @Tag("local")
+@Testcontainers
 public class RegistryLocalTest {
 
-    private static final RegistryEndpoint LOCAL = new RegistryEndpoint("http", "localhost", 5000, null);
+    @Container
+    private static final GenericContainer<?> REGISTRY = new GenericContainer<>("registry:2")
+            .withExposedPorts(5000);
+
+    private static RegistryEndpoint LOCAL;
     private static final String REPO = "hello-world";
     private static final String REF = "latest";
     private static final String SCOPE = "repository:%s:pull".formatted(REPO);
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final HttpClientConfig httpConfig = HttpClientConfig.builder().build();
+    private final HttpClientConfig httpConfig = new HttpClientConfig();
     private final HttpClient httpClient = HttpClientFactory.create(httpConfig);
     private final HttpExecutor http = new HttpExecutor(httpClient, httpConfig);
     private final AuthService authService = new AuthService(http, mapper, new TokenCache());
     private final ManifestService manifestService = new ManifestService(http, authService, mapper);
     private final BlobService blobService = new BlobService(http, authService, null);
 
+    @BeforeAll
+    static void startRegistryAndSeed() throws Exception {
+        REGISTRY.start();
+        String host = REGISTRY.getHost();
+        int port = REGISTRY.getMappedPort(5000);
+        LOCAL = new RegistryEndpoint("http", host, port, null);
+
+        // Seed registry with hello-world using host docker
+        String localImage = "%s:%d/%s".formatted(host, port, REPO);
+        run("docker", "pull", REPO);
+        run("docker", "tag", REPO, localImage);
+        run("docker", "push", localImage);
+    }
+
+    private static void run(String... cmd) throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        String output = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        int code = p.waitFor();
+        if (code != 0) {
+            throw new IllegalStateException("Command failed (%d): %s%nOutput:%n%s"
+                    .formatted(code, String.join(" ", cmd), output));
+        }
+    }
+
     @Test
     void fetchManifestAndLayer() throws Exception {
         ManifestResult manifest = manifestService.fetchManifest(LOCAL, REPO, REF, SCOPE);
-        assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
+        Assertions.assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
         BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
 
         Optional<Long> sizeOpt = blobService.headBlob(LOCAL, REPO, layer.digest(), SCOPE);
-        assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
+        Assertions.assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
         File tmp = Files.createTempFile("local-layer", ".tar").toFile();
         tmp.deleteOnExit();
         BlobResult result = blobService.fetchBlob(LOCAL, req, tmp, SCOPE);
 
-        assertEquals(layer.digest(), result.digest(), "digest must match manifest");
-        assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
-        assertTrue(tmp.length() > 0, "downloaded file should not be empty");
+        Assertions.assertEquals(layer.digest(), result.digest(), "digest must match manifest");
+        Assertions.assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
+        Assertions.assertTrue(tmp.length() > 0, "downloaded file should not be empty");
     }
 }
 
