@@ -20,10 +20,10 @@ public final class RuntimeRegistry {
     public RuntimeAdapter get(String runtimeId) {
         RuntimeAdapter adapter = runtimes.get(runtimeId);
         if (adapter == null) {
+            String msg = AppError.RuntimeKind.ADAPTER_NOT_FOUND.format(runtimeId);
             throw new AppException(
-                    new AppError.Runtime(AppError.RuntimeKind.ADAPTER_NOT_FOUND,
-                            "Runtime adapter not found: " + runtimeId),
-                    "Runtime adapter not found: " + runtimeId);
+                    new AppError.Runtime(AppError.RuntimeKind.ADAPTER_NOT_FOUND, msg),
+                    msg);
         }
         return adapter;
     }

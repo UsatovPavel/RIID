@@ -41,38 +41,23 @@ public final class ImageLoadFacade {
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
-    private final String defaultRegistry;
-
     public ImageLoadFacade(RequestDispatcher dispatcher, RuntimeRegistry runtimeRegistry, RegistryClient client) {
-        this(dispatcher, runtimeRegistry, client, new NioHostFilesystem(null), null);
+        this(dispatcher, runtimeRegistry, client, new NioHostFilesystem(null));
     }
 
     public ImageLoadFacade(RequestDispatcher dispatcher,
                            RuntimeRegistry runtimeRegistry,
                            RegistryClient client,
-                           HostFilesystem fs,
-                           String defaultRegistry) {
+                           HostFilesystem fs) {
         this.archiveBuilder = new OciArchiveBuilder(dispatcher, fs);
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.client = Objects.requireNonNull(client, "client");
-        this.defaultRegistry = defaultRegistry;
     }
 
     /**
      * High-level load: download/validate, assemble OCI, import into runtime.
      *
      * @return refName used for runtime
-     */
-    public String load(String repository, String reference, String runtimeId) {
-        if (defaultRegistry == null || defaultRegistry.isBlank()) {
-            throw new IllegalStateException("Default registry is not configured");
-        }
-        ImageId imageId = ImageId.fromRegistry(defaultRegistry, repository, reference);
-        return load(imageId, runtimeId);
-    }
-
-    /**
-     * Load using a prepared image id and runtime id; client/runtime lookup happens here.
      */
     public String load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
@@ -97,15 +82,15 @@ public final class ImageLoadFacade {
             return imageId.toString();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            String msg = AppError.RuntimeKind.LOAD_FAILED.format(runtime.runtimeId());
             throw new AppException(
-                    new AppError.Runtime(AppError.RuntimeKind.LOAD_FAILED,
-                            "Failed to load image into runtime " + runtime.runtimeId()),
-                    "Failed to load image into runtime " + runtime.runtimeId(), e);
+                    new AppError.Runtime(AppError.RuntimeKind.LOAD_FAILED, msg),
+                    msg, e);
         } catch (IOException e) {
+            String msg = AppError.RuntimeKind.LOAD_FAILED.format(runtime.runtimeId());
             throw new AppException(
-                    new AppError.Runtime(AppError.RuntimeKind.LOAD_FAILED,
-                            "Failed to load image into runtime " + runtime.runtimeId()),
-                    "Failed to load image into runtime " + runtime.runtimeId(), e);
+                    new AppError.Runtime(AppError.RuntimeKind.LOAD_FAILED, msg),
+                    msg, e);
         }
     }
 
@@ -118,8 +103,7 @@ public final class ImageLoadFacade {
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
         RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
-        String registryName = ImageId.registryFor(endpoint);
-        return new ImageLoadFacade(dispatcher, registry, client, fs, registryName);
+        return new ImageLoadFacade(dispatcher, registry, client, fs);
     }
 
     /**

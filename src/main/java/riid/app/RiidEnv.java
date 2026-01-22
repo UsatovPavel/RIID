@@ -1,31 +1,31 @@
 package riid.app;
 import java.util.Map;
 
+import riid.dispatcher.ImageRef;
+
 final class RiidEnv {
     private static volatile Map<String, String> envOverride;
 
     private RiidEnv() { }
 
-    static String repo() {
-        return env().getOrDefault("RIID_REPO", "library/busybox");
-    }
-
-    static String tag() {
-        java.util.Map<String, String> env = env();
-        return env.getOrDefault("RIID_TAG", env.getOrDefault("RIID_REF", "latest"));
-    }
-
-    static String digest() {
+    static ImageRef imageRef() {
         Map<String, String> env = env();
-        String v = env.get("RIID_DIGEST");
-        if (v != null && !v.isBlank()) {
-            return v;
+        String repo = env.getOrDefault("RIID_REPO", "library/busybox");
+        String tag = env.get("RIID_TAG");
+        String digest = env.get("RIID_DIGEST");
+        String ref = env.getOrDefault("RIID_REF", "latest");
+
+        if (digest == null || digest.isBlank()) {
+            if (ref.startsWith("sha256:")) {
+                digest = ref;
+            } else if (tag == null || tag.isBlank()) {
+                tag = ref;
+            }
         }
-        String ref = env.get("RIID_REF");
-        if (ref != null && ref.startsWith("sha256:")) {
-            return ref;
+        if (tag != null && tag.isBlank()) {
+            tag = null;
         }
-        return null;
+        return new ImageRef(repo, tag, digest);
     }
 
     static String cacheDir() {

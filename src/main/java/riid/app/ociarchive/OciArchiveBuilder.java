@@ -14,9 +14,9 @@ import riid.app.error.AppError;
 import riid.app.error.OciArchiveException;
 import riid.app.fs.HostFilesystem;
 import riid.cache.ImageDigest;
-import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.MediaType;
 import riid.dispatcher.RequestDispatcher;
 
 /**
@@ -45,11 +45,19 @@ public final class OciArchiveBuilder {
 
         // Config
         var cfg = manifest.config();
-        pullLayer(imageId.name(), cfg.digest(), cfg.size(), cfg.mediaType(), blobsDir);
+        pullLayer(imageId.name(),
+                ImageDigest.parse(cfg.digest()),
+                cfg.size(),
+                MediaType.from(cfg.mediaType()),
+                blobsDir);
 
         // Layers
         for (var layer : manifest.layers()) {
-            pullLayer(imageId.name(), layer.digest(), layer.size(), layer.mediaType(), blobsDir);
+            pullLayer(imageId.name(),
+                    ImageDigest.parse(layer.digest()),
+                    layer.size(),
+                    MediaType.from(layer.mediaType()),
+                    blobsDir);
         }
 
         // Manifest blob
@@ -71,15 +79,13 @@ public final class OciArchiveBuilder {
     }
 
     private void pullLayer(String repository,
-                           String digest,
+                           ImageDigest digest,
                            long size,
-                           String mediaType,
+                           MediaType mediaType,
                            Path blobsDir) throws IOException {
         var fetched = dispatcher.fetchLayer(repository, digest, size, mediaType);
-        File tmp = new File(fetched.path());
-        BlobResult blob = new BlobResult(fetched.digest(), tmp.length(), fetched.mediaType(), fetched.path());
-        ImageDigest imgDigest = ImageDigest.parse(blob.digest());
-        fs.copy(tmp.toPath(), blobsDir.resolve(imgDigest.hex()));
+        File tmp = fetched.path().toFile();
+        fs.copy(tmp.toPath(), blobsDir.resolve(fetched.digest().hex()));
     }
 
     private static void runTar(Path archive, Path ociDir) throws IOException, InterruptedException {
@@ -95,15 +101,17 @@ public final class OciArchiveBuilder {
     private static String readResource(String path) throws OciArchiveException {
         try (var in = OciArchiveBuilder.class.getClassLoader().getResourceAsStream(path)) {
             if (in == null) {
+                String msg = AppError.OciKind.RESOURCE_NOT_FOUND.format(path);
                 throw new OciArchiveException(
-                        new AppError.Oci(AppError.OciKind.RESOURCE_NOT_FOUND, "Resource not found: " + path),
-                        "Resource not found: " + path);
+                        new AppError.Oci(AppError.OciKind.RESOURCE_NOT_FOUND, msg),
+                        msg);
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
+            String msg = AppError.OciKind.RESOURCE_READ_FAILED.format(path);
             throw new OciArchiveException(
-                    new AppError.Oci(AppError.OciKind.RESOURCE_READ_FAILED, "Failed to read resource: " + path),
-                    "Failed to read resource: " + path, e);
+                    new AppError.Oci(AppError.OciKind.RESOURCE_READ_FAILED, msg),
+                    msg, e);
         }
     }
 }

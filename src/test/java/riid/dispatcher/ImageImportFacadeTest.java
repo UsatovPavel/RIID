@@ -9,6 +9,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import riid.client.core.model.manifest.MediaType;
 
 class ImageImportFacadeTest {
 
@@ -16,21 +17,21 @@ class ImageImportFacadeTest {
     void importsIntoRuntimeAfterValidation() throws Exception {
         Path temp = Files.createTempFile("fetch-", ".bin");
         Files.writeString(temp, "data");
-        FetchResult ok = new FetchResult(digestA(), media(), temp.toString());
+        FetchResult ok = new FetchResult(digestA(), media(), temp);
         RecordingDispatcher dispatcher = new RecordingDispatcher(ok);
         RecordingRuntimeAdapter runtime = new RecordingRuntimeAdapter();
 
         ImageImportFacade integrator = new ImageImportFacade(dispatcher);
         FetchResult result = integrator.fetchAndLoad(new ImageRef("repo", "ref", null), runtime);
 
-        assertEquals(temp.toString(), result.path());
+        assertEquals(temp, result.path());
         assertEquals(temp, runtime.importedPath);
     }
 
     @Test
     void failsWhenFileMissing() {
         RecordingDispatcher dispatcher = new RecordingDispatcher(
-                new FetchResult(digestA(), media(), "/non/existent/file"));
+                new FetchResult(digestA(), media(), Path.of("/non/existent/file")));
         ImageImportFacade integrator = new ImageImportFacade(dispatcher);
 
         assertThrows(DispatcherRuntimeException.class,
@@ -40,7 +41,7 @@ class ImageImportFacadeTest {
     @Test
     void failsOnBlankFields() {
         ImageImportFacade integrator = new ImageImportFacade(
-                new RecordingDispatcher(new FetchResult("", "", "")));
+                new RecordingDispatcher(new FetchResult(null, null, null)));
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
     }
@@ -49,7 +50,7 @@ class ImageImportFacadeTest {
     void failsOnDirectoryPath() throws Exception {
         Path dir = Files.createTempDirectory("not-file");
         ImageImportFacade integrator = new ImageImportFacade(
-                new RecordingDispatcher(new FetchResult(digestB(), media(), dir.toString())));
+                new RecordingDispatcher(new FetchResult(digestB(), media(), dir)));
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
     }
@@ -58,7 +59,7 @@ class ImageImportFacadeTest {
     void failsOnEmptyFile() throws Exception {
         Path empty = Files.createTempFile("empty-", ".bin");
         ImageImportFacade integrator = new ImageImportFacade(
-                new RecordingDispatcher(new FetchResult(digestC(), media(), empty.toString())));
+                new RecordingDispatcher(new FetchResult(digestC(), media(), empty)));
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
     }
@@ -70,7 +71,7 @@ class ImageImportFacadeTest {
         }
 
         @Override
-        public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
+        public FetchResult fetchLayer(String repository, riid.cache.ImageDigest digest, long sizeBytes, MediaType mediaType) {
             return result;
         }
     }
@@ -89,20 +90,20 @@ class ImageImportFacadeTest {
         }
     }
 
-    private static String digestA() {
-        return "sha256:" + "a".repeat(64);
+    private static riid.cache.ImageDigest digestA() {
+        return riid.cache.ImageDigest.parse("sha256:" + "a".repeat(64));
     }
 
-    private static String digestB() {
-        return "sha256:" + "b".repeat(64);
+    private static riid.cache.ImageDigest digestB() {
+        return riid.cache.ImageDigest.parse("sha256:" + "b".repeat(64));
     }
 
-    private static String digestC() {
-        return "sha256:" + "c".repeat(64);
+    private static riid.cache.ImageDigest digestC() {
+        return riid.cache.ImageDigest.parse("sha256:" + "c".repeat(64));
     }
 
-    private static String media() {
-        return "application/octet-stream";
+    private static MediaType media() {
+        return MediaType.OCI_IMAGE_LAYER;
     }
 }
 

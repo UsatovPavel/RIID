@@ -1,8 +1,6 @@
 package riid.runtime;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -32,20 +30,10 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 "-I",
                 imagePath.toAbsolutePath().toString()
         );
-        Process p = startProcess(cmd);
-        String output;
-        try (var in = p.getInputStream()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
-        int code = p.waitFor();
-        if (code != 0) {
-            String err;
-            try (var es = p.getErrorStream()) {
-                err = new String(es.readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            throw new IOException("portoctl layer import failed (exit " + code + "): " + output + err);
+        BoundedCommandExecution.Result result = BoundedCommandExecution.run(cmd);
+        if (result.exitCode() != 0) {
+            throw new IOException("portoctl layer import failed (exit " + result.exitCode() + "): "
+                    + result.stdout() + result.stderr());
         }
     }
 

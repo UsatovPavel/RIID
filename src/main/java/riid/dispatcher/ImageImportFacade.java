@@ -35,7 +35,7 @@ public final class ImageImportFacade {
         FetchResult result = dispatcher.fetchImage(ref);
         validateResult(result);
 
-        Path imagePath = Path.of(result.path());
+        Path imagePath = result.path();
         try {
             LOGGER.info("Importing digest {} into runtime {}", result.digest(), runtime.runtimeId());
             runtime.importImage(imagePath);
@@ -54,16 +54,16 @@ public final class ImageImportFacade {
         if (result == null) {
             throw new DispatcherRuntimeException("Dispatcher returned null result");
         }
-        if (isBlank(result.digest())) {
+        if (result.digest() == null) {
             throw new DispatcherRuntimeException("Missing digest from dispatcher result");
         }
-        if (isBlank(result.mediaType())) {
+        if (result.mediaType() == null) {
             throw new DispatcherRuntimeException("Missing media type from dispatcher result");
         }
-        if (isBlank(result.path())) {
+        if (result.path() == null) {
             throw new DispatcherRuntimeException("Missing path from dispatcher result");
         }
-        Path p = Path.of(result.path());
+        Path p = result.path();
         if (!Files.exists(p)) {
             throw new DispatcherRuntimeException("Fetched path does not exist: " + p);
         }
@@ -80,9 +80,6 @@ public final class ImageImportFacade {
         }
     }
 
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
 }
 
 

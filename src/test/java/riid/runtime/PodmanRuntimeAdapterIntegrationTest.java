@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import riid.app.ImageId;
 import riid.app.ImageLoadFacade;
 import riid.app.fs.HostFilesystemTestSupport;
 import riid.cache.TempFileCacheAdapter;
@@ -54,7 +55,8 @@ class PodmanRuntimeAdapterIntegrationTest {
         Files.writeString(configPath, configYaml);
 
         var app = ImageLoadFacade.createFromConfig(configPath);
-        refName = app.load(REPO, REF, PODMAN);
+        ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
+        refName = app.load(imageId, PODMAN);
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
                 .redirectErrorStream(true)
@@ -82,7 +84,8 @@ class PodmanRuntimeAdapterIntegrationTest {
                 java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()),
                 HostFilesystemTestSupport.create());
 
-        String refName = app.load(REPO, REF, "podman");
+        ImageId imageId = ImageId.fromRegistry(ImageId.registryFor(endpoint), REPO, REF);
+        String refName = app.load(imageId, "podman");
         // Verify the image can run a trivial command
         run(List.of(PODMAN, "run", "--rm", refName, "true"));
     }

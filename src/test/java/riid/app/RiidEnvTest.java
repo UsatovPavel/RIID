@@ -22,32 +22,33 @@ class RiidEnvTest {
     @Test
     void repoDefaultsWhenEnvMissing() {
         setEnv("RIID_REPO", null);
-        assertEquals("library/busybox", RiidEnv.repo());
+        var ref = RiidEnv.imageRef();
+        assertEquals("library/busybox", ref.repository());
     }
 
     @Test
     void tagPrefersTagThenRef() {
         setEnv("RIID_TAG", "v1");
         setEnv("RIID_REF", "latest");
-        assertEquals("v1", RiidEnv.tag());
+        assertEquals("v1", RiidEnv.imageRef().tag());
 
         setEnv("RIID_TAG", null);
         setEnv("RIID_REF", "ref-tag");
-        assertEquals("ref-tag", RiidEnv.tag());
+        assertEquals("ref-tag", RiidEnv.imageRef().tag());
     }
 
     @Test
     void digestPrefersDigestThenRefSha() {
         setEnv("RIID_DIGEST", "sha256:abc");
         setEnv("RIID_REF", "sha256:def");
-        assertEquals("sha256:abc", RiidEnv.digest());
+        assertEquals("sha256:abc", RiidEnv.imageRef().digest());
 
         setEnv("RIID_DIGEST", null);
         setEnv("RIID_REF", "sha256:def");
-        assertEquals("sha256:def", RiidEnv.digest());
+        assertEquals("sha256:def", RiidEnv.imageRef().digest());
 
         setEnv("RIID_REF", "latest");
-        assertNull(RiidEnv.digest());
+        assertNull(RiidEnv.imageRef().digest());
     }
 
     @Test

@@ -14,9 +14,11 @@ import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.cache.ImageDigest;
 import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Descriptor;
 import riid.client.core.model.manifest.Manifest;
+import riid.client.core.model.manifest.MediaType;
 import riid.dispatcher.FetchResult;
 import riid.dispatcher.ImageRef;
 import riid.dispatcher.RequestDispatcher;
@@ -24,6 +26,7 @@ import riid.runtime.RuntimeAdapter;
 
 class ImageLoadFacadeErrorTest {
     private static final String DIGEST = "sha256:" + "a".repeat(64);
+    private static final ImageDigest IMG_DIGEST = ImageDigest.parse(DIGEST);
 
     @Test
     void loadWrapsIOExceptionAsAppError() {
@@ -32,7 +35,7 @@ class ImageLoadFacadeErrorTest {
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
         ImageLoadFacade facade = new ImageLoadFacade(new NoopDispatcher(), new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(), fs, "registry.example");
+                new NoopRegistryClient(), fs);
 
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new NoopRuntime(), imageId));
@@ -50,7 +53,7 @@ class ImageLoadFacadeErrorTest {
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
         HostFilesystem fs = new NioHostFilesystem(null);
         ImageLoadFacade facade = new ImageLoadFacade(dispatcher, new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(), fs, "registry.example");
+                new NoopRegistryClient(), fs);
 
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));
@@ -91,6 +94,9 @@ class ImageLoadFacadeErrorTest {
         public riid.client.core.model.manifest.TagList listTags(String repository, Integer n, String last) {
             throw new UnsupportedOperationException("Not used");
         }
+
+        @Override
+        public void close() { }
     }
 
     private static final class NoopDispatcher implements RequestDispatcher {
@@ -100,7 +106,10 @@ class ImageLoadFacadeErrorTest {
         }
 
         @Override
-        public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
+        public FetchResult fetchLayer(String repository,
+                                     riid.cache.ImageDigest digest,
+                                     long sizeBytes,
+                                     MediaType mediaType) {
             throw new UnsupportedOperationException("Not used");
         }
     }
@@ -118,8 +127,11 @@ class ImageLoadFacadeErrorTest {
         }
 
         @Override
-        public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
-            return new FetchResult(DIGEST, mediaType, path);
+        public FetchResult fetchLayer(String repository,
+                                     riid.cache.ImageDigest digest,
+                                     long sizeBytes,
+                                     MediaType mediaType) {
+            return new FetchResult(IMG_DIGEST, mediaType, Path.of(path));
         }
     }
 
