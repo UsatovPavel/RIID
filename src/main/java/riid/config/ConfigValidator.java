@@ -26,6 +26,7 @@ public final class ConfigValidator {
         if (dispatcher == null) {
             throw new ConfigValidationException("Missing dispatcher configuration");
         }
+        validateApp(config.app());
         validateRegistries(client.registries());
         validateHttp(client.http());
         validateAuth(client.auth());
@@ -81,6 +82,16 @@ public final class ConfigValidator {
         }
         if (auth.defaultTokenTtlSeconds() <= 0) {
             throw new ConfigValidationException("auth.defaultTokenTtlSeconds must be > 0");
+        }
+    }
+
+    private static void validateApp(AppRuntimeConfig app) {
+        if (app == null) {
+            return;
+        }
+        String tempDir = app.tempDir();
+        if (tempDir != null && tempDir.isBlank()) {
+            throw new ConfigValidationException("app.tempDir must not be blank");
         }
     }
 

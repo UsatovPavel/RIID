@@ -1,13 +1,5 @@
 package riid.runtime;
 
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import riid.app.ImageLoadService;
-import riid.app.ImageLoadServiceFactory;
-import riid.cache.TempFileCacheAdapter;
-import riid.client.core.config.RegistryEndpoint;
-import riid.p2p.P2PExecutor;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -16,6 +8,14 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import riid.app.ImageLoadFacade;
+import riid.cache.TempFileCacheAdapter;
+import riid.client.core.config.RegistryEndpoint;
+import riid.app.fs.NioHostFilesystem;
+import riid.p2p.P2PExecutor;
 
 @Tag("local")
 class PodmanRuntimeAdapterIntegrationTest {
@@ -53,7 +53,7 @@ class PodmanRuntimeAdapterIntegrationTest {
                 """;
         Files.writeString(configPath, configYaml);
 
-        var app = ImageLoadServiceFactory.createFromConfig(configPath);
+        var app = ImageLoadFacade.createFromConfig(configPath);
         refName = app.load(REPO, REF, PODMAN);
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
@@ -75,11 +75,12 @@ class PodmanRuntimeAdapterIntegrationTest {
     void oneShotLoadAndRun() throws Exception {
         // Build app with podman runtime only; dispatcher falls back to registry
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        var app = ImageLoadService.createDefault(
+        var app = ImageLoadFacade.createDefault(
                 endpoint,
                 new TempFileCacheAdapter(),
                 new P2PExecutor.NoOp(),
-                java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));
+                java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()),
+                new NioHostFilesystem(null));
 
         String refName = app.load(REPO, REF, "podman");
         // Verify the image can run a trivial command
@@ -102,7 +103,7 @@ class PodmanRuntimeAdapterIntegrationTest {
         try {
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             p.waitFor();
-        } catch (Exception ignored) {
+        } catch (IOException | InterruptedException ignored) {
             // ignore cleanup failures
         }
     }

@@ -7,7 +7,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-class ImageLoadServiceFactoryTest {
+class ImageLoadFacadeFactoryTest {
 
     @Test
     void createsServiceFromConfig() throws Exception {
@@ -25,7 +25,7 @@ class ImageLoadServiceFactoryTest {
         Path tmp = Files.createTempFile("config-", ".yaml");
         Files.writeString(tmp, yaml);
 
-        ImageLoadService svc = ImageLoadServiceFactory.createFromConfig(tmp);
+        ImageLoadFacade svc = ImageLoadFacade.createFromConfig(tmp);
         assertNotNull(svc);
     }
 }

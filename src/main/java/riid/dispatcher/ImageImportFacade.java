@@ -13,12 +13,12 @@ import java.util.Objects;
  * Connects RequestDispatcher (download/validate) with a RuntimeAdapter (import).
  * 7.0/7.1/7.2 from Plan PR 3: fetch -> validate -> pass to runtime, with clear errors.
  */
-public final class DispatcherRuntimeIntegrator {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DispatcherRuntimeIntegrator.class);
+public final class ImageImportFacade {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ImageImportFacade.class);
 
     private final RequestDispatcher dispatcher;
 
-    public DispatcherRuntimeIntegrator(RequestDispatcher dispatcher) {
+    public ImageImportFacade(RequestDispatcher dispatcher) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     }
 

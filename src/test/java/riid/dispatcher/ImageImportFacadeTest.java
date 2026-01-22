@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class DispatcherRuntimeIntegratorTest {
+class ImageImportFacadeTest {
 
     @Test
     void importsIntoRuntimeAfterValidation() throws Exception {
@@ -20,7 +20,7 @@ class DispatcherRuntimeIntegratorTest {
         RecordingDispatcher dispatcher = new RecordingDispatcher(ok);
         RecordingRuntimeAdapter runtime = new RecordingRuntimeAdapter();
 
-        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(dispatcher);
+        ImageImportFacade integrator = new ImageImportFacade(dispatcher);
         FetchResult result = integrator.fetchAndLoad(new ImageRef("repo", "ref", null), runtime);
 
         assertEquals(temp.toString(), result.path());
@@ -31,7 +31,7 @@ class DispatcherRuntimeIntegratorTest {
     void failsWhenFileMissing() {
         RecordingDispatcher dispatcher = new RecordingDispatcher(
                 new FetchResult(digestA(), media(), "/non/existent/file"));
-        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(dispatcher);
+        ImageImportFacade integrator = new ImageImportFacade(dispatcher);
 
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("repo", "ref", null), new RecordingRuntimeAdapter()));
@@ -39,7 +39,7 @@ class DispatcherRuntimeIntegratorTest {
 
     @Test
     void failsOnBlankFields() {
-        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
+        ImageImportFacade integrator = new ImageImportFacade(
                 new RecordingDispatcher(new FetchResult("", "", "")));
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
@@ -48,7 +48,7 @@ class DispatcherRuntimeIntegratorTest {
     @Test
     void failsOnDirectoryPath() throws Exception {
         Path dir = Files.createTempDirectory("not-file");
-        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
+        ImageImportFacade integrator = new ImageImportFacade(
                 new RecordingDispatcher(new FetchResult(digestB(), media(), dir.toString())));
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
@@ -57,7 +57,7 @@ class DispatcherRuntimeIntegratorTest {
     @Test
     void failsOnEmptyFile() throws Exception {
         Path empty = Files.createTempFile("empty-", ".bin");
-        DispatcherRuntimeIntegrator integrator = new DispatcherRuntimeIntegrator(
+        ImageImportFacade integrator = new ImageImportFacade(
                 new RecordingDispatcher(new FetchResult(digestC(), media(), empty.toString())));
         assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
