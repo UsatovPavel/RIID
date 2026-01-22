@@ -1,14 +1,5 @@
 package riid.integration.runtime_app;
 
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import riid.app.ImageLoadService;
-import riid.app.ImageLoadServiceFactory;
-import riid.cache.oci.TempFileCacheAdapter;
-import riid.client.core.config.RegistryEndpoint;
-import riid.p2p.P2PExecutor;
-import riid.runtime.PodmanRuntimeAdapter;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,6 +8,16 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import riid.app.ImageId;
+import riid.app.ImageLoadFacade;
+import riid.app.fs.HostFilesystemTestSupport;
+import riid.cache.oci.TempFileCacheAdapter;
+import riid.client.core.config.RegistryEndpoint;
+import riid.p2p.P2PExecutor;
+import riid.runtime.PodmanRuntimeAdapter;
 
 @Tag("local")
 class PodmanRuntimeAdapterIntegrationTest {
@@ -53,8 +54,9 @@ class PodmanRuntimeAdapterIntegrationTest {
                 """;
         Files.writeString(configPath, configYaml);
 
-        var app = ImageLoadServiceFactory.createFromConfig(configPath);
-        refName = app.load(REPO, REF, PODMAN);
+        var app = ImageLoadFacade.createFromConfig(configPath);
+        ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
+        refName = app.load(imageId, PODMAN);
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
                 .redirectErrorStream(true)
@@ -75,14 +77,15 @@ class PodmanRuntimeAdapterIntegrationTest {
     void oneShotLoadAndRun() throws Exception {
         // Build app with podman runtime only; dispatcher falls back to registry
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        var app = ImageLoadService.createDefault(
+        var app = ImageLoadFacade.createDefault(
                 endpoint,
                 new TempFileCacheAdapter(),
                 new P2PExecutor.NoOp(),
                 java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()),
-                riid.client.core.config.AuthConfig.DEFAULT_TTL_SECONDS);
+                HostFilesystemTestSupport.create());
 
-        String refName = app.load(REPO, REF, "podman");
+        ImageId imageId = ImageId.fromRegistry(ImageId.registryFor(endpoint), REPO, REF);
+        String refName = app.load(imageId, "podman");
         // Verify the image can run a trivial command
         run(List.of(PODMAN, "run", "--rm", refName, "true"));
     }
@@ -103,7 +106,7 @@ class PodmanRuntimeAdapterIntegrationTest {
         try {
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             p.waitFor();
-        } catch (Exception ignored) {
+        } catch (IOException | InterruptedException ignored) {
             // ignore cleanup failures
         }
     }

@@ -5,13 +5,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
-import riid.cache.oci.PathCachePayload;
 import riid.cache.oci.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
+import riid.client.core.model.manifest.MediaType;
 import riid.p2p.P2PExecutor;
 
 import java.io.File;
@@ -52,22 +53,22 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         String reference = ref.digest() != null && !ref.digest().isBlank() ? ref.digest() : ref.tag();
         ManifestResult manifest = client.fetchManifest(ref.repository(), reference);
         var layer = manifest.manifest().layers().getFirst();
-        return fetchLayer(ref.repository(), layer.digest(), layer.size(), layer.mediaType());
+        return fetchLayer(ref.repository(),
+                ImageDigest.parse(layer.digest()),
+                layer.size(),
+                MediaType.from(layer.mediaType()));
     }
 
     @Override
-    public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
+    public FetchResult fetchLayer(String repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
         Objects.requireNonNull(repository);
         Objects.requireNonNull(digest);
 
-        ImageDigest imgDigest = ImageDigest.parse(digest);
-
         // 1) cache
-        String cachedPath = null;
-        if (cache != null && cache.has(imgDigest)) {
-            cachedPath = cache.get(imgDigest)
+        Path cachedPath = null;
+        if (cache != null && cache.has(digest)) {
+            cachedPath = cache.get(digest)
                     .flatMap(entry -> cache.resolve(entry.key()))
-                    .map(Path::toString)
                     .orElse(null);
         }
         if (cachedPath != null) {
@@ -78,10 +79,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         // 2) P2P
         if (p2p != null) {
             try {
-                var p2pPath = p2p.fetch(imgDigest, sizeBytes, CacheMediaType.from(mediaType));
+                var p2pPath = p2p.fetch(digest, sizeBytes, CacheMediaType.from(mediaType.value()));
                 if (p2pPath.isPresent()) {
                     LOGGER.info("p2p hit for layer {}", digest);
-                    return new FetchResult(digest, mediaType, p2pPath.get().toString());
+                    return new FetchResult(digest, mediaType, p2pPath.get());
                 }
             } catch (Exception ex) {
                 LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
@@ -93,14 +94,14 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         try {
             File tmp = createTemp();
             BlobResult blob = client.fetchBlob(
-                    new BlobRequest(repository, digest, sizeBytes, mediaType),
+                    new BlobRequest(repository, digest.toString(), sizeBytes, mediaType.value()),
                     tmp);
             LOGGER.info("downloaded layer {} from registry", digest);
 
             if (cache != null) {
                 try {
                     cache.put(ImageDigest.parse(blob.digest()),
-                            PathCachePayload.of(tmp.toPath(), tmp.length()),
+                            FilesystemCachePayload.of(tmp.toPath(), tmp.length()),
                             CacheMediaType.from(blob.mediaType()));
                 } catch (ValidationException ve) {
                     LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
@@ -122,7 +123,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 }
             }
 
-            return new FetchResult(blob.digest(), blob.mediaType(), blob.path());
+            return new FetchResult(ImageDigest.parse(blob.digest()),
+                    MediaType.from(blob.mediaType()),
+                    Path.of(blob.path()));
         } finally {
             releaseRegistry();
         }

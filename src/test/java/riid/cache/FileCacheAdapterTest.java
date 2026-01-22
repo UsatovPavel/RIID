@@ -6,8 +6,8 @@ import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.CachePayload;
 import riid.cache.oci.FileCacheAdapter;
+import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
-import riid.cache.oci.PathCachePayload;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,7 +45,7 @@ class FileCacheAdapterTest {
         Files.writeString(tmp, "hello");
         CacheEntry entry = cache.put(
                 digest,
-                PathCachePayload.of(tmp, Files.size(tmp)),
+                FilesystemCachePayload.of(tmp, Files.size(tmp)),
                 CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));

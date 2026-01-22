@@ -61,7 +61,7 @@ class SimpleRequestDispatcherTest {
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p);
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
-        assertEquals("/tmp/cached", result.path());
+        assertEquals(Path.of("/tmp/cached"), result.path());
         assertEquals(1, registry.manifestCalls);
         assertEquals(0, registry.blobCalls);
         assertFalse(p2p.fetchCalled, "p2p should not be used on cache hit");
@@ -74,7 +74,7 @@ class SimpleRequestDispatcherTest {
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p);
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
-        assertEquals("/tmp/p2p-layer", result.path());
+        assertEquals(Path.of("/tmp/p2p-layer"), result.path());
         assertEquals(1, registry.manifestCalls);
         assertEquals(0, registry.blobCalls);
         assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
@@ -89,7 +89,7 @@ class SimpleRequestDispatcherTest {
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, new DispatcherConfig(1));
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
-        assertEquals(tmp.getAbsolutePath(), result.path());
+        assertEquals(tmp.toPath(), result.path());
         assertEquals(1, registry.blobCalls);
         assertTrue(cache.putCalled, "cache should be populated after registry download");
         assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
@@ -98,7 +98,7 @@ class SimpleRequestDispatcherTest {
     /**
     * Minimal in-memory registry stub that returns a manifest with one layer.
     */
-    private static final class RecordingRegistryClient implements RegistryClient, AutoCloseable {
+    private static final class RecordingRegistryClient implements RegistryClient {
         int manifestCalls;
         int blobCalls;
         BlobResult blobResult;

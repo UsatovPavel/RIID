@@ -29,6 +29,7 @@ public final class ConfigValidator {
         if (dispatcher == null) {
             throw new ConfigValidationException(ConfigValidationException.Reason.MISSING_DISPATCHER.message());
         }
+        validateApp(config.app());
         validateRegistries(client.registries());
         validateHttp(client.http());
         validateAuth(client.auth());
@@ -88,6 +89,16 @@ public final class ConfigValidator {
         validatePathIfPresent(auth.certPath(), "client.auth.certPath");
         validatePathIfPresent(auth.keyPath(), "client.auth.keyPath");
         validatePathIfPresent(auth.caPath(), "client.auth.caPath");
+    }
+
+    private static void validateApp(AppRuntimeConfig app) {
+        if (app == null) {
+            return;
+        }
+        String tempDir = app.tempDir();
+        if (tempDir != null && tempDir.isBlank()) {
+            throw new ConfigValidationException("app.tempDir must not be blank");
+        }
     }
 
     private static void checkDuration(Duration value, String field) {

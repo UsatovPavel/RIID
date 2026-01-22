@@ -20,9 +20,8 @@ public interface RegistryClient extends AutoCloseable {
 
     TagList listTags(String repository, Integer n, String last);
 
-    @Override//throw Exception becauese impl that throw exception. Don't change
-    default void close() throws Exception {
-    }
+    @Override // throw Exception because impl that throws exception. Don't change
+    void close() throws Exception;
 
 }
 

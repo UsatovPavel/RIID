@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ConfigLoaderTest {
@@ -135,9 +136,9 @@ class ConfigLoaderTest {
         assertEquals("token-123", secondCreds.flatMap(Credentials::identityTokenOpt).orElse(null));
 
         assertEquals(5, cfg.client().http().maxRetries());
-        assertEquals(false, cfg.client().http().retryIdempotentOnly());
+        assertFalse(cfg.client().http().retryIdempotentOnly());
         assertEquals("riid-test-agent", cfg.client().http().userAgent());
-        assertEquals(false, cfg.client().http().followRedirects());
+        assertFalse(cfg.client().http().followRedirects());
         assertEquals(900, cfg.client().auth().defaultTokenTtlSeconds());
         assertEquals(cert.toString(), cfg.client().auth().certPath());
         assertEquals(key.toString(), cfg.client().auth().keyPath());

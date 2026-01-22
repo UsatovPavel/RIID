@@ -88,6 +88,7 @@ public final class FileCacheAdapter implements CacheAdapter {
         try {
             Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
+            LOGGER.warn("Atomic move not supported, falling back to regular move for {}", target);
             Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
         }
         String key = root.relativize(target).toString();

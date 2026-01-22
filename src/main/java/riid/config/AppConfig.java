@@ -9,7 +9,8 @@ import riid.dispatcher.DispatcherConfig;
  */
 public record AppConfig(
         @JsonProperty("client") ClientConfig client,
-        @JsonProperty("dispatcher") DispatcherConfig dispatcher
+        @JsonProperty("dispatcher") DispatcherConfig dispatcher,
+        @JsonProperty("app") AppRuntimeConfig app
 ) {
 }
 

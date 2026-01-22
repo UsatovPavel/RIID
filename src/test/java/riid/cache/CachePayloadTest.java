@@ -2,7 +2,7 @@ package riid.cache;
 
 import org.junit.jupiter.api.Test;
 import riid.cache.oci.CachePayload;
-import riid.cache.oci.PathCachePayload;
+import riid.cache.oci.FilesystemCachePayload;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,7 +18,7 @@ class CachePayloadTest {
         byte[] bytes = "data".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         Files.write(tmp, bytes);
 
-        CachePayload payload = PathCachePayload.of(tmp, bytes.length);
+        CachePayload payload = FilesystemCachePayload.of(tmp, bytes.length);
         assertEquals(bytes.length, payload.sizeBytes());
         try (var in = payload.open()) {
             assertArrayEquals(bytes, in.readAllBytes());

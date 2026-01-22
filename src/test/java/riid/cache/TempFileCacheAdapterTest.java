@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.CachePayload;
+import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
-import riid.cache.oci.PathCachePayload;
 import riid.cache.oci.TempFileCacheAdapter;
 
 import java.io.IOException;
@@ -36,7 +36,7 @@ class TempFileCacheAdapterTest {
         Path tmp = Files.createTempFile("cache-", ".bin");
         Files.writeString(tmp, "hello");
 
-        CachePayload payload = PathCachePayload.of(tmp, Files.size(tmp));
+        CachePayload payload = FilesystemCachePayload.of(tmp, Files.size(tmp));
         CacheEntry entry = cache.put(digest, payload, CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));

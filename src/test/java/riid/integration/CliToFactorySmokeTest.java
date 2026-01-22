@@ -1,7 +1,9 @@
-package riid.app;
+package riid.integration;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import riid.app.CliApplication;
+import riid.app.ImageLoadFacade;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
@@ -17,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke: CLI arg parsing -> ConfigLoader -> ImageLoadServiceFactory (no network).
+ * Smoke: CLI arg parsing -> ConfigLoader -> ImageLoadFacade (no network).
  */
 @Tag("e2e")
 class CliToFactorySmokeTest {
@@ -42,7 +44,7 @@ class CliToFactorySmokeTest {
         CliApplication cli = new CliApplication(
                 opts -> {
                     factoryCalled.set(true);
-                    ImageLoadServiceFactory.createFromConfig(opts.configPath());
+                    ImageLoadFacade.createFromConfig(opts.configPath());
                     return (repo, ref, runtime) -> "ok";
                 },
                 Map.of("stub", new NoopRuntimeAdapter()),

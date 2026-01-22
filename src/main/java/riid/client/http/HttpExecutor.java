@@ -1,12 +1,5 @@
 package riid.client.http;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.eclipse.jetty.client.ContentResponse;
-import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.client.InputStreamResponseListener;
-import org.eclipse.jetty.client.Request;
-import org.eclipse.jetty.http.HttpFields;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -14,17 +7,29 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.InputStreamResponseListener;
+import org.eclipse.jetty.client.Request;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpMethod;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 /**
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
  */
 public class HttpExecutor {
-    private static final String METHOD_HEAD = "HEAD";
+    private static final String METHOD_HEAD = HttpMethod.HEAD.asString();
     private static final List<Integer> RETRY_STATUSES = List.of(429, 502, 503, 504);
+    private static final List<Integer> REDIRECT_STATUSES = List.of(301, 302, 303, 307, 308);
+    private static final int MAX_REDIRECTS = 5;
 
     private final HttpClient client;
     private final HttpClientConfig config;
@@ -53,7 +58,7 @@ public class HttpExecutor {
         while (true) {
             attempts++;
             try {
-                HttpResult<InputStream> resp = execute(method, uri, headers);
+                HttpResult<InputStream> resp = executeWithRedirects(method, uri, headers);
                 if (shouldRetry(resp.statusCode(), attempts, idempotent)) {
                     backoff(attempts);
                     continue;
@@ -69,6 +74,25 @@ public class HttpExecutor {
         }
     }
 
+    private HttpResult<InputStream> executeWithRedirects(String method,
+                                                         URI uri,
+                                                         Map<String, String> headers) throws IOException {
+        URI current = uri;
+        int redirects = 0;
+        while (true) {
+            HttpResult<InputStream> resp = execute(method, current, headers);
+            Optional<String> location = resp.firstHeader("Location");
+            if (location.isEmpty() || !REDIRECT_STATUSES.contains(resp.statusCode())) {
+                return resp;
+            }
+            closeQuietly(resp.body());
+            if (redirects++ >= MAX_REDIRECTS) {
+                return resp;
+            }
+            current = current.resolve(location.get());
+        }
+    }
+
     private HttpResult<InputStream> execute(String method,
                                             URI uri,
                                             Map<String, String> headers) throws IOException {
@@ -77,6 +101,7 @@ public class HttpExecutor {
                 Request req = client.newRequest(uri)
                         .method(METHOD_HEAD)
                         .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                        .followRedirects(config.followRedirects())
                         .headers(h -> {
                             headers.forEach(h::add);
                             applyUserAgent(h, headers);
@@ -88,7 +113,7 @@ public class HttpExecutor {
                 Thread.currentThread().interrupt();
                 throw new IOException("Jetty HEAD interrupted", ie);
             } catch (ExecutionException | TimeoutException e) {
-                throw new IOException("Jetty HEAD failed", e);
+                throw new IOException("Jetty HEAD failed for " + uri, e);
             }
         }
 
@@ -97,6 +122,7 @@ public class HttpExecutor {
         Request request = client.newRequest(uri)
                 .method(method)
                 .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                .followRedirects(config.followRedirects())
                 .headers(h -> {
                     headers.forEach(h::add);
                     applyUserAgent(h, headers);
@@ -110,7 +136,7 @@ public class HttpExecutor {
             Thread.currentThread().interrupt();
             throw new IOException("Jetty request interrupted", ie);
         } catch (ExecutionException | TimeoutException e) {
-            throw new IOException("Jetty request failed", e);
+            throw new IOException("Jetty request failed for " + uri, e);
         }
     }
 
@@ -151,6 +177,17 @@ public class HttpExecutor {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
+        }
+    }
+
+    private static void closeQuietly(InputStream body) {
+        if (body == null) {
+            return;
+        }
+        try {
+            body.close();
+        } catch (IOException ignored) {
+            // best effort for redirect responses
         }
     }
 

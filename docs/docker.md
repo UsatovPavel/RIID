@@ -32,6 +32,13 @@ docker compose up --build
 - `RIID_CACHE_DIR` (optional): override cache path; default `/var/cache/riid`.
 
 Notes:
-- The container builds an executable uber-JAR using the Shadow plugin and runs `riid.app.ImageLoadServiceFactory`.
+- The container builds an executable uber-JAR using the Shadow plugin and runs `riid.app.ImageLoadFacadeFactory`.
 - Configure repository and reference via `RIID_REPO` and `RIID_REF` environment variables.
 - Cache is stored in `/var/cache/riid` (mounted to named volume in compose).
+## Gradlew commands 
+// Usage:
+// ./gradlew allReports for run code quality utils and save report in one file
+//  ./gradlew testAll for run all tests
+// ./gradlew testStress for run only stress tests
+// ./gradlew testLocal for run only local tests
+// ./gradlew test --tests "riid.client.integration.RegistryLocalTest" <-важный тест с testContainers

@@ -1,8 +1,6 @@
 package riid.runtime;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -32,20 +30,10 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 "-I",
                 imagePath.toAbsolutePath().toString()
         );
-        Process p = startProcess(cmd);
-        String output;
-        try (var in = p.getInputStream()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
-        int code = p.waitFor();
-        if (code != 0) {
-            String err;
-            try (var es = p.getErrorStream()) {
-                err = new String(es.readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            throw new IOException("portoctl layer import failed (exit " + code + "): " + output + err);
+        BoundedCommandExecution.Result result = runCommand(cmd);
+        if (result.exitCode() != 0) {
+            throw new IOException("portoctl layer import failed (exit " + result.exitCode() + "): "
+                    + result.stdout() + result.stderr());
         }
     }
 
@@ -54,6 +42,20 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
      */
     protected Process startProcess(List<String> command) throws IOException {
         return new ProcessBuilder(command).start();
+    }
+
+    protected BoundedCommandExecution.Result runCommand(List<String> command)
+            throws IOException, InterruptedException {
+        return BoundedCommandExecution.run(command, 64 * 1024, streamThreads);
+    }
+
+    private static int streamThreads = BoundedCommandExecution.DEFAULT_STREAM_THREADS;
+
+    public static void setStreamThreads(int threads) {
+        if (threads <= 0) {
+            throw new IllegalArgumentException("streamThreads must be positive");
+        }
+        streamThreads = threads;
     }
 }
 

@@ -25,7 +25,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication appWithErr = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8)),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -42,7 +42,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -58,7 +58,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -104,7 +104,7 @@ class CliApplicationTest {
                         return "ok";
                     };
                 },
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
         );
@@ -128,7 +128,7 @@ class CliApplicationTest {
         ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(outBuf, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
         );
@@ -147,7 +147,7 @@ class CliApplicationTest {
                     refSeen.set(ref);
                     return "ok";
                 },
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
         );
@@ -168,7 +168,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -190,7 +190,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -210,7 +210,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -230,7 +230,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -255,7 +255,7 @@ class CliApplicationTest {
 
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -278,7 +278,7 @@ class CliApplicationTest {
 
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -298,7 +298,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );

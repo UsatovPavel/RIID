@@ -28,6 +28,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import static java.util.Base64.getEncoder;
+
 /**
  * Handles ping + Bearer token fetching with caching.
  */
@@ -129,7 +131,7 @@ public class AuthService {
                 creds.identityTokenOpt().ifPresent(id -> headers.put("Authorization", "Bearer " + id));
                 if (headers.isEmpty()) {
                     String basic = creds.usernameOpt().orElse("") + ":" + creds.passwordOpt().orElse("");
-                    String enc = java.util.Base64.getEncoder()
+                    String enc = getEncoder()
                             .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
                     headers.put("Authorization", "Basic " + enc);
                 }

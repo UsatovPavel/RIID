@@ -1,5 +1,7 @@
 package riid.dispatcher;
 
+import riid.cache.oci.ImageDigest;
+import riid.client.core.model.manifest.MediaType;
 import java.util.Objects;
 
 /**
@@ -13,7 +15,10 @@ public final class NoOpRequestDispatcher implements RequestDispatcher {
     }
 
     @Override
-    public FetchResult fetchLayer(String repository, String digest, long sizeBytes, String mediaType) {
+    public FetchResult fetchLayer(String repository,
+                                  ImageDigest digest,
+                                  long sizeBytes,
+                                  MediaType mediaType) {
         throw new UnsupportedOperationException("Dispatcher not implemented");
     }
 }

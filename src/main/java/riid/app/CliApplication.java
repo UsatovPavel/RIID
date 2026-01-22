@@ -1,6 +1,9 @@
 package riid.app;
 
 import riid.client.core.config.Credentials;
+import riid.client.core.config.RegistryEndpoint;
+import riid.config.AppConfig;
+import riid.config.ConfigLoader;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.IOException;
@@ -15,7 +18,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Minimal CLI parser/runner for ImageLoadService.
+ * Minimal CLI parser/runner for ImageLoadFacade.
  */
 public final class CliApplication {
     // package-visible for tests
@@ -45,13 +48,27 @@ public final class CliApplication {
     public static CliApplication createDefault() {
         return new CliApplication(
                 options -> {
-                    ImageLoadService service = ImageLoadServiceFactory.createFromConfig(
+                    AppConfig config = ConfigLoader.load(options.configPath());
+                    RegistryEndpoint endpoint = config.client().registries().getFirst();
+                    if (options.credentials() != null) {
+                        endpoint = new RegistryEndpoint(
+                                endpoint.scheme(),
+                                endpoint.host(),
+                                endpoint.port(),
+                                options.credentials()
+                        );
+                    }
+                    ImageLoadFacade facade = ImageLoadFacade.createFromConfig(
                             options.configPath(),
                             options.credentials()
                     );
-                    return service::load;
+                    String registry = ImageId.registryFor(endpoint);
+                    return (repository, reference, runtimeId) -> facade.load(
+                            ImageId.fromRegistry(registry, repository, reference),
+                            runtimeId
+                    );
                 },
-                ImageLoadServiceFactory.defaultRuntimes(),
+                ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true)
         );
@@ -122,7 +139,7 @@ public final class CliApplication {
         writer.flush();
     }
 
-    record CliOptions(Path configPath,
+    public record CliOptions(Path configPath,
                       String repository,
                       String reference,
                       String runtimeId,
@@ -278,12 +295,12 @@ public final class CliApplication {
     }
 
     @FunctionalInterface
-    interface ServiceFactory {
+    public interface ServiceFactory {
         ImageLoader create(CliOptions options) throws Exception;
     }
 
     @FunctionalInterface
-    interface ImageLoader {
+    public interface ImageLoader {
         String load(String repository, String reference, String runtimeId);
     }
 }

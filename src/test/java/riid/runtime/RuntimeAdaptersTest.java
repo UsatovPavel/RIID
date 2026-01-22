@@ -2,10 +2,7 @@ package riid.runtime;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -88,8 +85,8 @@ class RuntimeAdaptersTest {
         }
 
         @Override
-        protected Process startProcess(List<String> command) {
-            return new FakeProcess(exitCode, stdout, stderr);
+        protected BoundedCommandExecution.Result runCommand(List<String> command) {
+            return new BoundedCommandExecution.Result(exitCode, stdout, stderr);
         }
     }
 
@@ -106,51 +103,12 @@ class RuntimeAdaptersTest {
         }
 
         @Override
-        protected Process startProcess(List<String> command) {
-            return new FakeProcess(exitCode, stdout, stderr);
+        protected BoundedCommandExecution.Result runCommand(List<String> command) {
+            return new BoundedCommandExecution.Result(exitCode, stdout, stderr);
         }
     }
 
-    private static final class FakeProcess extends Process {
-        private final int exitCode;
-        private final byte[] out;
-        private final byte[] err;
-
-        private FakeProcess(int exitCode, String stdout, String stderr) {
-            this.exitCode = exitCode;
-            this.out = stdout.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            this.err = stderr.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        }
-
-        @Override
-        public OutputStream getOutputStream() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public InputStream getInputStream() {
-            return new ByteArrayInputStream(out);
-        }
-
-        @Override
-        public InputStream getErrorStream() {
-            return new ByteArrayInputStream(err);
-        }
-
-        @Override
-        public int waitFor() {
-            return exitCode;
-        }
-
-        @Override
-        public int exitValue() {
-            return exitCode;
-        }
-
-        @Override
-        public void destroy() {
-            // no-op
-        }
-    }
 }
+
+
 

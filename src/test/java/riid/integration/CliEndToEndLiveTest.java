@@ -1,7 +1,11 @@
-package riid.app;
+package riid.integration;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import riid.app.CliApplication;
+import riid.app.ImageId;
+import riid.app.ImageLoadFacade;
+import riid.app.fs.HostFilesystemTestSupport;
 import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
 import riid.config.ConfigLoader;
@@ -20,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Full-flow smoke: CLI args -> ConfigLoader -> ImageLoadServiceFactory -> dispatcher -> registry -> runtime (stub).
+ * Full-flow smoke: CLI args -> ConfigLoader -> ImageLoadFacade -> dispatcher -> registry -> runtime (stub).
  * Live: hits Docker Hub for library/busybox:latest.
  */
 @Tag("e2e")
@@ -50,14 +54,18 @@ class CliEndToEndLiveTest {
                 opts -> {
                     var cfg = ConfigLoader.load(opts.configPath());
                     RegistryEndpoint endpoint = cfg.client().registries().getFirst();
-                    var svc = ImageLoadService.createDefault(
+                    var svc = ImageLoadFacade.createDefault(
                             endpoint,
                             new TempFileCacheAdapter(),
                             new P2PExecutor.NoOp(),
                             Map.of(runtime.runtimeId(), runtime),
-                            cfg.client().auth().defaultTokenTtlSeconds()
+                            HostFilesystemTestSupport.create()
                     );
-                    return svc::load;
+                    String registry = ImageId.registryFor(endpoint);
+                    return (repo, ref, runtimeId) -> svc.load(
+                            ImageId.fromRegistry(registry, repo, ref),
+                            runtimeId
+                    );
                 },
                 Map.of(runtime.runtimeId(), runtime),
                 new PrintWriter(new OutputStreamWriter(outBuf, java.nio.charset.StandardCharsets.UTF_8), true),
