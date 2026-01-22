@@ -1,11 +1,10 @@
 package riid.app;
 
-import org.junit.jupiter.api.Test;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import org.junit.jupiter.api.Test;
 
 class ImageLoadFacadeFactoryTest {
 
@@ -25,8 +24,9 @@ class ImageLoadFacadeFactoryTest {
         Path tmp = Files.createTempFile("config-", ".yaml");
         Files.writeString(tmp, yaml);
 
-        ImageLoadFacade svc = ImageLoadFacade.createFromConfig(tmp);
-        assertNotNull(svc);
+        try (ImageLoadFacade svc = ImageLoadFacade.createFromConfig(tmp)) {
+            assertNotNull(svc);
+        }
     }
 }
 

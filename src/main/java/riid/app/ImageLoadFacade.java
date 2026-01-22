@@ -37,23 +37,33 @@ import riid.runtime.RuntimeAdapter;
  * Application entrypoint/facade: load image (dispatcher -> OCI -> runtime), optionally run.
  * Not a god-class: it wires existing components and delegates real work to them.
  */
-public final class ImageLoadFacade {
+public final class ImageLoadFacade implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadFacade.class);
 
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
+    private final CacheCloser cacheCloser;
     public ImageLoadFacade(RequestDispatcher dispatcher, RuntimeRegistry runtimeRegistry, RegistryClient client) {
-        this(dispatcher, runtimeRegistry, client, new NioHostFilesystem(null));
+        this(dispatcher, runtimeRegistry, client, new NioHostFilesystem(null), null);
     }
 
     public ImageLoadFacade(RequestDispatcher dispatcher,
                            RuntimeRegistry runtimeRegistry,
                            RegistryClient client,
                            HostFilesystem fs) {
+        this(dispatcher, runtimeRegistry, client, fs, null);
+    }
+
+    public ImageLoadFacade(RequestDispatcher dispatcher,
+                           RuntimeRegistry runtimeRegistry,
+                           RegistryClient client,
+                           HostFilesystem fs,
+                           CacheCloser cacheCloser) {
         this.archiveBuilder = new OciArchiveBuilder(dispatcher, fs);
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.client = Objects.requireNonNull(client, "client");
+        this.cacheCloser = cacheCloser;
     }
 
     /**
@@ -105,7 +115,7 @@ public final class ImageLoadFacade {
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
         RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
-        return new ImageLoadFacade(dispatcher, registry, client, fs);
+        return new ImageLoadFacade(dispatcher, registry, client, fs, null);
     }
 
     /**
@@ -152,7 +162,7 @@ public final class ImageLoadFacade {
                 ? new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), dispatcherConfig)
                 : new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp());
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
-        return new ImageLoadFacade(dispatcher, registry, client, fs);
+        return new ImageLoadFacade(dispatcher, registry, client, fs, cache::close);
     }
 
     /**
@@ -165,6 +175,35 @@ public final class ImageLoadFacade {
         return Map.copyOf(runtimes);
     }
 
+    @Override
+    public void close() throws IOException {
+        IOException error = null;
+        try {
+            client.close();
+        } catch (Exception e) {
+            error = new IOException("Failed to close registry client", e);
+        }
+        if (cacheCloser != null) {
+            try {
+                cacheCloser.close();
+            } catch (Exception e) {
+                IOException cacheError = new IOException("Failed to close cache adapter", e);
+                if (error == null) {
+                    error = cacheError;
+                } else {
+                    error.addSuppressed(cacheError);
+                }
+            }
+        }
+        if (error != null) {
+            throw error;
+        }
+    }
+
+    @FunctionalInterface
+    public interface CacheCloser {
+        void close() throws Exception;
+    }
 }
 
 

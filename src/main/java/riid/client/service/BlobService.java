@@ -72,9 +72,13 @@ public class BlobService implements BlobServiceApi {
         HttpResult<InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
         if (status < 200 || status >= 300) {
+            String location = resp.firstHeader("Location").orElse(null);
+            String detail = location != null
+                    ? " (location=" + location + ")"
+                    : "";
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Blob fetch failed"),
-                    "Blob fetch failed: " + status);
+                    "Blob fetch failed: " + status + detail);
         }
 
         long expectedSize = req.expectedSizeBytes() != null

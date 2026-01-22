@@ -1,11 +1,5 @@
 package riid.app;
 
-import riid.client.core.config.Credentials;
-import riid.client.core.config.RegistryEndpoint;
-import riid.config.AppConfig;
-import riid.config.ConfigLoader;
-import riid.runtime.RuntimeAdapter;
-
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -16,6 +10,12 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import riid.client.core.config.Credentials;
+import riid.client.core.config.RegistryEndpoint;
+import riid.config.AppConfig;
+import riid.config.ConfigLoader;
+import riid.runtime.RuntimeAdapter;
 
 /**
  * Minimal CLI parser/runner for ImageLoadFacade.
@@ -58,15 +58,20 @@ public final class CliApplication {
                                 options.credentials()
                         );
                     }
-                    ImageLoadFacade facade = ImageLoadFacade.createFromConfig(
-                            options.configPath(),
-                            options.credentials()
-                    );
                     String registry = ImageId.registryFor(endpoint);
-                    return (repository, reference, runtimeId) -> facade.load(
-                            ImageId.fromRegistry(registry, repository, reference),
-                            runtimeId
-                    );
+                    return (repository, reference, runtimeId) -> {
+                        try (ImageLoadFacade facade = ImageLoadFacade.createFromConfig(
+                                options.configPath(),
+                                options.credentials()
+                        )) {
+                            return facade.load(
+                                    ImageId.fromRegistry(registry, repository, reference),
+                                    runtimeId
+                            );
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to load image", e);
+                        }
+                    };
                 },
                 ImageLoadFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),

@@ -30,18 +30,20 @@ class ImageLoadFacadeErrorTest {
     private static final String NOT_USED = "Not used";
 
     @Test
-    void loadWrapsIOExceptionAsAppError() {
+    void loadWrapsIOExceptionAsAppError() throws Exception {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
-        ImageLoadFacade facade = new ImageLoadFacade(new NoopDispatcher(), new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(), fs);
-
+        try (ImageLoadFacade facade = new ImageLoadFacade(new NoopDispatcher(),
+                new RuntimeRegistry(java.util.Map.of()),
+                new NoopRegistryClient(),
+                fs)) {
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new NoopRuntime(), imageId));
         assertTrue(ex.error() instanceof AppError.Runtime);
         assertEquals(AppError.RuntimeKind.LOAD_FAILED, ((AppError.Runtime) ex.error()).kind());
+        }
     }
 
     @Test
@@ -53,15 +55,17 @@ class ImageLoadFacadeErrorTest {
         Files.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
         HostFilesystem fs = new NioHostFilesystem(null);
-        ImageLoadFacade facade = new ImageLoadFacade(dispatcher, new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(), fs);
-
+        try (ImageLoadFacade facade = new ImageLoadFacade(dispatcher,
+                new RuntimeRegistry(java.util.Map.of()),
+                new NoopRegistryClient(),
+                fs)) {
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));
         assertTrue(ex.error() instanceof AppError.Runtime);
         assertEquals(AppError.RuntimeKind.LOAD_FAILED, ((AppError.Runtime) ex.error()).kind());
         assertTrue(Thread.currentThread().isInterrupted());
         Thread.interrupted(); // clear for other tests
+        }
     }
 
     private static ManifestResult minimalManifestResult() {

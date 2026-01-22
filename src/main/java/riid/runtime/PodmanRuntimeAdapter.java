@@ -46,16 +46,16 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
 
     protected BoundedCommandExecution.Result runCommand(List<String> command)
             throws IOException, InterruptedException {
-        return BoundedCommandExecution.run(command, 64 * 1024, streamThreads);
+        return BoundedCommandExecution.run(command, 64 * 1024, STREAM_THREADS);
     }
 
-    private static int streamThreads = BoundedCommandExecution.DEFAULT_STREAM_THREADS;
+    private static int STREAM_THREADS = BoundedCommandExecution.DEFAULT_STREAM_THREADS;
 
     public static void setStreamThreads(int threads) {
         if (threads <= 0) {
             throw new IllegalArgumentException("streamThreads must be positive");
         }
-        streamThreads = threads;
+        STREAM_THREADS = threads;
     }
 }
 

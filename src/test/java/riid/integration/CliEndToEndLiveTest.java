@@ -83,13 +83,16 @@ class CliEndToEndLiveTest {
             fail("CLI exit code " + code + "\nSTDOUT:\n" + outBuf + "\nSTDERR:\n" + errBuf);
         }
         assertTrue(runtime.called.get(), "runtime should be invoked");
-        assertTrue(Files.exists(runtime.lastArchive), "archive must exist");
-        assertTrue(Files.size(runtime.lastArchive) > 0, "archive must be non-empty");
+        assertTrue(runtime.archiveExisted.get(), "archive must exist during import");
+        assertTrue(runtime.archiveSize > 0, "archive must be non-empty");
+        assertTrue(runtime.lastArchive != null, "archive path should be recorded");
     }
 
     private static final class RecordingRuntimeAdapter implements RuntimeAdapter {
         private final AtomicBoolean called = new AtomicBoolean(false);
+        private final AtomicBoolean archiveExisted = new AtomicBoolean(false);
         private Path lastArchive;
+        private long archiveSize;
 
         @Override
         public String runtimeId() {
@@ -100,6 +103,12 @@ class CliEndToEndLiveTest {
         public void importImage(Path archive) {
             this.called.set(true);
             this.lastArchive = archive;
+            this.archiveExisted.set(Files.exists(archive));
+            try {
+                this.archiveSize = Files.size(archive);
+            } catch (Exception ignored) {
+                this.archiveSize = 0L;
+            }
         }
     }
 }

@@ -1,16 +1,16 @@
 package riid.config;
 
-import riid.client.core.config.AuthConfig;
-import riid.client.core.config.ClientConfig;
-import riid.client.core.config.RegistryEndpoint;
-import riid.client.http.HttpClientConfig;
-import riid.dispatcher.DispatcherConfig;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+
+import riid.client.core.config.AuthConfig;
+import riid.client.core.config.ClientConfig;
+import riid.client.core.config.RegistryEndpoint;
+import riid.client.http.HttpClientConfig;
+import riid.dispatcher.DispatcherConfig;
 
 /**
  * Validates application configuration.
@@ -30,6 +30,9 @@ public final class ConfigValidator {
             throw new ConfigValidationException(ConfigValidationException.Reason.MISSING_DISPATCHER.message());
         }
         validateApp(config.app());
+        if (client.registriesMissing()) {
+            throw new ConfigValidationException(ConfigValidationException.Reason.MISSING_REGISTRIES.message());
+        }
         validateRegistries(client.registries());
         validateHttp(client.http());
         validateAuth(client.auth());

@@ -78,18 +78,25 @@ public class HttpExecutor {
                                                          URI uri,
                                                          Map<String, String> headers) throws IOException {
         URI current = uri;
+        Map<String, String> currentHeaders = headers;
         int redirects = 0;
         while (true) {
-            HttpResult<InputStream> resp = execute(method, current, headers);
+            HttpResult<InputStream> resp = execute(method, current, currentHeaders);
             Optional<String> location = resp.firstHeader("Location");
             if (location.isEmpty() || !REDIRECT_STATUSES.contains(resp.statusCode())) {
                 return resp;
             }
             closeQuietly(resp.body());
-            if (redirects++ >= MAX_REDIRECTS) {
+            if (redirects >= MAX_REDIRECTS) {
                 return resp;
             }
-            current = current.resolve(location.get());
+            redirects++;
+            URI next = current.resolve(location.get());
+            if (!sameOrigin(current, next)) {
+                currentHeaders = new java.util.LinkedHashMap<>(currentHeaders);
+                currentHeaders.remove("Authorization");
+            }
+            current = next;
         }
     }
 
@@ -189,6 +196,15 @@ public class HttpExecutor {
         } catch (IOException ignored) {
             // best effort for redirect responses
         }
+    }
+
+    private static boolean sameOrigin(URI a, URI b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return Objects.equals(a.getScheme(), b.getScheme())
+                && Objects.equals(a.getHost(), b.getHost())
+                && a.getPort() == b.getPort();
     }
 
     public static String rangeHeader(long startInclusive, Long endInclusive) {

@@ -1,10 +1,10 @@
 package riid.client.core.config;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import riid.client.http.HttpClientConfig;
+import java.util.List;
 
-import java.util.List;
-import java.util.List;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import riid.client.http.HttpClientConfig;
 
 /**
  * Aggregated client module configuration.
@@ -23,8 +23,12 @@ public record ClientConfig(
     @Override
     public List<RegistryEndpoint> registries() {
         if (registries == null) {
-            return null;
+            return java.util.List.of();
         }
         return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(registries));
+    }
+
+    public boolean registriesMissing() {
+        return registries == null;
     }
 }

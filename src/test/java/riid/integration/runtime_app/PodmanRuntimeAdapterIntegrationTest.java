@@ -54,9 +54,10 @@ class PodmanRuntimeAdapterIntegrationTest {
                 """;
         Files.writeString(configPath, configYaml);
 
-        var app = ImageLoadFacade.createFromConfig(configPath);
+        try (var app = ImageLoadFacade.createFromConfig(configPath)) {
         ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
         refName = app.load(imageId, PODMAN);
+        }
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
                 .redirectErrorStream(true)
@@ -77,17 +78,17 @@ class PodmanRuntimeAdapterIntegrationTest {
     void oneShotLoadAndRun() throws Exception {
         // Build app with podman runtime only; dispatcher falls back to registry
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        var app = ImageLoadFacade.createDefault(
+        try (var app = ImageLoadFacade.createDefault(
                 endpoint,
                 new TempFileCacheAdapter(),
                 new P2PExecutor.NoOp(),
                 java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()),
-                HostFilesystemTestSupport.create());
-
+                HostFilesystemTestSupport.create())) {
         ImageId imageId = ImageId.fromRegistry(ImageId.registryFor(endpoint), REPO, REF);
         String refName = app.load(imageId, "podman");
         // Verify the image can run a trivial command
         run(List.of(PODMAN, "run", "--rm", refName, "true"));
+        }
     }
 
     private static void run(List<String> cmd) throws Exception {
