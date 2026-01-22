@@ -27,6 +27,7 @@ import riid.runtime.RuntimeAdapter;
 class ImageLoadFacadeErrorTest {
     private static final String DIGEST = "sha256:" + "a".repeat(64);
     private static final ImageDigest IMG_DIGEST = ImageDigest.parse(DIGEST);
+    private static final String NOT_USED = "Not used";
 
     @Test
     void loadWrapsIOExceptionAsAppError() {
@@ -72,27 +73,27 @@ class ImageLoadFacadeErrorTest {
     private static final class NoopRegistryClient implements riid.client.api.RegistryClient {
         @Override
         public ManifestResult fetchManifest(String repository, String reference) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
 
         @Override
         public riid.client.api.BlobResult fetchConfig(String repository, Manifest manifest, java.io.File target) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
 
         @Override
         public riid.client.api.BlobResult fetchBlob(riid.client.api.BlobRequest request, java.io.File target) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
 
         @Override
         public java.util.Optional<Long> headBlob(String repository, String digest) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
 
         @Override
         public riid.client.core.model.manifest.TagList listTags(String repository, Integer n, String last) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
 
         @Override
@@ -102,7 +103,7 @@ class ImageLoadFacadeErrorTest {
     private static final class NoopDispatcher implements RequestDispatcher {
         @Override
         public FetchResult fetchImage(ImageRef ref) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
 
         @Override
@@ -110,7 +111,7 @@ class ImageLoadFacadeErrorTest {
                                      riid.cache.ImageDigest digest,
                                      long sizeBytes,
                                      MediaType mediaType) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
     }
 
@@ -123,7 +124,7 @@ class ImageLoadFacadeErrorTest {
 
         @Override
         public FetchResult fetchImage(ImageRef ref) {
-            throw new UnsupportedOperationException("Not used");
+            throw new UnsupportedOperationException(NOT_USED);
         }
 
         @Override

@@ -62,7 +62,7 @@ public final class ImageLoadFacade {
     public String load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
         ManifestResult manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
-        RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
+            RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
         ImageId resolved = imageId.withDigest(manifestResult.digest());
         return load(manifestResult, runtime, resolved);
     }
@@ -122,7 +122,11 @@ public final class ImageLoadFacade {
 
         Path tempDir = config.app() != null ? config.app().tempDirPath() : null;
         HostFilesystem fs = new NioHostFilesystem(tempDir);
-
+        if (config.app() != null) {
+            int threads = config.app().streamThreadsOrDefault();
+            riid.runtime.PodmanRuntimeAdapter.setStreamThreads(threads);
+            riid.runtime.PortoRuntimeAdapter.setStreamThreads(threads);
+        }
         return createDefault(endpoint, cache, new P2PExecutor.NoOp(), runtimes, fs);
     }
 

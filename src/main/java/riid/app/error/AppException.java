@@ -8,20 +8,20 @@ import java.util.Objects;
 public class AppException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
-    private final AppError error;
+    private final AppError appError;
 
     public AppException(AppError error, String message) {
         super(message);
-        this.error = Objects.requireNonNull(error, "error");
+        this.appError = Objects.requireNonNull(error, "error");
     }
 
     public AppException(AppError error, String message, Throwable cause) {
         super(message, cause);
-        this.error = Objects.requireNonNull(error, "error");
+        this.appError = Objects.requireNonNull(error, "error");
     }
 
     public AppError error() {
-        return error;
+        return appError;
     }
 }
 

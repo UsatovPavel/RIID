@@ -17,28 +17,34 @@ import java.util.concurrent.Future;
  */
 public final class BoundedCommandExecution {
     private static final int DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
+    public static final int DEFAULT_STREAM_THREADS = 2;
 
     private BoundedCommandExecution() { }
 
     public static Result run(List<String> command) throws IOException, InterruptedException {
-        return run(command, DEFAULT_MAX_OUTPUT_BYTES);
+        return run(command, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_STREAM_THREADS);
     }
 
     public static Result run(List<String> command, int maxOutputBytes) throws IOException, InterruptedException {
+        return run(command, maxOutputBytes, DEFAULT_STREAM_THREADS);
+    }
+
+    public static Result run(List<String> command, int maxOutputBytes, int streamThreads)
+            throws IOException, InterruptedException {
         Objects.requireNonNull(command, "command");
         if (maxOutputBytes <= 0) {
             throw new IllegalArgumentException("maxOutputBytes must be positive");
         }
+        if (streamThreads <= 0) {
+            throw new IllegalArgumentException("streamThreads must be positive");
+        }
 
         Process process = new ProcessBuilder(command).start();
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        try {
+        try (ExecutorService executor = Executors.newFixedThreadPool(streamThreads)) {
             Future<String> stdout = executor.submit(streamReader(process.getInputStream(), maxOutputBytes));
             Future<String> stderr = executor.submit(streamReader(process.getErrorStream(), maxOutputBytes));
             int exitCode = process.waitFor();
             return new Result(exitCode, get(stdout), get(stderr));
-        } finally {
-            executor.shutdownNow();
         }
     }
 
@@ -46,9 +52,9 @@ public final class BoundedCommandExecution {
         return () -> {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buffer = new byte[4096];
-            int read;
             int total = 0;
-            while ((read = stream.read(buffer)) != -1) {
+            int read = stream.read(buffer);
+            while (read != -1) {
                 int remaining = maxBytes - total;
                 if (remaining <= 0) {
                     break;
@@ -56,6 +62,7 @@ public final class BoundedCommandExecution {
                 int toWrite = Math.min(read, remaining);
                 out.write(buffer, 0, toWrite);
                 total += toWrite;
+                read = stream.read(buffer);
             }
             return out.toString(StandardCharsets.UTF_8);
         };

@@ -1,10 +1,12 @@
 package riid.app;
+
 import java.util.Map;
 
 import riid.dispatcher.ImageRef;
 
 final class RiidEnv {
-    private static volatile Map<String, String> envOverride;
+    private static volatile Map<String, String> ENV_OVERRIDE = Map.of();
+    private static volatile boolean OVERRIDE_ENABLED;
 
     private RiidEnv() { }
 
@@ -22,10 +24,8 @@ final class RiidEnv {
                 tag = ref;
             }
         }
-        if (tag != null && tag.isBlank()) {
-            tag = null;
-        }
-        return new ImageRef(repo, tag, digest);
+        String tagValue = normalizeTag(tag);
+        return new ImageRef(repo, tagValue, digest);
     }
 
     static String cacheDir() {
@@ -41,7 +41,8 @@ final class RiidEnv {
      */
     static void setEnvForTests(Map<String, String> env) {
         if (env == null) {
-            envOverride = null;
+            OVERRIDE_ENABLED = false;
+            ENV_OVERRIDE = Map.of();
             return;
         }
         Map<String, String> sanitized = new java.util.HashMap<>();
@@ -50,13 +51,21 @@ final class RiidEnv {
                 sanitized.put(entry.getKey(), entry.getValue());
             }
         }
-        envOverride = Map.copyOf(sanitized);
+        ENV_OVERRIDE = Map.copyOf(sanitized);
+        OVERRIDE_ENABLED = true;
     }
 
     private static Map<String, String> env() {
-        if (envOverride != null) {
-            return envOverride;
+        if (OVERRIDE_ENABLED) {
+            return ENV_OVERRIDE;
         }
         return System.getenv();
+    }
+
+    private static String normalizeTag(String tag) {
+        if (tag == null || tag.isBlank()) {
+            return null;
+        }
+        return tag;
     }
 }

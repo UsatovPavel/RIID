@@ -14,7 +14,10 @@ public final class NoOpRequestDispatcher implements RequestDispatcher {
     }
 
     @Override
-    public FetchResult fetchLayer(String repository, riid.cache.ImageDigest digest, long sizeBytes, MediaType mediaType) {
+    public FetchResult fetchLayer(String repository,
+                                  riid.cache.ImageDigest digest,
+                                  long sizeBytes,
+                                  MediaType mediaType) {
         throw new UnsupportedOperationException("Dispatcher not implemented");
     }
 }

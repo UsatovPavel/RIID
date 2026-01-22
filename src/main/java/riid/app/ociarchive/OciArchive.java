@@ -12,26 +12,26 @@ import java.util.Objects;
  * OCI archive with cleanup support.
  */
 public final class OciArchive implements AutoCloseable {
-    private final Path archivePath;
-    private final Path ociDir;
+    private final Path archiveFile;
+    private final Path ociDirPath;
 
     public OciArchive(Path archivePath, Path ociDir) {
-        this.archivePath = Objects.requireNonNull(archivePath, "archivePath");
-        this.ociDir = Objects.requireNonNull(ociDir, "ociDir");
+        this.archiveFile = Objects.requireNonNull(archivePath, "archivePath");
+        this.ociDirPath = Objects.requireNonNull(ociDir, "ociDir");
     }
 
     public Path archivePath() {
-        return archivePath;
+        return archiveFile;
     }
 
     public Path ociDir() {
-        return ociDir;
+        return ociDirPath;
     }
 
     @Override
     public void close() throws IOException {
-        Files.deleteIfExists(archivePath);
-        deleteRecursively(ociDir);
+        Files.deleteIfExists(archiveFile);
+        deleteRecursively(ociDirPath);
     }
 
     private static void deleteRecursively(Path root) throws IOException {

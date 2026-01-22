@@ -99,7 +99,8 @@ public final class OciArchiveBuilder {
     }
     
     private static String readResource(String path) throws OciArchiveException {
-        try (var in = OciArchiveBuilder.class.getClassLoader().getResourceAsStream(path)) {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        try (var in = loader.getResourceAsStream(path)) {
             if (in == null) {
                 String msg = AppError.OciKind.RESOURCE_NOT_FOUND.format(path);
                 throw new OciArchiveException(

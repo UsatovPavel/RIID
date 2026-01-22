@@ -10,6 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 class RiidEnvTest {
+    private static final String ENV_REPO = "RIID_REPO";
+    private static final String ENV_TAG = "RIID_TAG";
+    private static final String ENV_REF = "RIID_REF";
+    private static final String ENV_DIGEST = "RIID_DIGEST";
+    private static final String ENV_CACHE_DIR = "RIID_CACHE_DIR";
     private final Map<String, String> original = new HashMap<>();
 
     @AfterEach
@@ -21,47 +26,47 @@ class RiidEnvTest {
 
     @Test
     void repoDefaultsWhenEnvMissing() {
-        setEnv("RIID_REPO", null);
+        setEnv(ENV_REPO, null);
         var ref = RiidEnv.imageRef();
         assertEquals("library/busybox", ref.repository());
     }
 
     @Test
     void tagPrefersTagThenRef() {
-        setEnv("RIID_TAG", "v1");
-        setEnv("RIID_REF", "latest");
+        setEnv(ENV_TAG, "v1");
+        setEnv(ENV_REF, "latest");
         assertEquals("v1", RiidEnv.imageRef().tag());
 
-        setEnv("RIID_TAG", null);
-        setEnv("RIID_REF", "ref-tag");
+        setEnv(ENV_TAG, null);
+        setEnv(ENV_REF, "ref-tag");
         assertEquals("ref-tag", RiidEnv.imageRef().tag());
     }
 
     @Test
     void digestPrefersDigestThenRefSha() {
-        setEnv("RIID_DIGEST", "sha256:abc");
-        setEnv("RIID_REF", "sha256:def");
+        setEnv(ENV_DIGEST, "sha256:abc");
+        setEnv(ENV_REF, "sha256:def");
         assertEquals("sha256:abc", RiidEnv.imageRef().digest());
 
-        setEnv("RIID_DIGEST", null);
-        setEnv("RIID_REF", "sha256:def");
+        setEnv(ENV_DIGEST, null);
+        setEnv(ENV_REF, "sha256:def");
         assertEquals("sha256:def", RiidEnv.imageRef().digest());
 
-        setEnv("RIID_REF", "latest");
+        setEnv(ENV_REF, "latest");
         assertNull(RiidEnv.imageRef().digest());
     }
 
     @Test
     void cacheDirRequiresValue() {
-        setEnv("RIID_CACHE_DIR", null);
+        setEnv(ENV_CACHE_DIR, null);
         IllegalStateException ex1 = assertThrows(IllegalStateException.class, RiidEnv::cacheDir);
         assertEquals("RIID_CACHE_DIR is not set", ex1.getMessage());
 
-        setEnv("RIID_CACHE_DIR", " ");
+        setEnv(ENV_CACHE_DIR, " ");
         IllegalStateException ex2 = assertThrows(IllegalStateException.class, RiidEnv::cacheDir);
         assertEquals("RIID_CACHE_DIR is not set", ex2.getMessage());
 
-        setEnv("RIID_CACHE_DIR", "/tmp/cache");
+        setEnv(ENV_CACHE_DIR, "/tmp/cache");
         assertEquals("/tmp/cache", RiidEnv.cacheDir());
     }
 

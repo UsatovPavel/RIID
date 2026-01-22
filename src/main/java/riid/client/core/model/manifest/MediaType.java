@@ -17,14 +17,14 @@ public enum MediaType {
     DOCKER_IMAGE_LAYER_GZIP(MediaTypes.DOCKER_IMAGE_LAYER_GZIP),
     GENERIC_OCTET_STREAM("application/octet-stream");
 
-    private final String value;
+    private final String mediaType;
 
     MediaType(String value) {
-        this.value = value;
+        this.mediaType = value;
     }
 
     public String value() {
-        return value;
+        return mediaType;
     }
 
     public static MediaType from(String raw) {
@@ -32,7 +32,7 @@ public enum MediaType {
             throw new IllegalArgumentException("mediaType is blank");
         }
         for (MediaType type : values()) {
-            if (type.value.equals(raw)) {
+            if (type.mediaType.equals(raw)) {
                 return type;
             }
         }
