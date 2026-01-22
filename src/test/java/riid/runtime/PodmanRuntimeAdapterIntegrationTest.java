@@ -12,9 +12,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.ImageLoadFacade;
+import riid.app.fs.HostFilesystemTestSupport;
 import riid.cache.TempFileCacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
-import riid.app.fs.NioHostFilesystem;
 import riid.p2p.P2PExecutor;
 
 @Tag("local")
@@ -80,7 +80,7 @@ class PodmanRuntimeAdapterIntegrationTest {
                 new TempFileCacheAdapter(),
                 new P2PExecutor.NoOp(),
                 java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()),
-                new NioHostFilesystem(null));
+                HostFilesystemTestSupport.create());
 
         String refName = app.load(REPO, REF, "podman");
         // Verify the image can run a trivial command

@@ -9,8 +9,8 @@ import java.util.Objects;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import riid.app.error.AppError;
 import riid.app.ImageId;
+import riid.app.error.AppError;
 import riid.app.error.OciArchiveException;
 import riid.app.fs.HostFilesystem;
 import riid.cache.ImageDigest;
@@ -91,6 +91,7 @@ public final class OciArchiveBuilder {
             throw new IOException("tar failed with exit " + code);
         }
     }
+    
     private static String readResource(String path) throws OciArchiveException {
         try (var in = OciArchiveBuilder.class.getClassLoader().getResourceAsStream(path)) {
             if (in == null) {

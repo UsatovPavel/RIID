@@ -6,18 +6,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * HostFilesystem for tests that isolates temp files in a dedicated directory.
+ * HostFilesystem helper for tests that isolates temp files in a dedicated directory.
  */
-public final class TestHostFilesystem implements HostFilesystem {
+public final class HostFilesystemTestSupport implements HostFilesystem {
     private final NioHostFilesystem delegate;
 
-    private TestHostFilesystem(Path baseTempDir) {
+    private HostFilesystemTestSupport(Path baseTempDir) {
         this.delegate = new NioHostFilesystem(baseTempDir);
     }
 
-    public static TestHostFilesystem create() throws IOException {
+    public static HostFilesystemTestSupport create() throws IOException {
         Path baseDir = Files.createTempDirectory("riid-test-fs");
-        return new TestHostFilesystem(baseDir);
+        return new HostFilesystemTestSupport(baseDir);
     }
 
     @Override
