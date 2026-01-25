@@ -8,11 +8,13 @@
 ## Tags / long-running
 - Live/registry/podman tests may need network or local runtimes; skip them when offline (e.g., `--exclude-task integrationTest` or selective `--tests`).
 - E2E/CLI tests often shell out; prefer running them explicitly when changing CLI/runtime glue.
+- Fuzzing tests live under `riid.fuzz` and are tagged `stress` (long-running / heavy).
 
 ## Commands
 - Fast cycle (unit only): `./gradlew test --tests "*unit*"`
 - Integration focus: `./gradlew test --tests "riid.integration.*"`
 - Full suite (if env ready: network, podman/porto): `./gradlew test`
+- Fuzzing only: `./gradlew testStress --tests "riid.fuzz.*"`
 
 ## Conventions
 - Name integration folders by the main modules touched (`runtime_app`, `client_cache`, `config_client`, `dispatcher_runtime`, etc.) for discoverability.

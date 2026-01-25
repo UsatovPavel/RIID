@@ -34,6 +34,8 @@ bin/
 
 ### VS Code ###
 .vscode/
+.jqwik-database
+.cifuzz-corpus
 ### Mac OS ###
 .DS_Store
 
