@@ -26,7 +26,11 @@
         <module name="AvoidStarImport"/>
         <module name="UnusedImports"/>
         <module name="RedundantImport"/>
-        <module name="IllegalImport"/>
+        <module name="IllegalImport">
+            <!--environment custom vars flaky and unsafe-->
+            <property name="illegalClasses"
+                      value="org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable"/>
+        </module>
 
         <!-- Braces and layout -->
         <module name="NeedBraces"/>

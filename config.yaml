@@ -7,6 +7,7 @@ client:
     initialBackoff: "PT0.2S"
     maxBackoff: "PT2S"
     retryIdempotentOnly: true
+    followRedirects: true
     userAgent: "riid-client"
   auth:
     defaultTokenTtlSeconds: 300

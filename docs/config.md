@@ -25,7 +25,7 @@ dispatcher:
 - client.http.maxBackoff = PT2S
 - client.http.retryIdempotentOnly = false
 - client.http.userAgent = riid-registry-client
-- client.http.followRedirects = false
+- client.http.followRedirects = true (для GHCR обязательно оставить включённым)
 - client.auth.defaultTokenTtlSeconds = 300
 - client.auth.certPath / keyPath / caPath = null
 - client.registries.size = 1
@@ -38,6 +38,7 @@ dispatcher:
 
 ### Known notes
 - Missing `registries` throws `ConfigValidationException`.
+- Для GHCR скачивание blob/manifest использует 302/307 CDN, поэтому `client.http.followRedirects` должен быть true (явно прописывать в config.yaml).
 
 ### Tests
 - `ConfigBranchTest`: validation branches (including maxRetries < 0, missing http/auth/registries/dispatcher).

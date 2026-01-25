@@ -2,7 +2,7 @@ package riid.runtime;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,17 +24,12 @@ class PortoRuntimeAdapterTest {
     }
 
     @Test
-    @Tag("local")
-    @EnabledIfEnvironmentVariable(named = "PORTO_LAYER_TAR", matches = ".*")
+    @Tag("porto")
     void importsLayerViaPortoctl() throws Exception {
         String tar = System.getenv("PORTO_LAYER_TAR");
-        if (tar == null) {
-            throw new IllegalStateException("PORTO_LAYER_TAR is not set");
-        }
+        assumeTrue(tar != null && !tar.isBlank(), "Set PORTO_LAYER_TAR to a layer archive");
         Path archive = Path.of(tar);
-        if (!Files.exists(archive)) {
-            throw new IOException("Layer archive missing: " + archive);
-        }
+        assumeTrue(Files.exists(archive), "Layer archive missing: " + archive);
         var fileName = archive.getFileName();
         if (fileName == null) {
             throw new IOException("Layer archive has no filename: " + archive);

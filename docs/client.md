@@ -2,7 +2,7 @@
 
 ### Config
 - Registry endpoints via `RegistryEndpoint` (scheme/host/port/creds); list provided by external config/Orchestrator.
-- HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, User-Agent).
+- HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, User-Agent, followRedirects=true для GHCR CDN 302/307).
 - Cache: external `CacheAdapter` (optional); client writes to cache after download. Source choice (cache/P2P/registry) is up to Orchestrator.
 
 ### Supported operations
