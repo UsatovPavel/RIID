@@ -26,6 +26,9 @@ dispatcher:
 - client.http.retryIdempotentOnly = false
 - client.http.userAgent = riid-registry-client
 - client.http.followRedirects = true (для GHCR обязательно оставить включённым)
+- client.range.mode = AUTO
+- client.range.partialValidation = SKIP
+- client.range.fallbackToFullOn416 = true
 - client.auth.defaultTokenTtlSeconds = 300
 - client.auth.certPath / keyPath / caPath = null
 - client.registries.size = 1

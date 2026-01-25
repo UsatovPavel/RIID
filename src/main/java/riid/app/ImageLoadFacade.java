@@ -21,6 +21,7 @@ import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.Credentials;
+import riid.client.core.config.RangeConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.config.AppConfig;
@@ -156,7 +157,8 @@ public final class ImageLoadFacade implements AutoCloseable {
         long ttl = config.client() != null && config.client().auth() != null
                 ? config.client().auth().defaultTokenTtlSeconds()
                 : riid.client.core.config.AuthConfig.DEFAULT_TTL_SECONDS;
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl);
+        RangeConfig rangeConfig = config.client() != null ? config.client().rangeOrDefault() : new RangeConfig();
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, rangeConfig);
         DispatcherConfig dispatcherConfig = config.dispatcher();
         RequestDispatcher dispatcher = dispatcherConfig != null
                 ? new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), dispatcherConfig)

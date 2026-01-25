@@ -1,19 +1,29 @@
 package riid.client.integration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.Optional;
+
 import org.eclipse.jetty.client.HttpClient;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.function.Executable;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
+import riid.client.core.config.BlockSize;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.http.HttpClientConfig;
@@ -23,25 +33,22 @@ import riid.client.service.AuthService;
 import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.util.Optional;
-
 /**
  * Integration test against a local registry:2, started via Testcontainers.
  * VPN sensitive
  */
 @Tag("local")
 @Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class RegistryLocalTest {
 
+    @SuppressWarnings("resource")
     @Container
     private static final GenericContainer<?> REGISTRY = new GenericContainer<>("registry:2")
             .withExposedPorts(5000);
 
     private static RegistryEndpoint LOCAL;
-    private static final String REPO = "hello-world";
+    private static final String REPO = "alpine";
     private static final String REF = "latest";
     private static final String SCOPE = "repository:%s:pull".formatted(REPO);
 
@@ -54,17 +61,24 @@ public class RegistryLocalTest {
     private final BlobService blobService = new BlobService(http, authService, null);
 
     @BeforeAll
+    @SuppressWarnings("unused")
     static void startRegistryAndSeed() throws Exception {
         REGISTRY.start();
         String host = REGISTRY.getHost();
         int port = REGISTRY.getMappedPort(5000);
         LOCAL = new RegistryEndpoint("http", host, port, null);
 
-        // Seed registry with hello-world using host docker
+        // Seed registry with alpine using host docker
         String localImage = "%s:%d/%s".formatted(host, port, REPO);
         run("docker", "pull", REPO);
         run("docker", "tag", REPO, localImage);
         run("docker", "push", localImage);
+    }
+
+    @AfterAll
+    @SuppressWarnings("unused")
+    void stopHttpClient() throws Exception {
+        httpClient.stop();
     }
 
     private static void run(String... cmd) throws IOException, InterruptedException {
@@ -95,14 +109,47 @@ public class RegistryLocalTest {
         BlobResult result = blobService.fetchBlob(LOCAL, req, tmp, SCOPE);
 
         Assertions.assertEquals(layer.digest(), result.digest(), "digest must match manifest");
-        Assertions.assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
+        Assertions.assertEquals(sizeOpt.get().longValue(), result.size(), "size must match HEAD");
         Assertions.assertTrue(tmp.length() > 0, "downloaded file should not be empty");
+    }
+
+    @Test
+    void fetchBlobWithRange() throws Exception {
+        ManifestResult manifest = manifestService.fetchManifest(LOCAL, REPO, REF, SCOPE);
+        var layer = manifest.manifest().layers().getFirst();
+
+        long total = layer.size();
+        long blockSize = BlockSize.MB1.bytes();
+        if (total <= blockSize) {
+            Assertions.fail("layer size must be > block size for range test");
+        }
+
+        long start = 0L;
+        long end = blockSize - 1;
+        long rangeLen = end - start + 1;
+
+        BlobRequest req = new BlobRequest(
+                REPO,
+                layer.digest(),
+                rangeLen,
+                layer.mediaType(),
+                new BlobRequest.RangeSpec(start, end)
+        );
+
+        File tmp = Files.createTempFile("local-layer-range", ".bin").toFile();
+        tmp.deleteOnExit();
+
+        BlobResult result = blobService.fetchBlob(LOCAL, req, tmp, SCOPE);
+
+        Assertions.assertEquals(rangeLen, result.size(), "partial size must match range length");
+        Assertions.assertEquals(rangeLen, tmp.length(), "file size must match range length");
     }
 
     @Test
     void manifestNotFoundReturns404() {
         Executable call = () -> manifestService.fetchManifest(LOCAL, "missing-repo", "missing", SCOPE);
-        Assertions.assertThrows(ClientException.class, call, "fetching missing manifest should throw");
+        var ex = Assertions.assertThrows(ClientException.class, call, "fetching missing manifest should throw");
+        Assertions.assertNotNull(ex.getMessage());
     }
 }
 

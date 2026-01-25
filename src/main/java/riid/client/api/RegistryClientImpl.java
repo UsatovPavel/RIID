@@ -5,6 +5,7 @@ import org.eclipse.jetty.client.HttpClient;
 import riid.cache.auth.TokenCache;
 import riid.cache.oci.CacheAdapter;
 import riid.client.core.config.AuthConfig;
+import riid.client.core.config.RangeConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.core.error.ClientError;
@@ -31,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Default RegistryClient implementation through jetty. Throw exception on close.
  */
-public final class RegistryClientImpl implements RegistryClient, AutoCloseable {
+public final class RegistryClientImpl implements RegistryClient {
     private static final String PULL_SCOPE_TEMPLATE = "repository:%s:pull";
 
     private final RegistryEndpoint endpoint;
@@ -46,20 +47,28 @@ public final class RegistryClientImpl implements RegistryClient, AutoCloseable {
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter) {
-        this(endpoint, httpConfig, cacheAdapter, AuthConfig.DEFAULT_TTL_SECONDS);
+        this(endpoint, httpConfig, cacheAdapter, AuthConfig.DEFAULT_TTL_SECONDS, null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds) {
+        this(endpoint, httpConfig, cacheAdapter, defaultTokenTtlSeconds, null);
+    }
+
+    public RegistryClientImpl(RegistryEndpoint endpoint,
+                              HttpClientConfig httpConfig,
+                              CacheAdapter cacheAdapter,
+                              long defaultTokenTtlSeconds,
+                              RangeConfig rangeConfig) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
         this.jettyClient = HttpClientFactory.create(httpConfig);
         this.http = new HttpExecutor(jettyClient, httpConfig);
         this.authService = new AuthService(http, mapper, new TokenCache(), defaultTokenTtlSeconds);
         this.manifestService = new ManifestService(http, authService, mapper);
-        this.blobService = new BlobService(http, authService, cacheAdapter);
+        this.blobService = new BlobService(http, authService, cacheAdapter, rangeConfig);
     }
 
     @Override

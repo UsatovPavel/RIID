@@ -21,10 +21,12 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,6 +45,7 @@ class RegistryClientImplTest {
     private HttpServer server;
 
     @AfterEach
+    @SuppressWarnings("unused")
     void tearDown() {
         if (server != null) {
             server.stop(0);
@@ -87,7 +90,8 @@ class RegistryClientImplTest {
         startServer(new byte[0], "sha256:dead", new byte[0], "sha256:dead", 500, 500);
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
         try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
-            assertThrows(RuntimeException.class, () -> client.listTags(REPO, null, null));
+            var ex = assertThrows(RuntimeException.class, () -> client.listTags(REPO, null, null));
+            assertNotNull(ex.getMessage());
         }
     }
 
@@ -98,6 +102,54 @@ class RegistryClientImplTest {
         RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
         try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
             assertTrue(client.headBlob(REPO, SHA_PREFIX + "missing").isEmpty());
+        }
+    }
+
+    @Test
+    void fetchBlobRangeReturnsPartialContent() throws Exception {
+        byte[] layer = "0123456789".getBytes(StandardCharsets.UTF_8);
+        String layerDigest = SHA_PREFIX + sha256(layer);
+        Manifest manifest = manifest(layerDigest, layer.length);
+        byte[] manifestBytes = new ObjectMapper().writeValueAsBytes(manifest);
+        String manifestDigest = SHA_PREFIX + sha256(manifestBytes);
+
+        startServerWithRange(layer, layerDigest, manifestBytes, manifestDigest);
+
+        RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+            File tmp = File.createTempFile("blob-range-", ".bin");
+            tmp.deleteOnExit();
+            BlobRequest req = new BlobRequest(REPO, layerDigest, null, OCTET,
+                    new BlobRequest.RangeSpec(2L, 5L));
+
+            BlobResult br = client.fetchBlob(req, tmp);
+
+            assertEquals(4L, br.size());
+            assertEquals(4L, tmp.length());
+        }
+    }
+
+    @Test
+    void fetchBlobRange416FallsBackToFull() throws Exception {
+        byte[] layer = "0123456789".getBytes(StandardCharsets.UTF_8);
+        String layerDigest = SHA_PREFIX + sha256(layer);
+        Manifest manifest = manifest(layerDigest, layer.length);
+        byte[] manifestBytes = new ObjectMapper().writeValueAsBytes(manifest);
+        String manifestDigest = SHA_PREFIX + sha256(manifestBytes);
+
+        startServerWithRange(layer, layerDigest, manifestBytes, manifestDigest);
+
+        RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+            File tmp = File.createTempFile("blob-range-416-", ".bin");
+            tmp.deleteOnExit();
+            BlobRequest req = new BlobRequest(REPO, layerDigest, null, OCTET,
+                    new BlobRequest.RangeSpec(100L, 110L));
+
+            BlobResult br = client.fetchBlob(req, tmp);
+
+            assertEquals(layer.length, br.size());
+            assertEquals(layer.length, tmp.length());
         }
     }
 
@@ -158,6 +210,87 @@ class RegistryClientImplTest {
         server.createContext(API_PREFIX + REPO + "/blobs/" + SHA_PREFIX + "missing",
                 exchange -> respond(exchange, STATUS_NOT_FOUND, Map.of(), new byte[0]));
         server.start();
+    }
+
+    private void startServerWithRange(byte[] layer,
+                                      String layerDigest,
+                                      byte[] manifestBytes,
+                                      String manifestDigest) throws IOException {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext(API_PREFIX, exchange -> respond(exchange, STATUS_OK, Map.of(), ""));
+        server.createContext(API_PREFIX + REPO + "/manifests/latest", exchange -> {
+            if (!exchange.getRequestMethod().equalsIgnoreCase(METHOD_GET)) {
+                respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), "");
+                return;
+            }
+            Map<String, String> headers = Map.of(
+                    CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json",
+                    "Docker-Content-Digest", manifestDigest
+            );
+            respond(exchange, STATUS_OK, headers, manifestBytes);
+        });
+        server.createContext(API_PREFIX + REPO + "/blobs/" + layerDigest, exchange -> {
+            if (METHOD_HEAD.equals(exchange.getRequestMethod())) {
+                respond(exchange, STATUS_OK, Map.of(
+                        "Content-Length", String.valueOf(layer.length),
+                        CONTENT_TYPE, OCTET
+                ), new byte[0]);
+                return;
+            }
+            if (METHOD_GET.equals(exchange.getRequestMethod())) {
+                String rangeHeader = exchange.getRequestHeaders().getFirst("Range");
+                if (rangeHeader != null) {
+                    long[] range = parseRange(rangeHeader);
+                    if (range == null || range[0] >= layer.length || range[1] < range[0]) {
+                        respond(exchange, 416, Map.of(), new byte[0]);
+                        return;
+                    }
+                    long start = range[0];
+                    long end = Math.min(range[1], layer.length - 1);
+                    byte[] part = Arrays.copyOfRange(layer, (int) start, (int) end + 1);
+                    Map<String, String> headers = Map.of(
+                            "Content-Length", String.valueOf(part.length),
+                            "Content-Range", "bytes %d-%d/%d".formatted(start, end, layer.length),
+                            CONTENT_TYPE, OCTET
+                    );
+                    respond(exchange, 206, headers, part);
+                    return;
+                }
+                respond(exchange, STATUS_OK, Map.of(
+                        "Content-Length", String.valueOf(layer.length),
+                        CONTENT_TYPE, OCTET
+                ), layer);
+                return;
+            }
+            respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), new byte[0]);
+        });
+        server.createContext(API_PREFIX + REPO + "/tags/list", exchange -> {
+            if (!exchange.getRequestMethod().equalsIgnoreCase(METHOD_GET)) {
+                respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), "");
+                return;
+            }
+            String body = "{\"name\":\"" + REPO + "\",\"tags\":[\"latest\",\"edge\"]}";
+            respond(exchange, STATUS_OK, Map.of(CONTENT_TYPE, "application/json"), body);
+        });
+        server.start();
+    }
+
+    private static long[] parseRange(String raw) {
+        if (raw == null || !raw.startsWith("bytes=")) {
+            return null;
+        }
+        String value = raw.substring("bytes=".length());
+        String[] parts = value.split("-", 2);
+        if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            return null;
+        }
+        try {
+            long start = Long.parseLong(parts[0].trim());
+            long end = Long.parseLong(parts[1].trim());
+            return new long[]{start, end};
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body)
