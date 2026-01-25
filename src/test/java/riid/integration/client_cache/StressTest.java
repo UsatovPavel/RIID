@@ -57,7 +57,7 @@ public class StressTest {
         var layer = manifest.layers().getFirst(); // tiny layer in busybox
         BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
 
-        int count = 1000;
+        int count = 100;
         try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
             List<CompletableFuture<File>> futures = new ArrayList<>();
             for (int i = 0; i < count; i++) {

@@ -35,6 +35,7 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("com.code-intelligence:jazzer-junit:0.29.1")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
@@ -94,8 +95,30 @@ tasks.withType<Test>().configureEach {
 }
 
 tasks.register<Test>("testStress") {
+    val outFile = layout.buildDirectory.file("reports/jazzer/jazzer.log").get().asFile
+    doFirst {
+        outFile.parentFile.mkdirs()
+    }
+    testLogging.showStandardStreams = false
+    //full qualifed for local task
+    addTestOutputListener(object : org.gradle.api.tasks.testing.TestOutputListener {
+        override fun onOutput(
+            descriptor: org.gradle.api.tasks.testing.TestDescriptor,
+            event: org.gradle.api.tasks.testing.TestOutputEvent
+        ) {
+            outFile.appendText(event.message)
+        }
+    })
     group = "verification"
     description = "Run stress-tagged tests"
+    dependsOn(tasks.testClasses)
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    // Enable Jazzer fuzzing mode for @FuzzTest
+    environment("JAZZER_FUZZ", "1")
+    environment("JAZZER_DICTIONARY", "$projectDir/src/test/resources/fuzz/authparser.dict")
+    // Keep fuzzing time bounded during stress runs
+    environment("JAZZER_MAX_TOTAL_TIME", "120")// seconds
     useJUnitPlatform {
         includeTags("stress")
     }
@@ -104,6 +127,9 @@ tasks.register<Test>("testStress") {
 tasks.register<Test>("testLocal") {
     group = "verification"
     description = "Run local-tagged tests (e.g., Testcontainers registry)"
+    dependsOn(tasks.testClasses)
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform {
         includeTags("local")
     }
