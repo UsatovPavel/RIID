@@ -41,6 +41,13 @@ import riid.client.http.HttpResult;
  */
 public class BlobService implements BlobServiceApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(BlobService.class);
+    private static final String HEADER_CONTENT_LENGTH = "Content-Length";
+    private static final String RANGE_UNIT = "bytes";
+    private static final String RANGE_WILDCARD = "*";
+    private static final String INVALID_CONTENT_RANGE = "Invalid Content-Range";
+    private static final String BLOB_IO_ERROR = "Blob IO error";
+    private static final String BLOB_SINK_ERROR = "Blob sink error";
+    private static final int EXPECTED_RANGE_PARTS = 2;
 
     private final HttpExecutor http;
     private final AuthService authService;
@@ -51,12 +58,12 @@ public class BlobService implements BlobServiceApi {
         this(http, authService, null, null);
     }
 
-    @SuppressFBWarnings({"EI_EXPOSE_REP2"})
     public BlobService(HttpExecutor http, AuthService authService, CacheAdapter cacheAdapter) {
         this(http, authService, cacheAdapter, null);
     }
 
-    @SuppressFBWarnings({"EI_EXPOSE_REP2"})
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2",
+            justification = "CacheAdapter lifecycle is managed by caller; BlobService does not mutate it")
     public BlobService(HttpExecutor http,
                        AuthService authService,
                        CacheAdapter cacheAdapter,
@@ -70,8 +77,19 @@ public class BlobService implements BlobServiceApi {
     @Override
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, File target, String scope) {
         Objects.requireNonNull(target, "target file");
-        BlobSink sink = new FileBlobSink(target);
-        return fetchBlob(endpoint, req, sink, scope);
+        try (BlobSink sink = new FileBlobSink(target)) {
+            return fetchBlob(endpoint, req, sink, scope);
+        } catch (IOException e) {
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, BLOB_IO_ERROR),
+                    BLOB_IO_ERROR,
+                    e);
+        } catch (Exception e) {
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, BLOB_SINK_ERROR),
+                    BLOB_SINK_ERROR,
+                    e);
+        }
     }
 
     @Override
@@ -81,6 +99,7 @@ public class BlobService implements BlobServiceApi {
         return fetchBlob(endpoint, req, sink, scope, true);
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     private BlobResult fetchBlob(RegistryEndpoint endpoint,
                                  BlobRequest req,
                                  BlobSink sink,
@@ -134,13 +153,13 @@ public class BlobService implements BlobServiceApi {
             }
             contentRange = ContentRange.parse(raw);
             validateContentRange(contentRange, req.range());
-            var contentLength = resp.firstHeaderAsLong("Content-Length");
+            var contentLength = resp.firstHeaderAsLong(HEADER_CONTENT_LENGTH);
             if (contentLength.isPresent()) {
                 long len = contentLength.getAsLong();
                 if (len != contentRange.length()) {
-                    throw new ClientException(
-                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Content-Length mismatch"),
-                            "Content-Length mismatch for partial blob download");
+                throw new ClientException(
+                        new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Content-Length mismatch"),
+                        "Content-Length mismatch for partial blob download");
                 }
             }
         } else if (req.range() != null && status == HttpStatus.OK_200) {
@@ -208,8 +227,8 @@ public class BlobService implements BlobServiceApi {
             return new BlobResult(digest, actualSize, mediaType, locator);
         } catch (IOException e) {
             throw new ClientException(
-                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Blob IO error"),
-                    "Blob IO error",
+                    new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, BLOB_IO_ERROR),
+                    BLOB_IO_ERROR,
                     e);
         } finally {
             try {
@@ -285,7 +304,7 @@ public class BlobService implements BlobServiceApi {
         if (expected != null) {
             return expected;
         }
-        return resp.firstHeaderAsLong("Content-Length").orElse(-1);
+        return resp.firstHeaderAsLong(HEADER_CONTENT_LENGTH).orElse(-1);
     }
 
     private static void validateContentRange(ContentRange range, BlobRequest.RangeSpec reqRange) {
@@ -367,39 +386,39 @@ public class BlobService implements BlobServiceApi {
 
         static ContentRange parse(String header) {
             String trimmed = header.trim();
-            if (!trimmed.startsWith("bytes")) {
+            if (!trimmed.startsWith(RANGE_UNIT)) {
                 throw new ClientException(
                         new ClientError.Parse(ClientError.ParseKind.RANGE, "Unsupported Content-Range"),
                         "Unsupported Content-Range: " + header);
             }
             String[] parts = trimmed.split(" ", 2);
-            if (parts.length != 2) {
+            if (parts.length != EXPECTED_RANGE_PARTS) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Invalid Content-Range"),
-                        "Invalid Content-Range: " + header);
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
+                        INVALID_CONTENT_RANGE + ": " + header);
             }
             String[] rangeAndTotal = parts[1].split("/", 2);
-            if (rangeAndTotal.length != 2) {
+            if (rangeAndTotal.length != EXPECTED_RANGE_PARTS) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Invalid Content-Range"),
-                        "Invalid Content-Range: " + header);
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
+                        INVALID_CONTENT_RANGE + ": " + header);
             }
             String[] range = rangeAndTotal[0].split("-", 2);
-            if (range.length != 2) {
+            if (range.length != EXPECTED_RANGE_PARTS) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Invalid Content-Range"),
-                        "Invalid Content-Range: " + header);
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
+                        INVALID_CONTENT_RANGE + ": " + header);
             }
             long start = parseLong(range[0], "Content-Range start");
             long end = parseLong(range[1], "Content-Range end");
             if (end < start) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Invalid Content-Range"),
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
                         "Content-Range end < start");
             }
             Long total = null;
             String totalRaw = rangeAndTotal[1].trim();
-            if (!"*".equals(totalRaw)) {
+            if (!RANGE_WILDCARD.equals(totalRaw)) {
                 total = parseLong(totalRaw, "Content-Range total");
                 if (total <= 0) {
                     throw new ClientException(

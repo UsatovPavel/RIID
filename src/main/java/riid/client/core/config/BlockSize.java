@@ -13,14 +13,14 @@ public enum BlockSize {
 
     private static final long BYTES_IN_MB = 1024L * 1024L;
 
-    private final long bytes;
+    private final long sizeBytes;
 
     BlockSize(long megabytes) {
-        this.bytes = megabytes * BYTES_IN_MB;
+        this.sizeBytes = megabytes * BYTES_IN_MB;
     }
 
     public long bytes() {
-        return bytes;
+        return sizeBytes;
     }
 }
 

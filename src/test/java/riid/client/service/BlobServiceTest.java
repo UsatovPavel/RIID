@@ -31,18 +31,23 @@ import riid.client.http.HttpResult;
 @SuppressWarnings("PMD.CloseResource")
 class BlobServiceTest {
 
+    private static final String TEST_URI = "https://x";
+    private static final String REPO = "library/busybox";
+    private static final String MEDIA_TYPE = "application/octet-stream";
+    private static final String SCOPE = "scope";
     private final RegistryEndpoint endpoint = RegistryEndpoint.https("registry-1.docker.io");
 
     @Test
     void closesSinkOnIoFailure() {
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY, new FailingInputStream(), URI.create("https://x"));
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY, 
+            new FailingInputStream(), URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest("library/busybox", "sha256:ignored", 4L, "application/octet-stream");
+        BlobRequest req = new BlobRequest(REPO, "sha256:ignored", 4L, MEDIA_TYPE);
 
-        var ex = assertThrows(ClientException.class, () -> svc.fetchBlob(endpoint, req, sink, "scope"));
+        var ex = assertThrows(ClientException.class, () -> svc.fetchBlob(endpoint, req, sink, SCOPE));
         assertNotNull(ex.getMessage());
         assertEquals(RecordingSink.State.CLOSED, sink.state);
     }
@@ -52,13 +57,13 @@ class BlobServiceTest {
         byte[] data = "abc".getBytes(StandardCharsets.UTF_8);
         FakeHttp http = new FakeHttp();
         http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new ByteArrayInputStream(data), URI.create("https://x"));
+                new ByteArrayInputStream(data), URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest("library/busybox", null, (long) data.length, "application/octet-stream");
+        BlobRequest req = new BlobRequest(REPO, null, (long) data.length, MEDIA_TYPE);
 
-        BlobResult result = svc.fetchBlob(endpoint, req, sink, "scope");
+        BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
 
         assertEquals(RecordingSink.State.CLOSED, sink.state);
         assertEquals("sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", result.digest());
@@ -70,14 +75,14 @@ class BlobServiceTest {
         byte[] data = "abc".getBytes(StandardCharsets.UTF_8);
         FakeHttp http = new FakeHttp();
         http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new ByteArrayInputStream(data), URI.create("https://x"));
+                new ByteArrayInputStream(data), URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest("library/busybox", null, 3L, "application/octet-stream",
+        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec(0L, 1L));
 
-        svc.fetchBlob(endpoint, req, sink, "scope");
+        svc.fetchBlob(endpoint, req, sink, SCOPE);
         assertEquals("bytes=0-1", http.lastHeaders.get("Range"));
     }
 
@@ -90,14 +95,14 @@ class BlobServiceTest {
 
         FakeHttp http = new FakeHttp();
         http.nextGet = new HttpResult<>(HttpStatus.PARTIAL_CONTENT_206, headers,
-                new ByteArrayInputStream(data), URI.create("https://x"));
+                new ByteArrayInputStream(data), URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest("library/busybox", "sha256:full", 10L, "application/octet-stream",
+        BlobRequest req = new BlobRequest(REPO, "sha256:full", 10L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec(0L, 1L));
 
-        BlobResult result = svc.fetchBlob(endpoint, req, sink, "scope");
+        BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
 
         assertEquals("sha256:full", result.digest());
         assertEquals(2L, result.size());
@@ -108,14 +113,14 @@ class BlobServiceTest {
         byte[] data = "ab".getBytes(StandardCharsets.UTF_8);
         FakeHttp http = new FakeHttp();
         http.nextGet = new HttpResult<>(HttpStatus.PARTIAL_CONTENT_206, HttpFields.EMPTY,
-                new ByteArrayInputStream(data), URI.create("https://x"));
+                new ByteArrayInputStream(data), URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest("library/busybox", "sha256:full", 10L, "application/octet-stream",
+        BlobRequest req = new BlobRequest(REPO, "sha256:full", 10L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec(0L, 1L));
 
-        var ex = assertThrows(ClientException.class, () -> svc.fetchBlob(endpoint, req, sink, "scope"));
+        var ex = assertThrows(ClientException.class, () -> svc.fetchBlob(endpoint, req, sink, SCOPE));
         assertNotNull(ex.getMessage());
     }
 
@@ -124,16 +129,16 @@ class BlobServiceTest {
         byte[] data = "abc".getBytes(StandardCharsets.UTF_8);
         FakeHttp http = new FakeHttp();
         http.enqueue(new HttpResult<>(HttpStatus.RANGE_NOT_SATISFIABLE_416, HttpFields.EMPTY,
-                new ByteArrayInputStream(new byte[0]), URI.create("https://x")));
+                new ByteArrayInputStream(new byte[0]), URI.create(TEST_URI)));
         http.enqueue(new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new ByteArrayInputStream(data), URI.create("https://x")));
+                new ByteArrayInputStream(data), URI.create(TEST_URI)));
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest("library/busybox", null, 3L, "application/octet-stream",
+        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec(0L, 1L));
 
-        BlobResult result = svc.fetchBlob(endpoint, req, sink, "scope");
+        BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
         assertEquals(data.length, result.size());
         assertEquals(2, http.getCallCount());
     }

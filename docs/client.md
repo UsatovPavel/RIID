@@ -3,7 +3,7 @@
 ### Config
 - Registry endpoints via `RegistryEndpoint` (scheme/host/port/creds); list provided by external config/Orchestrator.
 - HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, User-Agent, followRedirects=true для GHCR CDN 302/307).
-- Range policy: `RangeConfig` (mode/partialValidation/fallbackToFullOn416) controls Range usage and validation.
+- Range policy: `RangeConfig` (mode/partialValidation/fallbackToFullOn416) controls Range usage, 206/416 handling, and partial validation.
 - Cache: external `CacheAdapter` (optional); client writes to cache after download. Source choice (cache/P2P/registry) is up to Orchestrator.
 
 ### Supported operations
@@ -40,4 +40,5 @@ var res = client.fetchBlob(new BlobRequest("library/busybox", layer.digest(), la
 ### Constraints / architecture
 - Client does not choose source (cache/P2P/registry) and is runtime-agnostic; Orchestrator/Runtime Adapter decides.
 - Client validates digest/size on download; final verification/import is in the Runtime Adapter layer.
+- Range: for partial responses (206), digest validation is skipped unless the range covers the full blob; 416 fallback to full GET is configurable.
 
