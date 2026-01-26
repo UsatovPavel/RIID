@@ -7,7 +7,7 @@ CLI and dependency wiring layer for loading container images: parse flags, valid
 - `RiidCli` (JAR entrypoint): minimal `main`, calls CLI, returns exit code only.
 - `CliApplication`: parses args, prints help/usage, validates options (repo/runtime/auth/cert/key/CA), handles exit codes and stdout/stderr.
 - `CliParser` (inside `CliApplication`): pure argument parser → DTO `CliOptions`.
-- `ImageLoadServiceFactory`: reads YAML (`config.yaml`), assembles dependencies (RegistryClient, Dispatcher, P2P stub, RuntimeRegistry).
+- `ImageLoadServiceFactory`: reads YAML (`config/config.yaml`), assembles dependencies (RegistryClient, Dispatcher, P2P stub, RuntimeRegistry).
 - `ImageLoadService`: façade that downloads, assembles OCI, and imports into runtime; no CLI logic.
 - `RuntimeRegistry`: registry of runtime adapters (`podman`, `porto`), throws a clear error for unknown runtime.
 - `RiidEnv`: helpers for env-based launching without CLI.
@@ -22,7 +22,7 @@ Reference:
 - `--digest` — `sha256:...` (overrides tag/ref)
 
 Config:
-- `--config` — path to YAML config (default: `config.yaml`)
+- `--config` — path to YAML config (default: `config/config.yaml`)
 
 Basic auth (password options are mutually exclusive):
 - `--username <user>`
@@ -53,7 +53,7 @@ java -jar riid.jar --repo library/busybox --digest sha256:abc... --runtime porto
   --username user --password-env RIID_PASS
 
 # Custom config
-java -jar riid.jar --config ./config.yaml --repo registry.example.com/app --tag v1 --runtime podman
+java -jar riid.jar --config ./config/config.yaml --repo registry.example.com/app --tag v1 --runtime podman
 ```
 
 ## Tests

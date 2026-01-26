@@ -27,7 +27,7 @@ public final class CliApplication {
     static final int EXIT_RUNTIME_NOT_FOUND = 65;
     static final int EXIT_FAILURE = 1;
 
-    private static final Path DEFAULT_CONFIG_PATH = Paths.get("config.yaml");
+    private static final Path DEFAULT_CONFIG_PATH = Paths.get("config", "config.yaml");
     private static final int MAX_PASSWORD_SOURCES = 1;
 
     private final ServiceFactory serviceFactory;

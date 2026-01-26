@@ -1,0 +1,10 @@
+manager:
+  server:
+    addr: 0.0.0.0:65003
+  security:
+    jwt:
+      key: dragonfly-test-key
+security:
+  jwt:
+    key: dragonfly-test-key
+

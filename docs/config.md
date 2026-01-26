@@ -41,7 +41,7 @@ dispatcher:
 
 ### Known notes
 - Missing `registries` throws `ConfigValidationException`.
-- Для GHCR скачивание blob/manifest использует 302/307 CDN, поэтому `client.http.followRedirects` должен быть true (явно прописывать в config.yaml).
+- Для GHCR скачивание blob/manifest использует 302/307 CDN, поэтому `client.http.followRedirects` должен быть true (явно прописывать в config/config.yaml).
 - Range: `partialValidation=SKIP` means digest is validated only for a full blob; `fallbackToFullOn416` enables retry without Range.
 
 ### Tests

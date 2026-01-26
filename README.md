@@ -13,7 +13,7 @@ The JAR will be at `build/libs/riid.jar` (manifest points to `riid.app.RiidCli`)
 Pull BusyBox into Podman runtime using the default config:
 ```bash
 java -jar build/libs/riid.jar \
-  --config ./config.yaml \
+  --config ./config/config.yaml \
   --repo library/busybox \
   --tag latest \
   --runtime podman
@@ -23,7 +23,7 @@ With basic auth from env and a custom registry:
 ```bash
 RIID_PASS=secret \
 java -jar build/libs/riid.jar \
-  --config ./config.yaml \
+  --config ./config/config.yaml \
   --repo registry.example.com/app \
   --digest sha256:abc... \
   --runtime porto \
@@ -55,7 +55,7 @@ podman push localhost:5000/hello-world
 ### Run CLI against local registry (podman runtime)
 ```bash
 java -jar build/libs/riid.jar \
-  --config ./config.yaml \
+  --config ./config/config.yaml \
   --repo localhost:5000/hello-world \
   --tag latest \
   --runtime podman
@@ -69,3 +69,9 @@ Porto runtime adapters are wired the same way via `--runtime porto`; ensure Port
 - For Podman integration end-to-end: run local registry as above, then `./gradlew test --tests "riid.integration.runtime_app.CliPodmanIntegrationTest"` (requires podman and network for base images).
 - For Porto: use analogous CLI invocation with `--runtime porto` after ensuring runtime availability.
 
+# Dragonfly
+Pull container images 
+```bash
+docker pull dragonflyoss/dfdaemon:latest
+docker pull dragonflyoss/manager:latest
+docker pull dragonflyoss/scheduler:latest

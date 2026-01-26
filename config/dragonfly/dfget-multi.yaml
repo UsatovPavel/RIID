@@ -1,0 +1,10 @@
+download:
+  downloadGRPC:
+    listen: 0.0.0.0:65001
+daemon:
+  dataDir: /var/lib/dragonfly
+  cacheDir: /var/cache/dragonfly
+scheduler:
+  netAddrs:
+    - "dfscheduler:65002"
+

@@ -110,14 +110,14 @@ class CliApplicationTest {
         );
 
         int code = app.run(new String[]{
-                "--config", "config.yaml",
+                "--config", "config/config.yaml",
                 "--repo", REPO_BUSYBOX,
                 "--tag", "latest",
                 "--runtime", RUNTIME_PODMAN
         });
 
         assertEquals(CliApplication.EXIT_OK, code);
-        assertEquals(Path.of("config.yaml"), configSeen.get());
+        assertEquals(Path.of("config/config.yaml"), configSeen.get());
         assertEquals(REPO_BUSYBOX, repoSeen.get());
         assertEquals("latest", refSeen.get());
         assertEquals(RUNTIME_PODMAN, runtimeSeen.get());
