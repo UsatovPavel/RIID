@@ -1,7 +1,6 @@
 package riid.app;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -40,8 +39,8 @@ class ImageLoadFacadeErrorTest {
 
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new NoopRuntime(), imageId));
-        assertTrue(ex.error() instanceof AppError.Runtime);
-        assertEquals(AppError.RuntimeKind.LOAD_FAILED, ((AppError.Runtime) ex.error()).kind());
+        assertTrue(ex.error() instanceof AppError.RuntimeError);
+        assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
     }
 
     @Test
@@ -49,17 +48,17 @@ class ImageLoadFacadeErrorTest {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
-        Path layer = Files.createTempFile("riid-layer", ".bin");
-        Files.write(layer, new byte[] {1, 2, 3});
-        RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
         HostFilesystem fs = new NioHostFilesystem(null);
+        Path layer = fs.createTempFile("riid-layer", ".bin");
+        fs.write(layer, new byte[] {1, 2, 3});
+        RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
         ImageLoadFacade facade = new ImageLoadFacade(dispatcher, new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(), fs);
 
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));
-        assertTrue(ex.error() instanceof AppError.Runtime);
-        assertEquals(AppError.RuntimeKind.LOAD_FAILED, ((AppError.Runtime) ex.error()).kind());
+        assertTrue(ex.error() instanceof AppError.RuntimeError);
+        assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
         assertTrue(Thread.currentThread().isInterrupted());
         Thread.interrupted(); // clear for other tests
     }
@@ -176,6 +175,11 @@ class ImageLoadFacadeErrorTest {
         }
 
         @Override
+        public Path createTempFile(Path dir, String prefix, String suffix) throws IOException {
+            throw error;
+        }
+
+        @Override
         public Path createDirectories(Path dir) throws IOException {
             throw error;
         }
@@ -192,6 +196,46 @@ class ImageLoadFacadeErrorTest {
 
         @Override
         public Path writeString(Path path, String content) throws IOException {
+            throw error;
+        }
+
+        @Override
+        public java.io.InputStream newInputStream(Path path) throws IOException {
+            throw error;
+        }
+
+        @Override
+        public java.io.OutputStream newOutputStream(Path path) throws IOException {
+            throw error;
+        }
+
+        @Override
+        public boolean exists(Path path) {
+            return false;
+        }
+
+        @Override
+        public boolean isRegularFile(Path path) {
+            return false;
+        }
+
+        @Override
+        public long size(Path path) throws IOException {
+            throw error;
+        }
+
+        @Override
+        public String probeContentType(Path path) throws IOException {
+            throw error;
+        }
+
+        @Override
+        public java.util.stream.Stream<Path> walk(Path root) throws IOException {
+            throw error;
+        }
+
+        @Override
+        public Path atomicMove(Path source, Path target) throws IOException {
             throw error;
         }
     }

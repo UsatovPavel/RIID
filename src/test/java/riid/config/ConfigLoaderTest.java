@@ -4,17 +4,20 @@ import org.junit.jupiter.api.Test;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
 class ConfigLoaderTest {
 
     private static final String TMP_PREFIX = "config-";
     private static final String TMP_SUFFIX = ".yaml";
+    private final HostFilesystem fs = new NioHostFilesystem(null);
 
     @Test
     void loadsValidConfig() throws Exception {
@@ -37,8 +40,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 3
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = fs.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
         AppConfig cfg = ConfigLoader.load(tmp);
         assertEquals(1, cfg.client().registries().size());
@@ -54,8 +57,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = fs.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -69,8 +72,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = fs.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -104,8 +107,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 10
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = fs.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
         AppConfig cfg = ConfigLoader.load(tmp);
         assertEquals(2, cfg.client().registries().size());
@@ -142,8 +145,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 2
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = fs.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -162,8 +165,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = fs.createTempFile(TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }

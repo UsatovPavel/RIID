@@ -6,8 +6,10 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
 
 /**
  * Loads AppConfig from YAML file.
@@ -20,7 +22,11 @@ public final class ConfigLoader {
     private ConfigLoader() { }
 
     public static AppConfig load(Path path) {
-        if (!Files.exists(path)) {
+        return load(path, new NioHostFilesystem(null));
+    }
+
+    public static AppConfig load(Path path, HostFilesystem fs) {
+        if (!fs.exists(path)) {
             throw new IllegalArgumentException("Config file not found: " + path);
         }
         try {

@@ -43,7 +43,7 @@ public record ImageId(String registry, String name, String tag, String digest) {
     /**
      * Reference name for OCI index.json annotations (name[:tag]).
      */
-    public String refName() {
+    public String referenceName() {
         if (tag != null && !tag.isBlank()) {
             return name + ":" + tag;
         }

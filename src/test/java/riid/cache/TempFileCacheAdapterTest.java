@@ -4,16 +4,19 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
 class TempFileCacheAdapterTest {
 
     private TempFileCacheAdapter cache;
+    private final HostFilesystem fs = new NioHostFilesystem(null);
 
     @AfterEach
     void tearDown() throws Exception {
@@ -27,10 +30,10 @@ class TempFileCacheAdapterTest {
         cache = new TempFileCacheAdapter();
         ImageDigest digest = ImageDigest.parse("sha256:" + "a".repeat(64));
 
-        Path tmp = Files.createTempFile("cache-", ".bin");
-        Files.writeString(tmp, "hello");
+        Path tmp = fs.createTempFile("cache-", ".bin");
+        fs.writeString(tmp, "hello");
 
-        CachePayload payload = FilesystemCachePayload.of(tmp, Files.size(tmp));
+        CachePayload payload = FilesystemCachePayload.of(tmp, fs.size(tmp));
         CacheEntry entry = cache.put(digest, payload, CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));
@@ -39,9 +42,9 @@ class TempFileCacheAdapterTest {
         assertEquals(cache.resolve(entry.key()).orElseThrow(), loadedPath);
         // media type is derived from probeContentType; just ensure not null
         assertEquals(
-                CacheMediaType.from(Files.probeContentType(loadedPath)),
+                CacheMediaType.from(fs.probeContentType(loadedPath)),
                 loaded.mediaType());
-        assertEquals(Files.size(tmp), loaded.sizeBytes());
+        assertEquals(fs.size(tmp), loaded.sizeBytes());
     }
 
     @Test
@@ -49,13 +52,13 @@ class TempFileCacheAdapterTest {
         cache = new TempFileCacheAdapter();
         ImageDigest digest = ImageDigest.parse("sha256:" + "b".repeat(64));
 
-        Path tmp = Files.createTempFile("cache-", ".dat");
-        Files.writeString(tmp, "payload");
+        Path tmp = fs.createTempFile("cache-", ".dat");
+        fs.writeString(tmp, "payload");
 
         CachePayload payload = new CachePayload() {
             @Override
             public java.io.InputStream open() throws IOException {
-                return Files.newInputStream(tmp);
+                return fs.newInputStream(tmp);
             }
 
             @Override
@@ -65,7 +68,7 @@ class TempFileCacheAdapterTest {
         };
 
         CacheEntry entry = cache.put(digest, payload, CacheMediaType.UNKNOWN);
-        assertEquals(Files.size(tmp), entry.sizeBytes());
+        assertEquals(fs.size(tmp), entry.sizeBytes());
     }
 
     @Test
@@ -82,7 +85,7 @@ class TempFileCacheAdapterTest {
         Path root = cache.rootDir();
         cache.cleanup();
         cache.cleanup(); // should not throw
-        assertFalse(Files.exists(root));
+        assertFalse(fs.exists(root));
     }
 }
 

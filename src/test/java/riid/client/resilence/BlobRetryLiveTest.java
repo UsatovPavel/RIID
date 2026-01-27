@@ -8,10 +8,12 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 
 import java.io.File;
-import java.nio.file.Files;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
 
 /**
  * Retry test against real Docker Hub.
@@ -23,6 +25,7 @@ public class BlobRetryLiveTest {
     void retryAfterConnectionDrop() throws Exception {
         RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         HttpClientConfig cfg = new HttpClientConfig();
+        HostFilesystem fs = new NioHostFilesystem(null);
         try (var client = new RegistryClientImpl(hub, cfg, null)) {
 
         String repo = "library/alpine";
@@ -34,7 +37,7 @@ public class BlobRetryLiveTest {
 
         BlobRequest req = new BlobRequest(repo, layer.digest(), layer.size(), layer.mediaType());
 
-        File tmp = Files.createTempFile("alpine-layer-retry", ".tar").toFile();
+        File tmp = fs.createTempFile("alpine-layer-retry", ".tar").toFile();
         tmp.deleteOnExit();
 
         // обычный GET; при сбое сработает retry внутри клиента

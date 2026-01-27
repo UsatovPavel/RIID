@@ -6,7 +6,6 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -14,7 +13,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
 class PortoRuntimeAdapterTest {
+    private final HostFilesystem fs = new NioHostFilesystem(null);
 
     @Test
     void missingFileThrowsIOException() {
@@ -32,7 +35,7 @@ class PortoRuntimeAdapterTest {
             throw new IllegalStateException("PORTO_LAYER_TAR is not set");
         }
         Path archive = Path.of(tar);
-        if (!Files.exists(archive)) {
+        if (!fs.exists(archive)) {
             throw new IOException("Layer archive missing: " + archive);
         }
         var fileName = archive.getFileName();

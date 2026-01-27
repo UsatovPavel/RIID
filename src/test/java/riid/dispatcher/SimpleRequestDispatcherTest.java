@@ -19,7 +19,6 @@ import riid.p2p.P2PExecutor;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +26,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
 
 class SimpleRequestDispatcherTest {
 
@@ -36,12 +38,14 @@ class SimpleRequestDispatcherTest {
     private RecordingRegistryClient registry;
     private RecordingCacheAdapter cache;
     private RecordingP2PExecutor p2p;
+    private HostFilesystem fs;
 
     @BeforeEach
     void setUp() {
         registry = new RecordingRegistryClient();
         cache = new RecordingCacheAdapter();
         p2p = new RecordingP2PExecutor();
+        fs = new NioHostFilesystem(null);
     }
 
     @AfterEach
@@ -78,8 +82,8 @@ class SimpleRequestDispatcherTest {
 
     @Test
     void downloadsFromRegistryAndPublishes() throws IOException {
-        File tmp = Files.createTempFile("blob-", ".bin").toFile();
-        Files.writeString(tmp.toPath(), "data");
+        File tmp = fs.createTempFile("blob-", ".bin").toFile();
+        fs.writeString(tmp.toPath(), "data");
         registry.blobResult = new BlobResult(DIGEST, tmp.length(), MEDIA_LAYER, tmp.getAbsolutePath());
 
         SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, new DispatcherConfig(1));

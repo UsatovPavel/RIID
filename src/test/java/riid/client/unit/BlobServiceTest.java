@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.util.Map;
 import java.util.Optional;
@@ -30,8 +29,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
 @SuppressWarnings("PMD.CloseResource")
 class BlobServiceTest {
+    private final HostFilesystem fs = new NioHostFilesystem(null);
     private enum Strings {
         HTTP_SCHEME("http"),
         HOST("localhost"),
@@ -99,7 +102,7 @@ class BlobServiceTest {
         assertEquals(data.length, head.get());
 
         // GET
-        File tmp = Files.createTempFile("blob-", ".bin").toFile();
+        File tmp = fs.createTempFile("blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, (long) data.length, Strings.OCTET.v());
         BlobResult result = blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v());
@@ -131,7 +134,7 @@ class BlobServiceTest {
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
         BlobService blob = new BlobService(exec, auth, null);
 
-        File tmp = Files.createTempFile("blob-", ".bin").toFile();
+        File tmp = fs.createTempFile("blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, null, Strings.OCTET.v());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));
@@ -155,7 +158,7 @@ class BlobServiceTest {
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
         BlobService blob = new BlobService(exec, auth, null);
-        File tmp = Files.createTempFile("blob-", ".bin").toFile();
+        File tmp = fs.createTempFile("blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(Strings.REPO.v(), expectedDigest, (long) data.length, Strings.OCTET.v());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));

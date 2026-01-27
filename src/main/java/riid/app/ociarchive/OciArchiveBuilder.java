@@ -33,7 +33,15 @@ public final class OciArchiveBuilder {
         this.fs = Objects.requireNonNull(fs, "fs");
     }
 
-    public OciArchive build(ImageId imageId, ManifestResult manifestResult)
+    public <T> T withArchive(ImageId imageId,
+                             ManifestResult manifestResult,
+                             ArchiveUser<T> user) throws IOException, InterruptedException {
+        try (OciArchive archive = build(imageId, manifestResult)) {
+            return user.use(archive.archivePath());
+        }
+    }
+
+    private OciArchive build(ImageId imageId, ManifestResult manifestResult)
             throws IOException, InterruptedException {
         Objects.requireNonNull(imageId, "imageId");
         Objects.requireNonNull(manifestResult, "manifestResult");
@@ -70,12 +78,17 @@ public final class OciArchiveBuilder {
 
         // index.json with ref name
         String template = readResource("oci/index/json.tpl");
-        String index = String.format(Locale.ROOT, template, manifestBytes.length, manifestDigest, imageId.refName());
+        String index = String.format(Locale.ROOT, template, manifestBytes.length, manifestDigest, imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
         Path archive = fs.createTempFile("oci-archive", ".tar");
         runTar(archive, ociDir);
-        return new OciArchive(archive, ociDir);
+        return new OciArchive(archive, ociDir, fs);
+    }
+
+    @FunctionalInterface
+    public interface ArchiveUser<T> {
+        T use(Path archivePath) throws IOException, InterruptedException;
     }
 
     private void pullLayer(String repository,
@@ -102,16 +115,16 @@ public final class OciArchiveBuilder {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         try (var in = loader.getResourceAsStream(path)) {
             if (in == null) {
-                String msg = AppError.OciKind.RESOURCE_NOT_FOUND.format(path);
+                String msg = AppError.OciErrorKind.RESOURCE_NOT_FOUND.format(path);
                 throw new OciArchiveException(
-                        new AppError.Oci(AppError.OciKind.RESOURCE_NOT_FOUND, msg),
+                        new AppError.Oci(AppError.OciErrorKind.RESOURCE_NOT_FOUND, msg),
                         msg);
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            String msg = AppError.OciKind.RESOURCE_READ_FAILED.format(path);
+            String msg = AppError.OciErrorKind.RESOURCE_READ_FAILED.format(path);
             throw new OciArchiveException(
-                    new AppError.Oci(AppError.OciKind.RESOURCE_READ_FAILED, msg),
+                    new AppError.Oci(AppError.OciErrorKind.RESOURCE_READ_FAILED, msg),
                     msg, e);
         }
     }

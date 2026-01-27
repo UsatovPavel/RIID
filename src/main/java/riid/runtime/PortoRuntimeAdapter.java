@@ -30,10 +30,10 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 "-I",
                 imagePath.toAbsolutePath().toString()
         );
-        BoundedCommandExecution.Result result = runCommand(cmd);
-        if (result.exitCode() != 0) {
-            throw new IOException("portoctl layer import failed (exit " + result.exitCode() + "): "
-                    + result.stdout() + result.stderr());
+        BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
+        if (shellResult.exitCode() != 0) {
+            throw new IOException("portoctl layer import failed (exit " + shellResult.exitCode() + "): "
+                    + shellResult.stdout() + shellResult.stderr());
         }
     }
 
@@ -44,7 +44,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         return new ProcessBuilder(command).start();
     }
 
-    protected BoundedCommandExecution.Result runCommand(List<String> command)
+    protected BoundedCommandExecution.ShellResult runCommand(List<String> command)
             throws IOException, InterruptedException {
         return BoundedCommandExecution.run(command, 64 * 1024, streamThreads);
     }

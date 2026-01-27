@@ -2,7 +2,6 @@ package riid.runtime;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -13,6 +12,8 @@ import org.junit.jupiter.api.Test;
 
 import riid.app.ImageId;
 import riid.app.ImageLoadFacade;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.HostFilesystemTestSupport;
 import riid.cache.TempFileCacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
@@ -32,7 +33,8 @@ class PodmanRuntimeAdapterIntegrationTest {
 
         // Use high-level service to fetch and import
         String refName;
-        Path configPath = Files.createTempFile("config-", ".yaml");
+        HostFilesystem fs = new NioHostFilesystem(null);
+        Path configPath = fs.createTempFile("config-", ".yaml");
         String configYaml = """
                 client:
                   http:
@@ -52,7 +54,7 @@ class PodmanRuntimeAdapterIntegrationTest {
                 dispatcher:
                   maxConcurrentRegistry: 3
                 """;
-        Files.writeString(configPath, configYaml);
+        fs.writeString(configPath, configYaml);
 
         var app = ImageLoadFacade.createFromConfig(configPath);
         ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);

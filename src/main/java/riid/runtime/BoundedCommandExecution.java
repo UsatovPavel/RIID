@@ -21,15 +21,15 @@ public final class BoundedCommandExecution {
 
     private BoundedCommandExecution() { }
 
-    public static Result run(List<String> command) throws IOException, InterruptedException {
+    public static ShellResult run(List<String> command) throws IOException, InterruptedException {
         return run(command, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_STREAM_THREADS);
     }
 
-    public static Result run(List<String> command, int maxOutputBytes) throws IOException, InterruptedException {
+    public static ShellResult run(List<String> command, int maxOutputBytes) throws IOException, InterruptedException {
         return run(command, maxOutputBytes, DEFAULT_STREAM_THREADS);
     }
 
-    public static Result run(List<String> command, int maxOutputBytes, int streamThreads)
+    public static ShellResult run(List<String> command, int maxOutputBytes, int streamThreads)
             throws IOException, InterruptedException {
         Objects.requireNonNull(command, "command");
         if (maxOutputBytes <= 0) {
@@ -44,7 +44,7 @@ public final class BoundedCommandExecution {
             Future<String> stdout = executor.submit(streamReader(process.getInputStream(), maxOutputBytes));
             Future<String> stderr = executor.submit(streamReader(process.getErrorStream(), maxOutputBytes));
             int exitCode = process.waitFor();
-            return new Result(exitCode, get(stdout), get(stderr));
+            return new ShellResult(exitCode, get(stdout), get(stderr));
         }
     }
 
@@ -83,6 +83,6 @@ public final class BoundedCommandExecution {
         }
     }
 
-    public record Result(int exitCode, String stdout, String stderr) { }
+    public record ShellResult(int exitCode, String stdout, String stderr) { }
 }
 

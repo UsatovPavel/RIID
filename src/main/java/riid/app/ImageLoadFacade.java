@@ -13,7 +13,6 @@ import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
-import riid.app.ociarchive.OciArchive;
 import riid.app.ociarchive.OciArchiveBuilder;
 import riid.cache.CacheAdapter;
 import riid.cache.TempFileCacheAdapter;
@@ -76,20 +75,22 @@ public final class ImageLoadFacade {
         Objects.requireNonNull(manifestResult, "manifestResult");
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(imageId, "imageId");
-        try (OciArchive archive = archiveBuilder.build(imageId, manifestResult)) {
-            runtime.importImage(archive.archivePath());
-            LOGGER.info("Loaded {} into runtime {} at {}", imageId, runtime.runtimeId(), archive.archivePath());
-            return imageId.toString();
+        try {
+            return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
+                runtime.importImage(archivePath);
+                LOGGER.info("Loaded {} into runtime {} at {}", imageId, runtime.runtimeId(), archivePath);
+                return imageId.toString();
+            });
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            String msg = AppError.RuntimeKind.LOAD_FAILED.format(runtime.runtimeId());
+            String msg = AppError.RuntimeErrorKind.LOAD_FAILED.format(runtime.runtimeId());
             throw new AppException(
-                    new AppError.Runtime(AppError.RuntimeKind.LOAD_FAILED, msg),
+                    new AppError.RuntimeError(AppError.RuntimeErrorKind.LOAD_FAILED, msg),
                     msg, e);
         } catch (IOException e) {
-            String msg = AppError.RuntimeKind.LOAD_FAILED.format(runtime.runtimeId());
+            String msg = AppError.RuntimeErrorKind.LOAD_FAILED.format(runtime.runtimeId());
             throw new AppException(
-                    new AppError.Runtime(AppError.RuntimeKind.LOAD_FAILED, msg),
+                    new AppError.RuntimeError(AppError.RuntimeErrorKind.LOAD_FAILED, msg),
                     msg, e);
         }
     }

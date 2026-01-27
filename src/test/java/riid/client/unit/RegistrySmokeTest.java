@@ -17,12 +17,14 @@ import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
 
 /**
  * Smoke placeholder: requires a running local registry:2 and creds if needed.
@@ -48,6 +50,7 @@ public class RegistrySmokeTest {
         private static final String REF = "edge";
         private static final String SCOPE = "repository:library/alpine:pull";
 
+        private final HostFilesystem fs = new NioHostFilesystem(null);
         private final ObjectMapper mapper = new ObjectMapper();
         private final HttpClientConfig httpConfig = new HttpClientConfig();
         private final HttpClient httpClient = HttpClientFactory.create(httpConfig);
@@ -70,7 +73,7 @@ public class RegistrySmokeTest {
             assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
             // GET blob
-            File tmp = Files.createTempFile("alpine-layer", ".tar").toFile();
+            File tmp = fs.createTempFile("alpine-layer", ".tar").toFile();
             tmp.deleteOnExit();
             BlobResult result = blobService.fetchBlob(DOCKER_HUB, req, tmp, SCOPE);
 

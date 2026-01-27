@@ -3,18 +3,21 @@ package riid.runtime;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
 class RuntimeAdaptersTest {
 
     private static final String TAR_SUFFIX = ".tar";
     private static final String PAYLOAD = "data";
     private static final String ERR = "err";
+    private final HostFilesystem fs = new NioHostFilesystem(null);
 
     @Test
     void podmanFailsOnMissingFile() {
@@ -25,8 +28,8 @@ class RuntimeAdaptersTest {
 
     @Test
     void podmanThrowsOnNonZeroExit() throws Exception {
-        Path tmp = Files.createTempFile("podman-", TAR_SUFFIX);
-        Files.writeString(tmp, PAYLOAD);
+        Path tmp = fs.createTempFile("podman-", TAR_SUFFIX);
+        fs.writeString(tmp, PAYLOAD);
         PodmanRuntimeAdapter adapter = new TestPodmanAdapter(1, "out", ERR);
         IOException ex = assertThrows(IOException.class, () -> adapter.importImage(tmp));
         assertContains(ex.getMessage(), "podman load failed");
@@ -35,8 +38,8 @@ class RuntimeAdaptersTest {
 
     @Test
     void podmanSuccess() throws Exception {
-        Path tmp = Files.createTempFile("podman-", TAR_SUFFIX);
-        Files.writeString(tmp, PAYLOAD);
+        Path tmp = fs.createTempFile("podman-", TAR_SUFFIX);
+        fs.writeString(tmp, PAYLOAD);
         PodmanRuntimeAdapter adapter = new TestPodmanAdapter(0, "ok", "");
         assertDoesNotThrow(() -> adapter.importImage(tmp));
     }
@@ -50,8 +53,8 @@ class RuntimeAdaptersTest {
 
     @Test
     void portoThrowsOnNonZeroExit() throws Exception {
-        Path tmp = Files.createTempFile("porto-", TAR_SUFFIX);
-        Files.writeString(tmp, PAYLOAD);
+        Path tmp = fs.createTempFile("porto-", TAR_SUFFIX);
+        fs.writeString(tmp, PAYLOAD);
         PortoRuntimeAdapter adapter = new TestPortoAdapter(2, "o", ERR);
         IOException ex = assertThrows(IOException.class, () -> adapter.importImage(tmp));
         assertContains(ex.getMessage(), "portoctl layer import failed");
@@ -60,8 +63,8 @@ class RuntimeAdaptersTest {
 
     @Test
     void portoSuccess() throws Exception {
-        Path tmp = Files.createTempFile("porto-", TAR_SUFFIX);
-        Files.writeString(tmp, PAYLOAD);
+        Path tmp = fs.createTempFile("porto-", TAR_SUFFIX);
+        fs.writeString(tmp, PAYLOAD);
         PortoRuntimeAdapter adapter = new TestPortoAdapter(0, "ok", "");
         assertDoesNotThrow(() -> adapter.importImage(tmp));
     }
@@ -85,8 +88,8 @@ class RuntimeAdaptersTest {
         }
 
         @Override
-        protected BoundedCommandExecution.Result runCommand(List<String> command) {
-            return new BoundedCommandExecution.Result(exitCode, stdout, stderr);
+        protected BoundedCommandExecution.ShellResult runCommand(List<String> command) {
+            return new BoundedCommandExecution.ShellResult(exitCode, stdout, stderr);
         }
     }
 
@@ -103,8 +106,8 @@ class RuntimeAdaptersTest {
         }
 
         @Override
-        protected BoundedCommandExecution.Result runCommand(List<String> command) {
-            return new BoundedCommandExecution.Result(exitCode, stdout, stderr);
+        protected BoundedCommandExecution.ShellResult runCommand(List<String> command) {
+            return new BoundedCommandExecution.ShellResult(exitCode, stdout, stderr);
         }
     }
 

@@ -2,10 +2,11 @@ package riid.dispatcher;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -13,13 +14,19 @@ import java.util.Objects;
  * Connects RequestDispatcher (download/validate) with a RuntimeAdapter (import).
  * 7.0/7.1/7.2 from Plan PR 3: fetch -> validate -> pass to runtime, with clear errors.
  */
-public final class ImageImportFacade {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ImageImportFacade.class);
+public final class ImageImportingFacade {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ImageImportingFacade.class);
 
     private final RequestDispatcher dispatcher;
+    private final HostFilesystem fs;
 
-    public ImageImportFacade(RequestDispatcher dispatcher) {
+    public ImageImportingFacade(RequestDispatcher dispatcher) {
+        this(dispatcher, new NioHostFilesystem(null));
+    }
+
+    public ImageImportingFacade(RequestDispatcher dispatcher, HostFilesystem fs) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.fs = Objects.requireNonNull(fs, "fs");
     }
 
     /**
@@ -64,14 +71,14 @@ public final class ImageImportFacade {
             throw new DispatcherRuntimeException("Missing path from dispatcher result");
         }
         Path p = result.path();
-        if (!Files.exists(p)) {
+        if (!fs.exists(p)) {
             throw new DispatcherRuntimeException("Fetched path does not exist: " + p);
         }
-        if (!Files.isRegularFile(p)) {
+        if (!fs.isRegularFile(p)) {
             throw new DispatcherRuntimeException("Fetched path is not a regular file: " + p);
         }
         try {
-            long size = Files.size(p);
+            long size = fs.size(p);
             if (size <= 0) {
                 throw new DispatcherRuntimeException("Fetched file is empty: " + p);
             }
