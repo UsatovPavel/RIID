@@ -29,7 +29,8 @@ public interface RequestDispatcher {
         }
 
         @Override
-        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest,
+                                      long sizeBytes, MediaType mediaType) {
             throw new UnsupportedOperationException("Dispatcher not implemented");
         }
     }

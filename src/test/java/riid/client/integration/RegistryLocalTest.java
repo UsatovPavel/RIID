@@ -51,11 +51,11 @@ public class RegistryLocalTest {
     private static final String REF = "latest";
     private static final String SCOPE = "repository:%s:pull".formatted(REPO);
 
-    private static HttpClient httpClient;
-    private static HttpExecutor http;
-    private static AuthService authService;
-    private static ManifestService manifestService;
-    private static BlobService blobService;
+    private static HttpClient HTTP_CLIENT;
+    private static HttpExecutor HTTP;
+    private static AuthService AUTH_SERVICE;
+    private static ManifestService MANIFEST_SERVICE;
+    private static BlobService BLOB_SERVICE;
     private final HostFilesystem fs = new NioHostFilesystem();
 
     @BeforeAll
@@ -65,11 +65,11 @@ public class RegistryLocalTest {
         int port = REGISTRY.getMappedPort(5000);
         LOCAL = new RegistryEndpoint("http", host, port, null);
         HttpClientConfig httpConfig = new HttpClientConfig();
-        httpClient = HttpClientFactory.create(httpConfig);
-        http = new HttpExecutor(httpClient, httpConfig);
-        authService = new AuthService(http, new ObjectMapper(), new TokenCache());
-        manifestService = new ManifestService(http, authService, new ObjectMapper());
-        blobService = new BlobService(http, authService, null);
+        HTTP_CLIENT = HttpClientFactory.create(httpConfig);
+        HTTP = new HttpExecutor(HTTP_CLIENT, httpConfig);
+        AUTH_SERVICE = new AuthService(HTTP, new ObjectMapper(), new TokenCache());
+        MANIFEST_SERVICE = new ManifestService(HTTP, AUTH_SERVICE, new ObjectMapper());
+        BLOB_SERVICE = new BlobService(HTTP, AUTH_SERVICE, null);
 
         // Seed registry with hello-world using host docker
         String localImage = "%s:%d/%s".formatted(host, port, REPO);
@@ -92,26 +92,26 @@ public class RegistryLocalTest {
 
     @AfterAll
     public static void stop() throws Exception {
-        if (httpClient != null) {
-            httpClient.stop();
+        if (HTTP_CLIENT != null) {
+            HTTP_CLIENT.stop();
         }
         REGISTRY.stop();
     }
 
     @Test
     void fetchManifestAndLayer() throws Exception {
-        ManifestResult manifest = manifestService.fetchManifest(LOCAL, REPO, REF, SCOPE);
+        ManifestResult manifest = MANIFEST_SERVICE.fetchManifest(LOCAL, REPO, REF, SCOPE);
         Assertions.assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
         BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
 
-        Optional<Long> sizeOpt = blobService.headBlob(LOCAL, REPO, layer.digest(), SCOPE);
+        Optional<Long> sizeOpt = BLOB_SERVICE.headBlob(LOCAL, REPO, layer.digest(), SCOPE);
         Assertions.assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "local-layer", ".tar").toFile();
         tmp.deleteOnExit();
-        BlobResult result = blobService.fetchBlob(LOCAL, req, tmp, SCOPE);
+        BlobResult result = BLOB_SERVICE.fetchBlob(LOCAL, req, tmp, SCOPE);
 
         Assertions.assertEquals(layer.digest(), result.digest(), "digest must match manifest");
         Assertions.assertEquals(sizeOpt.get().longValue(), result.size(), "size must match HEAD");
@@ -120,7 +120,7 @@ public class RegistryLocalTest {
 
     @Test
     void manifestNotFoundReturns404() {
-        Executable call = () -> manifestService.fetchManifest(LOCAL, "missing-repo", "missing", SCOPE);
+        Executable call = () -> MANIFEST_SERVICE.fetchManifest(LOCAL, "missing-repo", "missing", SCOPE);
         ClientException ex = Assertions.assertThrows(ClientException.class, call,
                 "fetching missing manifest should throw");
         Assertions.assertNotNull(ex.getMessage());

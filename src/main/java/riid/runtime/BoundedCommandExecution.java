@@ -20,7 +20,7 @@ public final class BoundedCommandExecution {
     private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(
             16,
             Thread.ofVirtual().name("cmd-io-", 0).factory());
-    private static volatile int maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES;
+    private static volatile int MAX_OUTPUT_BYTES = DEFAULT_MAX_OUTPUT_BYTES;
 
     private BoundedCommandExecution() { }
 
@@ -29,7 +29,7 @@ public final class BoundedCommandExecution {
     }
 
     public static ShellResult run(List<String> command) throws IOException, InterruptedException {
-        return run(command, maxOutputBytes);
+        return run(command, MAX_OUTPUT_BYTES);
     }
 
     public static ShellResult run(List<String> command, int maxOutputBytes) throws IOException, InterruptedException {
@@ -80,11 +80,15 @@ public final class BoundedCommandExecution {
         }
     }
 
+    static String getForTest(Future<String> future) throws IOException, InterruptedException {
+        return get(future);
+    }
+
     public static void setMaxOutputBytes(int value) {
         if (value <= 0) {
             throw new IllegalArgumentException("maxOutputBytes must be positive");
         }
-        maxOutputBytes = value;
+        MAX_OUTPUT_BYTES = value;
     }
 
     public record ShellResult(int exitCode, String stdout, String stderr) { }

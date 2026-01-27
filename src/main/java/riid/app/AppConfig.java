@@ -13,6 +13,18 @@ public record AppConfig(
         @JsonProperty("streamThreads") Integer streamThreads,
         @JsonProperty("allowedRegistries") List<String> allowedRegistries
 ) {
+    //(EI_EXPOSE_REP*) by spotsbugs
+    public AppConfig {
+        if (allowedRegistries != null) {
+            allowedRegistries = List.copyOf(allowedRegistries);
+        }
+    }
+
+    @Override
+    public List<String> allowedRegistries() {
+        return allowedRegistries == null ? List.of() : List.copyOf(allowedRegistries);
+    }
+
     public Path tempDirectoryPath() {
         if (tempDirectory == null || tempDirectory.isBlank()) {
             return null;

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.HostFilesystemTestSupport;
+import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 import riid.cache.ImageDigest;
 import riid.client.api.ManifestResult;
@@ -21,8 +21,8 @@ import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.MediaType;
 import riid.dispatcher.FetchResult;
 import riid.dispatcher.ImageRef;
-import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.RepositoryName;
+import riid.dispatcher.RequestDispatcher;
 import riid.runtime.RuntimeAdapter;
 
 class ImageLoadingFacadeErrorTest {
@@ -36,8 +36,11 @@ class ImageLoadingFacadeErrorTest {
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
-        ImageLoadingFacade facade = new ImageLoadingFacade(new NoopDispatcher(), new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(), fs);
+        ImageLoadingFacade facade = new ImageLoadingFacade(
+                new NoopDispatcher(),
+                new RuntimeRegistry(java.util.Map.of()),
+                new NoopRegistryClient(),
+                fs);
 
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new NoopRuntime(), imageId));
@@ -50,12 +53,17 @@ class ImageLoadingFacadeErrorTest {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
-        HostFilesystem fs = HostFilesystemTestSupport.create();
-        Path layer = TestPaths.tempFile(fs, "riid-layer", ".bin");
+        HostFilesystem fs = new NioHostFilesystem();
+        Path layer = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer", ".bin");
         fs.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
-        ImageLoadingFacade facade = new ImageLoadingFacade(dispatcher, new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(), fs);
+        ImageLoadingFacade facade = new ImageLoadingFacade(
+                dispatcher,
+                new RuntimeRegistry(java.util.Map.of()),
+                new NoopRegistryClient(),
+                fs,
+                TestPaths.DEFAULT_BASE_DIR,
+                java.util.List.of());
 
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));

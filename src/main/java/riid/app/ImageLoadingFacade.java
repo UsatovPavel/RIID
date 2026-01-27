@@ -97,7 +97,8 @@ public final class ImageLoadingFacade {
                 return imageId;
             });
         } catch (AppException e) {
-            LOGGER.error("App error while loading {} into runtime {}: {}", imageId, runtime.runtimeId(), e.getMessage(), e);
+            LOGGER.error("App error while loading {} into runtime {}: {}",
+                    imageId, runtime.runtimeId(), e.getMessage(), e);
             throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

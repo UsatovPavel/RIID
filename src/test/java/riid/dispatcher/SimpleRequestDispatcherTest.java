@@ -86,7 +86,8 @@ class SimpleRequestDispatcherTest {
         fs.writeString(tmp.toPath(), "data");
         registry.blobResult = new BlobResult(DIGEST, tmp.length(), MEDIA_LAYER, tmp.getAbsolutePath());
 
-        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, new DispatcherConfig(1), fs);
+        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
+                registry, cache, p2p, new DispatcherConfig(1), fs);
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
         assertEquals(tmp.toPath(), result.path());

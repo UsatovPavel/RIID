@@ -12,12 +12,11 @@ import org.junit.jupiter.api.Test;
 
 import riid.app.ImageId;
 import riid.app.ImageLoadingFacade;
+import riid.app.RuntimeRegistry;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 import riid.cache.TempFileCacheAdapter;
-import riid.client.api.RegistryClient;
-import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.dispatcher.RequestDispatcher;
@@ -86,22 +85,25 @@ class PodmanRuntimeAdapterIntegrationTest {
         // Build app with podman runtime only; dispatcher falls back to registry
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
-        TempFileCacheAdapter cache = new TempFileCacheAdapter();
-        RegistryClient client = new RegistryClientImpl(endpoint, new HttpClientConfig(), cache);
-        RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), fs);
-        RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));
-        var app = new ImageLoadingFacade(
-                dispatcher,
-                registry,
-                client,
-                fs,
-                TestPaths.DEFAULT_BASE_DIR,
-                java.util.List.of());
+        try (TempFileCacheAdapter cache = new TempFileCacheAdapter();
+             riid.client.api.RegistryClientImpl client =
+                     new riid.client.api.RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
+            RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
+                    client, cache, new P2PExecutor.NoOp(), fs);
+            RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));
+            var app = new ImageLoadingFacade(
+                    dispatcher,
+                    registry,
+                    client,
+                    fs,
+                    TestPaths.DEFAULT_BASE_DIR,
+                    java.util.List.of());
 
-        ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
-        ImageId loadedId = app.load(imageId, "podman");
-        // Verify the image can run a trivial command
-        run(List.of(PODMAN, "run", "--rm", loadedId.toString(), "true"));
+            ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
+            ImageId loadedId = app.load(imageId, "podman");
+            // Verify the image can run a trivial command
+            run(List.of(PODMAN, "run", "--rm", loadedId.toString(), "true"));
+        }
     }
 
     private static void run(List<String> cmd) throws Exception {

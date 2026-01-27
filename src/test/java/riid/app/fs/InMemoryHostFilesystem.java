@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 /**
  * In-memory HostFilesystem for unit tests.
  */
-public final class InMemoryHostFilesystem implements HostFilesystem {
+public class InMemoryHostFilesystem implements HostFilesystem {
     private final Map<Path, byte[]> files = new ConcurrentHashMap<>();
     private final Set<Path> directories = ConcurrentHashMap.newKeySet();
 
