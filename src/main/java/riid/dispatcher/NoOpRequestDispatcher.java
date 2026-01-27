@@ -1,9 +1,8 @@
 package riid.dispatcher;
 
-import riid.cache.oci.ImageDigest;
-import riid.client.core.model.manifest.MediaType;
 import java.util.Objects;
 
+import riid.cache.oci.ImageDigest;
 import riid.client.core.model.manifest.MediaType;
 
 /**

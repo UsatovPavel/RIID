@@ -1,19 +1,22 @@
 package riid.app;
 
-import org.junit.jupiter.api.Test;
-import riid.runtime.PodmanRuntimeAdapter;
-
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.nio.file.Files;
-import java.util.UUID;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
+import riid.app.fs.TestPaths;
+import riid.runtime.PodmanRuntimeAdapter;
 
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class CliApplicationTest {
@@ -25,7 +28,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication appWithErr = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8)),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -42,7 +45,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -58,7 +61,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -104,7 +107,7 @@ class CliApplicationTest {
                         return "ok";
                     };
                 },
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
         );
@@ -128,7 +131,7 @@ class CliApplicationTest {
         ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(outBuf, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
         );
@@ -147,7 +150,7 @@ class CliApplicationTest {
                     refSeen.set(ref);
                     return "ok";
                 },
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
         );
@@ -168,7 +171,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -190,7 +193,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -210,7 +213,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -230,7 +233,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -250,12 +253,13 @@ class CliApplicationTest {
     @Test
     void failsWhenPasswordFileEmpty() throws Exception {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
-        Path emptyFile = Files.createTempFile("pwd-", ".txt");
-        Files.writeString(emptyFile, "");
+        HostFilesystem fs = HostFilesystemTestSupport.create();
+        Path emptyFile = TestPaths.tempFile(fs, "pwd-", ".txt");
+        fs.writeString(emptyFile, "");
 
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -278,7 +282,7 @@ class CliApplicationTest {
 
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );
@@ -298,7 +302,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         CliApplication app = new CliApplication(
                 options -> (repo, ref, runtime) -> "ignored",
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
         );

@@ -13,12 +13,12 @@ import java.util.Set;
 
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
-import riid.config.AppConfig;
+import riid.config.GlobalConfig;
 import riid.config.ConfigLoader;
 import riid.runtime.RuntimeAdapter;
 
 /**
- * Minimal CLI parser/runner for ImageLoadFacade.
+ * Minimal CLI parser/runner for ImageLoadingFacade.
  */
 public final class CliApplication {
     // package-visible for tests
@@ -48,7 +48,7 @@ public final class CliApplication {
     public static CliApplication createDefault() {
         return new CliApplication(
                 options -> {
-                    AppConfig config = ConfigLoader.load(options.configPath());
+                    GlobalConfig config = ConfigLoader.load(options.configPath());
                     RegistryEndpoint endpoint = config.client().registries().getFirst();
                     if (options.credentials() != null) {
                         endpoint = new RegistryEndpoint(
@@ -58,22 +58,22 @@ public final class CliApplication {
                                 options.credentials()
                         );
                     }
-                    String registry = ImageId.registryFor(endpoint);
+                    String registry = endpoint.registryName();
                     return (repository, reference, runtimeId) -> {
-                        try (ImageLoadFacade facade = ImageLoadFacade.createFromConfig(
+                        try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(
                                 options.configPath(),
                                 options.credentials()
                         )) {
                             return facade.load(
                                     ImageId.fromRegistry(registry, repository, reference),
                                     runtimeId
-                            );
+                            ).toString();
                         } catch (Exception e) {
                             throw new RuntimeException("Failed to load image", e);
                         }
                     };
                 },
-                ImageLoadFacade.defaultRuntimes(),
+                ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true)
         );

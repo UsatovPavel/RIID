@@ -76,7 +76,7 @@ public class RegistrySmokeTest {
             assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
             // GET blob
-            File tmp = TestPaths.tempFile(fs, "alpine-layer", ".tar").toFile();
+            File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "alpine-layer", ".tar").toFile();
             tmp.deleteOnExit();
             BlobResult result = blobService.fetchBlob(DOCKER_HUB, req, tmp, SCOPE);
 

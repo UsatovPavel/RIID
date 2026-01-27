@@ -61,9 +61,10 @@ class PodmanRuntimeAdapterIntegrationTest {
                 """;
         fs.writeString(configPath, configYaml);
 
-        var app = ImageLoadingFacade.createFromConfig(configPath);
+        try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
         ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
-        loadedId = app.load(imageId, PODMAN);
+            loadedId = app.load(imageId, PODMAN);
+        }
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
                 .redirectErrorStream(true)
@@ -85,24 +86,24 @@ class PodmanRuntimeAdapterIntegrationTest {
         // Build app with podman runtime only; dispatcher falls back to registry
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
-        try (TempFileCacheAdapter cache = new TempFileCacheAdapter();
+        try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
              riid.client.api.RegistryClientImpl client =
                      new riid.client.api.RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
             RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
                     client, cache, new P2PExecutor.NoOp(), fs);
             RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));
-            var app = new ImageLoadingFacade(
+            try (ImageLoadingFacade app = new ImageLoadingFacade(
                     dispatcher,
                     registry,
                     client,
                     fs,
                     TestPaths.DEFAULT_BASE_DIR,
-                    java.util.List.of());
-
+                    java.util.List.of())) {
             ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
             ImageId loadedId = app.load(imageId, "podman");
             // Verify the image can run a trivial command
             run(List.of(PODMAN, "run", "--rm", loadedId.toString(), "true"));
+            }
         }
     }
 

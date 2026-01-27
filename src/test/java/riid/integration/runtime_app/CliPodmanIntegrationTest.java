@@ -4,7 +4,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,6 +12,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.CliApplication;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 /**
  * End-to-end via CLI with real podman runtime.
@@ -29,8 +31,9 @@ class CliPodmanIntegrationTest {
         // ensure clean slate
         runIgnoreErrors(PODMAN, "rmi", "-f", "alpine:edge", "busybox:latest");
 
-        Path config = Files.createTempFile("config-", ".yaml");
-        Files.writeString(config, """
+        HostFilesystem fs = new NioHostFilesystem();
+        Path config = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
+        fs.writeString(config, """
                 client:
                   http: {}
                   auth: {}

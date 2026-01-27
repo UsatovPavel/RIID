@@ -1,5 +1,6 @@
 package riid.client.core.config;
 
+import java.util.Collections;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -16,7 +17,7 @@ public record ClientConfig(
 ) {
     public ClientConfig {
         if (registries != null) {
-            registries = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(registries));
+            registries = Collections.unmodifiableList(new java.util.ArrayList<>(registries));
         }
     }
 
@@ -25,7 +26,7 @@ public record ClientConfig(
         if (registries == null) {
             return java.util.List.of();
         }
-        return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(registries));
+        return Collections.unmodifiableList(new java.util.ArrayList<>(registries));
     }
 
     public boolean registriesMissing() {

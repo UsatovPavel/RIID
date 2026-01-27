@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
 import riid.app.fs.TestPaths;
 
 class RuntimeAdaptersTest {
@@ -18,7 +18,7 @@ class RuntimeAdaptersTest {
     private static final String TAR_SUFFIX = ".tar";
     private static final String PAYLOAD = "data";
     private static final String ERR = "err";
-    private final HostFilesystem fs = new NioHostFilesystem();
+    private final HostFilesystem fs = HostFilesystemTestSupport.create();
 
     @Test
     void podmanFailsOnMissingFile() {

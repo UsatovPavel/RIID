@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import riid.app.fs.TestPaths;
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
 
 class ImageLoadingFacadeFactoryTest {
 
@@ -24,12 +24,13 @@ class ImageLoadingFacadeFactoryTest {
                 dispatcher:
                   maxConcurrentRegistry: 2
                 """;
-        HostFilesystem fs = new NioHostFilesystem();
+        HostFilesystem fs = HostFilesystemTestSupport.create();
         Path tmp = TestPaths.tempFile(fs, "config-", ".yaml");
         fs.writeString(tmp, yaml);
 
-        ImageLoadingFacade svc = ImageLoadingFacade.createFromConfig(tmp);
+        try (ImageLoadingFacade svc = ImageLoadingFacade.createFromConfig(tmp)) {
         assertNotNull(svc);
+        }
     }
 }
 

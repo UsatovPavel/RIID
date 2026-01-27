@@ -17,13 +17,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
 import riid.app.fs.TestPaths;
 
 class TempFileCacheAdapterTest {
 
     private TempFileCacheAdapter cache;
-    private final HostFilesystem fs = new NioHostFilesystem();
+    private final HostFilesystem fs = HostFilesystemTestSupport.create();
 
     @AfterEach
     void tearDown() throws Exception {
@@ -34,7 +34,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void putAndGetRoundtrip() throws Exception {
-        cache = new TempFileCacheAdapter();
+        cache = new TempFileCacheAdapter(fs);
         ImageDigest digest = ImageDigest.parse("sha256:" + "a".repeat(64));
 
         Path tmp = TestPaths.tempFile(fs, "cache-", ".bin");
@@ -56,7 +56,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void putComputesSizeWhenUnknown() throws Exception {
-        cache = new TempFileCacheAdapter();
+        cache = new TempFileCacheAdapter(fs);
         ImageDigest digest = ImageDigest.parse("sha256:" + "b".repeat(64));
 
         Path tmp = TestPaths.tempFile(fs, "cache-", ".dat");
@@ -80,7 +80,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void getMissingReturnsEmpty() {
-        cache = new TempFileCacheAdapter();
+        cache = new TempFileCacheAdapter(fs);
         ImageDigest digest = ImageDigest.parse("sha256:" + "c".repeat(64));
         assertFalse(cache.has(digest));
         assertTrue(cache.get(digest).isEmpty());
@@ -88,7 +88,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void cleanupIsIdempotent() throws Exception {
-        cache = new TempFileCacheAdapter();
+        cache = new TempFileCacheAdapter(fs);
         Path root = cache.rootDir();
         cache.cleanup();
         cache.cleanup(); // should not throw

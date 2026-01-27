@@ -71,7 +71,7 @@ class RegistryClientImplTest {
         assertEquals(layerDigest, mf.manifest().layers().getFirst().digest());
 
         HostFilesystem fs = new NioHostFilesystem();
-        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(REPO, layerDigest, (long) layer.length, OCTET);
         BlobResult br = client.fetchBlob(req, tmp);

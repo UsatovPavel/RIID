@@ -86,7 +86,7 @@ class SimpleRequestDispatcherTest {
 
     @Test
     void downloadsFromRegistryAndPublishes() throws IOException {
-        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         fs.writeString(tmp.toPath(), "data");
         registry.blobResult = new BlobResult(DIGEST, tmp.length(), MEDIA_LAYER, tmp.getAbsolutePath());
 

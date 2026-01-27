@@ -44,7 +44,7 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 3
                 """;
-        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
 
         GlobalConfig cfg = ConfigLoader.load(tmp);
@@ -61,9 +61,10 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
-        assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        assertEquals(ConfigValidationException.class, ex.getClass());
     }
 
     @Test
@@ -78,14 +79,15 @@ class ConfigLoaderTest {
                 """;
         Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
-        assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        assertEquals(ConfigValidationException.class, ex.getClass());
     }
 
     @Test
     void loadsAllHttpAndAuthFields() throws Exception {
-        Path cert = TestPaths.tempFile(fs, "cert-", ".pem");
-        Path key = TestPaths.tempFile(fs, "key-", ".pem");
-        Path ca = TestPaths.tempFile(fs, "ca-", ".pem");
+        Path cert = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cert-", ".pem");
+        Path key = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "key-", ".pem");
+        Path ca = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "ca-", ".pem");
 
         String yaml = """
                 client:
@@ -117,8 +119,8 @@ class ConfigLoaderTest {
                         identityToken: token-123
                 dispatcher:
                   maxConcurrentRegistry: 10
-                """;
-        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+                """.replace("\n", "%n");
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml.formatted(
                 cert.toString(),
                 key.toString(),
@@ -162,10 +164,11 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 2
                 """;
-        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
 
-        assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        assertEquals(ConfigValidationException.class, ex.getClass());
     }
 
     @Test
@@ -182,10 +185,11 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
 
-        assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
+        assertEquals(ConfigValidationException.class, ex.getClass());
     }
 }
 

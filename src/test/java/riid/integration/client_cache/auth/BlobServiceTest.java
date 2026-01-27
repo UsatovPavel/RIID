@@ -103,7 +103,7 @@ class BlobServiceTest {
         assertEquals(data.length, head.get());
 
         // GET
-        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, (long) data.length, Strings.OCTET.v());
         BlobResult result = blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v());
@@ -135,7 +135,7 @@ class BlobServiceTest {
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
         BlobService blob = new BlobService(exec, auth, null);
 
-        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, null, Strings.OCTET.v());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));
@@ -159,7 +159,7 @@ class BlobServiceTest {
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
         BlobService blob = new BlobService(exec, auth, null);
-        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(Strings.REPO.v(), expectedDigest, (long) data.length, Strings.OCTET.v());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));

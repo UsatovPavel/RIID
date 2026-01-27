@@ -10,7 +10,6 @@ import riid.dispatcher.DispatcherConfig;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -20,13 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import riid.app.fs.TestPaths;
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
 
 @SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.AvoidAccessibilityAlteration"})
 class ConfigBranchTest {
 
     private static final String YAML_SUFFIX = ".yaml";
-    private final HostFilesystem fs = new NioHostFilesystem();
+    private final HostFilesystem fs = HostFilesystemTestSupport.create();
 
     @Test
     void missingFileFails() {
@@ -122,8 +121,8 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile("cfg-bad-maxRetries", YAML_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, "cfg-bad-maxRetries", YAML_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -141,8 +140,8 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile("cfg-minimal", YAML_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, "cfg-minimal", YAML_SUFFIX);
+        fs.writeString(tmp, yaml);
 
         GlobalConfig cfg = ConfigLoader.load(tmp);
         System.out.println("client.http.connectTimeout=" + cfg.client().http().connectTimeout());

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
 import riid.cache.oci.ImageDigest;
 import riid.app.fs.TestPaths;
 import riid.client.api.ManifestResult;
@@ -36,16 +36,16 @@ class ImageLoadingFacadeErrorTest {
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
-        ImageLoadingFacade facade = new ImageLoadingFacade(
+        try (ImageLoadingFacade facade = new ImageLoadingFacade(
                 new NoopDispatcher(),
                 new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(),
-                fs);
-
+                fs)) {
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new NoopRuntime(), imageId));
         assertTrue(ex.error() instanceof AppError.RuntimeError);
         assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
+        }
     }
 
     @Test
@@ -53,24 +53,24 @@ class ImageLoadingFacadeErrorTest {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
-        HostFilesystem fs = new NioHostFilesystem();
+        HostFilesystem fs = HostFilesystemTestSupport.create();
         Path layer = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer", ".bin");
         fs.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
-        ImageLoadingFacade facade = new ImageLoadingFacade(//мы тут используем в unit-тесте facade потому что иначе падает тест(thread isInterrupted не пройдёт)
+        try (ImageLoadingFacade facade = new ImageLoadingFacade(
                 dispatcher,
                 new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(),
                 fs,
                 TestPaths.DEFAULT_BASE_DIR,
-                java.util.List.of());
-
+                java.util.List.of())) {
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));
         assertTrue(ex.error() instanceof AppError.RuntimeError);
         assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
         assertTrue(Thread.currentThread().isInterrupted());
         Thread.interrupted(); // clear for other tests
+        }
     }
 
     private static ManifestResult minimalManifestResult() {

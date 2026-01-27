@@ -3,31 +3,32 @@ package riid.integration;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.app.CliApplication;
-import riid.app.ImageLoadFacade;
+import riid.app.ImageLoadingFacade;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke: CLI arg parsing -> ConfigLoader -> ImageLoadFacade (no network).
+ * Smoke: CLI arg parsing -> ConfigLoader -> ImageLoadingFacade (no network).
  */
 @Tag("e2e")
 class CliToFactorySmokeTest {
 
     @Test
     void reachesFactoryFromCli() throws Exception {
-        Path config = Files.createTempFile("config-", ".yaml");
-        Files.writeString(config, """
+        var fs = new riid.app.fs.NioHostFilesystem();
+        Path config = riid.app.fs.TestPaths.tempFile(fs, riid.app.fs.TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
+        fs.writeString(config, """
                 client:
                   http: {}
                   auth: {}
@@ -44,7 +45,9 @@ class CliToFactorySmokeTest {
         CliApplication cli = new CliApplication(
                 opts -> {
                     factoryCalled.set(true);
-                    ImageLoadFacade.createFromConfig(opts.configPath());
+                    try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(opts.configPath())) {
+                        Objects.requireNonNull(facade);
+                    }
                     return (repo, ref, runtime) -> "ok";
                 },
                 Map.of("stub", new NoopRuntimeAdapter()),

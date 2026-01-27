@@ -16,14 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
 import riid.app.fs.TestPaths;
 
 class FileCacheAdapterTest {
 
     private Path root;
     private FileCacheAdapter cache;
-    private final HostFilesystem fs = new NioHostFilesystem();
+    private final HostFilesystem fs = HostFilesystemTestSupport.create();
 
     @AfterEach
     void tearDown() throws Exception {
@@ -35,7 +35,7 @@ class FileCacheAdapterTest {
     @Test
     void putAndGetRoundtrip() throws Exception {
         root = TestPaths.tempDir(fs, "file-cache-");
-        cache = new FileCacheAdapter(root.toString());
+        cache = new FileCacheAdapter(root.toString(), fs);
         ImageDigest digest = ImageDigest.parse("sha256:" + "d".repeat(64));
 
         Path tmp = TestPaths.tempFile(fs, "cache-file-", ".bin");
@@ -54,7 +54,7 @@ class FileCacheAdapterTest {
     @Test
     void missingReturnsEmptyAndHasFalse() throws Exception {
         root = TestPaths.tempDir(fs, "file-cache-");
-        cache = new FileCacheAdapter(root.toString());
+        cache = new FileCacheAdapter(root.toString(), fs);
         ImageDigest digest = ImageDigest.parse("sha256:" + "e".repeat(64));
         assertFalse(cache.has(digest));
         assertTrue(cache.get(digest).isEmpty());
