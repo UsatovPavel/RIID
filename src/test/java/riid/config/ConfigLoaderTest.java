@@ -43,7 +43,7 @@ class ConfigLoaderTest {
         Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
 
-        AppConfig cfg = ConfigLoader.load(tmp);
+        GlobalConfig cfg = ConfigLoader.load(tmp);
         assertEquals(1, cfg.client().registries().size());
         RegistryEndpoint ep = cfg.client().registries().get(0);
         assertEquals("https", ep.scheme());
@@ -110,7 +110,7 @@ class ConfigLoaderTest {
         Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
 
-        AppConfig cfg = ConfigLoader.load(tmp);
+        GlobalConfig cfg = ConfigLoader.load(tmp);
         assertEquals(2, cfg.client().registries().size());
         var first = cfg.client().registries().get(0);
         var firstCreds = first.credentialsOpt();

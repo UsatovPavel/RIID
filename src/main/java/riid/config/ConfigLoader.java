@@ -21,16 +21,16 @@ public final class ConfigLoader {
 
     private ConfigLoader() { }
 
-    public static AppConfig load(Path path) {
+    public static GlobalConfig load(Path path) {
         return load(path, new NioHostFilesystem());
     }
 
-    public static AppConfig load(Path path, HostFilesystem fs) {
+    public static GlobalConfig load(Path path, HostFilesystem fs) {
         if (!fs.exists(path)) {
             throw new IllegalArgumentException("Config file not found: " + path);
         }
         try {
-            AppConfig config = YAML_MAPPER.readValue(path.toFile(), AppConfig.class);
+            GlobalConfig config = YAML_MAPPER.readValue(path.toFile(), GlobalConfig.class);
             ConfigValidator.validate(config);
             return config;
         } catch (ConfigValidationException e) {

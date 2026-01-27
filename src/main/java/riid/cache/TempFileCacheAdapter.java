@@ -7,6 +7,7 @@ import java.util.Optional;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.PathSupport;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * Temporary filesystem cache, useful for tests and ephemeral runs.
@@ -14,6 +15,7 @@ import riid.app.fs.PathSupport;
 public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     private final Path rootPath;
     private final FileCacheAdapter delegate;
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "HostFilesystem is stateless")
     private final HostFilesystem fs;
     private boolean cleaned;
 

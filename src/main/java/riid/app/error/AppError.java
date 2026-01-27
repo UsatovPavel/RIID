@@ -25,6 +25,7 @@ public sealed interface AppError permits AppError.Oci, AppError.RuntimeError {
 
     enum RuntimeErrorKind {
         ADAPTER_NOT_FOUND("Runtime adapter not found: %s"),
+        REGISTRY_NOT_ALLOWED("Registry not allowed: %s"),
         LOAD_FAILED("Failed to load image into runtime %s");
 
         private final String template;

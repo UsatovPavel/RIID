@@ -15,7 +15,7 @@ public final class NoOpRequestDispatcher implements RequestDispatcher {
     }
 
     @Override
-    public FetchResult fetchLayer(String repository,
+    public FetchResult fetchLayer(RepositoryName repository,
                                   riid.cache.ImageDigest digest,
                                   long sizeBytes,
                                   MediaType mediaType) {

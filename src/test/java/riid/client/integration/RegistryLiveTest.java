@@ -1,4 +1,4 @@
-package riid.client;
+package riid.client.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.client.HttpClient;
@@ -62,7 +62,7 @@ public class RegistryLiveTest {
         assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
         // GET blob
-        File tmp = TestPaths.tempFile(fs, "alpine-layer", ".tar").toFile();
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "alpine-layer", ".tar").toFile();
         tmp.deleteOnExit();
         BlobResult result = blobService.fetchBlob(DOCKER_HUB, req, tmp, SCOPE);
 

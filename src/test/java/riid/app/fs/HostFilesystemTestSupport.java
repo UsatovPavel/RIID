@@ -11,10 +11,10 @@ import java.util.stream.Stream;
  * HostFilesystem helper for tests that isolates temp files in a dedicated directory.
  */
 public final class HostFilesystemTestSupport implements HostFilesystem {
-    private final NioHostFilesystem delegate;
+    private final InMemoryHostFilesystem delegate;
 
     private HostFilesystemTestSupport() {
-        this.delegate = new NioHostFilesystem();
+        this.delegate = new InMemoryHostFilesystem();
     }
 
     public static HostFilesystemTestSupport create() {

@@ -29,6 +29,7 @@ import riid.app.fs.TestPaths;
  */
 @Tag("local")
 @Testcontainers
+@SuppressWarnings({"resource"})
 class RegistryAuthStatusTest {
 
     private static final String USER = "testuser";
@@ -56,7 +57,7 @@ class RegistryAuthStatusTest {
                 BCRYPT_HASH = parts[1];
             }
 
-            HTPASSWD_PATH = TestPaths.tempFile(FS, "htpasswd-", ".txt");
+            HTPASSWD_PATH = TestPaths.tempFile(FS, TestPaths.DEFAULT_BASE_DIR, "htpasswd-", ".txt");
             FS.writeString(HTPASSWD_PATH, USER + ":" + BCRYPT_HASH);
         } catch (Exception e) {
             throw new RuntimeException("Failed to prepare htpasswd", e);

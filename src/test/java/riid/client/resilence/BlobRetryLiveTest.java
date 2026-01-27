@@ -31,14 +31,12 @@ public class BlobRetryLiveTest {
 
         String repo = "library/alpine";
         String ref = "edge";
-        String scope = "repository:library/alpine:pull";
-
         var manifestResult = client.fetchManifest(repo, ref);
         var layer = manifestResult.manifest().layers().getFirst();
 
         BlobRequest req = new BlobRequest(repo, layer.digest(), layer.size(), layer.mediaType());
 
-        File tmp = TestPaths.tempFile(fs, "alpine-layer-retry", ".tar").toFile();
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "alpine-layer-retry", ".tar").toFile();
         tmp.deleteOnExit();
 
         // обычный GET; при сбое сработает retry внутри клиента

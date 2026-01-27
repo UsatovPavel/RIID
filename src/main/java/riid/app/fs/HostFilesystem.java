@@ -47,11 +47,11 @@ public interface HostFilesystem {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(bytes, "bytes");
         Path dir = path.toAbsolutePath().getParent();
-        String fileName = path.getFileName() != null ? path.getFileName().toString() : "tmp";
+        Path fileNamePath = path.getFileName();
+        String fileName = fileNamePath != null ? fileNamePath.toString() : "tmp";
         String prefix = fileName.length() < 3 ? "tmp-" + fileName : fileName;
-        Path temp = dir == null
-                ? Files.createTempFile(prefix, ".tmp")
-                : Files.createTempFile(dir, prefix, ".tmp");
+        Path temp = PathSupport.tempPath(dir, prefix + "-", ".tmp");
+        createFile(temp);
         try {
             write(temp, bytes);
             return atomicMove(temp, path);

@@ -62,15 +62,15 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         String reference = ref.digest() != null && !ref.digest().isBlank() ? ref.digest() : ref.tag();
         ManifestResult manifest = client.fetchManifest(ref.repository(), reference);
         var layer = manifest.manifest().layers().getFirst();
-        return fetchLayer(ref.repository(),
+        return fetchLayer(new RepositoryName(ref.repository()),
                 ImageDigest.parse(layer.digest()),
                 layer.size(),
                 MediaType.from(layer.mediaType()));
     }
 
     @Override
-    public FetchResult fetchLayer(String repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
-        Objects.requireNonNull(repository);
+    public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
+        Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest);
 
         // 1) cache
@@ -103,7 +103,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         try {
             File tmp = createTemp();
             BlobResult blob = client.fetchBlob(
-                    new BlobRequest(repository, digest.toString(), sizeBytes, mediaType.value()),
+                    new BlobRequest(repository.value(), digest.toString(), sizeBytes, mediaType.value()),
                     tmp);
             LOGGER.info("downloaded layer {} from registry", digest);
 

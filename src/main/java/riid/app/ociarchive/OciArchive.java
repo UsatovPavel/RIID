@@ -14,7 +14,7 @@ final class OciArchive implements AutoCloseable {
     private final Path ociDirPath;
     private final HostFilesystem fs;
 
-    public OciArchive(Path archivePath, Path ociDir, HostFilesystem fs) {
+    OciArchive(Path archivePath, Path ociDir, HostFilesystem fs) {
         this.archiveFile = Objects.requireNonNull(archivePath, "archivePath");
         this.ociDirPath = Objects.requireNonNull(ociDir, "ociDir");
         this.fs = Objects.requireNonNull(fs, "fs");

@@ -15,9 +15,12 @@ import riid.app.ImageLoadingFacade;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
-import riid.app.fs.HostFilesystemTestSupport;
 import riid.cache.TempFileCacheAdapter;
+import riid.client.api.RegistryClient;
+import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.http.HttpClientConfig;
+import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
 
 @Tag("local")
@@ -35,7 +38,7 @@ class PodmanRuntimeAdapterIntegrationTest {
         // Use high-level service to fetch and import
         ImageId loadedId;
         HostFilesystem fs = new NioHostFilesystem();
-        Path configPath = TestPaths.tempFile(fs, "config-", ".yaml");
+        Path configPath = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
         String configYaml = """
                 client:
                   http:
@@ -54,6 +57,8 @@ class PodmanRuntimeAdapterIntegrationTest {
                       port: -1
                 dispatcher:
                   maxConcurrentRegistry: 3
+                app:
+                  tempDirectory: "build/test-fs"
                 """;
         fs.writeString(configPath, configYaml);
 
@@ -80,12 +85,18 @@ class PodmanRuntimeAdapterIntegrationTest {
     void oneShotLoadAndRun() throws Exception {
         // Build app with podman runtime only; dispatcher falls back to registry
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        var app = ImageLoadingFacade.createDefault(
-                endpoint,
-                new TempFileCacheAdapter(),
-                new P2PExecutor.NoOp(),
-                java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()),
-                HostFilesystemTestSupport.create());
+        HostFilesystem fs = new NioHostFilesystem();
+        TempFileCacheAdapter cache = new TempFileCacheAdapter();
+        RegistryClient client = new RegistryClientImpl(endpoint, new HttpClientConfig(), cache);
+        RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), fs);
+        RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));
+        var app = new ImageLoadingFacade(
+                dispatcher,
+                registry,
+                client,
+                fs,
+                TestPaths.DEFAULT_BASE_DIR,
+                java.util.List.of());
 
         ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
         ImageId loadedId = app.load(imageId, "podman");

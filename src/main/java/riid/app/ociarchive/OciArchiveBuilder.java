@@ -19,6 +19,7 @@ import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.MediaType;
 import riid.dispatcher.RequestDispatcher;
+import riid.dispatcher.RepositoryName;
 
 /**
  * Builds an OCI archive from a manifest, pulling blobs via RequestDispatcher.
@@ -86,7 +87,8 @@ public final class OciArchiveBuilder {
 
         // index.json with ref name
         String template = readResource("oci/index/json.tpl");
-        String index = String.format(Locale.ROOT, template, manifestBytes.length, manifestDigest, imageId.referenceName());
+        String index = String.format(Locale.ROOT, template, manifestBytes.length, 
+            manifestDigest, imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
         Path archive = PathSupport.tempPath(tempRoot, "oci-archive-", ".tar");
@@ -105,7 +107,7 @@ public final class OciArchiveBuilder {
                            long size,
                            MediaType mediaType,
                            Path blobsDir) throws IOException {
-        var fetched = dispatcher.fetchLayer(repository, digest, size, mediaType);
+        var fetched = dispatcher.fetchLayer(new RepositoryName(repository), digest, size, mediaType);
         File tmp = fetched.path().toFile();
         fs.copy(tmp.toPath(), blobsDir.resolve(fetched.digest().hex()));
     }

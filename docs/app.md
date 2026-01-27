@@ -1,4 +1,4 @@
-# App module (CLI + wiring)
+# App **module** (CLI + wiring)
 
 ## Purpose
 CLI and dependency wiring layer for loading container images: parse flags, validate user input, invoke `ImageLoadService`, and return exit codes.

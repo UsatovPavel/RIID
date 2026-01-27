@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.HostFilesystemTestSupport;
 import riid.app.fs.TestPaths;
 import riid.cache.ImageDigest;
 import riid.client.api.ManifestResult;
@@ -22,6 +22,7 @@ import riid.client.core.model.manifest.MediaType;
 import riid.dispatcher.FetchResult;
 import riid.dispatcher.ImageRef;
 import riid.dispatcher.RequestDispatcher;
+import riid.dispatcher.RepositoryName;
 import riid.runtime.RuntimeAdapter;
 
 class ImageLoadingFacadeErrorTest {
@@ -49,7 +50,7 @@ class ImageLoadingFacadeErrorTest {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
-        HostFilesystem fs = new NioHostFilesystem();
+        HostFilesystem fs = HostFilesystemTestSupport.create();
         Path layer = TestPaths.tempFile(fs, "riid-layer", ".bin");
         fs.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
@@ -107,10 +108,10 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
-        public FetchResult fetchLayer(String repository,
-                                     riid.cache.ImageDigest digest,
-                                     long sizeBytes,
-                                     MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository,
+                                      riid.cache.ImageDigest digest,
+                                      long sizeBytes,
+                                      MediaType mediaType) {
             throw new UnsupportedOperationException(NOT_USED);
         }
     }
@@ -128,10 +129,10 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
-        public FetchResult fetchLayer(String repository,
-                                     riid.cache.ImageDigest digest,
-                                     long sizeBytes,
-                                     MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository,
+                                      riid.cache.ImageDigest digest,
+                                      long sizeBytes,
+                                      MediaType mediaType) {
             return new FetchResult(IMG_DIGEST, mediaType, Path.of(path));
         }
     }

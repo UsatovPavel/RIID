@@ -16,7 +16,7 @@ public interface RequestDispatcher {
     /**
      * Fetch a specific layer/config digest for a repository.
      */
-    FetchResult fetchLayer(String repository, ImageDigest digest, long sizeBytes, MediaType mediaType);
+    FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType);
 
     /**
      * Base no-op implementation (placeholder).
@@ -29,7 +29,7 @@ public interface RequestDispatcher {
         }
 
         @Override
-        public FetchResult fetchLayer(String repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
             throw new UnsupportedOperationException("Dispatcher not implemented");
         }
     }

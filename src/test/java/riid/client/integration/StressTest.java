@@ -69,6 +69,7 @@ public class StressTest {
                     try {
                         File tmp = TestPaths.tempFile(
                                 FS,
+                                TestPaths.DEFAULT_BASE_DIR,
                                 "busybox-layer-" + Thread.currentThread().getId() + "-",
                                 ".tar")
                                 .toFile();

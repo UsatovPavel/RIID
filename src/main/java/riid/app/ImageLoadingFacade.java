@@ -3,8 +3,11 @@ package riid.app;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,14 +24,16 @@ import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
-import riid.config.AppConfig;
+import riid.config.GlobalConfig;
 import riid.config.ConfigLoader;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
+import riid.runtime.BoundedCommandExecution;
 import riid.runtime.PodmanRuntimeAdapter;
 import riid.runtime.PortoRuntimeAdapter;
 import riid.runtime.RuntimeAdapter;
+import riid.runtime.RuntimeConfig;
 
 /**
  * Application entrypoint/facade: load image (dispatcher -> OCI -> runtime), optionally run.
@@ -40,21 +45,26 @@ public final class ImageLoadingFacade {
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
+    private final Set<String> allowedRegistries;
     public ImageLoadingFacade(RequestDispatcher dispatcher,
                               RuntimeRegistry runtimeRegistry,
                               RegistryClient client,
                               HostFilesystem fs) {
-        this(dispatcher, runtimeRegistry, client, fs, null);
+        this(dispatcher, runtimeRegistry, client, fs, null, null);
     }
 
     public ImageLoadingFacade(RequestDispatcher dispatcher,
                               RuntimeRegistry runtimeRegistry,
                               RegistryClient client,
                               HostFilesystem fs,
-                              Path tempRoot) {
+                              Path tempRoot,
+                              List<String> allowedRegistries) {
         this.archiveBuilder = new OciArchiveBuilder(dispatcher, fs, tempRoot);
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.client = Objects.requireNonNull(client, "client");
+        this.allowedRegistries = allowedRegistries == null
+                ? Set.of()
+                : Set.copyOf(new HashSet<>(allowedRegistries));
     }
 
     /**
@@ -64,6 +74,7 @@ public final class ImageLoadingFacade {
      */
     public ImageId load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
+        ensureRegistryAllowed(imageId.registry());
         ManifestResult manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
             RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
         ImageId resolved = imageId.withDigest(manifestResult.digest());
@@ -85,6 +96,9 @@ public final class ImageLoadingFacade {
                 LOGGER.info("Loaded {} into runtime {} at {}", imageId, runtime.runtimeId(), archivePath);
                 return imageId;
             });
+        } catch (AppException e) {
+            LOGGER.error("App error while loading {} into runtime {}: {}", imageId, runtime.runtimeId(), e.getMessage(), e);
+            throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             String msg = AppError.RuntimeErrorKind.LOAD_FAILED.format(runtime.runtimeId());
@@ -108,7 +122,7 @@ public final class ImageLoadingFacade {
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
         RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, fs);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
-        return new ImageLoadingFacade(dispatcher, registry, client, fs);
+        return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null);
     }
 
     /**
@@ -116,7 +130,7 @@ public final class ImageLoadingFacade {
      */
     public static ImageLoadingFacade createFromConfig(Path configPath) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
-        AppConfig config = ConfigLoader.load(configPath);
+        GlobalConfig config = ConfigLoader.load(configPath);
 
         RegistryEndpoint endpoint = config.client().registries().getFirst();
         TempFileCacheAdapter cache = new TempFileCacheAdapter();
@@ -127,19 +141,33 @@ public final class ImageLoadingFacade {
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
 
-        Path tempDir = config.app() != null ? config.app().tempDirPath() : null;
-        HostFilesystem fs = new NioHostFilesystem();
-        if (config.app() != null) {
-            int threads = config.app().streamThreadsOrDefault();
-            riid.runtime.PodmanRuntimeAdapter.setStreamThreads(threads);
-            riid.runtime.PortoRuntimeAdapter.setStreamThreads(threads);
+        AppConfig appConfig = config.app();
+        RuntimeConfig runtimeConfig = config.runtime();
+        if (runtimeConfig != null) {
+            BoundedCommandExecution.setMaxOutputBytes(runtimeConfig.maxOutputBytesOrDefault());
         }
+        Path tempDir = appConfig != null ? appConfig.tempDirectoryPath() : null;
+        HostFilesystem fs = new NioHostFilesystem();
+        List<String> allowedRegistries = appConfig != null ? appConfig.allowedRegistriesOrEmpty() : List.of();
         return new ImageLoadingFacade(
                 new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), fs),
                 new RuntimeRegistry(runtimes),
                 client,
                 fs,
-                tempDir);
+                tempDir,
+                allowedRegistries);
+    }
+
+    private void ensureRegistryAllowed(String registry) {
+        if (allowedRegistries.isEmpty()) {
+            return;
+        }
+        if (!allowedRegistries.contains(registry)) {
+            String msg = AppError.RuntimeErrorKind.REGISTRY_NOT_ALLOWED.format(registry);
+            throw new AppException(
+                    new AppError.RuntimeError(AppError.RuntimeErrorKind.REGISTRY_NOT_ALLOWED, msg),
+                    msg);
+        }
     }
 
 }

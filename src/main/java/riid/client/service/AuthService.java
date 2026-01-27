@@ -130,10 +130,14 @@ public final class AuthService {
             if (creds != null) {
                 creds.identityTokenOpt().ifPresent(id -> headers.put("Authorization", "Bearer " + id));
                 if (headers.isEmpty()) {
-                    String basic = creds.usernameOpt().orElse("") + ":" + creds.passwordOpt().orElse("");
-                    String enc = getEncoder()
-                            .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
-                    headers.put("Authorization", "Basic " + enc);
+                    boolean hasUser = creds.usernameOpt().filter(s -> !s.isBlank()).isPresent();
+                    boolean hasPass = creds.passwordOpt().filter(s -> !s.isBlank()).isPresent();
+                    if (hasUser && hasPass) {
+                        String basic = creds.usernameOpt().orElse("") + ":" + creds.passwordOpt().orElse("");
+                        String enc = getEncoder()
+                                .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
+                        headers.put("Authorization", "Basic " + enc);
+                    }
                 }
             }
             HttpResult<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
