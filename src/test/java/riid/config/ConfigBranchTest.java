@@ -18,10 +18,15 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import riid.app.fs.TestPaths;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
 @SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.AvoidAccessibilityAlteration"})
 class ConfigBranchTest {
 
     private static final String YAML_SUFFIX = ".yaml";
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @Test
     void missingFileFails() {
@@ -31,8 +36,8 @@ class ConfigBranchTest {
 
     @Test
     void invalidYamlFailsParsing() throws Exception {
-        Path tmp = Files.createTempFile("bad-config", YAML_SUFFIX);
-        Files.writeString(tmp, "not: [valid"); // broken YAML
+        Path tmp = TestPaths.tempFile(fs, "bad-config", YAML_SUFFIX);
+        fs.writeString(tmp, "not: [valid"); // broken YAML
         assertThrows(RuntimeException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -48,8 +53,8 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile("cfg-null-http", YAML_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, "cfg-null-http", YAML_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
         //Client config must not have side-effect(get http from default HttpConfig)
     }
@@ -66,8 +71,8 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile("cfg-null-auth", YAML_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, "cfg-null-auth", YAML_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -80,8 +85,8 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile("cfg-null-reg", YAML_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, "cfg-null-reg", YAML_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -98,8 +103,8 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 0
                 """;
-        Path tmp = Files.createTempFile("cfg-bad-dispatcher", YAML_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, "cfg-bad-dispatcher", YAML_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -139,7 +144,7 @@ class ConfigBranchTest {
         Path tmp = Files.createTempFile("cfg-minimal", YAML_SUFFIX);
         Files.writeString(tmp, yaml);
 
-        AppConfig cfg = ConfigLoader.load(tmp);
+        GlobalConfig cfg = ConfigLoader.load(tmp);
         System.out.println("client.http.connectTimeout=" + cfg.client().http().connectTimeout());
         System.out.println("client.http.requestTimeout=" + cfg.client().http().requestTimeout());
         System.out.println("client.http.maxRetries=" + cfg.client().http().maxRetries());
@@ -157,7 +162,7 @@ class ConfigBranchTest {
 
     @Test
     void throwsWhenDispatcherMissing() {
-        AppConfig cfg = new AppConfig(validClient(), null, null);
+        GlobalConfig cfg = new GlobalConfig(validClient(), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(ConfigValidationException.Reason.MISSING_DISPATCHER.message(), ex.getMessage());
     }
@@ -165,7 +170,7 @@ class ConfigBranchTest {
     @Test
     void throwsWhenRegistriesNull() {
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), null);
-        AppConfig cfg = new AppConfig(client, new DispatcherConfig(1), null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(ConfigValidationException.Reason.MISSING_REGISTRIES.message(), ex.getMessage());
     }
@@ -175,7 +180,7 @@ class ConfigBranchTest {
         var regs = new java.util.ArrayList<RegistryEndpoint>();
         regs.add(null);
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), regs);
-        AppConfig cfg = new AppConfig(client, new DispatcherConfig(1), null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(ConfigValidationException.Reason.NULL_REGISTRY.message(), ex.getMessage());
     }
@@ -186,7 +191,7 @@ class ConfigBranchTest {
         var regs = new java.util.ArrayList<RegistryEndpoint>();
         regs.add(ep);
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), regs);
-        AppConfig cfg = new AppConfig(client, new DispatcherConfig(1), null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         Assertions.assertEquals(ConfigValidationException.Reason.MISSING_SCHEME.message(), ex.getMessage());
     }
@@ -197,7 +202,7 @@ class ConfigBranchTest {
         var regs = new java.util.ArrayList<RegistryEndpoint>();
         regs.add(ep);
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), regs);
-        AppConfig cfg = new AppConfig(client, new DispatcherConfig(1), null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(ConfigValidationException.Reason.MISSING_HOST.message(), ex.getMessage());
     }
@@ -257,7 +262,7 @@ class ConfigBranchTest {
                 .followRedirects(true)
                 .build();
         ClientConfig client = new ClientConfig(http, new AuthConfig(), List.of(RegistryEndpoint.https("example.org")));
-        AppConfig cfg = new AppConfig(client, new DispatcherConfig(1), null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         Assertions.assertEquals(
                 ConfigValidationException.Reason.HTTP_CONNECT_TIMEOUT_POSITIVE.message(),
@@ -380,7 +385,7 @@ class ConfigBranchTest {
                 HttpClientConfig.builder().build(),
                 auth,
                 List.of(RegistryEndpoint.https("example.org")));
-        AppConfig cfg = new AppConfig(client, new DispatcherConfig(1), null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(
                 ConfigValidationException.Reason.AUTH_CERT_MISSING.message() + ": " + missing,

@@ -14,7 +14,7 @@ class ImageIdTest {
     @Test
     void registryForUsesPortWhenPositive() {
         RegistryEndpoint endpoint = new RegistryEndpoint("https", REGISTRY, 5000, null);
-        assertEquals(REGISTRY + ":5000", ImageId.registryFor(endpoint));
+        assertEquals(REGISTRY + ":5000", endpoint.registryName());
     }
 
     @Test

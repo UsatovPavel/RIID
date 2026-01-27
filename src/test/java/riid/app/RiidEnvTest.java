@@ -14,6 +14,7 @@ class RiidEnvTest {
     private static final String ENV_TAG = "RIID_TAG";
     private static final String ENV_REF = "RIID_REF";
     private static final String ENV_DIGEST = "RIID_DIGEST";
+    private static final String ENV_REGISTRY = "RIID_REGISTRY";
     private static final String ENV_CACHE_DIR = "RIID_CACHE_DIR";
     private final Map<String, String> original = new HashMap<>();
 
@@ -27,33 +28,40 @@ class RiidEnvTest {
     @Test
     void repoDefaultsWhenEnvMissing() {
         setEnv(ENV_REPO, null);
-        var ref = RiidEnv.imageRef();
-        assertEquals("library/busybox", ref.repository());
+        var id = RiidEnv.imageId();
+        assertEquals("library/busybox", id.name());
     }
 
     @Test
     void tagPrefersTagThenRef() {
         setEnv(ENV_TAG, "v1");
         setEnv(ENV_REF, "latest");
-        assertEquals("v1", RiidEnv.imageRef().tag());
+        assertEquals("v1", RiidEnv.imageId().tag());
 
         setEnv(ENV_TAG, null);
         setEnv(ENV_REF, "ref-tag");
-        assertEquals("ref-tag", RiidEnv.imageRef().tag());
+        assertEquals("ref-tag", RiidEnv.imageId().tag());
     }
 
     @Test
     void digestPrefersDigestThenRefSha() {
         setEnv(ENV_DIGEST, "sha256:abc");
         setEnv(ENV_REF, "sha256:def");
-        assertEquals("sha256:abc", RiidEnv.imageRef().digest());
+        assertEquals("sha256:abc", RiidEnv.imageId().digest());
 
         setEnv(ENV_DIGEST, null);
         setEnv(ENV_REF, "sha256:def");
-        assertEquals("sha256:def", RiidEnv.imageRef().digest());
+        assertEquals("sha256:def", RiidEnv.imageId().digest());
 
         setEnv(ENV_REF, "latest");
-        assertNull(RiidEnv.imageRef().digest());
+        assertNull(RiidEnv.imageId().digest());
+    }
+
+    @Test
+    void registryDefaultsWhenEnvMissing() {
+        setEnv(ENV_REGISTRY, null);
+        var id = RiidEnv.imageId();
+        assertEquals("registry-1.docker.io", id.registry());
     }
 
     @Test

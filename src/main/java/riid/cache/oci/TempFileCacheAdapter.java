@@ -1,10 +1,13 @@
 package riid.cache.oci;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.Optional;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.PathSupport;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * Temporary filesystem cache, useful for tests and ephemeral runs.
@@ -12,12 +15,20 @@ import java.util.Optional;
 public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     private final Path rootPath;
     private final FileCacheAdapter delegate;
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "HostFilesystem is stateless")
+    private final HostFilesystem fs;
     private boolean cleaned;
 
     public TempFileCacheAdapter() {
+        this(new NioHostFilesystem());
+    }
+
+    public TempFileCacheAdapter(HostFilesystem fs) {
         try {
-            this.rootPath = Files.createTempDirectory("riid-cache-tmp");
-            this.delegate = new FileCacheAdapter(rootPath.toString());
+            this.fs = fs;
+            this.rootPath = PathSupport.tempDirPath("riid-cache-tmp-");
+            fs.createDirectory(rootPath);
+            this.delegate = new FileCacheAdapter(rootPath.toString(), fs);
         } catch (IOException e) {
             throw new RuntimeException("Failed to create temp cache directory", e);
         }
@@ -50,7 +61,7 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
         if (cleaned) {
             return;
         }
-        deleteRecursively(rootPath);
+        fs.deleteRecursively(rootPath);
         cleaned = true;
     }
 
@@ -63,19 +74,5 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
         return rootPath;
     }
 
-    private void deleteRecursively(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (var paths = Files.walk(root)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException ignored) {
-                    // best effort cleanup
-                }
-            });
-        }
-    }
 }
 

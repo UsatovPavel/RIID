@@ -30,10 +30,10 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 "-I",
                 imagePath.toAbsolutePath().toString()
         );
-        BoundedCommandExecution.Result result = runCommand(cmd);
-        if (result.exitCode() != 0) {
-            throw new IOException("portoctl layer import failed (exit " + result.exitCode() + "): "
-                    + result.stdout() + result.stderr());
+        BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
+        if (shellResult.exitCode() != 0) {
+            throw new IOException("portoctl layer import failed (exit " + shellResult.exitCode() + "): "
+                    + shellResult.stdout() + shellResult.stderr());
         }
     }
 
@@ -44,18 +44,9 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         return new ProcessBuilder(command).start();
     }
 
-    protected BoundedCommandExecution.Result runCommand(List<String> command)
+    protected BoundedCommandExecution.ShellResult runCommand(List<String> command)
             throws IOException, InterruptedException {
-        return BoundedCommandExecution.run(command, 64 * 1024, STREAM_THREADS);
-    }
-
-    private static int STREAM_THREADS = BoundedCommandExecution.DEFAULT_STREAM_THREADS;
-
-    public static void setStreamThreads(int threads) {
-        if (threads <= 0) {
-            throw new IllegalArgumentException("streamThreads must be positive");
-        }
-        STREAM_THREADS = threads;
+        return BoundedCommandExecution.run(command);
     }
 }
 

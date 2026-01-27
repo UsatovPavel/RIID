@@ -3,6 +3,10 @@
 ### Purpose
 Parse and validate the application YAML config (registry client + dispatcher). Loader: `ConfigLoader`, rules: `ConfigValidator`.
 
+### Modules layout
+- Each module owns its config class in its module package (e.g., client/dispatcher/runtime/app).
+- `GlobalConfig` is the aggregator (config module) that stitches module configs together.
+
 ### Minimal valid example
 ```yaml
 client:

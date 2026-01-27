@@ -15,17 +15,21 @@ import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 /**
  * Local registry:2 with htpasswd auth. Verifies 401/404/200 paths.
  */
 @Tag("local")
 @Testcontainers
+@SuppressWarnings({"resource"})
 class RegistryAuthStatusTest {
 
     private static final String USER = "testuser";
@@ -34,6 +38,7 @@ class RegistryAuthStatusTest {
     private static final String REGISTRY_IMAGE = "registry:2";
     private static final int EXPECTED_HTPASSWD_PARTS = 2;
     private static final Path HTPASSWD_PATH;
+    private static final HostFilesystem FS = new NioHostFilesystem();
 
     static {
         try {
@@ -52,8 +57,8 @@ class RegistryAuthStatusTest {
                 BCRYPT_HASH = parts[1];
             }
 
-            HTPASSWD_PATH = Files.createTempFile("htpasswd-", ".txt");
-            Files.writeString(HTPASSWD_PATH, USER + ":" + BCRYPT_HASH);
+            HTPASSWD_PATH = TestPaths.tempFile(FS, TestPaths.DEFAULT_BASE_DIR, "htpasswd-", ".txt");
+            FS.writeString(HTPASSWD_PATH, USER + ":" + BCRYPT_HASH);
         } catch (Exception e) {
             throw new RuntimeException("Failed to prepare htpasswd", e);
         }

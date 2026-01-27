@@ -4,6 +4,8 @@ import riid.cache.oci.ImageDigest;
 import riid.client.core.model.manifest.MediaType;
 import java.util.Objects;
 
+import riid.client.core.model.manifest.MediaType;
+
 /**
  * No-op dispatcher placeholder.
  */
@@ -15,7 +17,7 @@ public final class NoOpRequestDispatcher implements RequestDispatcher {
     }
 
     @Override
-    public FetchResult fetchLayer(String repository,
+    public FetchResult fetchLayer(RepositoryName repository,
                                   ImageDigest digest,
                                   long sizeBytes,
                                   MediaType mediaType) {

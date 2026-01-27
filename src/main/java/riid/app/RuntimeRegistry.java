@@ -20,9 +20,9 @@ public final class RuntimeRegistry {
     public RuntimeAdapter get(String runtimeId) {
         RuntimeAdapter adapter = runtimes.get(runtimeId);
         if (adapter == null) {
-            String msg = AppError.RuntimeKind.ADAPTER_NOT_FOUND.format(runtimeId);
+            String msg = AppError.RuntimeErrorKind.ADAPTER_NOT_FOUND.format(runtimeId);
             throw new AppException(
-                    new AppError.Runtime(AppError.RuntimeKind.ADAPTER_NOT_FOUND, msg),
+                    new AppError.RuntimeError(AppError.RuntimeErrorKind.ADAPTER_NOT_FOUND, msg),
                     msg);
         }
         return adapter;

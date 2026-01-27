@@ -1,21 +1,22 @@
 package riid.dispatcher;
 
+import java.util.Objects;
+
 import riid.cache.oci.ImageDigest;
 import riid.client.core.model.manifest.MediaType;
-
-import java.util.Objects;
 
 /**
  * Dispatcher decides источник (cache/P2P/registry) и вызывает соответствующие адаптеры.
  */
 public interface RequestDispatcher {
 
+    // Dispatcher-level image fetch by repository/tag/digest.
     FetchResult fetchImage(ImageRef ref);
 
     /**
      * Fetch a specific layer/config digest for a repository.
      */
-    FetchResult fetchLayer(String repository, ImageDigest digest, long sizeBytes, MediaType mediaType);
+    FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType);
 
     /**
      * Base no-op implementation (placeholder).
@@ -28,7 +29,8 @@ public interface RequestDispatcher {
         }
 
         @Override
-        public FetchResult fetchLayer(String repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest,
+                                      long sizeBytes, MediaType mediaType) {
             throw new UnsupportedOperationException("Dispatcher not implemented");
         }
     }

@@ -9,54 +9,51 @@ import riid.cache.oci.FileCacheAdapter;
 import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
+
 class FileCacheAdapterTest {
 
     private Path root;
     private FileCacheAdapter cache;
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @AfterEach
     void tearDown() throws Exception {
         if (root != null) {
-            try (var paths = Files.walk(root)) {
-                paths.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
-                    try {
-                        Files.deleteIfExists(p);
-                    } catch (Exception ignored) {
-                    }
-                });
-            }
+            fs.deleteRecursively(root);
         }
     }
 
     @Test
     void putAndGetRoundtrip() throws Exception {
-        root = Files.createTempDirectory("file-cache");
+        root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString());
         ImageDigest digest = ImageDigest.parse("sha256:" + "d".repeat(64));
 
-        Path tmp = Files.createTempFile("cache-file-", ".bin");
-        Files.writeString(tmp, "hello");
+        Path tmp = TestPaths.tempFile(fs, "cache-file-", ".bin");
+        fs.writeString(tmp, "hello");
         CacheEntry entry = cache.put(
                 digest,
-                FilesystemCachePayload.of(tmp, Files.size(tmp)),
+                FilesystemCachePayload.of(tmp, fs.size(tmp)),
                 CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));
         CacheEntry loaded = cache.get(digest).orElseThrow();
         assertEquals(cache.resolve(entry.key()).orElseThrow(), cache.resolve(loaded.key()).orElseThrow());
-        assertEquals(Files.size(tmp), loaded.sizeBytes());
+        assertEquals(fs.size(tmp), loaded.sizeBytes());
     }
 
     @Test
     void missingReturnsEmptyAndHasFalse() throws Exception {
-        root = Files.createTempDirectory("file-cache");
+        root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString());
         ImageDigest digest = ImageDigest.parse("sha256:" + "e".repeat(64));
         assertFalse(cache.has(digest));
@@ -65,16 +62,16 @@ class FileCacheAdapterTest {
 
     @Test
     void sizeIsComputedWhenUnknown() throws Exception {
-        root = Files.createTempDirectory("file-cache");
+        root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString());
         ImageDigest digest = ImageDigest.parse("sha256:" + "f".repeat(64));
 
-        Path tmp = Files.createTempFile("cache-file-", ".data");
-        Files.writeString(tmp, "payload");
+        Path tmp = TestPaths.tempFile(fs, "cache-file-", ".data");
+        fs.writeString(tmp, "payload");
         CachePayload payload = new CachePayload() {
             @Override
             public java.io.InputStream open() throws java.io.IOException {
-                return Files.newInputStream(tmp);
+                return fs.newInputStream(tmp);
             }
 
             @Override
@@ -84,7 +81,7 @@ class FileCacheAdapterTest {
         };
 
         CacheEntry entry = cache.put(digest, payload, CacheMediaType.UNKNOWN);
-        assertEquals(Files.size(tmp), entry.sizeBytes());
+        assertEquals(fs.size(tmp), entry.sizeBytes());
     }
 }
 

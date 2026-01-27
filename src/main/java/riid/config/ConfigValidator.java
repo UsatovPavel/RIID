@@ -6,11 +6,13 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
+import riid.app.AppConfig;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.dispatcher.DispatcherConfig;
+import riid.runtime.RuntimeConfig;
 
 /**
  * Validates application configuration.
@@ -19,7 +21,7 @@ public final class ConfigValidator {
     private ConfigValidator() {
     }
 
-    public static void validate(AppConfig config) {
+    public static void validate(GlobalConfig config) {
         Objects.requireNonNull(config, "config");
         ClientConfig client = config.client();
         if (client == null) {
@@ -33,6 +35,7 @@ public final class ConfigValidator {
         if (client.registriesMissing()) {
             throw new ConfigValidationException(ConfigValidationException.Reason.MISSING_REGISTRIES.message());
         }
+        validateRuntime(config.runtime());
         validateRegistries(client.registries());
         validateHttp(client.http());
         validateAuth(client.auth());
@@ -94,13 +97,27 @@ public final class ConfigValidator {
         validatePathIfPresent(auth.caPath(), "client.auth.caPath");
     }
 
-    private static void validateApp(AppRuntimeConfig app) {
+    private static void validateApp(AppConfig app) {
         if (app == null) {
             return;
         }
-        String tempDir = app.tempDir();
+        String tempDir = app.tempDirectory();
         if (tempDir != null && tempDir.isBlank()) {
-            throw new ConfigValidationException("app.tempDir must not be blank");
+            throw new ConfigValidationException("app.tempDirectory must not be blank");
+        }
+        for (String reg : app.allowedRegistriesOrEmpty()) {
+            if (reg == null || reg.isBlank()) {
+                throw new ConfigValidationException("app.allowedRegistries entries must not be blank");
+            }
+        }
+    }
+
+    private static void validateRuntime(RuntimeConfig runtime) {
+        if (runtime == null) {
+            return;
+        }
+        if (runtime.maxOutputBytes() != null && runtime.maxOutputBytes() <= 0) {
+            throw new ConfigValidationException("runtime.maxOutputBytes must be positive");
         }
     }
 

@@ -16,4 +16,10 @@
 
 ## Conventions
 - Name integration folders by the main modules touched (`runtime_app`, `client_cache`, `config_client`, `dispatcher_runtime`, etc.) for discoverability.
+
 - Keep unit tests within their module
+
+## TestPolicy: filesystem usage
+- Unit tests use in-memory filesystem (`InMemoryHostFilesystem` via `HostFilesystemTestSupport`).
+- Integration tests use real filesystem under `build/test-fs` (via `TestPaths.DEFAULT_BASE_DIR`).
+- Avoid direct `java.nio.file.Files` in tests; go through `HostFilesystem` + `TestPaths`.

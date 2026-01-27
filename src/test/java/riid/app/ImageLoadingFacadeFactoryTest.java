@@ -1,12 +1,15 @@
 package riid.app;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import org.junit.jupiter.api.Test;
 
-class ImageLoadFacadeFactoryTest {
+import riid.app.fs.TestPaths;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
+class ImageLoadingFacadeFactoryTest {
 
     @Test
     void createsServiceFromConfig() throws Exception {
@@ -21,12 +24,12 @@ class ImageLoadFacadeFactoryTest {
                 dispatcher:
                   maxConcurrentRegistry: 2
                 """;
-        Path tmp = Files.createTempFile("config-", ".yaml");
-        Files.writeString(tmp, yaml);
+        HostFilesystem fs = new NioHostFilesystem();
+        Path tmp = TestPaths.tempFile(fs, "config-", ".yaml");
+        fs.writeString(tmp, yaml);
 
-        try (ImageLoadFacade svc = ImageLoadFacade.createFromConfig(tmp)) {
-            assertNotNull(svc);
-        }
+        ImageLoadingFacade svc = ImageLoadingFacade.createFromConfig(tmp);
+        assertNotNull(svc);
     }
 }
 

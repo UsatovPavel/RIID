@@ -1,4 +1,4 @@
-# App module (CLI + wiring)
+# App **module** (CLI + wiring)
 
 ## Purpose
 CLI and dependency wiring layer for loading container images: parse flags, validate user input, invoke `ImageLoadService`, and return exit codes.
@@ -11,6 +11,15 @@ CLI and dependency wiring layer for loading container images: parse flags, valid
 - `ImageLoadService`: façade that downloads, assembles OCI, and imports into runtime; no CLI logic.
 - `RuntimeRegistry`: registry of runtime adapters (`podman`, `porto`), throws a clear error for unknown runtime.
 - `RiidEnv`: helpers for env-based launching without CLI.
+
+## Policy: ImageId vs ImageRef
+- `ImageId` (app-level): full identity with registry + name + tag/digest; used in App/OCI/Runtime flows.
+- `ImageRef` (dispatcher-level): repository + tag/digest only; used inside dispatcher/registry fetch logic.
+- Boundary rule: CLI/ENV/API build `ImageId` once; dispatcher takes `ImageRef` derived from `ImageId`.
+
+## Policy: HostFilesystem
+- All filesystem operations outside `riid.app.fs` go through `HostFilesystem`.
+- `NioHostFilesystem` is the default implementation; it wraps `java.nio.file.Files`.
 
 ## CLI flags
 Required:
