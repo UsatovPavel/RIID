@@ -28,6 +28,7 @@ checkstyle {
 }
 
 dependencies {
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
@@ -73,11 +74,14 @@ tasks.withType<Pmd>().configureEach {
 
 tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
     enabled = !skipQuality
+    reports.create("html") {
+        required.set(true)   // всегда генерить html-отчёт
+    }
 }
 
 tasks.jacocoTestReport {
-    dependsOn(tasks.test)
     enabled = !skipQuality
+    dependsOn(tasks.test) // jacoco runs only when explicitly invoked, but needs tests
 }
 
 tasks.withType<Test>().configureEach {
@@ -107,10 +111,53 @@ tasks.register("testAll") {
     dependsOn("test", "testStress")
 }
 
+fun registerModuleTest(name: String, pattern: String, descriptionText: String) {
+    tasks.register<Test>(name) {
+        group = "verification"
+        description = descriptionText
+        dependsOn(tasks.testClasses)
+        testClassesDirs = sourceSets.test.get().output.classesDirs
+        classpath = sourceSets.test.get().runtimeClasspath
+        useJUnitPlatform()
+        filter {
+            includeTestsMatching("riid.${pattern}.*")
+        }
+    }
+}
+
+registerModuleTest(
+    name = "testApp",
+    pattern = "app",
+    descriptionText = "Run tests under riid.app"
+)
+
+registerModuleTest (
+    name = "testConfig",
+    pattern = "config",
+    descriptionText = "Run tests under riid.config"
+)
+
+registerModuleTest(
+    name = "testClient",
+    pattern = "client",
+    descriptionText = "Run tests under riid.client"
+)
+
+registerModuleTest(
+    name = "testDispatcher",
+    pattern = "dispatcher",
+    descriptionText = "Run tests under riid.dispatcher"
+)
+
+registerModuleTest(
+    name = "testRuntime",
+    pattern = "runtime",
+    descriptionText = "Run tests under riid.runtime"
+)
+
 tasks.register("allReports") {
     group = "verification"
-    description = "Concatenate quality reports into build/reports/all-reports.html"
-    dependsOn("check")
+    description = "Concatenate quality reports into build/reports/all-reports.html (best effort, no dependsOn check)"
     doLast {
         val reports = listOf(
             "checkstyle/main.html",
@@ -123,14 +170,82 @@ tasks.register("allReports") {
         val reportsDir = layout.buildDirectory.dir("reports").get().asFile
         reportsDir.mkdirs()
         val out = reportsDir.resolve("all-reports.html")
-        out.writeText("") // clear
-        reports.forEach { rel ->
-            val f = reportsDir.resolve(rel)
-            if (f.exists()) {
-                out.appendText(f.readText())
-            }
+        val header = """
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <title>Riid combined reports</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 1.5rem; }
+                h1 { margin-bottom: 0.5rem; }
+                h2 { margin-top: 2rem; }
+                .missing { color: #888; }
+                .section { border-top: 1px solid #ccc; padding-top: 1rem; }
+              </style>
+            </head>
+            <body>
+            <h1>Combined quality reports</h1>
+        """.trimIndent()
+        val footer = """
+            </body>
+            </html>
+        """.trimIndent()
+
+        fun extractBody(html: String): String {
+            val bodyRegex = Regex("(?is)<body[^>]*>(.*)</body>")
+            val body = bodyRegex.find(html)?.groups?.get(1)?.value ?: html
+            val headRegex = Regex("(?is)<head[^>]*>.*?</head>")
+            return headRegex.replace(body, "")
         }
+
+        val content = buildString {
+            append(header)
+            reports.forEach { rel ->
+                val f = reportsDir.resolve(rel)
+                append("""<div class="section">""")
+                append("<h2>${rel}</h2>")
+                if (f.exists()) {
+                    append(extractBody(f.readText()))
+                } else {
+                    append("""<p class="missing">Report not found: $rel</p>""")
+                }
+                append("</div>")
+            }
+            append(footer)
+        }
+        out.writeText(content)
         println("Concatenated report generated at ${out.absolutePath}")
+    }
+}
+
+// Always attempt concatenation after check (even if check fails)
+// Detach tests from check: run tests/jacoco explicitly when needed
+tasks.named("check") {
+    // Explicit quality-only dependencies; tests are not part of check
+    setDependsOn(
+        listOf(
+            tasks.named("checkstyleMain"),
+            tasks.named("checkstyleTest"),
+            tasks.named("pmdMain"),
+            tasks.named("pmdTest"),
+            tasks.named("spotbugsMain"),
+            tasks.named("spotbugsTest")
+        )
+    )
+    finalizedBy("allReports")
+}
+
+// Ensure allReports runs after individual quality tasks too (even on failure)
+listOf(
+    "pmdMain",
+    "pmdTest",
+    "spotbugsMain",
+    "spotbugsTest",
+    "checkstyleMain",
+    "checkstyleTest"
+).forEach { taskName ->
+    tasks.matching { it.name == taskName }.configureEach {
+        finalizedBy("allReports")
     }
 }
 //для запуска Docker у тасок вывод некрасивый по сравнению с Makefile
@@ -171,6 +286,6 @@ tasks.register("dockerTest") {
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
     manifest {
-        attributes("Main-Class" to "riid.app.Main")
+        attributes("Main-Class" to "riid.app.ImageLoadServiceFactory")
     }
 }

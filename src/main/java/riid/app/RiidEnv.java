@@ -1,33 +1,71 @@
 package riid.app;
 
+import java.util.Map;
+
 final class RiidEnv {
+    private static volatile Map<String, String> ENV_OVERRIDE = Map.of();
+    private static volatile boolean OVERRIDE_ENABLED;
+    private static final String DEFAULT_REGISTRY = "registry-1.docker.io";
+
     private RiidEnv() { }
 
-    static String repo() {
-        return System.getenv().getOrDefault("RIID_REPO", "library/busybox");
-    }
+    static ImageId imageId() {
+        Map<String, String> env = env();
+        String registry = env.getOrDefault("RIID_REGISTRY", DEFAULT_REGISTRY);
+        String repo = env.getOrDefault("RIID_REPO", "library/busybox");
+        String tag = env.get("RIID_TAG");
+        String digest = env.get("RIID_DIGEST");
+        String ref = env.getOrDefault("RIID_REF", "latest");
 
-    static String tag() {
-        return System.getenv().getOrDefault("RIID_TAG", System.getenv().getOrDefault("RIID_REF", "latest"));
-    }
-
-    static String digest() {
-        String v = System.getenv("RIID_DIGEST");
-        if (v != null && !v.isBlank()) {
-            return v;
+        if (digest == null || digest.isBlank()) {
+            if (ref.startsWith("sha256:")) {
+                digest = ref;
+            } else if (tag == null || tag.isBlank()) {
+                tag = ref;
+            }
         }
-        String ref = System.getenv("RIID_REF");
-        if (ref != null && ref.startsWith("sha256:")) {
-            return ref;
-        }
-        return null;
+        String tagValue = normalizeTag(tag);
+        return new ImageId(registry, repo, tagValue, digest);
     }
 
     static String cacheDir() {
-        String v = System.getenv("RIID_CACHE_DIR");
+        String v = env().get("RIID_CACHE_DIR");
         if (v == null || v.isBlank()) {
             throw new IllegalStateException("RIID_CACHE_DIR is not set");
         }
         return v;
+    }
+
+    /**
+     * @VisibleForTesting
+     */
+    static void setEnvForTests(Map<String, String> env) {
+        if (env == null) {
+            OVERRIDE_ENABLED = false;
+            ENV_OVERRIDE = Map.of();
+            return;
+        }
+        Map<String, String> sanitized = new java.util.HashMap<>();
+        for (Map.Entry<String, String> entry : env.entrySet()) {
+            if (entry.getValue() != null) {
+                sanitized.put(entry.getKey(), entry.getValue());
+            }
+        }
+        ENV_OVERRIDE = Map.copyOf(sanitized);
+        OVERRIDE_ENABLED = true;
+    }
+
+    private static Map<String, String> env() {
+        if (OVERRIDE_ENABLED) {
+            return ENV_OVERRIDE;
+        }
+        return System.getenv();
+    }
+
+    private static String normalizeTag(String tag) {
+        if (tag == null || tag.isBlank()) {
+            return null;
+        }
+        return tag;
     }
 }

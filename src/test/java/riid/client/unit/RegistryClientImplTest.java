@@ -5,6 +5,9 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 import riid.cache.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
@@ -67,7 +70,8 @@ class RegistryClientImplTest {
         assertEquals(1, mf.manifest().layers().size());
         assertEquals(layerDigest, mf.manifest().layers().getFirst().digest());
 
-        File tmp = File.createTempFile("blob-", ".bin");
+        HostFilesystem fs = new NioHostFilesystem();
+        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(REPO, layerDigest, (long) layer.length, OCTET);
         BlobResult br = client.fetchBlob(req, tmp);

@@ -15,6 +15,5 @@ public record ClientConfig(
 ) {
     public ClientConfig {
         registries = registries == null ? List.of() : List.copyOf(registries);
-        http = http == null ? new HttpClientConfig() : http;
     }
 }

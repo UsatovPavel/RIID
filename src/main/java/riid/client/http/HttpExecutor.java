@@ -1,13 +1,5 @@
 package riid.client.http;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.eclipse.jetty.client.ContentResponse;
-import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.client.InputStreamResponseListener;
-import org.eclipse.jetty.client.Request;
-import org.eclipse.jetty.http.HttpFields;
-import org.eclipse.jetty.http.HttpMethod;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -19,6 +11,15 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.InputStreamResponseListener;
+import org.eclipse.jetty.client.Request;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpMethod;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
@@ -89,7 +90,7 @@ public final class HttpExecutor {
                 Thread.currentThread().interrupt();
                 throw new IOException("Jetty HEAD interrupted", ie);
             } catch (ExecutionException | TimeoutException e) {
-                throw new IOException("Jetty HEAD failed", e);
+                throw new IOException("Jetty HEAD failed for " + uri, e);
             }
         }
 
@@ -111,7 +112,7 @@ public final class HttpExecutor {
             Thread.currentThread().interrupt();
             throw new IOException("Jetty request interrupted", ie);
         } catch (ExecutionException | TimeoutException e) {
-            throw new IOException("Jetty request failed", e);
+            throw new IOException("Jetty request failed for " + uri, e);
         }
     }
 

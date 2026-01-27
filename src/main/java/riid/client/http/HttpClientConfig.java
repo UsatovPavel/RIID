@@ -71,5 +71,88 @@ public record HttpClientConfig(
             throw new IllegalArgumentException("userAgent must not be blank");
         }
     }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public Builder toBuilder() {
+        return new Builder()
+                .connectTimeout(connectTimeout)
+                .requestTimeout(requestTimeout)
+                .maxRetries(maxRetries)
+                .initialBackoff(initialBackoff)
+                .maxBackoff(maxBackoff)
+                .retryIdempotentOnly(retryIdempotentOnly)
+                .userAgent(userAgent)
+                .followRedirects(followRedirects);
+    }
+
+    public static final class Builder {
+        private Duration connectTimeoutValue;
+        private Duration requestTimeoutValue;
+        private Integer maxRetriesValue;
+        private Duration initialBackoffValue;
+        private Duration maxBackoffValue;
+        private Boolean retryIdempotentOnlyValue;
+        private String userAgentValue;
+        private Boolean followRedirectsValue;
+
+        private Builder() {
+        }
+
+        public Builder connectTimeout(Duration v) {
+            this.connectTimeoutValue = v;
+            return this; 
+        }
+
+        public Builder requestTimeout(Duration v) {
+            this.requestTimeoutValue = v;
+            return this; 
+        }
+
+        public Builder maxRetries(int v) {
+            this.maxRetriesValue = v;
+            return this; 
+        }
+
+        public Builder initialBackoff(Duration v) {
+            this.initialBackoffValue = v;
+            return this; 
+        }
+
+        public Builder maxBackoff(Duration v) {
+            this.maxBackoffValue = v;
+            return this; 
+        }
+
+        public Builder retryIdempotentOnly(boolean v) {
+            this.retryIdempotentOnlyValue = v;
+            return this; 
+        }
+
+        public Builder userAgent(String v) {
+            this.userAgentValue = v;
+            return this; 
+        }
+
+        public Builder followRedirects(boolean v) {
+            this.followRedirectsValue = v;
+            return this; 
+        }
+
+        public HttpClientConfig build() {
+            return new HttpClientConfig(
+                    connectTimeoutValue != null ? connectTimeoutValue : DEFAULT_CONNECT_TIMEOUT,
+                    requestTimeoutValue != null ? requestTimeoutValue : DEFAULT_REQUEST_TIMEOUT,
+                    maxRetriesValue != null && maxRetriesValue > 0 ? maxRetriesValue : DEFAULT_MAX_RETRIES,
+                    initialBackoffValue != null ? initialBackoffValue : DEFAULT_INITIAL_BACKOFF,
+                    maxBackoffValue != null ? maxBackoffValue : DEFAULT_MAX_BACKOFF,
+                    retryIdempotentOnlyValue != null ? retryIdempotentOnlyValue : DEFAULT_RETRY_IDEMPOTENT_ONLY,
+                    userAgentValue != null ? userAgentValue : DEFAULT_USER_AGENT,
+                    followRedirectsValue != null ? followRedirectsValue : DEFAULT_FOLLOW_REDIRECTS
+            );
+        }
+    }
 }
 

@@ -28,6 +28,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import static java.util.Base64.getEncoder;
+
 /**
  * Handles ping + Bearer token fetching with caching.
  */
@@ -126,12 +128,16 @@ public final class AuthService {
             }
             var headers = new HashMap<String, String>();
             if (creds != null) {
-                creds.identityToken().ifPresent(id -> headers.put("Authorization", "Bearer " + id));
+                creds.identityTokenOpt().ifPresent(id -> headers.put("Authorization", "Bearer " + id));
                 if (headers.isEmpty()) {
-                    String basic = creds.username().orElse("") + ":" + creds.password().orElse("");
-                    String enc = java.util.Base64.getEncoder()
-                            .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
-                    headers.put("Authorization", "Basic " + enc);
+                    boolean hasUser = creds.usernameOpt().filter(s -> !s.isBlank()).isPresent();
+                    boolean hasPass = creds.passwordOpt().filter(s -> !s.isBlank()).isPresent();
+                    if (hasUser && hasPass) {
+                        String basic = creds.usernameOpt().orElse("") + ":" + creds.passwordOpt().orElse("");
+                        String enc = getEncoder()
+                                .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
+                        headers.put("Authorization", "Basic " + enc);
+                    }
                 }
             }
             HttpResult<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);

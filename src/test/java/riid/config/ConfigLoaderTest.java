@@ -1,21 +1,23 @@
 package riid.config;
 
-import org.junit.jupiter.api.Test;
-import riid.client.core.config.Credentials;
-import riid.client.core.config.RegistryEndpoint;
-import riid.client.http.HttpClientConfig;
-
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.Test;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
+import riid.client.core.config.Credentials;
+import riid.client.core.config.RegistryEndpoint;
 
 class ConfigLoaderTest {
 
     private static final String TMP_PREFIX = "config-";
     private static final String TMP_SUFFIX = ".yaml";
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @Test
     void loadsValidConfig() throws Exception {
@@ -38,10 +40,10 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 3
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
-        AppConfig cfg = ConfigLoader.load(tmp);
+        GlobalConfig cfg = ConfigLoader.load(tmp);
         assertEquals(1, cfg.client().registries().size());
         RegistryEndpoint ep = cfg.client().registries().get(0);
         assertEquals("https", ep.scheme());
@@ -55,8 +57,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -70,8 +72,8 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
@@ -105,34 +107,34 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 10
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
-        AppConfig cfg = ConfigLoader.load(tmp);
+        GlobalConfig cfg = ConfigLoader.load(tmp);
         assertEquals(2, cfg.client().registries().size());
         var first = cfg.client().registries().get(0);
         var firstCreds = first.credentialsOpt();
         assertEquals("example.org", first.host());
         assertEquals(5000, first.port());
-        assertEquals("user1", firstCreds.flatMap(Credentials::username).orElse(null));
-        assertEquals("pass1", firstCreds.flatMap(Credentials::password).orElse(null));
+        assertEquals("user1", firstCreds.flatMap(Credentials::usernameOpt).orElse(null));
+        assertEquals("pass1", firstCreds.flatMap(Credentials::passwordOpt).orElse(null));
 
         var second = cfg.client().registries().get(1);
         var secondCreds = second.credentialsOpt();
         assertEquals("http", second.scheme());
         assertEquals("another.example", second.host());
-        assertEquals("token-123", secondCreds.flatMap(Credentials::identityToken).orElse(null));
+        assertEquals("token-123", secondCreds.flatMap(Credentials::identityTokenOpt).orElse(null));
 
         assertEquals(5, cfg.client().http().maxRetries());
-        assertEquals(false, cfg.client().http().retryIdempotentOnly());
+        assertFalse(cfg.client().http().retryIdempotentOnly());
         assertEquals("riid-test-agent", cfg.client().http().userAgent());
-        assertEquals(false, cfg.client().http().followRedirects());
+        assertFalse(cfg.client().http().followRedirects());
         assertEquals(900, cfg.client().auth().defaultTokenTtlSeconds());
         assertEquals(10, cfg.dispatcher().maxConcurrentRegistry());
     }
 
     @Test
-    void defaultsHttpConfigWhenMissing() throws Exception {
+    void noDefaultHttpConfigWhenMissing() throws Exception {
         String yaml = """
                 client:
                   auth: {}
@@ -143,18 +145,10 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 2
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
-        AppConfig cfg = ConfigLoader.load(tmp);
-        HttpClientConfig http = cfg.client().http();
-        assertEquals(Duration.ofSeconds(5), http.connectTimeout());
-        assertEquals(Duration.ofSeconds(30), http.requestTimeout());
-        assertEquals(2, http.maxRetries());
-        assertEquals(Duration.ofMillis(200), http.initialBackoff());
-        assertEquals(Duration.ofSeconds(2), http.maxBackoff());
-        assertEquals("riid-registry-client", http.userAgent());
-        assertEquals(true, http.followRedirects());
+        assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
     @Test
@@ -171,9 +165,10 @@ class ConfigLoaderTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = Files.createTempFile(TMP_PREFIX, TMP_SUFFIX);
-        Files.writeString(tmp, yaml);
+        Path tmp = TestPaths.tempFile(fs, TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
 
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 }
+
