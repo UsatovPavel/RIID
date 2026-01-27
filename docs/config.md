@@ -30,6 +30,7 @@ dispatcher:
 - client.http.retryIdempotentOnly = false
 - client.http.userAgent = riid-registry-client
 - client.http.followRedirects = false
+- client.http.maxRedirects = 5
 - client.auth.defaultTokenTtlSeconds = 300
 - client.auth.certPath / keyPath / caPath = null
 - client.registries.size = 1
@@ -37,7 +38,7 @@ dispatcher:
 ### Validation rules (ConfigValidator)
 - `client`, `dispatcher`, `registries` required; at least one registry with `scheme` and `host`.
 - `dispatcher.maxConcurrentRegistry` > 0.
-- `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `userAgent` not blank, `maxRetries` must be >= 0.
+- `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `userAgent` not blank, `maxRetries` and `maxRedirects` must be >= 0.
 - `client.auth.defaultTokenTtlSeconds` > 0; cert/key/ca paths, if provided, must exist.
 
 ### Known notes

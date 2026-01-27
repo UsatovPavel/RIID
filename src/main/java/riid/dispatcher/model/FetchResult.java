@@ -1,4 +1,4 @@
-package riid.dispatcher;
+package riid.dispatcher.model;
 
 import riid.cache.oci.ImageDigest;
 import riid.client.core.model.manifest.MediaType;

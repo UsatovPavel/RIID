@@ -21,9 +21,9 @@ import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Descriptor;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.MediaType;
-import riid.dispatcher.FetchResult;
-import riid.dispatcher.ImageRef;
-import riid.dispatcher.RepositoryName;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
 import riid.dispatcher.RequestDispatcher;
 import riid.runtime.RuntimeAdapter;
 

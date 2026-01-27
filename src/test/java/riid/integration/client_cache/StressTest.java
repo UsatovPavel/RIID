@@ -36,6 +36,7 @@ import riid.app.fs.TestPaths;
  * - 100 мелких образов 740.2 kB (busybox:latest) скачиваются параллельно, проверка digest/size.
  */
 @Tag("stress")
+@Tag("filesystem")
 @SuppressWarnings("deprecation")
 public class StressTest {
 

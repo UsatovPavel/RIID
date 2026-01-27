@@ -13,6 +13,9 @@ import riid.app.fs.HostFilesystem;
 import riid.app.fs.HostFilesystemTestSupport;
 import riid.app.fs.TestPaths;
 import riid.client.core.model.manifest.MediaType;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
 import riid.runtime.RuntimeAdapter;
 
 class ImageImportingFacadeTest {

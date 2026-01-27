@@ -1,4 +1,4 @@
-package riid.dispatcher;
+package riid.dispatcher.model;
 
 /**
  * Image reference for dispatcher/registry layer: repository with tag or digest (no registry).

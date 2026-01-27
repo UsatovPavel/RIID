@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.fs.HostFilesystem;
@@ -250,6 +252,7 @@ class CliApplicationTest {
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("is not set or empty"));
     }
 
+    @Tag("filesystem")
     @Test
     void failsWhenPasswordFileEmpty() throws Exception {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();

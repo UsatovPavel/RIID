@@ -97,6 +97,7 @@ public class RegistryLocalTest {
         REGISTRY.stop();
     }
 
+    @Tag("filesystem")
     @Test
     void fetchManifestAndLayer() throws Exception {
         ManifestResult manifest = MANIFEST_SERVICE.fetchManifest(LOCAL, REPO, REF, SCOPE);

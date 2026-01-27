@@ -1,6 +1,7 @@
 package riid.config;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.ClientConfig;
@@ -33,6 +34,7 @@ class ConfigBranchTest {
         assertThrows(IllegalArgumentException.class, () -> ConfigLoader.load(missing));
     }
 
+    @Tag("filesystem")
     @Test
     void invalidYamlFailsParsing() throws Exception {
         Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "bad-config", YAML_SUFFIX);
@@ -40,6 +42,7 @@ class ConfigBranchTest {
         assertThrows(RuntimeException.class, () -> ConfigLoader.load(tmp));
     }
 
+    @Tag("filesystem")
     @Test
     void nullHttpFailsValidation() throws Exception {
         String yaml = """
@@ -58,6 +61,7 @@ class ConfigBranchTest {
         //Client config must not have side-effect(get http from default HttpConfig)
     }
 
+    @Tag("filesystem")
     @Test
     void nullAuthFailsValidation() throws Exception {
         String yaml = """
@@ -75,6 +79,7 @@ class ConfigBranchTest {
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
+    @Tag("filesystem")
     @Test
     void nullRegistriesFailsValidation() throws Exception {
         String yaml = """
@@ -89,6 +94,7 @@ class ConfigBranchTest {
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
+    @Tag("filesystem")
     @Test
     void dispatcherInvalidConcurrencyFailsValidation() throws Exception {
         String yaml = """
@@ -107,6 +113,7 @@ class ConfigBranchTest {
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
+    @Tag("filesystem")
     @Test
     void httpMaxRetriesNegativeFailsValidation() throws Exception {
         String yaml = """
@@ -126,6 +133,7 @@ class ConfigBranchTest {
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
 
+    @Tag("filesystem")
     @Test
     void smokePrintsDefaultsFromMinimalConfig() throws Exception {
         String yaml = """

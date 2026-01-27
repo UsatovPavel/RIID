@@ -30,8 +30,8 @@ import riid.client.core.model.manifest.Descriptor;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.TagList;
 import riid.dispatcher.DispatcherConfig;
-import riid.dispatcher.FetchResult;
-import riid.dispatcher.ImageRef;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
 

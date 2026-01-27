@@ -1,4 +1,4 @@
-package riid.dispatcher;
+package riid.dispatcher.model;
 
 /**
  * Repository name wrapper to avoid passing arbitrary strings.

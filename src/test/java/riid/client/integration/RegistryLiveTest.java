@@ -2,6 +2,7 @@ package riid.client.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.client.HttpClient;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
@@ -48,6 +49,7 @@ public class RegistryLiveTest {
     private final BlobService blobService = new BlobService(http, authService);
     private final HostFilesystem fs = new NioHostFilesystem();
 
+    @Tag("filesystem")
     @Test
     void fetchManifestAndFirstLayer() throws Exception {
         // /v2/ via manifest fetch (auth flow inside)

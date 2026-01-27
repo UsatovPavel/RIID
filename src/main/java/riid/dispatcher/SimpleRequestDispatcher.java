@@ -22,6 +22,9 @@ import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.core.model.manifest.MediaType;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
 import riid.p2p.P2PExecutor;
 
 /**

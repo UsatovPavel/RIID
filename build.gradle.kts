@@ -110,6 +110,14 @@ tasks.register<Test>("testLocal") {
     }
 }
 
+tasks.register<Test>("testNoFilesystem") {
+    group = "verification"
+    description = "Run tests excluding filesystem-tagged tests"
+    useJUnitPlatform {
+        excludeTags("filesystem")
+    }
+}
+
 tasks.register("testAll") {
     group = "verification"
     description = "Run default tests and stress tests"
