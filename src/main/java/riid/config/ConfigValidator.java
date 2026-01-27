@@ -74,6 +74,9 @@ public final class ConfigValidator {
         if (http.maxRetries() < 0) {
             throw new ConfigValidationException(ConfigValidationException.Reason.HTTP_MAX_RETRIES_NEGATIVE.message());
         }
+        if (http.maxRedirects() < 0) {
+            throw new ConfigValidationException("client.http.maxRedirects must be >= 0");
+        }
         checkDuration(http.initialBackoff(), "client.http.initialBackoff");
         checkDuration(http.maxBackoff(), "client.http.maxBackoff");
         if (http.initialBackoff().compareTo(http.maxBackoff()) > 0) {

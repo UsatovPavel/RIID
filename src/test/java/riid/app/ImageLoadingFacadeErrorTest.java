@@ -7,12 +7,14 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.HostFilesystemTestSupport;
+import riid.app.fs.NioHostFilesystem;
 import riid.cache.oci.ImageDigest;
 import riid.app.fs.TestPaths;
 import riid.client.api.ManifestResult;
@@ -48,12 +50,13 @@ class ImageLoadingFacadeErrorTest {
         }
     }
 
+    @Tag("filesystem")
     @Test
     void loadWrapsInterruptedExceptionAndInterruptsThread() throws Exception {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
-        HostFilesystem fs = HostFilesystemTestSupport.create();
+        HostFilesystem fs = new NioHostFilesystem();
         Path layer = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer", ".bin");
         fs.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());

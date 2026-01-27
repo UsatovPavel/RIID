@@ -85,5 +85,15 @@ public final class HostFilesystemTestSupport implements HostFilesystem {
     public Path atomicMove(Path source, Path target) throws IOException {
         return delegate.atomicMove(source, target);
     }
+
+    @Override
+    public void deleteIfExists(Path path) {
+        delegate.deleteIfExists(path);
+    }
+
+    @Override
+    public void deleteRecursively(Path root) {
+        delegate.deleteRecursively(root);
+    }
 }
 

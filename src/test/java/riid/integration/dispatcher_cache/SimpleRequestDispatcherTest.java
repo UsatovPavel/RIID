@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.fs.HostFilesystem;
@@ -34,6 +35,7 @@ import riid.dispatcher.ImageRef;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
 
+@Tag("filesystem")
 class SimpleRequestDispatcherTest {
 
     private static final String DIGEST = "sha256:" + "a".repeat(64);
@@ -94,7 +96,7 @@ class SimpleRequestDispatcherTest {
                 registry, cache, p2p, new DispatcherConfig(1), fs);
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
-        assertEquals(tmp.toPath(), result.path());
+        assertEquals(tmp.toPath().toAbsolutePath(), result.path().toAbsolutePath());
         assertEquals(1, registry.blobCalls);
         assertTrue(cache.putCalled, "cache should be populated after registry download");
         assertTrue(p2p.publishCalled, "p2p should be notified after registry download");

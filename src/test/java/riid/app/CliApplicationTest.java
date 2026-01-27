@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.HostFilesystemTestSupport;
+import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 import riid.runtime.PodmanRuntimeAdapter;
 
@@ -35,7 +35,7 @@ class CliApplicationTest {
 
         int code = appWithErr.run(new String[]{});
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Usage"),
                 errBuf.toString(StandardCharsets.UTF_8));
     }
@@ -52,7 +52,7 @@ class CliApplicationTest {
 
         int code = app.run(new String[]{"--runtime", RUNTIME_PODMAN});
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Repository is required"));
     }
 
@@ -68,7 +68,7 @@ class CliApplicationTest {
 
         int code = app.run(new String[]{"--repo", REPO_BUSYBOX});
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Runtime id is required"));
     }
 
@@ -86,7 +86,7 @@ class CliApplicationTest {
 
         int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", "unknown"});
 
-        assertEquals(CliApplication.EXIT_RUNTIME_NOT_FOUND, code);
+        assertEquals(CliApplication.ExitCode.RUNTIME_NOT_FOUND.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Unknown runtime"));
     }
 
@@ -119,7 +119,7 @@ class CliApplicationTest {
                 "--runtime", RUNTIME_PODMAN
         });
 
-        assertEquals(CliApplication.EXIT_OK, code);
+        assertEquals(CliApplication.ExitCode.OK.code(), code);
         assertEquals(Path.of("config.yaml"), configSeen.get());
         assertEquals(REPO_BUSYBOX, repoSeen.get());
         assertEquals("latest", refSeen.get());
@@ -138,7 +138,7 @@ class CliApplicationTest {
 
         int code = app.run(new String[]{"--help"});
 
-        assertEquals(CliApplication.EXIT_OK, code);
+        assertEquals(CliApplication.ExitCode.OK.code(), code);
         assertTrue(outBuf.toString(StandardCharsets.UTF_8).contains("Usage"));
     }
 
@@ -162,7 +162,7 @@ class CliApplicationTest {
                 "--runtime", RUNTIME_PODMAN
         });
 
-        assertEquals(CliApplication.EXIT_OK, code);
+        assertEquals(CliApplication.ExitCode.OK.code(), code);
         assertEquals("sha256:abc", refSeen.get());
     }
 
@@ -184,7 +184,7 @@ class CliApplicationTest {
                 "--password-env", "SOME_ENV"
         });
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Use only one of"));
     }
 
@@ -204,7 +204,7 @@ class CliApplicationTest {
                 "--username", "user"
         });
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Password is required"));
     }
 
@@ -224,7 +224,7 @@ class CliApplicationTest {
                 "--password", "secret"
         });
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Username is required"));
     }
 
@@ -246,15 +246,15 @@ class CliApplicationTest {
                 "--password-env", missingVar
         });
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("is not set or empty"));
     }
 
     @Test
     void failsWhenPasswordFileEmpty() throws Exception {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
-        HostFilesystem fs = HostFilesystemTestSupport.create();
-        Path emptyFile = TestPaths.tempFile(fs, "pwd-", ".txt");
+        HostFilesystem fs = new NioHostFilesystem();
+        Path emptyFile = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "pwd-", ".txt");
         fs.writeString(emptyFile, "");
 
         CliApplication app = new CliApplication(
@@ -271,7 +271,7 @@ class CliApplicationTest {
                 "--password-file", emptyFile.toString()
         });
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Password file is empty"));
     }
 
@@ -293,7 +293,7 @@ class CliApplicationTest {
                 "--cert-path", missing.toString()
         });
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("cert-path does not exist"));
     }
 
@@ -313,7 +313,7 @@ class CliApplicationTest {
                 "--unknown-flag"
         });
 
-        assertEquals(CliApplication.EXIT_USAGE, code);
+        assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Unknown option"));
     }
 }

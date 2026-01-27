@@ -11,24 +11,41 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.MissingArgumentException;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.UnrecognizedOptionException;
+
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
-import riid.config.GlobalConfig;
 import riid.config.ConfigLoader;
+import riid.config.GlobalConfig;
 import riid.runtime.RuntimeAdapter;
 
 /**
  * Minimal CLI parser/runner for ImageLoadingFacade.
  */
 public final class CliApplication {
-    // package-visible for tests
-    static final int EXIT_OK = 0;
-    static final int EXIT_USAGE = 64;
-    static final int EXIT_RUNTIME_NOT_FOUND = 65;
-    static final int EXIT_FAILURE = 1;
+    enum ExitCode {
+        OK(0),
+        USAGE(64),
+        RUNTIME_NOT_FOUND(65),
+        FAILURE(1);
 
-    private static final Path DEFAULT_CONFIG_PATH = Paths.get("config.yaml");
-    private static final int MAX_PASSWORD_SOURCES = 1;
+        private final int code;
+
+        ExitCode(int code) {
+            this.code = code;
+        }
+
+        int code() {
+            return code;
+        }
+    }
 
     private final ServiceFactory serviceFactory;
     private final PrintWriter out;
@@ -47,36 +64,19 @@ public final class CliApplication {
 
     public static CliApplication createDefault() {
         return new CliApplication(
-                options -> {
-                    GlobalConfig config = ConfigLoader.load(options.configPath());
-                    RegistryEndpoint endpoint = config.client().registries().getFirst();
-                    if (options.credentials() != null) {
-                        endpoint = new RegistryEndpoint(
-                                endpoint.scheme(),
-                                endpoint.host(),
-                                endpoint.port(),
-                                options.credentials()
-                        );
-                    }
-                    String registry = endpoint.registryName();
-                    return (repository, reference, runtimeId) -> {
-                        try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(
-                                options.configPath(),
-                                options.credentials()
-                        )) {
-                            return facade.load(
-                                    ImageId.fromRegistry(registry, repository, reference),
-                                    runtimeId
-                            ).toString();
-                        } catch (Exception e) {
-                            throw new RuntimeException("Failed to load image", e);
-                        }
-                    };
-                },
+                CliApplication::defaultServiceFactory,
                 ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true)
         );
+    }
+
+    public static void main(String[] args) {
+        CliApplication cli = createDefault();
+        int code = cli.run(args);
+        if (code != ExitCode.OK.code()) {
+            System.exit(code);
+        }
     }
 
     public int run(String[] args) {
@@ -84,11 +84,11 @@ public final class CliApplication {
         if (result.errorMessage != null) {
             err.println("Error: " + result.errorMessage);
             printUsage(err);
-            return EXIT_USAGE;
+            return ExitCode.USAGE.code();
         }
         if (result.showHelp) {
             printUsage(out);
-            return EXIT_OK;
+            return ExitCode.OK.code();
         }
         CliOptions options = result.options;
         if (!availableRuntimes.contains(options.runtimeId())) {
@@ -97,7 +97,7 @@ public final class CliApplication {
                     options.runtimeId(),
                     String.join(", ", availableRuntimes)
             );
-            return EXIT_RUNTIME_NOT_FOUND;
+            return ExitCode.RUNTIME_NOT_FOUND.code();
         }
         try {
             ImageLoader loader = serviceFactory.create(options);
@@ -111,14 +111,41 @@ public final class CliApplication {
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
             }
-            return EXIT_OK;
+            return ExitCode.OK.code();
         } catch (Exception e) {
             err.println("Failed to load image: " + e.getMessage());
-            return EXIT_FAILURE;
+            return ExitCode.FAILURE.code();
         }
     }
 
+    private static ImageLoader defaultServiceFactory(CliOptions options) throws Exception {
+        GlobalConfig config = ConfigLoader.load(options.configPath());
+        RegistryEndpoint endpoint = config.client().registries().getFirst();
+        if (options.credentials() != null) {
+            endpoint = new RegistryEndpoint(
+                    endpoint.scheme(),
+                    endpoint.host(),
+                    endpoint.port(),
+                    options.credentials()
+            );
+        }
+        String registry = endpoint.registryName();
+        return (repository, reference, runtimeId) -> {
+            try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(
+                    options.configPath(),
+                    options.credentials()
+            )) {
+                return facade.load(
+                        ImageId.fromRegistry(registry, repository, reference),
+                        runtimeId
+                ).toString();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to load image", e);
+            }
+        };
+    }
     private void printUsage(PrintWriter writer) {
+        Path defaultConfigPath = Paths.get("config.yaml");
         String usage = String.join("%n",
                 "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
                 "       [--config <path>] [--username <user>",
@@ -129,7 +156,7 @@ public final class CliApplication {
                 "  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided",
                 "  --digest         Digest to pull (format: sha256:...)",
                 "  --runtime        Runtime id (available: %s)".formatted(String.join(", ", availableRuntimes)),
-                "  --config         Path to YAML config (default: %s)".formatted(DEFAULT_CONFIG_PATH),
+                "  --config         Path to YAML config (default: %s)".formatted(defaultConfigPath),
                 "  --username       Registry username for basic auth",
                 "  --password       Registry password (mutually exclusive with",
                 "                     --password-env/--password-file)",
@@ -171,49 +198,60 @@ public final class CliApplication {
             if (args == null || args.length == 0) {
                 return new ParseResult(null, false, "No arguments provided");
             }
+            Options parsedOptions = new Options();
+            parsedOptions.addOption(Option.builder("h")
+                    .longOpt("help")
+                    .desc("Show help")
+                    .build());
+            addOption(parsedOptions, "config", "path");
+            addOption(parsedOptions, "repo", "name");
+            addOption(parsedOptions, "tag", "tag");
+            addOption(parsedOptions, "ref", "ref");
+            addOption(parsedOptions, "digest", "digest");
+            addOption(parsedOptions, "runtime", "id");
+            addOption(parsedOptions, "username", "user");
+            addOption(parsedOptions, "password", "pwd");
+            addOption(parsedOptions, "password-env", "var");
+            addOption(parsedOptions, "password-file", "path");
+            addOption(parsedOptions, "cert-path", "path");
+            addOption(parsedOptions, "key-path", "path");
+            addOption(parsedOptions, "ca-path", "path");
 
-            Path configPath = DEFAULT_CONFIG_PATH;
-            String repo = null;
-            String tag = "latest";
-            String digest = null;
-            String runtimeId = null;
-            String username = null;
-            String password = null;
-            String passwordEnv = null;
-            Path passwordFile = null;
-            Path certPath = null;
-            Path keyPath = null;
-            Path caPath = null;
-            boolean showHelp = false;
-
-            for (int i = 0; i < args.length; i++) {
-                String arg = args[i];
-                switch (arg) {
-                    case "--help", "-h" -> showHelp = true;
-                    case "--config" -> configPath = nextPath(args, ++i, "--config");
-                    case "--repo" -> repo = nextValue(args, ++i, "--repo");
-                    case "--tag", "--ref" -> tag = nextValue(args, ++i, arg);
-                    case "--digest" -> digest = nextValue(args, ++i, "--digest");
-                    case "--runtime" -> runtimeId = nextValue(args, ++i, "--runtime");
-                    case "--username" -> username = nextValue(args, ++i, "--username");
-                    case "--password" -> password = nextValue(args, ++i, "--password");
-                    case "--password-env" -> passwordEnv = nextValue(args, ++i, "--password-env");
-                    case "--password-file" -> passwordFile = nextPath(args, ++i, "--password-file");
-                    case "--cert-path" -> certPath = nextPath(args, ++i, "--cert-path");
-                    case "--key-path" -> keyPath = nextPath(args, ++i, "--key-path");
-                    case "--ca-path" -> caPath = nextPath(args, ++i, "--ca-path");
-                    default -> {
-                        if (arg.startsWith("-")) {
-                            return new ParseResult(null, false, "Unknown option: " + arg);
-                        }
-                        return new ParseResult(null, false, "Unexpected argument: " + arg);
-                    }
-                }
+            CommandLine cmd;
+            CommandLineParser parser = new DefaultParser();
+            try {
+                cmd = parser.parse(parsedOptions, args);
+            } catch (UnrecognizedOptionException e) {
+                return new ParseResult(null, false, "Unknown option: " + e.getOption());
+            } catch (MissingArgumentException e) {
+                return new ParseResult(null, false,
+                        "Missing value for " + formatOption(e.getOption()));
+            } catch (ParseException e) {
+                return new ParseResult(null, false, e.getMessage());
             }
 
-            if (showHelp) {
+            if (!cmd.getArgList().isEmpty()) {
+                return new ParseResult(null, false, "Unexpected argument: " + cmd.getArgList().getFirst());
+            }
+            if (cmd.hasOption("help")) {
                 return new ParseResult(null, true, null);
             }
+
+            Path configPath = Paths.get(cmd.getOptionValue("config", "config.yaml"));
+            String repo = cmd.getOptionValue("repo");
+            String tag = cmd.getOptionValue("tag");
+            String ref = cmd.getOptionValue("ref");
+            String digest = cmd.getOptionValue("digest");
+            String runtimeId = cmd.getOptionValue("runtime");
+            String username = cmd.getOptionValue("username");
+            String password = cmd.getOptionValue("password");
+            String passwordEnv = cmd.getOptionValue("password-env");
+            Path passwordFile = cmd.hasOption("password-file")
+                    ? Paths.get(cmd.getOptionValue("password-file"))
+                    : null;
+            Path certPath = cmd.hasOption("cert-path") ? Paths.get(cmd.getOptionValue("cert-path")) : null;
+            Path keyPath = cmd.hasOption("key-path") ? Paths.get(cmd.getOptionValue("key-path")) : null;
+            Path caPath = cmd.hasOption("ca-path") ? Paths.get(cmd.getOptionValue("ca-path")) : null;
             if (repo == null || repo.isBlank()) {
                 return new ParseResult(null, false, "Repository is required (--repo)");
             }
@@ -221,7 +259,7 @@ public final class CliApplication {
                 return new ParseResult(null, false, "Runtime id is required (--runtime)");
             }
 
-            if (countNonNull(password, passwordEnv, passwordFile) > MAX_PASSWORD_SOURCES) {
+            if (countNonNull(password, passwordEnv, passwordFile) > 1) {
                 return new ParseResult(null, false, "Use only one of --password, --password-env or --password-file");
             }
             String resolvedPassword = password;
@@ -260,10 +298,11 @@ public final class CliApplication {
             if (caPath != null && !Files.exists(caPath)) {
                 return new ParseResult(null, false, "ca-path does not exist: " + caPath);
             }
+            String reference = digest != null
+                    ? digest
+                    : (tag != null ? tag : (ref != null ? ref : "latest"));
 
-            String reference = digest != null ? digest : tag;
-
-            CliOptions options = new CliOptions(
+            CliOptions cliOptions = new CliOptions(
                     configPath,
                     repo,
                     reference,
@@ -273,18 +312,7 @@ public final class CliApplication {
                     keyPath,
                     caPath
             );
-            return new ParseResult(options, false, null);
-        }
-
-        private static String nextValue(String[] args, int index, String opt) {
-            if (index >= args.length) {
-                throw new IllegalArgumentException(opt + " requires a value");
-            }
-            return args[index];
-        }
-
-        private static Path nextPath(String[] args, int index, String opt) {
-            return Paths.get(nextValue(args, index, opt));
+            return new ParseResult(cliOptions, false, null);
         }
 
         @SafeVarargs
@@ -296,6 +324,24 @@ public final class CliApplication {
                 }
             }
             return count;
+        }
+
+        private static void addOption(Options options, String longOpt, String argName) {
+            options.addOption(Option.builder()
+                    .longOpt(longOpt)
+                    .hasArg()
+                    .argName(argName)
+                    .build());
+        }
+
+        private static String formatOption(Option option) {
+            if (option == null) {
+                return "option";
+            }
+            if (option.getLongOpt() != null) {
+                return "--" + option.getLongOpt();
+            }
+            return "-" + option.getOpt();
         }
     }
 

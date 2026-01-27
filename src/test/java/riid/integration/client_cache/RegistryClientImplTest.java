@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.cache.oci.CacheAdapter;
 import riid.app.fs.HostFilesystem;
@@ -52,6 +53,7 @@ class RegistryClientImplTest {
         }
     }
 
+    @Tag("filesystem")
     @Test
     void fetchManifestBlobAndTagsSuccess() throws Exception {
         byte[] layer = "layer-data".getBytes(StandardCharsets.UTF_8);

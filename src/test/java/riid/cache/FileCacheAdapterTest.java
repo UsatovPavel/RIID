@@ -42,7 +42,7 @@ class FileCacheAdapterTest {
         fs.writeString(tmp, "hello");
         CacheEntry entry = cache.put(
                 digest,
-                FilesystemCachePayload.of(tmp, fs.size(tmp)),
+                FilesystemCachePayload.of(fs, tmp, fs.size(tmp)),
                 CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));

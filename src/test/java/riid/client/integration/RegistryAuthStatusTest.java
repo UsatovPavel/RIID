@@ -28,6 +28,7 @@ import riid.app.fs.TestPaths;
  * Local registry:2 with htpasswd auth. Verifies 401/404/200 paths.
  */
 @Tag("local")
+@Tag("filesystem")
 @Testcontainers
 @SuppressWarnings({"resource"})
 class RegistryAuthStatusTest {

@@ -1,6 +1,7 @@
 package riid.cache;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.HostFilesystemTestSupport;
+import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 
 class TempFileCacheAdapterTest {
@@ -40,7 +42,7 @@ class TempFileCacheAdapterTest {
         Path tmp = TestPaths.tempFile(fs, "cache-", ".bin");
         fs.writeString(tmp, "hello");
 
-        CachePayload payload = FilesystemCachePayload.of(tmp, fs.size(tmp));
+        CachePayload payload = FilesystemCachePayload.of(fs, tmp, fs.size(tmp));
         CacheEntry entry = cache.put(digest, payload, CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));
@@ -86,13 +88,18 @@ class TempFileCacheAdapterTest {
         assertTrue(cache.get(digest).isEmpty());
     }
 
+    @Tag("filesystem")
     @Test
     void cleanupIsIdempotent() throws Exception {
-        cache = new TempFileCacheAdapter(fs);
+        HostFilesystem realFs = new NioHostFilesystem();
+        cache = new TempFileCacheAdapter(realFs);
         Path root = cache.rootDir();
+        if (realFs.exists(root)) {
+            realFs.deleteRecursively(root);
+        }
         cache.cleanup();
         cache.cleanup(); // should not throw
-        assertFalse(fs.exists(root));
+        assertFalse(realFs.exists(root));
     }
 }
 

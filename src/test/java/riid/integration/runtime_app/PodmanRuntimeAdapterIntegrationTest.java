@@ -23,6 +23,7 @@ import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.runtime.PodmanRuntimeAdapter;
 
+@Tag("filesystem")
 @Tag("local")
 class PodmanRuntimeAdapterIntegrationTest {
 

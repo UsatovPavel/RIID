@@ -49,6 +49,7 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     implementation("commons-codec:commons-codec:1.16.1")
+    implementation("commons-cli:commons-cli:1.11.0")
     implementation("commons-io:commons-io:2.21.0")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
     implementation("org.eclipse.jetty:jetty-client:12.1.5")

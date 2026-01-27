@@ -19,13 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import riid.app.fs.TestPaths;
 import riid.app.fs.HostFilesystem;
-import riid.app.fs.HostFilesystemTestSupport;
+import riid.app.fs.NioHostFilesystem;
 
 @SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.AvoidAccessibilityAlteration"})
 class ConfigBranchTest {
 
     private static final String YAML_SUFFIX = ".yaml";
-    private final HostFilesystem fs = HostFilesystemTestSupport.create();
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @Test
     void missingFileFails() {
@@ -35,7 +35,7 @@ class ConfigBranchTest {
 
     @Test
     void invalidYamlFailsParsing() throws Exception {
-        Path tmp = TestPaths.tempFile(fs, "bad-config", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "bad-config", YAML_SUFFIX);
         fs.writeString(tmp, "not: [valid"); // broken YAML
         assertThrows(RuntimeException.class, () -> ConfigLoader.load(tmp));
     }
@@ -52,7 +52,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = TestPaths.tempFile(fs, "cfg-null-http", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cfg-null-http", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
         //Client config must not have side-effect(get http from default HttpConfig)
@@ -70,7 +70,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = TestPaths.tempFile(fs, "cfg-null-auth", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cfg-null-auth", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -84,7 +84,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = TestPaths.tempFile(fs, "cfg-null-reg", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cfg-null-reg", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -102,7 +102,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 0
                 """;
-        Path tmp = TestPaths.tempFile(fs, "cfg-bad-dispatcher", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cfg-bad-dispatcher", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -121,7 +121,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = TestPaths.tempFile(fs, "cfg-bad-maxRetries", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cfg-bad-maxRetries", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -140,7 +140,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = TestPaths.tempFile(fs, "cfg-minimal", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cfg-minimal", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
 
         GlobalConfig cfg = ConfigLoader.load(tmp);

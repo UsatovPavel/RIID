@@ -36,16 +36,16 @@ class HttpExecutorTest {
     @Test
     void retriesOnlyIdempotentWhenConfigured() throws Exception {
         HttpClient client = new HttpClient();
-        HttpClientConfig config = new HttpClientConfig(
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                1,
-                Duration.ofMillis(100),
-                Duration.ofMillis(200),
-                true,
-                "ua",
-                true
-        );
+        HttpClientConfig config = HttpClientConfig.builder()
+                .connectTimeout(Duration.ofSeconds(1))
+                .requestTimeout(Duration.ofSeconds(1))
+                .maxRetries(1)
+                .initialBackoff(Duration.ofMillis(100))
+                .maxBackoff(Duration.ofMillis(200))
+                .retryIdempotentOnly(true)
+                .userAgent("ua")
+                .followRedirects(true)
+                .build();
         HttpExecutor exec = new HttpExecutor(client, config);
 
         assertThrows(IllegalStateException.class, () -> exec.shouldRetry(503, 1, false));
@@ -94,15 +94,16 @@ class HttpExecutorTest {
     }
 
     private HttpExecutor executor(int maxRetries) {
-        HttpClientConfig cfg = new HttpClientConfig(
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                maxRetries,
-                Duration.ofMillis(10),
-                Duration.ofMillis(10),
-                true,
-                "test-agent",
-                true);
+        HttpClientConfig cfg = HttpClientConfig.builder()
+                .connectTimeout(Duration.ofSeconds(1))
+                .requestTimeout(Duration.ofSeconds(1))
+                .maxRetries(1)
+                .initialBackoff(Duration.ofMillis(10))
+                .maxBackoff(Duration.ofMillis(10))
+                .retryIdempotentOnly(true)
+                .userAgent("ua")
+                .followRedirects(true)
+                .build();
         var client = HttpClientFactory.create(cfg);
         return new HttpExecutor(client, cfg);
     }

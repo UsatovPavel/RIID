@@ -10,16 +10,16 @@ class HttpExecutorConfigTest {
 
     @Test
     void throwsWhenNonIdempotentRetryRequested() {
-        HttpClientConfig cfg = new HttpClientConfig(
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                1,
-                Duration.ofMillis(100),
-                Duration.ofMillis(200),
-                true,
-                "ua",
-                true
-        );
+        HttpClientConfig cfg = HttpClientConfig.builder()
+                .connectTimeout(Duration.ofSeconds(1))
+                .requestTimeout(Duration.ofSeconds(1))
+                .maxRetries(1)
+                .initialBackoff(Duration.ofMillis(100))
+                .maxBackoff(Duration.ofMillis(200))
+                .retryIdempotentOnly(true)
+                .userAgent("ua")
+                .followRedirects(true)
+                .build();
         HttpExecutor exec = new HttpExecutor(new org.eclipse.jetty.client.HttpClient(), cfg);
 
         assertThrows(IllegalStateException.class, () -> exec.shouldRetry(503, 1, false));

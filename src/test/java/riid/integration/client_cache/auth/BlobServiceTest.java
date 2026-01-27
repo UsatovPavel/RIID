@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
@@ -33,6 +34,7 @@ import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 
+@Tag("filesystem")
 @SuppressWarnings("PMD.CloseResource")
 class BlobServiceTest {
     private final HostFilesystem fs = new NioHostFilesystem();

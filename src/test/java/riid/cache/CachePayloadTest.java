@@ -22,7 +22,7 @@ class CachePayloadTest {
         byte[] bytes = "data".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         fs.write(tmp, bytes);
 
-        CachePayload payload = FilesystemCachePayload.of(tmp, bytes.length);
+        CachePayload payload = FilesystemCachePayload.of(fs, tmp, bytes.length);
         assertEquals(bytes.length, payload.sizeBytes());
         try (var in = payload.open()) {
             assertArrayEquals(bytes, in.readAllBytes());

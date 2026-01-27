@@ -20,6 +20,7 @@ import riid.app.fs.TestPaths;
  * End-to-end via CLI with real podman runtime.
  * Requires podman and network access to Docker Hub.
  */
+@Tag("filesystem")
 @Tag("local")
 class CliPodmanIntegrationTest {
 

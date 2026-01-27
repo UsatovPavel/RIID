@@ -7,7 +7,6 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -28,9 +27,6 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class HttpExecutor {
     private static final String METHOD_HEAD = HttpMethod.HEAD.asString();
     private static final List<Integer> RETRY_STATUSES = List.of(429, 502, 503, 504);
-    private static final List<Integer> REDIRECT_STATUSES = List.of(301, 302, 303, 307, 308);
-    private static final int MAX_REDIRECTS = 5;
-
     private final HttpClient client;
     private final HttpClientConfig config;
 
@@ -58,7 +54,7 @@ public class HttpExecutor {
         while (true) {
             attempts++;
             try {
-                HttpResult<InputStream> resp = executeWithRedirects(method, uri, headers);
+                HttpResult<InputStream> resp = execute(method, uri, headers);
                 if (shouldRetry(resp.statusCode(), attempts, idempotent)) {
                     backoff(attempts);
                     continue;
@@ -71,32 +67,6 @@ public class HttpExecutor {
                 }
                 throw new UncheckedIOException(e);
             }
-        }
-    }
-
-    private HttpResult<InputStream> executeWithRedirects(String method,
-                                                         URI uri,
-                                                         Map<String, String> headers) throws IOException {
-        URI current = uri;
-        Map<String, String> currentHeaders = headers;
-        int redirects = 0;
-        while (true) {
-            HttpResult<InputStream> resp = execute(method, current, currentHeaders);
-            Optional<String> location = resp.firstHeader("Location");
-            if (location.isEmpty() || !REDIRECT_STATUSES.contains(resp.statusCode())) {
-                return resp;
-            }
-            closeQuietly(resp.body());
-            if (redirects >= MAX_REDIRECTS) {
-                return resp;
-            }
-            redirects++;
-            URI next = current.resolve(location.get());
-            if (!sameOrigin(current, next)) {
-                currentHeaders = new java.util.LinkedHashMap<>(currentHeaders);
-                currentHeaders.remove("Authorization");
-            }
-            current = next;
         }
     }
 
@@ -185,26 +155,6 @@ public class HttpExecutor {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
         }
-    }
-
-    private static void closeQuietly(InputStream body) {
-        if (body == null) {
-            return;
-        }
-        try {
-            body.close();
-        } catch (IOException ignored) {
-            // best effort for redirect responses
-        }
-    }
-
-    private static boolean sameOrigin(URI a, URI b) {
-        if (a == null || b == null) {
-            return false;
-        }
-        return Objects.equals(a.getScheme(), b.getScheme())
-                && Objects.equals(a.getHost(), b.getHost())
-                && a.getPort() == b.getPort();
     }
 
     public static String rangeHeader(long startInclusive, Long endInclusive) {

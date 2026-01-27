@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.app.CliApplication;
 import riid.app.ImageLoadingFacade;
+import riid.app.fs.NioHostFilesystem;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
@@ -21,12 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Smoke: CLI arg parsing -> ConfigLoader -> ImageLoadingFacade (no network).
  */
+@Tag("filesystem")
 @Tag("e2e")
 class CliToFactorySmokeTest {
 
     @Test
     void reachesFactoryFromCli() throws Exception {
-        var fs = new riid.app.fs.NioHostFilesystem();
+        var fs = new NioHostFilesystem();
         Path config = riid.app.fs.TestPaths.tempFile(fs, riid.app.fs.TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
         fs.writeString(config, """
                 client:

@@ -1,5 +1,6 @@
 package riid.integration.config_client;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
@@ -17,6 +18,7 @@ import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 
+@Tag("filesystem")
 class ConfigLoaderTest {
 
     private static final String TMP_PREFIX = "config-";

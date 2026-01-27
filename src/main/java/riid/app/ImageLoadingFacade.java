@@ -42,6 +42,7 @@ import riid.runtime.RuntimeConfig;
  */
 public final class ImageLoadingFacade implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadingFacade.class);
+    private static final CacheCleaner NOOP_CACHE_CLEANER = () -> { };
 
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
@@ -77,7 +78,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         this.allowedRegistries = allowedRegistries == null
                 ? Set.of()
                 : Set.copyOf(new HashSet<>(allowedRegistries));
-        this.cacheCleaner = cacheCleaner;
+        this.cacheCleaner = cacheCleaner != null ? cacheCleaner : NOOP_CACHE_CLEANER;
     }
 
     /**
@@ -207,16 +208,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
         } catch (Exception e) {
             error = new IOException("Failed to close registry client", e);
         }
-        if (cacheCleaner != null) {
-            try {
-                cacheCleaner.close();
-            } catch (Exception e) {
-                IOException cacheError = new IOException("Failed to close cache adapter", e);
-                if (error == null) {
-                    error = cacheError;
-                } else {
-                    error.addSuppressed(cacheError);
-                }
+        try {
+            cacheCleaner.close();
+        } catch (Exception e) {
+            IOException cacheError = new IOException("Failed to close cache adapter", e);
+            if (error == null) {
+                error = cacheError;
+            } else {
+                error.addSuppressed(cacheError);
             }
         }
         if (error != null) {

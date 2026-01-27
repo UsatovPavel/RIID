@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * Full-flow smoke: CLI args -> ConfigLoader -> ImageLoadingFacade -> dispatcher -> registry -> runtime (stub).
  * Live: hits Docker Hub for library/busybox:latest.
  */
+@Tag("filesystem")
 @Tag("e2e")
 @Tag("live")
 class CliEndToEndLiveTest {
