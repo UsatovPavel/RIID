@@ -14,36 +14,18 @@ import java.util.stream.Stream;
  * HostFilesystem implementation backed by java.nio.
  */
 public final class NioHostFilesystem implements HostFilesystem {
-    private final Path baseTempDir;
-
-    public NioHostFilesystem(Path baseTempDir) {
-        this.baseTempDir = baseTempDir;
-    }
-
     @Override
-    public Path createTempDirectory(String prefix) throws IOException {
-        if (baseTempDir == null) {
-            return Files.createTempDirectory(prefix);
-        }
-        return Files.createTempDirectory(baseTempDir, prefix);
-    }
-
-    @Override
-    public Path createTempFile(String prefix, String suffix) throws IOException {
-        if (baseTempDir == null) {
-            return Files.createTempFile(prefix, suffix);
-        }
-        return Files.createTempFile(baseTempDir, prefix, suffix);
-    }
-
-    @Override
-    public Path createTempFile(Path dir, String prefix, String suffix) throws IOException {
-        return Files.createTempFile(dir, prefix, suffix);
-    }
-
-    @Override
-    public Path createDirectories(Path dir) throws IOException {
+    public Path createDirectory(Path dir) throws IOException {
         return Files.createDirectories(dir);
+    }
+
+    @Override
+    public Path createFile(Path path) throws IOException {
+        Path parent = path.toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        return Files.createFile(path);
     }
 
     @Override

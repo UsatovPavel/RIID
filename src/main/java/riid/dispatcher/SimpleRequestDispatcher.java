@@ -1,10 +1,21 @@
 package riid.dispatcher;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.io.File;
+import java.nio.file.Path;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.Semaphore;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.PathSupport;
 import riid.cache.CacheAdapter;
+import riid.cache.CacheMediaType;
 import riid.cache.FilesystemCachePayload;
+import riid.cache.ImageDigest;
 import riid.cache.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
@@ -12,14 +23,6 @@ import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.core.model.manifest.MediaType;
 import riid.p2p.P2PExecutor;
-import riid.cache.CacheMediaType;
-import riid.cache.ImageDigest;
-
-import java.io.File;
-import java.nio.file.Path;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.Semaphore;
 
 /**
  * Simple dispatcher: cache -> P2P -> registry (registry concurrency limit is configurable).
@@ -31,19 +34,25 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     private final RegistryClient client;
     private final CacheAdapter cache;
     private final P2PExecutor p2p;
+    private final HostFilesystem fs;
     private final Optional<Semaphore> registryLimiter; // limits concurrent downloads from registry
 
-    public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p) {
-        this(client, cache, p2p, new DispatcherConfig());
+    public SimpleRequestDispatcher(RegistryClient client,
+                                   CacheAdapter cache,
+                                   P2PExecutor p2p,
+                                   HostFilesystem fs) {
+        this(client, cache, p2p, new DispatcherConfig(), fs);
     }
 
     public SimpleRequestDispatcher(RegistryClient client,
                                    CacheAdapter cache,
                                    P2PExecutor p2p,
-                                   DispatcherConfig config) {
+                                   DispatcherConfig config,
+                                   HostFilesystem fs) {
         this.client = Objects.requireNonNull(client);
         this.cache = cache;
         this.p2p = p2p;
+        this.fs = Objects.requireNonNull(fs, "fs");
         int maxConc = config != null ? config.maxConcurrentRegistry() : 0;
         this.registryLimiter = maxConc > 0 ? Optional.of(new Semaphore(maxConc)) : Optional.empty();
     }
@@ -133,9 +142,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
     private File createTemp() {
         try {
-            File f = File.createTempFile("layer-", ".bin");
-            f.deleteOnExit();
-            return f;
+            var path = PathSupport.tempPath("layer-", ".bin");
+            fs.createFile(path);
+            return path.toFile();
         } catch (Exception e) {
             throw new RuntimeException("Cannot create temp file", e);
         }

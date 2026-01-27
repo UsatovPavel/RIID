@@ -13,6 +13,7 @@ import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 import riid.cache.ImageDigest;
 import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Descriptor;
@@ -23,7 +24,7 @@ import riid.dispatcher.ImageRef;
 import riid.dispatcher.RequestDispatcher;
 import riid.runtime.RuntimeAdapter;
 
-class ImageLoadFacadeErrorTest {
+class ImageLoadingFacadeErrorTest {
     private static final String DIGEST = "sha256:" + "a".repeat(64);
     private static final ImageDigest IMG_DIGEST = ImageDigest.parse(DIGEST);
     private static final String NOT_USED = "Not used";
@@ -34,7 +35,7 @@ class ImageLoadFacadeErrorTest {
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
-        ImageLoadFacade facade = new ImageLoadFacade(new NoopDispatcher(), new RuntimeRegistry(java.util.Map.of()),
+        ImageLoadingFacade facade = new ImageLoadingFacade(new NoopDispatcher(), new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(), fs);
 
         AppException ex = assertThrows(AppException.class,
@@ -48,11 +49,11 @@ class ImageLoadFacadeErrorTest {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
-        HostFilesystem fs = new NioHostFilesystem(null);
-        Path layer = fs.createTempFile("riid-layer", ".bin");
+        HostFilesystem fs = new NioHostFilesystem();
+        Path layer = TestPaths.tempFile(fs, "riid-layer", ".bin");
         fs.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
-        ImageLoadFacade facade = new ImageLoadFacade(dispatcher, new RuntimeRegistry(java.util.Map.of()),
+        ImageLoadingFacade facade = new ImageLoadingFacade(dispatcher, new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(), fs);
 
         AppException ex = assertThrows(AppException.class,
@@ -165,22 +166,12 @@ class ImageLoadFacadeErrorTest {
         }
 
         @Override
-        public Path createTempDirectory(String prefix) throws IOException {
+        public Path createDirectory(Path dir) throws IOException {
             throw error;
         }
 
         @Override
-        public Path createTempFile(String prefix, String suffix) throws IOException {
-            throw error;
-        }
-
-        @Override
-        public Path createTempFile(Path dir, String prefix, String suffix) throws IOException {
-            throw error;
-        }
-
-        @Override
-        public Path createDirectories(Path dir) throws IOException {
+        public Path createFile(Path path) throws IOException {
             throw error;
         }
 

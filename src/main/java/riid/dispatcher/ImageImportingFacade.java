@@ -1,14 +1,15 @@
 package riid.dispatcher;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.runtime.RuntimeAdapter;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.runtime.RuntimeAdapter;
 
 /**
  * Connects RequestDispatcher (download/validate) with a RuntimeAdapter (import).
@@ -21,7 +22,7 @@ public final class ImageImportingFacade {
     private final HostFilesystem fs;
 
     public ImageImportingFacade(RequestDispatcher dispatcher) {
-        this(dispatcher, new NioHostFilesystem(null));
+        this(dispatcher, new NioHostFilesystem());
     }
 
     public ImageImportingFacade(RequestDispatcher dispatcher, HostFilesystem fs) {

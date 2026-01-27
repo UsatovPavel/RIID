@@ -17,7 +17,7 @@ import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 
 class PortoRuntimeAdapterTest {
-    private final HostFilesystem fs = new NioHostFilesystem(null);
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @Test
     void missingFileThrowsIOException() {

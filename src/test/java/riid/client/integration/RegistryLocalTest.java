@@ -24,6 +24,7 @@ import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 import java.io.File;
 import java.io.IOException;
@@ -53,7 +54,7 @@ public class RegistryLocalTest {
     private final AuthService authService = new AuthService(http, mapper, new TokenCache());
     private final ManifestService manifestService = new ManifestService(http, authService, mapper);
     private final BlobService blobService = new BlobService(http, authService, null);
-    private final HostFilesystem fs = new NioHostFilesystem(null);
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @BeforeAll
     static void startRegistryAndSeed() throws Exception {
@@ -92,7 +93,7 @@ public class RegistryLocalTest {
         Optional<Long> sizeOpt = blobService.headBlob(LOCAL, REPO, layer.digest(), SCOPE);
         Assertions.assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
-        File tmp = fs.createTempFile("local-layer", ".tar").toFile();
+        File tmp = TestPaths.tempFile(fs, "local-layer", ".tar").toFile();
         tmp.deleteOnExit();
         BlobResult result = blobService.fetchBlob(LOCAL, req, tmp, SCOPE);
 

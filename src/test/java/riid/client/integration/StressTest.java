@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 /**
  * Stress/retry test (step 9.1).
@@ -41,7 +42,7 @@ public class StressTest {
     private static RegistryClient CLIENT;
     private static final String REPO = "library/busybox";
     private static final String REF = "latest";
-    private static final HostFilesystem FS = new NioHostFilesystem(null);
+    private static final HostFilesystem FS = new NioHostFilesystem();
 
     @BeforeAll
     static void setup() {
@@ -66,8 +67,9 @@ public class StressTest {
             for (int i = 0; i < count; i++) {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
-                        File tmp = FS.createTempFile(
-                                "busybox-layer-" + Thread.currentThread().getId(),
+                        File tmp = TestPaths.tempFile(
+                                FS,
+                                "busybox-layer-" + Thread.currentThread().getId() + "-",
                                 ".tar")
                                 .toFile();
                         var res = CLIENT.fetchBlob(req, tmp);

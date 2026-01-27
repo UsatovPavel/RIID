@@ -17,13 +17,9 @@ import java.util.stream.Stream;
  * Filesystem abstraction for host operations (real or test).
  */
 public interface HostFilesystem {
-    Path createTempDirectory(String prefix) throws IOException;
+    Path createDirectory(Path dir) throws IOException;
 
-    Path createTempFile(String prefix, String suffix) throws IOException;
-
-    Path createTempFile(Path dir, String prefix, String suffix) throws IOException;
-
-    Path createDirectories(Path dir) throws IOException;
+    Path createFile(Path path) throws IOException;
 
     Path copy(Path source, Path target, CopyOption... options) throws IOException;
 

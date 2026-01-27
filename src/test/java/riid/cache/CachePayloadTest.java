@@ -9,13 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 class CachePayloadTest {
 
     @Test
     void ofPathReturnsProvidedSizeAndData() throws Exception {
-        HostFilesystem fs = new NioHostFilesystem(null);
-        Path tmp = fs.createTempFile("payload-", ".bin");
+        HostFilesystem fs = new NioHostFilesystem();
+        Path tmp = TestPaths.tempFile(fs, "payload-", ".bin");
         byte[] bytes = "data".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         fs.write(tmp, bytes);
 

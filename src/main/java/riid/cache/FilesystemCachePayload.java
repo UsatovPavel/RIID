@@ -23,7 +23,7 @@ public final class FilesystemCachePayload implements CachePayload {
     }
 
     public static FilesystemCachePayload of(Path path) {
-        return new FilesystemCachePayload(new NioHostFilesystem(null), path, null);
+        return new FilesystemCachePayload(new NioHostFilesystem(), path, null);
     }
 
     public static FilesystemCachePayload of(HostFilesystem fs, Path path) {
@@ -31,7 +31,7 @@ public final class FilesystemCachePayload implements CachePayload {
     }
 
     public static FilesystemCachePayload of(Path path, long sizeBytes) {
-        return new FilesystemCachePayload(new NioHostFilesystem(null), path, sizeBytes > 0 ? sizeBytes : null);
+        return new FilesystemCachePayload(new NioHostFilesystem(), path, sizeBytes > 0 ? sizeBytes : null);
     }
 
     public static FilesystemCachePayload of(HostFilesystem fs, Path path, long sizeBytes) {

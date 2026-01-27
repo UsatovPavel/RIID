@@ -12,11 +12,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 class TempFileCacheAdapterTest {
 
     private TempFileCacheAdapter cache;
-    private final HostFilesystem fs = new NioHostFilesystem(null);
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @AfterEach
     void tearDown() throws Exception {
@@ -30,7 +31,7 @@ class TempFileCacheAdapterTest {
         cache = new TempFileCacheAdapter();
         ImageDigest digest = ImageDigest.parse("sha256:" + "a".repeat(64));
 
-        Path tmp = fs.createTempFile("cache-", ".bin");
+        Path tmp = TestPaths.tempFile(fs, "cache-", ".bin");
         fs.writeString(tmp, "hello");
 
         CachePayload payload = FilesystemCachePayload.of(tmp, fs.size(tmp));
@@ -52,7 +53,7 @@ class TempFileCacheAdapterTest {
         cache = new TempFileCacheAdapter();
         ImageDigest digest = ImageDigest.parse("sha256:" + "b".repeat(64));
 
-        Path tmp = fs.createTempFile("cache-", ".dat");
+        Path tmp = TestPaths.tempFile(fs, "cache-", ".dat");
         fs.writeString(tmp, "payload");
 
         CachePayload payload = new CachePayload() {

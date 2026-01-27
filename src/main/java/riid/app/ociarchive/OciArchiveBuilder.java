@@ -13,6 +13,7 @@ import riid.app.ImageId;
 import riid.app.error.AppError;
 import riid.app.error.OciArchiveException;
 import riid.app.fs.HostFilesystem;
+import riid.app.fs.PathSupport;
 import riid.cache.ImageDigest;
 import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Manifest;
@@ -27,10 +28,16 @@ public final class OciArchiveBuilder {
 
     private final RequestDispatcher dispatcher;
     private final HostFilesystem fs;
+    private final Path tempRoot;
 
     public OciArchiveBuilder(RequestDispatcher dispatcher, HostFilesystem fs) {
+        this(dispatcher, fs, null);
+    }
+
+    public OciArchiveBuilder(RequestDispatcher dispatcher, HostFilesystem fs, Path tempRoot) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.fs = Objects.requireNonNull(fs, "fs");
+        this.tempRoot = tempRoot;
     }
 
     public <T> T withArchive(ImageId imageId,
@@ -47,9 +54,10 @@ public final class OciArchiveBuilder {
         Objects.requireNonNull(manifestResult, "manifestResult");
 
         Manifest manifest = manifestResult.manifest();
-        Path ociDir = fs.createTempDirectory("oci-layout");
+        Path ociDir = PathSupport.tempDirPath(tempRoot, "oci-layout-");
+        fs.createDirectory(ociDir);
         Path blobsDir = ociDir.resolve("blobs").resolve("sha256");
-        fs.createDirectories(blobsDir);
+        fs.createDirectory(blobsDir);
 
         // Config
         var cfg = manifest.config();
@@ -81,7 +89,8 @@ public final class OciArchiveBuilder {
         String index = String.format(Locale.ROOT, template, manifestBytes.length, manifestDigest, imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
-        Path archive = fs.createTempFile("oci-archive", ".tar");
+        Path archive = PathSupport.tempPath(tempRoot, "oci-archive-", ".tar");
+        fs.createFile(archive);
         runTar(archive, ociDir);
         return new OciArchive(archive, ociDir, fs);
     }
@@ -102,6 +111,7 @@ public final class OciArchiveBuilder {
     }
 
     private static void runTar(Path archive, Path ociDir) throws IOException, InterruptedException {
+        // tar -c: create archive, -f: output file, -C: change dir before adding "."
         Process p = new ProcessBuilder("tar", "-cf", archive.toString(), "-C", ociDir.toString(), ".")
                 .redirectErrorStream(true)
                 .start();

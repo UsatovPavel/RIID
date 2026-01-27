@@ -11,13 +11,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 class RuntimeAdaptersTest {
 
     private static final String TAR_SUFFIX = ".tar";
     private static final String PAYLOAD = "data";
     private static final String ERR = "err";
-    private final HostFilesystem fs = new NioHostFilesystem(null);
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @Test
     void podmanFailsOnMissingFile() {
@@ -28,7 +29,7 @@ class RuntimeAdaptersTest {
 
     @Test
     void podmanThrowsOnNonZeroExit() throws Exception {
-        Path tmp = fs.createTempFile("podman-", TAR_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "podman-", TAR_SUFFIX);
         fs.writeString(tmp, PAYLOAD);
         PodmanRuntimeAdapter adapter = new TestPodmanAdapter(1, "out", ERR);
         IOException ex = assertThrows(IOException.class, () -> adapter.importImage(tmp));
@@ -38,7 +39,7 @@ class RuntimeAdaptersTest {
 
     @Test
     void podmanSuccess() throws Exception {
-        Path tmp = fs.createTempFile("podman-", TAR_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "podman-", TAR_SUFFIX);
         fs.writeString(tmp, PAYLOAD);
         PodmanRuntimeAdapter adapter = new TestPodmanAdapter(0, "ok", "");
         assertDoesNotThrow(() -> adapter.importImage(tmp));
@@ -53,7 +54,7 @@ class RuntimeAdaptersTest {
 
     @Test
     void portoThrowsOnNonZeroExit() throws Exception {
-        Path tmp = fs.createTempFile("porto-", TAR_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "porto-", TAR_SUFFIX);
         fs.writeString(tmp, PAYLOAD);
         PortoRuntimeAdapter adapter = new TestPortoAdapter(2, "o", ERR);
         IOException ex = assertThrows(IOException.class, () -> adapter.importImage(tmp));
@@ -63,7 +64,7 @@ class RuntimeAdaptersTest {
 
     @Test
     void portoSuccess() throws Exception {
-        Path tmp = fs.createTempFile("porto-", TAR_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "porto-", TAR_SUFFIX);
         fs.writeString(tmp, PAYLOAD);
         PortoRuntimeAdapter adapter = new TestPortoAdapter(0, "ok", "");
         assertDoesNotThrow(() -> adapter.importImage(tmp));

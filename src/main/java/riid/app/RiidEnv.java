@@ -2,16 +2,16 @@ package riid.app;
 
 import java.util.Map;
 
-import riid.dispatcher.ImageRef;
-
 final class RiidEnv {
     private static volatile Map<String, String> ENV_OVERRIDE = Map.of();
     private static volatile boolean OVERRIDE_ENABLED;
+    private static final String DEFAULT_REGISTRY = "registry-1.docker.io";
 
     private RiidEnv() { }
 
-    static ImageRef imageRef() {
+    static ImageId imageId() {
         Map<String, String> env = env();
+        String registry = env.getOrDefault("RIID_REGISTRY", DEFAULT_REGISTRY);
         String repo = env.getOrDefault("RIID_REPO", "library/busybox");
         String tag = env.get("RIID_TAG");
         String digest = env.get("RIID_DIGEST");
@@ -25,7 +25,7 @@ final class RiidEnv {
             }
         }
         String tagValue = normalizeTag(tag);
-        return new ImageRef(repo, tagValue, digest);
+        return new ImageId(registry, repo, tagValue, digest);
     }
 
     static String cacheDir() {

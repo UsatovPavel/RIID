@@ -22,7 +22,7 @@ public final class ConfigLoader {
     private ConfigLoader() { }
 
     public static AppConfig load(Path path) {
-        return load(path, new NioHostFilesystem(null));
+        return load(path, new NioHostFilesystem());
     }
 
     public static AppConfig load(Path path, HostFilesystem fs) {

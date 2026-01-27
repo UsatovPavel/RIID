@@ -1,8 +1,21 @@
 package riid.dispatcher;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+
 import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 import riid.cache.CacheAdapter;
 import riid.cache.CacheEntry;
 import riid.cache.CacheMediaType;
@@ -16,19 +29,6 @@ import riid.client.core.model.manifest.Descriptor;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.TagList;
 import riid.p2p.P2PExecutor;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
 
 class SimpleRequestDispatcherTest {
 
@@ -45,7 +45,7 @@ class SimpleRequestDispatcherTest {
         registry = new RecordingRegistryClient();
         cache = new RecordingCacheAdapter();
         p2p = new RecordingP2PExecutor();
-        fs = new NioHostFilesystem(null);
+        fs = new NioHostFilesystem();
     }
 
     @AfterEach
@@ -58,7 +58,7 @@ class SimpleRequestDispatcherTest {
         cache.hasEntry = true;
         cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
 
-        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p);
+        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
         assertEquals(Path.of("/tmp/cached"), result.path());
@@ -71,7 +71,7 @@ class SimpleRequestDispatcherTest {
     void returnsP2PWhenCacheMiss() {
         p2p.fetchResult = Optional.of(Path.of("/tmp/p2p-layer"));
 
-        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p);
+        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
         assertEquals(Path.of("/tmp/p2p-layer"), result.path());
@@ -82,11 +82,11 @@ class SimpleRequestDispatcherTest {
 
     @Test
     void downloadsFromRegistryAndPublishes() throws IOException {
-        File tmp = fs.createTempFile("blob-", ".bin").toFile();
+        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
         fs.writeString(tmp.toPath(), "data");
         registry.blobResult = new BlobResult(DIGEST, tmp.length(), MEDIA_LAYER, tmp.getAbsolutePath());
 
-        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, new DispatcherConfig(1));
+        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, new DispatcherConfig(1), fs);
         FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
 
         assertEquals(tmp.toPath(), result.path());

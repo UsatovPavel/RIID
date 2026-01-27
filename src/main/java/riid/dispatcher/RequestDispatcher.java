@@ -1,15 +1,16 @@
 package riid.dispatcher;
 
+import java.util.Objects;
+
 import riid.cache.ImageDigest;
 import riid.client.core.model.manifest.MediaType;
-
-import java.util.Objects;
 
 /**
  * Dispatcher decides источник (cache/P2P/registry) и вызывает соответствующие адаптеры.
  */
 public interface RequestDispatcher {
 
+    // Dispatcher-level image fetch by repository/tag/digest.
     FetchResult fetchImage(ImageRef ref);
 
     /**

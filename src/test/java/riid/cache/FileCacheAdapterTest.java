@@ -11,12 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 class FileCacheAdapterTest {
 
     private Path root;
     private FileCacheAdapter cache;
-    private final HostFilesystem fs = new NioHostFilesystem(null);
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @AfterEach
     void tearDown() throws Exception {
@@ -27,11 +28,11 @@ class FileCacheAdapterTest {
 
     @Test
     void putAndGetRoundtrip() throws Exception {
-        root = fs.createTempDirectory("file-cache");
+        root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString());
         ImageDigest digest = ImageDigest.parse("sha256:" + "d".repeat(64));
 
-        Path tmp = fs.createTempFile("cache-file-", ".bin");
+        Path tmp = TestPaths.tempFile(fs, "cache-file-", ".bin");
         fs.writeString(tmp, "hello");
         CacheEntry entry = cache.put(
                 digest,
@@ -46,7 +47,7 @@ class FileCacheAdapterTest {
 
     @Test
     void missingReturnsEmptyAndHasFalse() throws Exception {
-        root = fs.createTempDirectory("file-cache");
+        root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString());
         ImageDigest digest = ImageDigest.parse("sha256:" + "e".repeat(64));
         assertFalse(cache.has(digest));
@@ -55,11 +56,11 @@ class FileCacheAdapterTest {
 
     @Test
     void sizeIsComputedWhenUnknown() throws Exception {
-        root = fs.createTempDirectory("file-cache");
+        root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString());
         ImageDigest digest = ImageDigest.parse("sha256:" + "f".repeat(64));
 
-        Path tmp = fs.createTempFile("cache-file-", ".data");
+        Path tmp = TestPaths.tempFile(fs, "cache-file-", ".data");
         fs.writeString(tmp, "payload");
         CachePayload payload = new CachePayload() {
             @Override

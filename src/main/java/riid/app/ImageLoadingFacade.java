@@ -34,21 +34,25 @@ import riid.runtime.RuntimeAdapter;
  * Application entrypoint/facade: load image (dispatcher -> OCI -> runtime), optionally run.
  * Not a god-class: it wires existing components and delegates real work to them.
  */
-public final class ImageLoadFacade {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadFacade.class);
+public final class ImageLoadingFacade {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadingFacade.class);
 
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
-    public ImageLoadFacade(RequestDispatcher dispatcher, RuntimeRegistry runtimeRegistry, RegistryClient client) {
-        this(dispatcher, runtimeRegistry, client, new NioHostFilesystem(null));
+    public ImageLoadingFacade(RequestDispatcher dispatcher,
+                              RuntimeRegistry runtimeRegistry,
+                              RegistryClient client,
+                              HostFilesystem fs) {
+        this(dispatcher, runtimeRegistry, client, fs, null);
     }
 
-    public ImageLoadFacade(RequestDispatcher dispatcher,
-                           RuntimeRegistry runtimeRegistry,
-                           RegistryClient client,
-                           HostFilesystem fs) {
-        this.archiveBuilder = new OciArchiveBuilder(dispatcher, fs);
+    public ImageLoadingFacade(RequestDispatcher dispatcher,
+                              RuntimeRegistry runtimeRegistry,
+                              RegistryClient client,
+                              HostFilesystem fs,
+                              Path tempRoot) {
+        this.archiveBuilder = new OciArchiveBuilder(dispatcher, fs, tempRoot);
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.client = Objects.requireNonNull(client, "client");
     }
@@ -56,9 +60,9 @@ public final class ImageLoadFacade {
     /**
      * High-level load: download/validate, assemble OCI, import into runtime.
      *
-     * @return refName used for runtime
+     * @return resolved ImageId used for runtime
      */
-    public String load(ImageId imageId, String runtimeId) {
+    public ImageId load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
         ManifestResult manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
             RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
@@ -69,9 +73,9 @@ public final class ImageLoadFacade {
     /**
      * Load using prepared manifest result and runtime.
      *
-     * @return refName used for runtime
+     * @return resolved ImageId used for runtime
      */
-    public String load(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId) {
+    public ImageId load(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId) {
         Objects.requireNonNull(manifestResult, "manifestResult");
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(imageId, "imageId");
@@ -79,7 +83,7 @@ public final class ImageLoadFacade {
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
                 runtime.importImage(archivePath);
                 LOGGER.info("Loaded {} into runtime {} at {}", imageId, runtime.runtimeId(), archivePath);
-                return imageId.toString();
+                return imageId;
             });
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -95,40 +99,47 @@ public final class ImageLoadFacade {
         }
     }
 
-    public static ImageLoadFacade createDefault(RegistryEndpoint endpoint,
-                                                CacheAdapter cache,
-                                                P2PExecutor p2p,
-                                                Map<String, RuntimeAdapter> runtimes,
-                                                HostFilesystem fs) {
+    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint,
+                                                   CacheAdapter cache,
+                                                   P2PExecutor p2p,
+                                                   Map<String, RuntimeAdapter> runtimes,
+                                                   HostFilesystem fs) {
         HttpClientConfig httpConfig = new HttpClientConfig();
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
-        RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p);
+        RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, fs);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
-        return new ImageLoadFacade(dispatcher, registry, client, fs);
+        return new ImageLoadingFacade(dispatcher, registry, client, fs);
     }
 
     /**
      * Build ImageLoadFacade from YAML config.
      */
-    public static ImageLoadFacade createFromConfig(Path configPath) throws Exception {
+    public static ImageLoadingFacade createFromConfig(Path configPath) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         AppConfig config = ConfigLoader.load(configPath);
 
         RegistryEndpoint endpoint = config.client().registries().getFirst();
         TempFileCacheAdapter cache = new TempFileCacheAdapter();
+        HttpClientConfig httpConfig = new HttpClientConfig();
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
 
         Path tempDir = config.app() != null ? config.app().tempDirPath() : null;
-        HostFilesystem fs = new NioHostFilesystem(tempDir);
+        HostFilesystem fs = new NioHostFilesystem();
         if (config.app() != null) {
             int threads = config.app().streamThreadsOrDefault();
             riid.runtime.PodmanRuntimeAdapter.setStreamThreads(threads);
             riid.runtime.PortoRuntimeAdapter.setStreamThreads(threads);
         }
-        return createDefault(endpoint, cache, new P2PExecutor.NoOp(), runtimes, fs);
+        return new ImageLoadingFacade(
+                new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), fs),
+                new RuntimeRegistry(runtimes),
+                client,
+                fs,
+                tempDir);
     }
 
 }

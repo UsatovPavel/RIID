@@ -1,7 +1,8 @@
 package riid.dispatcher;
 
-import riid.client.core.model.manifest.MediaType;
 import java.util.Objects;
+
+import riid.client.core.model.manifest.MediaType;
 
 /**
  * No-op dispatcher placeholder.

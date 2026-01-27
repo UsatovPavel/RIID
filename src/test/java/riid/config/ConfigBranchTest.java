@@ -6,13 +6,14 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import riid.app.fs.TestPaths;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 
 class ConfigBranchTest {
 
     private static final String YAML_SUFFIX = ".yaml";
-    private final HostFilesystem fs = new NioHostFilesystem(null);
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @Test
     void missingFileFails() {
@@ -22,7 +23,7 @@ class ConfigBranchTest {
 
     @Test
     void invalidYamlFailsParsing() throws Exception {
-        Path tmp = fs.createTempFile("bad-config", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "bad-config", YAML_SUFFIX);
         fs.writeString(tmp, "not: [valid"); // broken YAML
         assertThrows(RuntimeException.class, () -> ConfigLoader.load(tmp));
     }
@@ -39,7 +40,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = fs.createTempFile("cfg-null-http", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "cfg-null-http", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
         //Client config must not have side-effect(get http from default HttpConfig)
@@ -57,7 +58,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = fs.createTempFile("cfg-null-auth", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "cfg-null-auth", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -71,7 +72,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 1
                 """;
-        Path tmp = fs.createTempFile("cfg-null-reg", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "cfg-null-reg", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }
@@ -89,7 +90,7 @@ class ConfigBranchTest {
                 dispatcher:
                   maxConcurrentRegistry: 0
                 """;
-        Path tmp = fs.createTempFile("cfg-bad-dispatcher", YAML_SUFFIX);
+        Path tmp = TestPaths.tempFile(fs, "cfg-bad-dispatcher", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
     }

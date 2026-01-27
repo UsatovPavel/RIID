@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 /**
  * Live smoke against Docker Hub for alpine:edge.
@@ -45,7 +46,7 @@ public class RegistryLiveTest {
     private final AuthService authService = new AuthService(http, mapper, new TokenCache());
     private final ManifestService manifestService = new ManifestService(http, authService, mapper);
     private final BlobService blobService = new BlobService(http, authService);
-    private final HostFilesystem fs = new NioHostFilesystem(null);
+    private final HostFilesystem fs = new NioHostFilesystem();
 
     @Test
     void fetchManifestAndFirstLayer() throws Exception {
@@ -61,7 +62,7 @@ public class RegistryLiveTest {
         assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
 
         // GET blob
-        File tmp = fs.createTempFile("alpine-layer", ".tar").toFile();
+        File tmp = TestPaths.tempFile(fs, "alpine-layer", ".tar").toFile();
         tmp.deleteOnExit();
         BlobResult result = blobService.fetchBlob(DOCKER_HUB, req, tmp, SCOPE);
 

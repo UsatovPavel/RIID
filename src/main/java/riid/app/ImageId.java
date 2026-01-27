@@ -1,9 +1,8 @@
 package riid.app;
 
-import riid.client.core.config.RegistryEndpoint;
-
 /**
  * Full image identity: registry + name + tag + digest.
+ * Usage: app-level identity passed through facade/OCI build/runtime.
  */
 public record ImageId(String registry, String name, String tag, String digest) {
     public ImageId {
@@ -32,16 +31,9 @@ public record ImageId(String registry, String name, String tag, String digest) {
         return new ImageId(registry, name, reference, null);
     }
 
-    public static String registryFor(RegistryEndpoint endpoint) {
-        int port = endpoint.port();
-        if (port > 0) {
-            return endpoint.host() + ":" + port;
-        }
-        return endpoint.host();
-    }
-
     /**
      * Reference name for OCI index.json annotations (name[:tag]).
+     * Usage: OCI layout metadata.
      */
     public String referenceName() {
         if (tag != null && !tag.isBlank()) {
@@ -52,6 +44,7 @@ public record ImageId(String registry, String name, String tag, String digest) {
 
     /**
      * Reference for registry API calls: use tag if present, otherwise digest.
+     * Usage: registry fetch APIs.
      */
     public String reference() {
         if (tag != null && !tag.isBlank()) {

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 import riid.client.core.model.manifest.MediaType;
 import riid.runtime.RuntimeAdapter;
 
@@ -17,8 +18,8 @@ class ImageImportingFacadeTest {
 
     @Test
     void importsIntoRuntimeAfterValidation() throws Exception {
-        HostFilesystem fs = new NioHostFilesystem(null);
-        Path temp = fs.createTempFile("fetch-", ".bin");
+        HostFilesystem fs = new NioHostFilesystem();
+        Path temp = TestPaths.tempFile(fs, "fetch-", ".bin");
         fs.writeString(temp, "data");
         FetchResult ok = new FetchResult(digestA(), media(), temp);
         RecordingDispatcher dispatcher = new RecordingDispatcher(ok);
@@ -37,7 +38,7 @@ class ImageImportingFacadeTest {
                 .resolve("riid-missing-" + java.util.UUID.randomUUID());
         RecordingDispatcher dispatcher = new RecordingDispatcher(
                 new FetchResult(digestA(), media(), missing));
-        ImageImportingFacade integrator = new ImageImportingFacade(dispatcher, new NioHostFilesystem(null));
+        ImageImportingFacade integrator = new ImageImportingFacade(dispatcher, new NioHostFilesystem());
 
         DispatcherRuntimeException ex1 = assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("repo", "ref", null), new RecordingRuntimeAdapter()));
@@ -48,7 +49,7 @@ class ImageImportingFacadeTest {
     void failsOnBlankFields() {
         ImageImportingFacade integrator = new ImageImportingFacade(
                 new RecordingDispatcher(new FetchResult(null, null, null)),
-                new NioHostFilesystem(null));
+                new NioHostFilesystem());
         DispatcherRuntimeException ex2 = assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
         assertTrue(ex2.getMessage().contains("Missing"));
@@ -56,8 +57,8 @@ class ImageImportingFacadeTest {
 
     @Test
     void failsOnDirectoryPath() throws Exception {
-        HostFilesystem fs = new NioHostFilesystem(null);
-        Path dir = fs.createTempDirectory("not-file");
+        HostFilesystem fs = new NioHostFilesystem();
+        Path dir = TestPaths.tempDir(fs, "not-file-");
         ImageImportingFacade integrator = new ImageImportingFacade(
                 new RecordingDispatcher(new FetchResult(digestB(), media(), dir)),
                 fs);
@@ -68,8 +69,8 @@ class ImageImportingFacadeTest {
 
     @Test
     void failsOnEmptyFile() throws Exception {
-        HostFilesystem fs = new NioHostFilesystem(null);
-        Path empty = fs.createTempFile("empty-", ".bin");
+        HostFilesystem fs = new NioHostFilesystem();
+        Path empty = TestPaths.tempFile(fs, "empty-", ".bin");
         ImageImportingFacade integrator = new ImageImportingFacade(
                 new RecordingDispatcher(new FetchResult(digestC(), media(), empty)),
                 fs);
