@@ -1,7 +1,7 @@
 package riid.p2p;
 
-import riid.cache.CacheMediaType;
-import riid.cache.ImageDigest;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.ImageDigest;
 
 import java.nio.file.Path;
 import java.util.Optional;

@@ -9,7 +9,7 @@ import java.util.Optional;
 /**
  * High-level client interface.
  */
-public interface RegistryClient {
+public interface RegistryClient extends AutoCloseable {
     ManifestResult fetchManifest(String repository, String reference);
 
     BlobResult fetchConfig(String repository, Manifest manifest, File target);
@@ -19,6 +19,9 @@ public interface RegistryClient {
     Optional<Long> headBlob(String repository, String digest);
 
     TagList listTags(String repository, Integer n, String last);
+
+    @Override // throw Exception because impl that throws exception. Don't change
+    void close() throws Exception;
 
 }
 

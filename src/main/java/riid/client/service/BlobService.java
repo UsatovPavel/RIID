@@ -4,14 +4,16 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import riid.cache.CacheAdapter;
-import riid.cache.FilesystemCachePayload;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.FilesystemCachePayload;
+import riid.cache.oci.ImageDigest;
+import riid.cache.oci.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.BlobSink;
 import riid.client.api.FileBlobSink;
 import riid.client.core.config.RegistryEndpoint;
-import riid.cache.ValidationException;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.manifest.RegistryApi;
@@ -61,8 +63,6 @@ public class BlobService implements BlobServiceApi {
 
     @Override
     @SuppressWarnings("PMD.CloseResource")
-    //рефакторинг после убирания этого supress в RegistryClientImpl провалился.
-    //неочевидно как без supresss здесь реализовывать
     public BlobResult fetchBlob(RegistryEndpoint endpoint, BlobRequest req, BlobSink sink, String scope) {
         Objects.requireNonNull(sink, "sink");
 
@@ -72,9 +72,13 @@ public class BlobService implements BlobServiceApi {
         HttpResult<InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
         if (status < 200 || status >= 300) {
+            String location = resp.firstHeader("Location").orElse(null);
+            String detail = location != null
+                    ? " (location=" + location + ")"
+                    : "";
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Blob fetch failed"),
-                    "Blob fetch failed: " + status);
+                    "Blob fetch failed: " + status + detail);
         }
 
         long expectedSize = req.expectedSizeBytes() != null
@@ -104,9 +108,9 @@ public class BlobService implements BlobServiceApi {
             if (cacheAdapter != null && sinkPath != null) {
                 try {
                     var entry = cacheAdapter.put(
-                            riid.cache.ImageDigest.parse(digest),
+                            ImageDigest.parse(digest),
                             FilesystemCachePayload.of(sinkPath, actualSize),
-                            riid.cache.CacheMediaType.from(mediaType));
+                            CacheMediaType.from(mediaType));
                     if (entry != null && entry.key() != null && !entry.key().isBlank()) {
                         locator = cacheAdapter.resolve(entry.key()).map(Path::toString).orElse(locator);
                     }

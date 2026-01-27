@@ -1,24 +1,31 @@
 package riid.dispatcher;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import riid.cache.CacheAdapter;
-import riid.cache.FilesystemCachePayload;
-import riid.cache.ValidationException;
-import riid.client.api.BlobRequest;
-import riid.client.api.BlobResult;
-import riid.client.api.ManifestResult;
-import riid.client.api.RegistryClient;
-import riid.p2p.P2PExecutor;
-import riid.cache.CacheMediaType;
-import riid.cache.ImageDigest;
-
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.PathSupport;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.FilesystemCachePayload;
+import riid.cache.oci.ImageDigest;
+import riid.cache.oci.ValidationException;
+import riid.client.api.BlobRequest;
+import riid.client.api.BlobResult;
+import riid.client.api.ManifestResult;
+import riid.client.api.RegistryClient;
+import riid.client.core.model.manifest.MediaType;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
+import riid.p2p.P2PExecutor;
 
 /**
  * Simple dispatcher: cache -> P2P -> registry (registry concurrency limit is configurable).
@@ -30,67 +37,79 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     private final RegistryClient client;
     private final CacheAdapter cache;
     private final P2PExecutor p2p;
+    private final HostFilesystem fs;
     private final Optional<Semaphore> registryLimiter; // limits concurrent downloads from registry
 
-    public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p) {
-        this(client, cache, p2p, new DispatcherConfig());
+    public SimpleRequestDispatcher(RegistryClient client,
+                                   CacheAdapter cache,
+                                   P2PExecutor p2p,
+                                   HostFilesystem fs) {
+        this(client, cache, p2p, new DispatcherConfig(), fs);
     }
 
     public SimpleRequestDispatcher(RegistryClient client,
                                    CacheAdapter cache,
                                    P2PExecutor p2p,
-                                   DispatcherConfig config) {
+                                   DispatcherConfig config,
+                                   HostFilesystem fs) {
         this.client = Objects.requireNonNull(client);
         this.cache = cache;
         this.p2p = p2p;
+        this.fs = Objects.requireNonNull(fs, "fs");
         int maxConc = config != null ? config.maxConcurrentRegistry() : 0;
         this.registryLimiter = maxConc > 0 ? Optional.of(new Semaphore(maxConc)) : Optional.empty();
     }
 
     @Override
     public FetchResult fetchImage(ImageRef ref) {
-        // 1) Manifest from registry
         String reference = ref.digest() != null && !ref.digest().isBlank() ? ref.digest() : ref.tag();
         ManifestResult manifest = client.fetchManifest(ref.repository(), reference);
-
-        // 2) Try cache for each layer
         var layer = manifest.manifest().layers().getFirst();
-        var digest = ImageDigest.parse(layer.digest());
-        String cachedPath = null;
+        return fetchLayer(new RepositoryName(ref.repository()),
+                ImageDigest.parse(layer.digest()),
+                layer.size(),
+                MediaType.from(layer.mediaType()));
+    }
+
+    @Override
+    public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
+        Objects.requireNonNull(repository, "repository");
+        Objects.requireNonNull(digest);
+
+        // 1) cache
+        Path cachedPath = null;
         if (cache != null && cache.has(digest)) {
             cachedPath = cache.get(digest)
                     .flatMap(entry -> cache.resolve(entry.key()))
-                    .map(Path::toString)
                     .orElse(null);
         }
         if (cachedPath != null) {
-            LOGGER.info("cache hit for layer {}", layer.digest());
-            return new FetchResult(layer.digest(), layer.mediaType(), cachedPath);
+            LOGGER.info("cache hit for layer {}", digest);
+            return new FetchResult(digest, mediaType, cachedPath);
         }
 
-        // 3) Try P2P (if wired)
+        // 2) P2P
         if (p2p != null) {
             try {
-                var p2pPath = p2p.fetch(digest, layer.size(), CacheMediaType.from(layer.mediaType()));
+                var p2pPath = p2p.fetch(digest, sizeBytes, CacheMediaType.from(mediaType.value()));
                 if (p2pPath.isPresent()) {
-                    LOGGER.info("p2p hit for layer {}", layer.digest());
-                    return new FetchResult(layer.digest(), layer.mediaType(), p2pPath.get().toString());
+                    LOGGER.info("p2p hit for layer {}", digest);
+                    return new FetchResult(digest, mediaType, p2pPath.get());
                 }
             } catch (Exception ex) {
-                LOGGER.warn("P2P fetch failed for layer {}: {}", layer.digest(), ex.getMessage());
+                LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
             }
         }
 
-        // 4) Registry download (with limiter if set)
+        // 3) Registry download
         acquireRegistry();
         try {
             File tmp = createTemp();
             BlobResult blob = client.fetchBlob(
-                    new BlobRequest(ref.repository(), layer.digest(), layer.size(), layer.mediaType()),
+                    new BlobRequest(repository.value(), digest.toString(), sizeBytes, mediaType.value()),
                     tmp);
-            LOGGER.info("Downloaded layer {} from registry", layer.digest());
+            LOGGER.info("downloaded layer {} from registry", digest);
 
-            // 5) Publish to P2P/cache
             if (cache != null) {
                 try {
                     cache.put(ImageDigest.parse(blob.digest()),
@@ -116,7 +135,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 }
             }
 
-            return new FetchResult(blob.digest(), blob.mediaType(), blob.path());
+            return new FetchResult(ImageDigest.parse(blob.digest()),
+                    MediaType.from(blob.mediaType()),
+                    Path.of(blob.path()));
         } finally {
             releaseRegistry();
         }
@@ -124,9 +145,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
     private File createTemp() {
         try {
-            File f = File.createTempFile("layer-", ".bin");
-            f.deleteOnExit();
-            return f;
+            var path = PathSupport.tempPath("layer-", ".bin");
+            fs.createFile(path);
+            return path.toFile();
         } catch (Exception e) {
             throw new RuntimeException("Cannot create temp file", e);
         }
