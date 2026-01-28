@@ -1,3 +1,4 @@
+import com.github.spotbugs.snom.SpotBugsTask
 import org.gradle.api.plugins.quality.Checkstyle
 import org.gradle.api.plugins.quality.CheckstyleExtension
 import org.gradle.api.plugins.quality.Pmd
@@ -17,20 +18,10 @@ tasks.withType(Pmd::class).configureEach {
     enabled = !skipQuality
 }
 
-tasks.matching { it.name.startsWith("spotbugs") }.configureEach {
+tasks.withType(SpotBugsTask::class).configureEach {
     enabled = !skipQuality
-    runCatching {
-        val reports = javaClass.methods.firstOrNull { it.name == "getReports" && it.parameterCount == 0 }
-            ?.invoke(this)
-        val htmlReport = reports?.javaClass?.methods
-            ?.firstOrNull { it.name == "getHtml" && it.parameterCount == 0 }
-            ?.invoke(reports)
-        val required = htmlReport?.javaClass?.methods
-            ?.firstOrNull { it.name == "getRequired" && it.parameterCount == 0 }
-            ?.invoke(htmlReport)
-        required?.javaClass?.methods
-            ?.firstOrNull { it.name == "set" && it.parameterCount == 1 }
-            ?.invoke(required, true)
+    reports.create("html") {
+        required.set(true)   // всегда генерить html-отчёт
     }
 }
 

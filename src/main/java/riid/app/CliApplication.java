@@ -36,14 +36,14 @@ public final class CliApplication {
         RUNTIME_NOT_FOUND(65),
         FAILURE(1);
 
-        private final int code;
+        private final int exitCode;
 
         ExitCode(int code) {
-            this.code = code;
+            this.exitCode = code;
         }
 
         int code() {
-            return code;
+            return exitCode;
         }
     }
 
@@ -191,6 +191,9 @@ public final class CliApplication {
      * Parses CLI arguments and performs basic validation.
      */
     static final class CliParser {
+        private static final String ARG_PATH = "path";
+        private static final int MAX_PASSWORD_SOURCES = 1;
+
         private CliParser() {
         }
 
@@ -203,7 +206,7 @@ public final class CliApplication {
                     .longOpt("help")
                     .desc("Show help")
                     .build());
-            addOption(parsedOptions, "config", "path");
+            addOption(parsedOptions, "config", ARG_PATH);
             addOption(parsedOptions, "repo", "name");
             addOption(parsedOptions, "tag", "tag");
             addOption(parsedOptions, "ref", "ref");
@@ -212,10 +215,10 @@ public final class CliApplication {
             addOption(parsedOptions, "username", "user");
             addOption(parsedOptions, "password", "pwd");
             addOption(parsedOptions, "password-env", "var");
-            addOption(parsedOptions, "password-file", "path");
-            addOption(parsedOptions, "cert-path", "path");
-            addOption(parsedOptions, "key-path", "path");
-            addOption(parsedOptions, "ca-path", "path");
+            addOption(parsedOptions, "password-file", ARG_PATH);
+            addOption(parsedOptions, "cert-path", ARG_PATH);
+            addOption(parsedOptions, "key-path", ARG_PATH);
+            addOption(parsedOptions, "ca-path", ARG_PATH);
 
             CommandLine cmd;
             CommandLineParser parser = new DefaultParser();
@@ -259,7 +262,7 @@ public final class CliApplication {
                 return new ParseResult(null, false, "Runtime id is required (--runtime)");
             }
 
-            if (countNonNull(password, passwordEnv, passwordFile) > 1) {
+            if (countNonNull(password, passwordEnv, passwordFile) > MAX_PASSWORD_SOURCES) {
                 return new ParseResult(null, false, "Use only one of --password, --password-env or --password-file");
             }
             String resolvedPassword = password;

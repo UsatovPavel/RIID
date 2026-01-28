@@ -3,10 +3,11 @@ plugins {
     id("checkstyle")
     id("pmd")
     id("jacoco")
-    id("com.github.spotbugs") version "6.4.8"
+    id("com.github.spotbugs")
     id("com.gradleup.shadow") version "9.3.0"
     id("idea")
     id("java-test-fixtures")
+    id("riid.code-quality")
 }
 
 group = "hse.ru"
@@ -27,7 +28,6 @@ repositories {
 apply(from = "gradle/test-source-sets.gradle.kts")
 apply(from = "gradle/dependencies.gradle.kts")
 apply(from = "gradle/tests-tasks.gradle.kts")
-apply(from = "gradle/code-quality.gradle.kts")
 apply(from = "gradle/docker.gradle.kts")
 
 idea {
