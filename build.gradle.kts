@@ -5,6 +5,8 @@ plugins {
     id("jacoco")
     id("com.github.spotbugs") version "6.4.8"
     id("com.gradleup.shadow") version "9.3.0"
+    id("idea")
+    id("java-test-fixtures")
 }
 
 group = "hse.ru"
@@ -35,7 +37,6 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
     testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.4"))//idea say<=1.21 it vulnerable
@@ -53,6 +54,67 @@ dependencies {
     implementation("commons-io:commons-io:2.21.0")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
     implementation("org.eclipse.jetty:jetty-client:12.1.5")
+
+}
+
+sourceSets {
+    val integrationTest by creating {
+        java.srcDir("src/test/integration/java")
+        resources.srcDir("src/test/integration/resources")
+        compileClasspath += sourceSets["main"].output
+        runtimeClasspath += output + compileClasspath
+    }
+
+    val performanceTest by creating {
+        java.srcDir("src/test/performance/java")
+        resources.srcDir("src/test/performance/resources")
+        compileClasspath += sourceSets["main"].output
+        runtimeClasspath += output + compileClasspath
+    }
+
+    val moduledTest by creating {
+        java.srcDir("src/test/moduled/java")
+        resources.srcDir("src/test/moduled/resources")
+        compileClasspath += sourceSets["main"].output
+        runtimeClasspath += output + compileClasspath
+    }
+
+    named("test") {
+        java.setSrcDirs(emptyList<String>())
+        resources.setSrcDirs(emptyList<String>())
+    }
+}
+
+configurations {
+    named("integrationTestImplementation") {
+        extendsFrom(configurations["testImplementation"])
+    }
+    named("integrationTestRuntimeOnly") {
+        extendsFrom(configurations["testRuntimeOnly"])
+    }
+
+    named("performanceTestImplementation") {
+        extendsFrom(configurations["testImplementation"])
+    }
+    named("performanceTestRuntimeOnly") {
+        extendsFrom(configurations["testRuntimeOnly"])
+    }
+
+    named("moduledTestImplementation") {
+        extendsFrom(configurations["testImplementation"])
+    }
+    named("moduledTestRuntimeOnly") {
+        extendsFrom(configurations["testRuntimeOnly"])
+    }
+}
+
+dependencies {
+    add("integrationTestImplementation", testFixtures(project(":")))
+    add("integrationTestRuntimeOnly", "org.junit.platform:junit-platform-launcher")
+    add("performanceTestImplementation", testFixtures(project(":")))
+    add("performanceTestRuntimeOnly", "org.junit.platform:junit-platform-launcher")
+    add("moduledTestImplementation", testFixtures(project(":")))
+    add("moduledTestRuntimeOnly", "org.junit.platform:junit-platform-launcher")
 }
 
 tasks.test {
@@ -67,6 +129,9 @@ tasks.test {
             excludeTags("archunit")
         }
     }
+    dependsOn("integrationTest", "moduledTest")
+    testClassesDirs = files()
+    classpath = files()
 }
 
 tasks.withType<Checkstyle>().configureEach {
@@ -124,6 +189,30 @@ tasks.register("testAll") {
     dependsOn("test", "testStress")
 }
 
+tasks.register<Test>("integrationTest") {
+    description = "Runs integration tests."
+    group = "verification"
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
+    useJUnitPlatform()
+}
+
+tasks.register<Test>("performanceTest") {
+    description = "Runs performance tests."
+    group = "verification"
+    testClassesDirs = sourceSets["performanceTest"].output.classesDirs
+    classpath = sourceSets["performanceTest"].runtimeClasspath
+    useJUnitPlatform()
+}
+
+tasks.register<Test>("moduledTest") {
+    description = "Runs moduled tests."
+    group = "verification"
+    testClassesDirs = sourceSets["moduledTest"].output.classesDirs
+    classpath = sourceSets["moduledTest"].runtimeClasspath
+    useJUnitPlatform()
+}
+
 fun registerModuleTest(name: String, pattern: String, descriptionText: String) {
     tasks.register<Test>(name) {
         group = "verification"
@@ -144,7 +233,7 @@ registerModuleTest(
     descriptionText = "Run tests under riid.app"
 )
 
-registerModuleTest (
+registerModuleTest(
     name = "testConfig",
     pattern = "config",
     descriptionText = "Run tests under riid.config"
@@ -167,6 +256,23 @@ registerModuleTest(
     pattern = "runtime",
     descriptionText = "Run tests under riid.runtime"
 )
+
+idea {
+    module {
+        testSources.from(
+            "src/test/integration/java",
+            "src/test/performance/java",
+            "src/test/moduled/java",
+            "src/testFixtures/java",
+        )
+        testResources.from(
+            "src/test/integration/resources",
+            "src/test/performance/resources",
+            "src/test/moduled/resources",
+            "src/testFixtures/resources",
+        )
+    }
+}
 
 tasks.register("allReports") {
     group = "verification"
