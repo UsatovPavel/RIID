@@ -1,3 +1,4 @@
+#при любом изменении файла менять тест на его загрузку
 client:
   http:
     connectTimeout: "PT5S"
@@ -9,6 +10,9 @@ client:
     userAgent: "riid-client"
   auth:
     defaultTokenTtlSeconds: 300
+    certPath: null
+    keyPath: null
+    caPath: null
   registries:
     - scheme: "https"
       host: "registry-1.docker.io"

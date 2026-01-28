@@ -9,7 +9,8 @@ import java.io.InputStream;
  * Digest utilities.
  */
 public final class Digests {
-    private Digests() { }
+    private Digests() {
+    }
 
     public static String sha256Hex(byte[] data) {
         return DigestUtils.sha256Hex(data);

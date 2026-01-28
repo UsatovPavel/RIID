@@ -12,6 +12,7 @@ build/
 out/
 !**/src/main/**/out/
 !**/src/test/**/out/
+buildSrc/.kotlin/
 
 ### Eclipse ###
 .apt_generated
@@ -39,6 +40,8 @@ bin/
 
 #TODO at end of dev all make builded files
 *.txt
+
+###Internal artifacts###
 internalDocs/*
 План*
 Презентация.md

@@ -1,13 +1,5 @@
 package riid.client.http;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.eclipse.jetty.client.ContentResponse;
-import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.client.InputStreamResponseListener;
-import org.eclipse.jetty.client.Request;
-import org.eclipse.jetty.http.HttpFields;
-import org.eclipse.jetty.http.HttpMethod;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -20,13 +12,21 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.InputStreamResponseListener;
+import org.eclipse.jetty.client.Request;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpMethod;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 /**
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
  */
-public final class HttpExecutor {
+public class HttpExecutor {
     private static final String METHOD_HEAD = HttpMethod.HEAD.asString();
     private static final List<Integer> RETRY_STATUSES = List.of(429, 502, 503, 504);
-
     private final HttpClient client;
     private final HttpClientConfig config;
 
@@ -78,6 +78,7 @@ public final class HttpExecutor {
                 Request req = client.newRequest(uri)
                         .method(METHOD_HEAD)
                         .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                        .followRedirects(config.followRedirects())
                         .headers(h -> {
                             headers.forEach(h::add);
                             applyUserAgent(h, headers);
@@ -89,7 +90,7 @@ public final class HttpExecutor {
                 Thread.currentThread().interrupt();
                 throw new IOException("Jetty HEAD interrupted", ie);
             } catch (ExecutionException | TimeoutException e) {
-                throw new IOException("Jetty HEAD failed", e);
+                throw new IOException("Jetty HEAD failed for " + uri, e);
             }
         }
 
@@ -98,6 +99,7 @@ public final class HttpExecutor {
         Request request = client.newRequest(uri)
                 .method(method)
                 .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                .followRedirects(config.followRedirects())
                 .headers(h -> {
                     headers.forEach(h::add);
                     applyUserAgent(h, headers);
@@ -111,7 +113,7 @@ public final class HttpExecutor {
             Thread.currentThread().interrupt();
             throw new IOException("Jetty request interrupted", ie);
         } catch (ExecutionException | TimeoutException e) {
-            throw new IOException("Jetty request failed", e);
+            throw new IOException("Jetty request failed for " + uri, e);
         }
     }
 
@@ -121,22 +123,22 @@ public final class HttpExecutor {
         }
     }
 
-    private boolean shouldRetry(int status, int attempts, boolean idempotent) {
+    boolean shouldRetry(int status, int attempts, boolean idempotent) {
         if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
-            return false;
+            throw new IllegalStateException("Retries are limited to idempotent requests by configuration");
         }
         return RETRY_STATUSES.contains(status);
     }
 
-    private boolean shouldRetryIOException(int attempts, boolean idempotent) {
+    boolean shouldRetryIOException(int attempts, boolean idempotent) {
         if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
-            return false;
+            throw new IllegalStateException("Retries are limited to idempotent requests by configuration");
         }
         return true;
     }
