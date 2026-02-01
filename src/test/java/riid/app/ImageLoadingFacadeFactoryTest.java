@@ -1,0 +1,37 @@
+package riid.app;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import riid.app.fs.TestPaths;
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+
+class ImageLoadingFacadeFactoryTest {
+
+    @Test
+    void createsServiceFromConfig() throws Exception {
+        String yaml = """
+                client:
+                  http: {}
+                  auth: {}
+                  registries:
+                    - scheme: https
+                      host: registry-1.docker.io
+                      port: -1
+                dispatcher:
+                  maxConcurrentRegistry: 2
+                """;
+        HostFilesystem fs = new NioHostFilesystem();
+        Path tmp = TestPaths.tempFile(fs, "config-", ".yaml");
+        fs.writeString(tmp, yaml);
+
+        ImageLoadingFacade svc = ImageLoadingFacade.createFromConfig(tmp);
+        assertNotNull(svc);
+    }
+}
+
+

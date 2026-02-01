@@ -36,5 +36,15 @@ public record RegistryEndpoint(
     public java.net.URI uri(String path, String query) {
         return HttpRequestBuilder.buildUri(scheme, host, port, path, query);
     }
+
+    /**
+     * Registry host[:port] for use in image references.
+     */
+    public String registryName() {
+        if (port > 0) {
+            return host + ":" + port;
+        }
+        return host;
+    }
 }
 

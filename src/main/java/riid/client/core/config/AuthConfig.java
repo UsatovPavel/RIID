@@ -11,5 +11,9 @@ public record AuthConfig(@JsonProperty("defaultTokenTtlSeconds") long defaultTok
     public AuthConfig() {
         this(DEFAULT_TTL_SECONDS);
     }
+
+    public AuthConfig(long defaultTokenTtlSeconds) {
+        this.defaultTokenTtlSeconds = defaultTokenTtlSeconds > 0 ? defaultTokenTtlSeconds : DEFAULT_TTL_SECONDS;
+    }
 }
 
