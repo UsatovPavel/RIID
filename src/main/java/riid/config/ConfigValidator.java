@@ -12,6 +12,7 @@ import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.dispatcher.DispatcherConfig;
+import riid.runtime.OutputConfig;
 import riid.runtime.RuntimeConfig;
 
 /**
@@ -119,8 +120,15 @@ public final class ConfigValidator {
         if (runtime == null) {
             return;
         }
-        if (runtime.maxOutputBytes() != null && runtime.maxOutputBytes() <= 0) {
-            throw new ConfigValidationException("runtime.maxOutputBytes must be positive");
+        OutputConfig output = runtime.output();
+        if (output == null) {
+            return;
+        }
+        if (output.captureStdout() && (output.maxStdoutBytes() == null || output.maxStdoutBytes() <= 0)) {
+            throw new ConfigValidationException("runtime.output.maxStdoutBytes must be positive");
+        }
+        if (output.captureStderr() && (output.maxStderrBytes() == null || output.maxStderrBytes() <= 0)) {
+            throw new ConfigValidationException("runtime.output.maxStderrBytes must be positive");
         }
     }
 

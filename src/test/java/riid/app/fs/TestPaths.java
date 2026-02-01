@@ -13,13 +13,13 @@ public final class TestPaths {
     private TestPaths() { }
 
     public static Path tempFile(HostFilesystem fs, String prefix, String suffix) throws IOException {
-        Path path = PathSupport.tempPath(prefix, suffix);
+        Path path = PathSupport.temporaryPath(prefix, suffix);
         fs.createFile(path);
         return path;
     }
 
     public static Path tempFile(HostFilesystem fs, Path baseDir, String prefix, String suffix) throws IOException {
-        Path path = PathSupport.tempPath(baseDir, prefix, suffix);
+        Path path = PathSupport.temporaryPath(baseDir, prefix, suffix);
         fs.createFile(path);
         return path;
     }

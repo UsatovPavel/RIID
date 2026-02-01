@@ -195,12 +195,12 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
-        public Path write(Path path, byte[] bytes) throws IOException {
+        public Path write(Path path, byte[] bytes, java.nio.file.OpenOption... options) throws IOException {
             throw error;
         }
 
         @Override
-        public Path writeString(Path path, String content) throws IOException {
+        public Path writeString(Path path, String content, java.nio.file.OpenOption... options) throws IOException {
             throw error;
         }
 

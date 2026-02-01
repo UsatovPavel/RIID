@@ -21,6 +21,24 @@ dispatcher:
   maxConcurrentRegistry: 1
 ```
 
+### Optional app section
+```yaml
+app:
+  tempDirectory: "/var/tmp/riid"
+  allowedRegistries:
+    - registry.example.com
+```
+
+### Optional runtime output limits
+```yaml
+runtime:
+  output:
+    maxStdoutBytes: 32768
+    maxStderrBytes: 32768
+    captureStdout: true
+    captureStderr: false
+```
+
 ### Defaults (from smoke test)
 - client.http.connectTimeout = PT5S
 - client.http.requestTimeout = PT30S
@@ -40,6 +58,8 @@ dispatcher:
 - `dispatcher.maxConcurrentRegistry` > 0.
 - `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `userAgent` not blank, `maxRetries` and `maxRedirects` must be >= 0.
 - `client.auth.defaultTokenTtlSeconds` > 0; cert/key/ca paths, if provided, must exist.
+- `app.tempDirectory`, if present, must not be blank; `app.allowedRegistries` entries must not be blank.
+- `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.
 
 ### Known notes
 - Missing `registries` throws `ConfigValidationException`.

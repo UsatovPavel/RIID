@@ -7,8 +7,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.CopyOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -23,9 +25,9 @@ public interface HostFilesystem {
 
     Path copy(Path source, Path target, CopyOption... options) throws IOException;
 
-    Path write(Path path, byte[] bytes) throws IOException;
+    Path write(Path path, byte[] bytes, OpenOption... options) throws IOException;
 
-    Path writeString(Path path, String content) throws IOException;
+    Path writeString(Path path, String content, OpenOption... options) throws IOException;
 
     InputStream newInputStream(Path path) throws IOException;
 
@@ -43,27 +45,47 @@ public interface HostFilesystem {
 
     Path atomicMove(Path source, Path target) throws IOException;
 
-    default Path atomicWrite(Path path, byte[] bytes) throws IOException {
+    default void atomicWrite(Path destination, byte[] bytes, Path temporary, OpenOption... options) throws IOException {
+        Objects.requireNonNull(destination, "destination");
+        Objects.requireNonNull(bytes, "bytes");
+        Objects.requireNonNull(temporary, "temporary");
+        try {
+            write(temporary, bytes, options);
+            atomicMove(temporary, destination);
+        } catch (IOException e) {
+            try {
+                deleteIfExists(temporary);
+            } catch (IOException ignored) {
+                // best-effort cleanup
+            }
+            throw e;
+        }
+    }
+
+    default void atomicWrite(Path path, byte[] bytes, OpenOption... options) throws IOException {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(bytes, "bytes");
         Path dir = path.toAbsolutePath().getParent();
         Path fileNamePath = path.getFileName();
         String fileName = fileNamePath != null ? fileNamePath.toString() : "tmp";
         String prefix = fileName.length() < 3 ? "tmp-" + fileName : fileName;
-        Path temp = PathSupport.tempPath(dir, prefix + "-", ".tmp");
+        Path temp = PathSupport.temporaryPath(dir, prefix + "-", ".tmp");
         createFile(temp);
-        try {
-            write(temp, bytes);
-            return atomicMove(temp, path);
-        } catch (IOException e) {
-            deleteIfExists(temp);
-            throw e;
-        }
+        OpenOption[] effective = options.length == 0
+                ? new OpenOption[] {
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.DSYNC,
+                    StandardOpenOption.SYNC,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE
+                }
+                : options;
+        atomicWrite(path, bytes, temp, effective);
     }
 
-    default Path atomicWriteString(Path path, String content) throws IOException {
+    default void atomicWriteString(Path path, String content, OpenOption... options) throws IOException {
         Objects.requireNonNull(content, "content");
-        return atomicWrite(path, content.getBytes(StandardCharsets.UTF_8));
+        atomicWrite(path, content.getBytes(StandardCharsets.UTF_8), options);
     }
 
     default void deleteIfExists(Path path) throws IOException {
