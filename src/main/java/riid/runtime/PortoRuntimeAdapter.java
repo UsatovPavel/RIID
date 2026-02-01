@@ -48,7 +48,6 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
             throws IOException, InterruptedException {
         return BoundedCommandExecution.run(command);
     }
-
 }
 
 

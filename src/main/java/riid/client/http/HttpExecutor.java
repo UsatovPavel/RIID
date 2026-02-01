@@ -24,10 +24,9 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 /**
  * Thin wrapper over Jetty HttpClient with retries for idempotent GET/HEAD.
  */
-public final class HttpExecutor {
+public class HttpExecutor {
     private static final String METHOD_HEAD = HttpMethod.HEAD.asString();
     private static final List<Integer> RETRY_STATUSES = List.of(429, 502, 503, 504);
-
     private final HttpClient client;
     private final HttpClientConfig config;
 
@@ -79,6 +78,7 @@ public final class HttpExecutor {
                 Request req = client.newRequest(uri)
                         .method(METHOD_HEAD)
                         .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                        .followRedirects(config.followRedirects())
                         .headers(h -> {
                             headers.forEach(h::add);
                             applyUserAgent(h, headers);
@@ -99,6 +99,7 @@ public final class HttpExecutor {
         Request request = client.newRequest(uri)
                 .method(method)
                 .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                .followRedirects(config.followRedirects())
                 .headers(h -> {
                     headers.forEach(h::add);
                     applyUserAgent(h, headers);
@@ -122,22 +123,22 @@ public final class HttpExecutor {
         }
     }
 
-    private boolean shouldRetry(int status, int attempts, boolean idempotent) {
+    boolean shouldRetry(int status, int attempts, boolean idempotent) {
         if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
-            return false;
+            throw new IllegalStateException("Retries are limited to idempotent requests by configuration");
         }
         return RETRY_STATUSES.contains(status);
     }
 
-    private boolean shouldRetryIOException(int attempts, boolean idempotent) {
+    boolean shouldRetryIOException(int attempts, boolean idempotent) {
         if (attempts >= 1 + config.maxRetries()) {
             return false;
         }
         if (config.retryIdempotentOnly() && !idempotent) {
-            return false;
+            throw new IllegalStateException("Retries are limited to idempotent requests by configuration");
         }
         return true;
     }

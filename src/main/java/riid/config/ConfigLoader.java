@@ -19,7 +19,8 @@ public final class ConfigLoader {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    private ConfigLoader() { }
+    private ConfigLoader() {
+    }
 
     public static GlobalConfig load(Path path) {
         return load(path, new NioHostFilesystem());

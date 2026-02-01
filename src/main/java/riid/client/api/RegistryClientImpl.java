@@ -2,8 +2,9 @@ package riid.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.client.HttpClient;
-import riid.cache.CacheAdapter;
-import riid.cache.TokenCache;
+import riid.cache.auth.TokenCache;
+import riid.cache.oci.CacheAdapter;
+import riid.client.core.config.AuthConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.core.error.ClientError;
@@ -45,11 +46,18 @@ public final class RegistryClientImpl implements RegistryClient, AutoCloseable {
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter) {
+        this(endpoint, httpConfig, cacheAdapter, AuthConfig.DEFAULT_TTL_SECONDS);
+    }
+
+    public RegistryClientImpl(RegistryEndpoint endpoint,
+                              HttpClientConfig httpConfig,
+                              CacheAdapter cacheAdapter,
+                              long defaultTokenTtlSeconds) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
         this.jettyClient = HttpClientFactory.create(httpConfig);
         this.http = new HttpExecutor(jettyClient, httpConfig);
-        this.authService = new AuthService(http, mapper, new TokenCache());
+        this.authService = new AuthService(http, mapper, new TokenCache(), defaultTokenTtlSeconds);
         this.manifestService = new ManifestService(http, authService, mapper);
         this.blobService = new BlobService(http, authService, cacheAdapter);
     }

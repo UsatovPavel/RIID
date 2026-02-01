@@ -21,6 +21,7 @@ public record ErrorResponse(
             @JsonProperty("code") String code,
             @JsonProperty("message") String message,
             @JsonProperty("detail") Object detail
-    ) { }
+    ) {
+    }
 }
 

@@ -28,6 +28,10 @@ checkstyle {
 }
 
 dependencies {
+    // HTTP/Auth parsing (Apache HttpClient 5 + core)
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.3.1")
+    implementation("org.apache.httpcomponents.core5:httpcore5:5.2.4")
+
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -45,6 +49,7 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     implementation("commons-codec:commons-codec:1.16.1")
+    implementation("commons-cli:commons-cli:1.11.0")
     implementation("commons-io:commons-io:2.21.0")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
     implementation("org.eclipse.jetty:jetty-client:12.1.5")
@@ -102,6 +107,14 @@ tasks.register<Test>("testLocal") {
     description = "Run local-tagged tests (e.g., Testcontainers registry)"
     useJUnitPlatform {
         includeTags("local")
+    }
+}
+
+tasks.register<Test>("testNoFilesystem") {
+    group = "verification"
+    description = "Run tests excluding filesystem-tagged tests"
+    useJUnitPlatform {
+        excludeTags("filesystem")
     }
 }
 
@@ -286,6 +299,6 @@ tasks.register("dockerTest") {
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
     manifest {
-        attributes("Main-Class" to "riid.app.ImageLoadServiceFactory")
+        attributes("Main-Class" to "riid.app.RiidCli")
     }
 }

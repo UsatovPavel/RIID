@@ -12,17 +12,20 @@ import org.slf4j.LoggerFactory;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.PathSupport;
-import riid.cache.CacheAdapter;
-import riid.cache.CacheEntry;
-import riid.cache.CacheMediaType;
-import riid.cache.FilesystemCachePayload;
-import riid.cache.ImageDigest;
-import riid.cache.ValidationException;
+import riid.cache.oci.CacheAdapter;
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.FilesystemCachePayload;
+import riid.cache.oci.ImageDigest;
+import riid.cache.oci.CacheEntry;
+import riid.cache.oci.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.core.model.manifest.MediaType;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
 import riid.p2p.P2PExecutor;
 
 /**

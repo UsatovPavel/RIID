@@ -13,13 +13,13 @@ import riid.app.ImageId;
 import riid.app.error.AppError;
 import riid.app.error.OciArchiveException;
 import riid.app.fs.HostFilesystem;
+import riid.cache.oci.ImageDigest;
 import riid.app.fs.PathSupport;
-import riid.cache.ImageDigest;
 import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.MediaType;
 import riid.dispatcher.RequestDispatcher;
-import riid.dispatcher.RepositoryName;
+import riid.dispatcher.model.RepositoryName;
 
 /**
  * Builds an OCI archive from a manifest, pulling blobs via RequestDispatcher.

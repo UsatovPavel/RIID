@@ -10,6 +10,9 @@ client:
     userAgent: "riid-client"
   auth:
     defaultTokenTtlSeconds: 300
+    certPath: null
+    keyPath: null
+    caPath: null
   registries:
     - scheme: "https"
       host: "registry-1.docker.io"
