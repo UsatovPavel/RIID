@@ -5,12 +5,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.jupiter.api.AfterEach;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import riid.app.fs.HostFilesystem;
@@ -34,66 +34,92 @@ class SimpleRequestDispatcherTest {
 
     private static final String DIGEST = "sha256:" + "a".repeat(64);
     private static final String MEDIA_LAYER = "application/vnd.oci.image.layer.v1.tar";
-
-    private RecordingRegistryClient registry;
-    private RecordingCacheAdapter cache;
-    private RecordingP2PExecutor p2p;
-    private HostFilesystem fs;
-
-    @BeforeEach
-    void setUp() {
-        registry = new RecordingRegistryClient();
-        cache = new RecordingCacheAdapter();
-        p2p = new RecordingP2PExecutor();
-        fs = new NioHostFilesystem();
-    }
-
-    @AfterEach
-    void tearDown() throws IOException {
-        registry.close();
-    }
+    private static final String REPO = "repo";
+    private static final String TAG = "tag";
 
     @Test
     void returnsCacheHit() {
-        cache.hasEntry = true;
-        cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
+        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+            RecordingCacheAdapter cache = new RecordingCacheAdapter();
+            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
+            HostFilesystem fs = new NioHostFilesystem();
+            cache.hasEntry = true;
+            cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
 
-        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
-        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
+            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
 
-        assertEquals(Path.of("/tmp/cached"), result.path());
-        assertEquals(1, registry.manifestCalls);
-        assertEquals(0, registry.blobCalls);
-        assertFalse(p2p.fetchCalled, "p2p should not be used on cache hit");
+            assertEquals(Path.of("/tmp/cached"), result.path());
+            assertEquals(1, registry.manifestCalls);
+            assertEquals(0, registry.blobCalls);
+            assertFalse(p2p.fetchCalled, "p2p should not be used on cache hit");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
     void returnsP2PWhenCacheMiss() {
-        p2p.fetchResult = Optional.of(Path.of("/tmp/p2p-layer"));
+        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+            RecordingCacheAdapter cache = new RecordingCacheAdapter();
+            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
+            HostFilesystem fs = new NioHostFilesystem();
+            p2p.fetchResult = Optional.of(Path.of("/tmp/p2p-layer"));
 
-        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
-        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
+            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
 
-        assertEquals(Path.of("/tmp/p2p-layer"), result.path());
-        assertEquals(1, registry.manifestCalls);
-        assertEquals(0, registry.blobCalls);
-        assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
+            assertEquals(Path.of("/tmp/p2p-layer"), result.path());
+            assertEquals(1, registry.manifestCalls);
+            assertEquals(0, registry.blobCalls);
+            assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
     void downloadsFromRegistryAndPublishes() throws IOException {
-        File tmp = TestPaths.tempFile(fs, "blob-", ".bin").toFile();
-        fs.writeString(tmp.toPath(), "data");
-        registry.blobResult = new BlobResult(DIGEST, tmp.length(), MEDIA_LAYER, tmp.getAbsolutePath());
+        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+            HostFilesystem fs = new NioHostFilesystem();
+            Path cachedPath = TestPaths.tempFile(fs, "cache-", ".bin");
+            fs.writeString(cachedPath, "cached");
+            RecordingCacheAdapter cache = new RecordingCacheAdapter(cachedPath);
+            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
 
-        SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
-                registry, cache, p2p, new DispatcherConfig(1), fs);
-        FetchResult result = dispatcher.fetchImage(new ImageRef("repo", "tag", null));
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
+                    registry, cache, p2p, new DispatcherConfig(1), fs);
+            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
 
-        assertEquals(tmp.toPath(), result.path());
-        assertEquals(1, registry.blobCalls);
-        assertTrue(cache.putCalled, "cache should be populated after registry download");
-        assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
+            assertEquals(cachedPath, result.path());
+            assertTrue(fs.exists(result.path()), "downloaded layer should exist");
+            assertTrue(fs.size(result.path()) > 0, "downloaded layer should not be empty");
+            assertEquals(1, registry.blobCalls);
+            assertTrue(cache.putCalled, "cache should be populated after registry download");
+            assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
+        }
+    }
+
+    @Test
+    void deletesTempAfterCacheWrite() throws IOException {
+        TrackingHostFilesystem trackingFs = new TrackingHostFilesystem();
+        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
+            Path cachedPath = TestPaths.tempFile(trackingFs, "cache-", ".bin");
+            trackingFs.writeString(cachedPath, "cached");
+            RecordingCacheAdapter cache = new RecordingCacheAdapter(cachedPath);
+
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
+                    registry, cache, p2p, new DispatcherConfig(1), trackingFs);
+            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
+
+            assertEquals(cachedPath, result.path());
+            assertTrue(cache.putCalled, "cache should be populated after registry download");
+            assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
+            assertNotNull(trackingFs.lastTemp.get(), "temp file should be created");
+            assertFalse(trackingFs.exists(trackingFs.lastTemp.get()),
+                    "temp file should be deleted after cache write");
+        }
     }
 
     /**
@@ -102,7 +128,6 @@ class SimpleRequestDispatcherTest {
     private static final class RecordingRegistryClient implements RegistryClient {
         int manifestCalls;
         int blobCalls;
-        BlobResult blobResult;
 
         @Override
         public ManifestResult fetchManifest(String repository, String reference) {
@@ -121,9 +146,16 @@ class SimpleRequestDispatcherTest {
         @Override
         public BlobResult fetchBlob(BlobRequest request, File target) {
             blobCalls++;
-            return blobResult != null
-                    ? blobResult
-                    : new BlobResult(request.digest(), 0, request.mediaType(), target.getAbsolutePath());
+            if (target == null) {
+                return new BlobResult(request.digest(), 0, request.mediaType(), "");
+            }
+            try {
+                java.nio.file.Files.writeString(target.toPath(), "data");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            long size = target.length();
+            return new BlobResult(request.digest(), size, request.mediaType(), target.getAbsolutePath());
         }
 
         @Override
@@ -146,6 +178,15 @@ class SimpleRequestDispatcherTest {
         boolean hasEntry;
         CacheEntry entry;
         boolean putCalled;
+        private final Path resolvedPath;
+
+        private RecordingCacheAdapter() {
+            this.resolvedPath = null;
+        }
+
+        private RecordingCacheAdapter(Path resolvedPath) {
+            this.resolvedPath = resolvedPath;
+        }
 
         @Override
         public boolean has(ImageDigest digest) {
@@ -159,6 +200,9 @@ class SimpleRequestDispatcherTest {
 
         @Override
         public Optional<Path> resolve(String key) {
+            if (resolvedPath != null) {
+                return Optional.of(resolvedPath);
+            }
             return key == null ? Optional.empty() : Optional.of(Path.of(key));
         }
 
@@ -170,6 +214,9 @@ class SimpleRequestDispatcherTest {
                 size = payload.sizeBytes();
             } catch (IOException e) {
                 throw new RuntimeException(e);
+            }
+            if (resolvedPath != null) {
+                return new CacheEntry(digest, size, mediaType, resolvedPath.toString());
             }
             return new CacheEntry(digest, size, mediaType, "/tmp/cache/" + digest.hex());
         }
@@ -189,6 +236,82 @@ class SimpleRequestDispatcherTest {
         @Override
         public void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType) {
             publishCalled = true;
+        }
+    }
+
+    private static final class TrackingHostFilesystem implements HostFilesystem {
+        private final HostFilesystem delegate = new NioHostFilesystem();
+        private final AtomicReference<Path> lastTemp = new AtomicReference<>();
+
+        @Override
+        public Path createFile(Path path) throws IOException {
+            java.util.Objects.requireNonNull(path, "path");
+            Path fileName = path.getFileName();
+            String name = fileName != null ? fileName.toString() : "";
+            if (name.startsWith("layer-") && name.endsWith(".bin")) {
+                lastTemp.set(path);
+            }
+            return delegate.createFile(path);
+        }
+
+        @Override
+        public Path createDirectory(Path dir) throws IOException {
+            return delegate.createDirectory(dir);
+        }
+
+        @Override
+        public Path copy(Path source, Path target, java.nio.file.CopyOption... options) throws IOException {
+            return delegate.copy(source, target, options);
+        }
+
+        @Override
+        public Path write(Path path, byte[] bytes, java.nio.file.OpenOption... options) throws IOException {
+            return delegate.write(path, bytes, options);
+        }
+
+        @Override
+        public Path writeString(Path path, String content, java.nio.file.OpenOption... options) throws IOException {
+            return delegate.writeString(path, content, options);
+        }
+
+        @Override
+        public java.io.InputStream newInputStream(Path path) throws IOException {
+            return delegate.newInputStream(path);
+        }
+
+        @Override
+        public java.io.OutputStream newOutputStream(Path path) throws IOException {
+            return delegate.newOutputStream(path);
+        }
+
+        @Override
+        public boolean exists(Path path) {
+            return delegate.exists(path);
+        }
+
+        @Override
+        public boolean isRegularFile(Path path) {
+            return delegate.isRegularFile(path);
+        }
+
+        @Override
+        public long size(Path path) throws IOException {
+            return delegate.size(path);
+        }
+
+        @Override
+        public String probeContentType(Path path) throws IOException {
+            return delegate.probeContentType(path);
+        }
+
+        @Override
+        public java.util.stream.Stream<Path> walk(Path root) throws IOException {
+            return delegate.walk(root);
+        }
+
+        @Override
+        public Path atomicMove(Path source, Path target) throws IOException {
+            return delegate.atomicMove(source, target);
         }
     }
 }

@@ -91,7 +91,7 @@ public final class OciArchiveBuilder {
             manifestDigest, imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
-        Path archive = PathSupport.tempPath(tempRoot, "oci-archive-", ".tar");
+        Path archive = PathSupport.temporaryPath(tempRoot, "oci-archive-", ".tar");
         fs.createFile(archive);
         runTar(archive, ociDir);
         return new OciArchive(archive, ociDir, fs);
@@ -129,14 +129,14 @@ public final class OciArchiveBuilder {
             if (in == null) {
                 String msg = AppError.OciErrorKind.RESOURCE_NOT_FOUND.format(path);
                 throw new OciArchiveException(
-                        new AppError.Oci(AppError.OciErrorKind.RESOURCE_NOT_FOUND, msg),
+                        new AppError.OciError(AppError.OciErrorKind.RESOURCE_NOT_FOUND, msg),
                         msg);
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             String msg = AppError.OciErrorKind.RESOURCE_READ_FAILED.format(path);
             throw new OciArchiveException(
-                    new AppError.Oci(AppError.OciErrorKind.RESOURCE_READ_FAILED, msg),
+                    new AppError.OciError(AppError.OciErrorKind.RESOURCE_READ_FAILED, msg),
                     msg, e);
         }
     }

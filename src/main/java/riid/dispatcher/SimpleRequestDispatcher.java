@@ -13,6 +13,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.PathSupport;
 import riid.cache.CacheAdapter;
+import riid.cache.CacheEntry;
 import riid.cache.CacheMediaType;
 import riid.cache.FilesystemCachePayload;
 import riid.cache.ImageDigest;
@@ -102,16 +103,24 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         acquireRegistry();
         try {
             File tmp = createTemp();
+            Path tempPath = tmp.toPath();
             BlobResult blob = client.fetchBlob(
                     new BlobRequest(repository.value(), digest.toString(), sizeBytes, mediaType.value()),
                     tmp);
             LOGGER.info("downloaded layer {} from registry", digest);
 
+            Path resultPath = tempPath;
+            boolean deleteTemp = false;
             if (cache != null) {
                 try {
-                    cache.put(ImageDigest.parse(blob.digest()),
-                            FilesystemCachePayload.of(tmp.toPath(), tmp.length()),
+                    CacheEntry entry = cache.put(ImageDigest.parse(blob.digest()),
+                            FilesystemCachePayload.of(fs, tempPath, tmp.length()),
                             CacheMediaType.from(blob.mediaType()));
+                    Path resolvedPath = cache.resolve(entry.key()).orElse(null);
+                    if (resolvedPath != null) {
+                        resultPath = resolvedPath;
+                        deleteTemp = true;
+                    }
                 } catch (ValidationException ve) {
                     LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
                 } catch (IllegalArgumentException iae) {
@@ -124,7 +133,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 try {
                     p2p.publish(
                             ImageDigest.parse(blob.digest()),
-                            Path.of(blob.path()),
+                            resultPath,
                             blob.size(),
                             CacheMediaType.from(blob.mediaType()));
                 } catch (Exception ex) {
@@ -132,9 +141,17 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 }
             }
 
+            if (deleteTemp) {
+                try {
+                    fs.deleteIfExists(tempPath);
+                } catch (Exception ex) {
+                    LOGGER.warn("Failed to delete temp layer {}: {}", tempPath, ex.getMessage());
+                }
+            }
+
             return new FetchResult(ImageDigest.parse(blob.digest()),
                     MediaType.from(blob.mediaType()),
-                    Path.of(blob.path()));
+                    resultPath);
         } finally {
             releaseRegistry();
         }
@@ -142,7 +159,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
     private File createTemp() {
         try {
-            var path = PathSupport.tempPath("layer-", ".bin");
+            var path = PathSupport.temporaryPath("layer-", ".bin");
             fs.createFile(path);
             return path.toFile();
         } catch (Exception e) {

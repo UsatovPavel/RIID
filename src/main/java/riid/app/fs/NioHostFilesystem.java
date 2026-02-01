@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.CopyOption;
 import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.stream.Stream;
@@ -34,13 +35,13 @@ public final class NioHostFilesystem implements HostFilesystem {
     }
 
     @Override
-    public Path write(Path path, byte[] bytes) throws IOException {
-        return Files.write(path, bytes);
+    public Path write(Path path, byte[] bytes, OpenOption... options) throws IOException {
+        return Files.write(path, bytes, options);
     }
 
     @Override
-    public Path writeString(Path path, String content) throws IOException {
-        return Files.writeString(path, content);
+    public Path writeString(Path path, String content, OpenOption... options) throws IOException {
+        return Files.writeString(path, content, options);
     }
 
     @Override

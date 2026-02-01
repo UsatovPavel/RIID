@@ -1,9 +1,9 @@
 package riid.dispatcher;
 
+import java.nio.file.Path;
+
 import riid.cache.ImageDigest;
 import riid.client.core.model.manifest.MediaType;
-
-import java.nio.file.Path;
 
 /**
  * Result of image fetch orchestration.

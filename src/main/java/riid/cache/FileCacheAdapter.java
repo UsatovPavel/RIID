@@ -85,7 +85,7 @@ public final class FileCacheAdapter implements CacheAdapter {
     @Override
     public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException {
         Path target = pathFor(digest);
-        Path temp = PathSupport.tempPath(root, "cache-", ".tmp");
+        Path temp = PathSupport.temporaryPath(root, "cache-", ".tmp");
         fs.createFile(temp);
         try (InputStream data = payload.open();
              OutputStream out = new BufferedOutputStream(fs.newOutputStream(temp))) {

@@ -9,11 +9,11 @@ import java.util.UUID;
 public final class PathSupport {
     private PathSupport() { }
 
-    public static Path tempPath(String prefix, String suffix) {
-        return tempPath(null, prefix, suffix);
+    public static Path temporaryPath(String prefix, String suffix) {
+        return temporaryPath(null, prefix, suffix);
     }
 
-    public static Path tempPath(Path baseDir, String prefix, String suffix) {
+    public static Path temporaryPath(Path baseDir, String prefix, String suffix) {
         String safePrefix = prefix == null ? "" : prefix;
         String safeSuffix = suffix == null ? "" : suffix;
         String name = safePrefix + UUID.randomUUID() + safeSuffix;
@@ -26,7 +26,7 @@ public final class PathSupport {
     }
 
     public static Path tempDirPath(Path baseDir, String prefix) {
-        return tempPath(baseDir, prefix, "");
+        return temporaryPath(baseDir, prefix, "");
     }
 }
 

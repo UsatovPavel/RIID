@@ -3,8 +3,8 @@ package riid.app.error;
 /**
  * Domain error hierarchy for the app module.
  */
-public sealed interface AppError permits AppError.Oci, AppError.RuntimeError {
-    record Oci(OciErrorKind kind, String message) implements AppError { }
+public sealed interface AppError permits AppError.OciError, AppError.RuntimeError {
+    record OciError(OciErrorKind kind, String message) implements AppError { }
 
     enum OciErrorKind {
         RESOURCE_NOT_FOUND("Resource not found: %s"),

@@ -145,7 +145,7 @@ public final class ImageLoadingFacade {
         AppConfig appConfig = config.app();
         RuntimeConfig runtimeConfig = config.runtime();
         if (runtimeConfig != null) {
-            BoundedCommandExecution.setMaxOutputBytes(runtimeConfig.maxOutputBytesOrDefault());
+            BoundedCommandExecution.setDefaultOutputConfig(runtimeConfig.outputConfigOrDefault());
         }
         Path tempDir = appConfig != null ? appConfig.tempDirectoryPath() : null;
         HostFilesystem fs = new NioHostFilesystem();
