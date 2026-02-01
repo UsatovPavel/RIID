@@ -14,13 +14,12 @@ import org.junit.jupiter.api.function.Executable;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
-import riid.cache.TokenCache;
+import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
@@ -98,6 +97,7 @@ public class RegistryLocalTest {
         REGISTRY.stop();
     }
 
+    @Tag("filesystem")
     @Test
     void fetchManifestAndLayer() throws Exception {
         ManifestResult manifest = MANIFEST_SERVICE.fetchManifest(LOCAL, REPO, REF, SCOPE);

@@ -14,6 +14,7 @@ public final class HttpClientFactory {
             HttpClient client = new HttpClient();
             client.setConnectTimeout(config.connectTimeout().toMillis());
             client.setFollowRedirects(config.followRedirects());
+            client.setMaxRedirects(config.maxRedirects());
             client.start();
             return client;
         } catch (Exception e) {

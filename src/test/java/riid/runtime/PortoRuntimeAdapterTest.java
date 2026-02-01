@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
-
+@Tag("filesystem")
 class PortoRuntimeAdapterTest {
     private final HostFilesystem fs = new NioHostFilesystem();
 

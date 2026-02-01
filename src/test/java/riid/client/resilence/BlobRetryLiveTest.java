@@ -1,5 +1,6 @@
 package riid.client.resilence;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
@@ -20,6 +21,7 @@ import riid.app.fs.TestPaths;
  * Retry test against real Docker Hub.
  * Requires internet access.
  */
+@Tag("filesystem")
 public class BlobRetryLiveTest {
 
     @Test

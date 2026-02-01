@@ -2,8 +2,11 @@ package riid.dispatcher;
 
 import java.util.Objects;
 
-import riid.cache.ImageDigest;
+import riid.cache.oci.ImageDigest;
 import riid.client.core.model.manifest.MediaType;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
 
 /**
  * Dispatcher decides источник (cache/P2P/registry) и вызывает соответствующие адаптеры.

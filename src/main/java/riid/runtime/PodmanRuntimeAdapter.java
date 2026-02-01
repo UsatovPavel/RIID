@@ -48,7 +48,6 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
             throws IOException, InterruptedException {
         return BoundedCommandExecution.run(command);
     }
-
 }
 
 

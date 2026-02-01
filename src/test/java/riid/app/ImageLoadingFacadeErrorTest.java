@@ -7,21 +7,23 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
+import riid.cache.oci.ImageDigest;
 import riid.app.fs.TestPaths;
-import riid.cache.ImageDigest;
 import riid.client.api.ManifestResult;
 import riid.client.core.model.manifest.Descriptor;
 import riid.client.core.model.manifest.Manifest;
 import riid.client.core.model.manifest.MediaType;
-import riid.dispatcher.FetchResult;
-import riid.dispatcher.ImageRef;
-import riid.dispatcher.RepositoryName;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
 import riid.dispatcher.RequestDispatcher;
 import riid.runtime.RuntimeAdapter;
 
@@ -31,23 +33,24 @@ class ImageLoadingFacadeErrorTest {
     private static final String NOT_USED = "Not used";
 
     @Test
-    void loadWrapsIOExceptionAsAppError() {
+    void loadWrapsIOExceptionAsAppError() throws Exception {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
-        ImageLoadingFacade facade = new ImageLoadingFacade(
+        try (ImageLoadingFacade facade = new ImageLoadingFacade(
                 new NoopDispatcher(),
                 new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(),
-                fs);
-
+                fs)) {
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new NoopRuntime(), imageId));
         assertTrue(ex.error() instanceof AppError.RuntimeError);
         assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
+        }
     }
 
+    @Tag("filesystem")
     @Test
     void loadWrapsInterruptedExceptionAndInterruptsThread() throws Exception {
         ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
@@ -57,20 +60,20 @@ class ImageLoadingFacadeErrorTest {
         Path layer = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer", ".bin");
         fs.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
-        ImageLoadingFacade facade = new ImageLoadingFacade(
+        try (ImageLoadingFacade facade = new ImageLoadingFacade(
                 dispatcher,
                 new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(),
                 fs,
                 TestPaths.DEFAULT_BASE_DIR,
-                java.util.List.of());
-
+                java.util.List.of())) {
         AppException ex = assertThrows(AppException.class,
                 () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));
         assertTrue(ex.error() instanceof AppError.RuntimeError);
         assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
         assertTrue(Thread.currentThread().isInterrupted());
         Thread.interrupted(); // clear for other tests
+        }
     }
 
     private static ManifestResult minimalManifestResult() {
@@ -116,8 +119,9 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
+
         public FetchResult fetchLayer(RepositoryName repository,
-                                      riid.cache.ImageDigest digest,
+                                      ImageDigest digest,
                                       long sizeBytes,
                                       MediaType mediaType) {
             throw new UnsupportedOperationException(NOT_USED);
@@ -137,8 +141,9 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
+
         public FetchResult fetchLayer(RepositoryName repository,
-                                      riid.cache.ImageDigest digest,
+                                      ImageDigest digest,
                                       long sizeBytes,
                                       MediaType mediaType) {
             return new FetchResult(IMG_DIGEST, mediaType, Path.of(path));

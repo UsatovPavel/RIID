@@ -6,7 +6,8 @@ final class RiidEnv {
     private static volatile Map<String, String> ENV_OVERRIDE = Map.of();
     private static volatile boolean OVERRIDE_ENABLED;
 
-    private RiidEnv() { }
+    private RiidEnv() {
+    }
 
     @SuppressWarnings("unused")
     static String cacheDir() {

@@ -8,10 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
+import riid.cache.oci.ImageDigest;
 import riid.app.fs.HostFilesystem;
 import riid.app.fs.HostFilesystemTestSupport;
 import riid.app.fs.TestPaths;
 import riid.client.core.model.manifest.MediaType;
+import riid.dispatcher.model.FetchResult;
+import riid.dispatcher.model.ImageRef;
+import riid.dispatcher.model.RepositoryName;
 import riid.runtime.RuntimeAdapter;
 
 class ImageImportingFacadeTest {
@@ -86,7 +90,7 @@ class ImageImportingFacadeTest {
         }
 
         @Override
-        public FetchResult fetchLayer(RepositoryName repository, riid.cache.ImageDigest digest,
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest,
                                       long sizeBytes, MediaType mediaType) {
             return result;
         }
@@ -106,21 +110,20 @@ class ImageImportingFacadeTest {
         }
     }
 
-    private static riid.cache.ImageDigest digestA() {
-        return riid.cache.ImageDigest.parse("sha256:" + "a".repeat(64));
+    private static ImageDigest digestA() {
+        return ImageDigest.parse("sha256:" + "a".repeat(64));
     }
 
-    private static riid.cache.ImageDigest digestB() {
-        return riid.cache.ImageDigest.parse("sha256:" + "b".repeat(64));
+    private static ImageDigest digestB() {
+        return ImageDigest.parse("sha256:" + "b".repeat(64));
     }
 
-    private static riid.cache.ImageDigest digestC() {
-        return riid.cache.ImageDigest.parse("sha256:" + "c".repeat(64));
+    private static ImageDigest digestC() {
+        return ImageDigest.parse("sha256:" + "c".repeat(64));
     }
 
     private static MediaType media() {
         return MediaType.OCI_IMAGE_LAYER;
     }
 }
-
 
