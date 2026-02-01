@@ -12,7 +12,6 @@ import riid.client.core.model.manifest.Manifest;
 import riid.client.http.HttpClientConfig;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -22,6 +21,10 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.TestPaths;
 
 /**
  * Stress/retry test (step 9.1).
@@ -39,12 +42,16 @@ public class StressTest {
     private static RegistryClient CLIENT;
     private static final String REPO = "library/busybox";
     private static final String REF = "latest";
+    private static final HostFilesystem FS = new NioHostFilesystem();
 
     @BeforeAll
     static void setup() {
         RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
-        HttpClientConfig cfg = new HttpClientConfig(
-                null, null, 2, null, null, true, null, true);
+        HttpClientConfig cfg = HttpClientConfig.builder()
+                .maxRetries(2)
+                .retryIdempotentOnly(true)
+                .followRedirects(true)
+                .build();
         CLIENT = new RegistryClientImpl(hub, cfg, (CacheAdapter) null);
     }
 
@@ -60,8 +67,10 @@ public class StressTest {
             for (int i = 0; i < count; i++) {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
-                        File tmp = Files.createTempFile(
-                                "busybox-layer-" + Thread.currentThread().getId(),
+                        File tmp = TestPaths.tempFile(
+                                FS,
+                                TestPaths.DEFAULT_BASE_DIR,
+                                "busybox-layer-" + Thread.currentThread().getId() + "-",
                                 ".tar")
                                 .toFile();
                         var res = CLIENT.fetchBlob(req, tmp);
@@ -73,14 +82,22 @@ public class StressTest {
                     }
                 }, pool));
             }
-            for (var f : futures) {
-                f.join();
-            }
-            pool.shutdown();
-            pool.awaitTermination(1, TimeUnit.MINUTES);
+            joinAndShutdown(futures, pool);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while awaiting executor termination", ie);
+            throw new RuntimeException(
+                    "Interrupted while awaiting executor termination", ie);
+        }
+    }
+
+    private void joinAndShutdown(List<CompletableFuture<File>> futures,
+                                 ExecutorService pool) throws InterruptedException {
+        for (var f : futures) {
+            f.join();
+        }
+        pool.shutdown();
+        if (!pool.awaitTermination(1, TimeUnit.MINUTES)) {
+            throw new RuntimeException("Executor did not terminate");
         }
     }
 }
