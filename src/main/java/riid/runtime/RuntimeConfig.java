@@ -6,13 +6,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * Runtime module configuration.
  */
 public record RuntimeConfig(
-        @JsonProperty("maxOutputBytes") Integer maxOutputBytes
+        @JsonProperty("output") OutputConfig output
 ) {
-    public int maxOutputBytesOrDefault() {
-        if (maxOutputBytes == null || maxOutputBytes <= 0) {
-            return BoundedCommandExecution.DEFAULT_MAX_OUTPUT_BYTES;
-        }
-        return maxOutputBytes;
+    public OutputConfig outputConfigOrDefault() {
+        return output == null ? OutputConfig.defaults() : output;
     }
 }
 

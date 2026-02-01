@@ -5,30 +5,11 @@ import java.util.Map;
 final class RiidEnv {
     private static volatile Map<String, String> ENV_OVERRIDE = Map.of();
     private static volatile boolean OVERRIDE_ENABLED;
-    private static final String DEFAULT_REGISTRY = "registry-1.docker.io";
 
     private RiidEnv() {
     }
 
-    static ImageId imageId() {
-        Map<String, String> env = env();
-        String registry = env.getOrDefault("RIID_REGISTRY", DEFAULT_REGISTRY);
-        String repo = env.getOrDefault("RIID_REPO", "library/busybox");
-        String tag = env.get("RIID_TAG");
-        String digest = env.get("RIID_DIGEST");
-        String ref = env.getOrDefault("RIID_REF", "latest");
-
-        if (digest == null || digest.isBlank()) {
-            if (ref.startsWith("sha256:")) {
-                digest = ref;
-            } else if (tag == null || tag.isBlank()) {
-                tag = ref;
-            }
-        }
-        String tagValue = normalizeTag(tag);
-        return new ImageId(registry, repo, tagValue, digest);
-    }
-
+    @SuppressWarnings("unused")
     static String cacheDir() {
         String v = env().get("RIID_CACHE_DIR");
         if (v == null || v.isBlank()) {
@@ -40,6 +21,7 @@ final class RiidEnv {
     /**
      * @VisibleForTesting
      */
+    @SuppressWarnings("unused")
     static void setEnvForTests(Map<String, String> env) {
         if (env == null) {
             OVERRIDE_ENABLED = false;
@@ -61,12 +43,5 @@ final class RiidEnv {
             return ENV_OVERRIDE;
         }
         return System.getenv();
-    }
-
-    private static String normalizeTag(String tag) {
-        if (tag == null || tag.isBlank()) {
-            return null;
-        }
-        return tag;
     }
 }

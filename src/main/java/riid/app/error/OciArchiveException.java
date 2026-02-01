@@ -5,11 +5,11 @@ package riid.app.error;
  */
 public final class OciArchiveException extends AppException {
     private static final long serialVersionUID = 1L;
-    public OciArchiveException(AppError.Oci error, String message) {
+    public OciArchiveException(AppError.OciError error, String message) {
         super(error, message);
     }
 
-    public OciArchiveException(AppError.Oci error, String message, Throwable cause) {
+    public OciArchiveException(AppError.OciError error, String message, Throwable cause) {
         super(error, message, cause);
     }
 }

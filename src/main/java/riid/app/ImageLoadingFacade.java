@@ -174,7 +174,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         AppConfig appConfig = config.app();
         RuntimeConfig runtimeConfig = config.runtime();
         if (runtimeConfig != null) {
-            BoundedCommandExecution.setMaxOutputBytes(runtimeConfig.maxOutputBytesOrDefault());
+            BoundedCommandExecution.setDefaultOutputConfig(runtimeConfig.outputConfigOrDefault());
         }
         Path tempDir = appConfig != null ? appConfig.tempDirectoryPath() : null;
         List<String> allowedRegistries = appConfig != null ? appConfig.allowedRegistriesOrEmpty() : List.of();

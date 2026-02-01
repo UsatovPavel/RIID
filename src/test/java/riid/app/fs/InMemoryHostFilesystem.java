@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.CopyOption;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
@@ -49,7 +50,7 @@ public class InMemoryHostFilesystem implements HostFilesystem {
     }
 
     @Override
-    public Path write(Path path, byte[] bytes) throws IOException {
+    public Path write(Path path, byte[] bytes, OpenOption... options) throws IOException {
         Path normalized = normalize(path);
         if (!files.containsKey(normalized)) {
             createFile(path);
@@ -59,7 +60,7 @@ public class InMemoryHostFilesystem implements HostFilesystem {
     }
 
     @Override
-    public Path writeString(Path path, String content) throws IOException {
+    public Path writeString(Path path, String content, OpenOption... options) throws IOException {
         return write(path, content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.CopyOption;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
@@ -37,13 +38,13 @@ public final class HostFilesystemTestSupport implements HostFilesystem {
     }
 
     @Override
-    public Path write(Path path, byte[] bytes) throws IOException {
-        return delegate.write(path, bytes);
+    public Path write(Path path, byte[] bytes, OpenOption... options) throws IOException {
+        return delegate.write(path, bytes, options);
     }
 
     @Override
-    public Path writeString(Path path, String content) throws IOException {
-        return delegate.writeString(path, content);
+    public Path writeString(Path path, String content, OpenOption... options) throws IOException {
+        return delegate.writeString(path, content, options);
     }
 
     @Override
