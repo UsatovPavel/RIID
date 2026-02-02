@@ -145,7 +145,7 @@ public final class CliApplication {
         };
     }
     private void printUsage(PrintWriter writer) {
-        Path defaultConfigPath = Paths.get("config.yaml");
+        Path defaultConfigPath = Paths.get("config", "config.yaml");
         String usage = String.join("%n",
                 "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
                 "       [--config <path>] [--username <user>",
@@ -240,7 +240,7 @@ public final class CliApplication {
                 return new ParseResult(null, true, null);
             }
 
-            Path configPath = Paths.get(cmd.getOptionValue("config", "config.yaml"));
+            Path configPath = Paths.get(cmd.getOptionValue("config", "config/config.yaml"));
             String repo = cmd.getOptionValue("repo");
             String tag = cmd.getOptionValue("tag");
             String ref = cmd.getOptionValue("ref");

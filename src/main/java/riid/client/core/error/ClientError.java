@@ -17,6 +17,6 @@ public sealed interface ClientError permits ClientError.Auth, ClientError.Http, 
 
     enum HttpKind {RETRY_EXHAUSTED, BAD_STATUS}
 
-    enum ParseKind {MANIFEST, TOKEN, CONFIG}
+    enum ParseKind {MANIFEST, TOKEN, CONFIG, RANGE}
 }
 
