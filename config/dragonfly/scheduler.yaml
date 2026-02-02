@@ -1,6 +1,6 @@
-scheduler:
-  server:
-    addr: 0.0.0.0:65002
+server:
+  listenIP: 0.0.0.0
+  port: 65002
 manager:
   addr: dfmanager:65003
 

@@ -9,6 +9,93 @@ services:
       - riid_cache:/var/cache/riid
     ports:
       - "8080:8080"
+    networks:
+      - dragonfly-net
+
+  dfmysql:
+    image: mysql:8
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=dragonfly
+    volumes:
+      - dfmysql_data:/var/lib/mysql
+    networks:
+      - dragonfly-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dfredis:
+    image: redis:7
+    networks:
+      - dragonfly-net
+
+  dfmanager:
+    image: dragonflyoss/manager:latest
+    command: ["--config", "/etc/dragonfly/manager.yaml", "--console"]
+    environment:
+      - MANAGER_CONFIG=/etc/dragonfly/manager.yaml
+    volumes:
+      - ./config/dragonfly:/etc/dragonfly:ro
+    depends_on:
+      - dfmysql
+      - dfredis
+    ports:
+      - "65003:65003"
+      - "8080:8080"
+    networks:
+      - dragonfly-net
+
+  dfscheduler:
+    image: dragonflyoss/scheduler:latest
+    command: ["--config", "/etc/dragonfly/scheduler.yaml", "--console"]
+    volumes:
+      - ./config/dragonfly:/etc/dragonfly:ro
+    depends_on:
+      - dfmanager
+    ports:
+      - "65002:65002"
+    networks:
+      - dragonfly-net
+
+  dfdaemon1:
+    image: dragonflyoss/dfdaemon:latest
+    command: ["--config", "/etc/dragonfly/dfget-multi.yaml"]
+    privileged: true
+    volumes:
+      - ./config/dragonfly:/etc/dragonfly:ro
+    depends_on:
+      - dfscheduler
+    networks:
+      - dragonfly-net
+
+  dfdaemon2:
+    image: dragonflyoss/dfdaemon:latest
+    command: ["--config", "/etc/dragonfly/dfget-multi.yaml"]
+    privileged: true
+    volumes:
+      - ./config/dragonfly:/etc/dragonfly:ro
+    depends_on:
+      - dfscheduler
+    networks:
+      - dragonfly-net
+
+  dfdaemon3:
+    image: dragonflyoss/dfdaemon:latest
+    command: ["--config", "/etc/dragonfly/dfget-multi.yaml"]
+    privileged: true
+    volumes:
+      - ./config/dragonfly:/etc/dragonfly:ro
+    depends_on:
+      - dfscheduler
+    networks:
+      - dragonfly-net
 
 volumes:
   riid_cache:
+  dfmysql_data:
+
+networks:
+  dragonfly-net:
