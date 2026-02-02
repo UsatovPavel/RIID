@@ -8,6 +8,11 @@ client:
     maxBackoff: "PT2S"
     retryIdempotentOnly: true
     userAgent: "riid-client"
+    followRedirects: true
+  range:
+    mode: AUTO
+    partialValidation: SKIP
+    fallbackToFullOn416: true
   auth:
     defaultTokenTtlSeconds: 300
     certPath: null
@@ -21,4 +26,3 @@ client:
 
 dispatcher:
   maxConcurrentRegistry: 4
-
