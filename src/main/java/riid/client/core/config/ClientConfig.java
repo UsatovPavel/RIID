@@ -13,8 +13,13 @@ import riid.client.http.HttpClientConfig;
 public record ClientConfig(
         @JsonProperty("http") HttpClientConfig http,
         @JsonProperty("auth") AuthConfig auth,
-        @JsonProperty("registries") List<RegistryEndpoint> registries
+        @JsonProperty("registries") List<RegistryEndpoint> registries,
+        @JsonProperty("range") RangeConfig range
 ) {
+    public ClientConfig(HttpClientConfig http, AuthConfig auth, List<RegistryEndpoint> registries) {
+        this(http, auth, registries, null);
+    }
+
     public ClientConfig {
         if (registries != null) {
             registries = Collections.unmodifiableList(new java.util.ArrayList<>(registries));
@@ -31,5 +36,9 @@ public record ClientConfig(
 
     public boolean registriesMissing() {
         return registries == null;
+    }
+
+    public RangeConfig rangeOrDefault() {
+        return range != null ? range : new RangeConfig();
     }
 }

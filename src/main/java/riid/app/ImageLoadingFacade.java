@@ -22,7 +22,9 @@ import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
+import riid.client.core.config.AuthConfig;
 import riid.client.core.config.Credentials;
+import riid.client.core.config.RangeConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.config.ConfigLoader;
@@ -165,7 +167,11 @@ public final class ImageLoadingFacade implements AutoCloseable {
         HostFilesystem fs = new NioHostFilesystem();
         TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
         HttpClientConfig httpConfig = new HttpClientConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
+        long ttl = config.client() != null && config.client().auth() != null
+                ? config.client().auth().defaultTokenTtlSeconds()
+                : AuthConfig.DEFAULT_TTL_SECONDS;
+        RangeConfig rangeConfig = config.client() != null ? config.client().rangeOrDefault() : new RangeConfig();
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, rangeConfig);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
