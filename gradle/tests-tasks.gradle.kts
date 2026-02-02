@@ -31,6 +31,39 @@ tasks.withType(Test::class).configureEach {
 tasks.register("testStress", Test::class) {
     group = "verification"
     description = "Run stress-tagged tests"
+    dependsOn(tasks.named("testClasses"))
+    val mainTest = sourceSets.getByName("test")
+    testClassesDirs = mainTest.output.classesDirs
+    classpath = mainTest.runtimeClasspath
+    useJUnitPlatform {
+        includeTags("stress")
+    }
+}
+
+tasks.register("testFuzz", Test::class) {
+    group = "verification"
+    description = "Run fuzzing tests"
+    val fuzzing = sourceSets.getByName("fuzzingTest")
+    testClassesDirs = fuzzing.output.classesDirs
+    classpath = fuzzing.runtimeClasspath
+    val outFile = layout.buildDirectory.file("reports/jazzer/jazzer.log").get().asFile
+    doFirst {
+        outFile.parentFile.mkdirs()
+    }
+    testLogging.showStandardStreams = false
+    addTestOutputListener(object : org.gradle.api.tasks.testing.TestOutputListener {
+        override fun onOutput(
+            descriptor: org.gradle.api.tasks.testing.TestDescriptor,
+            event: org.gradle.api.tasks.testing.TestOutputEvent
+        ) {
+            outFile.appendText(event.message)
+        }
+    })
+    // Enable Jazzer fuzzing mode for @FuzzTest
+    environment("JAZZER_FUZZ", "1")
+    environment("JAZZER_DICTIONARY", "$projectDir/src/test/fuzzing/resources/fuzz/authparser.dict")
+    // Keep fuzzing time bounded during stress runs
+    environment("JAZZER_MAX_TOTAL_TIME", "120")// seconds
     useJUnitPlatform {
         includeTags("stress")
     }
@@ -39,6 +72,10 @@ tasks.register("testStress", Test::class) {
 tasks.register("testLocal", Test::class) {
     group = "verification"
     description = "Run local-tagged tests (e.g., Testcontainers registry)"
+    dependsOn(tasks.named("testClasses"))
+    val mainTest = sourceSets.getByName("test")
+    testClassesDirs = mainTest.output.classesDirs
+    classpath = mainTest.runtimeClasspath
     useJUnitPlatform {
         includeTags("local")
     }
