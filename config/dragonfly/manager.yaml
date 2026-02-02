@@ -1,10 +1,24 @@
-manager:
-  server:
-    addr: 0.0.0.0:65003
-  security:
-    jwt:
-      key: dragonfly-test-key
-security:
+server:
+  grpc:
+    listenIP: 0.0.0.0
+    port:
+      start: 65003
+      end: 65003
+  rest:
+    addr: 0.0.0.0:8080
+auth:
   jwt:
     key: dragonfly-test-key
+database:
+  type: mysql
+  mysql:
+    user: root
+    password: root
+    host: dfmysql
+    port: 3306
+    dbname: dragonfly
+  redis:
+    addrs:
+      - "dfredis:6379"
+    db: 0
 

@@ -7,3 +7,13 @@ if (gradle.startParameter.taskNames.any { name -> testTasks.any { task -> name.c
 }
 
 rootProject.name = "Riid"
+
+pluginManagement {
+  repositories {
+    gradlePluginPortal()
+    mavenCentral()
+  }
+  plugins {
+    id("com.github.spotbugs") version "6.4.8"
+  }
+}
