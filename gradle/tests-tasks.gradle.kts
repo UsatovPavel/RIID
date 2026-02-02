@@ -10,6 +10,7 @@ tasks.named<Test>("test") {
         if (!project.hasProperty("includeStress")) {
             excludeTags("stress")
         }
+        excludeTags("porto")
         if (project.hasProperty("disableLocal")) {
             excludeTags("local")
         }
@@ -40,6 +41,14 @@ tasks.register("testLocal", Test::class) {
     description = "Run local-tagged tests (e.g., Testcontainers registry)"
     useJUnitPlatform {
         includeTags("local")
+    }
+}
+
+tasks.register("testPorto", Test::class) {
+    group = "verification"
+    description = "Run porto-tagged tests (Porto runtime/manual env)"
+    useJUnitPlatform {
+        includeTags("porto")
     }
 }
 

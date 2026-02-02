@@ -47,7 +47,10 @@ runtime:
 - client.http.maxBackoff = PT2S
 - client.http.retryIdempotentOnly = false
 - client.http.userAgent = riid-registry-client
-- client.http.followRedirects = false
+- client.http.followRedirects = true (для GHCR обязательно оставить включённым)
+- client.range.mode = AUTO
+- client.range.partialValidation = SKIP
+- client.range.fallbackToFullOn416 = true
 - client.http.maxRedirects = 5
 - client.auth.defaultTokenTtlSeconds = 300
 - client.auth.certPath / keyPath / caPath = null
@@ -63,6 +66,8 @@ runtime:
 
 ### Known notes
 - Missing `registries` throws `ConfigValidationException`.
+- Для GHCR скачивание blob/manifest использует 302/307 CDN, поэтому `client.http.followRedirects` должен быть true (явно прописывать в config/config.yaml).
+- Range: `partialValidation=SKIP` means digest is validated only for a full blob; `fallbackToFullOn416` enables retry without Range.
 
 ### Tests
 - `ConfigBranchTest`: validation branches (including maxRetries < 0, missing http/auth/registries/dispatcher).

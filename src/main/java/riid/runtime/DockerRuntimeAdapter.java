@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 public class DockerRuntimeAdapter implements RuntimeAdapter {
     private static final String DOCKER_BIN = "docker";
+    private static final String DIGEST_KEY = "digest";
 
     @Override
     public String runtimeId() {
@@ -42,7 +43,7 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         if (manifestNode == null || manifestNode.isMissingNode()) {
             throw new IOException("OCI archive missing manifests");
         }
-        String manifestDigest = stripSha256(manifestNode.path("digest").asText(""));
+        String manifestDigest = stripSha256(manifestNode.path(DIGEST_KEY).asText(""));
         if (manifestDigest.isBlank()) {
             throw new IOException("OCI archive manifest digest missing");
         }
@@ -72,12 +73,12 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
                                          String refName,
                                          ObjectMapper mapper) throws IOException {
         String configPath = "blobs/sha256/" + stripSha256(
-                manifest.path("config").path("digest").asText(""));
+                manifest.path("config").path(DIGEST_KEY).asText(""));
 
         List<String> layers = new ArrayList<>();
         Map<String, Object> layerSources = new LinkedHashMap<>();
         for (JsonNode layer : manifest.path("layers")) {
-            String digest = layer.path("digest").asText("");
+            String digest = layer.path(DIGEST_KEY).asText("");
             String hex = stripSha256(digest);
             layers.add("blobs/sha256/" + hex);
 
@@ -105,7 +106,7 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         String repoKey = sep > 0 ? refName.substring(0, sep) : refName;
         String tag = sep > 0 ? refName.substring(sep + 1) : "latest";
         JsonNode firstLayer = manifest.path("layers").get(0);
-        String topLayer = stripSha256(firstLayer.path("digest").asText(""));
+        String topLayer = stripSha256(firstLayer.path(DIGEST_KEY).asText(""));
 
         Map<String, Map<String, String>> repositories = new LinkedHashMap<>();
         repositories.put(repoKey, Map.of(tag, topLayer));
