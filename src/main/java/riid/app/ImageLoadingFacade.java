@@ -170,6 +170,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
+        runtimes.put("docker", new riid.runtime.DockerRuntimeAdapter());
 
         AppConfig appConfig = config.app();
         RuntimeConfig runtimeConfig = config.runtime();
@@ -230,6 +231,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
+        runtimes.put("docker", new riid.runtime.DockerRuntimeAdapter());
         return Map.copyOf(runtimes);
     }
 
