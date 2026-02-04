@@ -230,7 +230,7 @@ class SimpleRequestDispatcherTest {
         Optional<Path> fetchResult = Optional.empty();
 
         @Override
-        public Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType) {
+        public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) {
             fetchCalled = true;
             return fetchResult;
         }

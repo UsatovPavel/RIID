@@ -31,6 +31,7 @@ import riid.config.ConfigLoader;
 import riid.config.GlobalConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
+import riid.p2p.DragonflyP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
 import riid.runtime.PodmanRuntimeAdapter;
@@ -185,8 +186,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
         }
         Path tempDir = appConfig != null ? appConfig.tempDirectoryPath() : null;
         List<String> allowedRegistries = appConfig != null ? appConfig.allowedRegistriesOrEmpty() : List.of();
+        P2PExecutor p2p = new P2PExecutor.NoOp();
+        if (config.p2p() != null
+                && config.p2p().dragonfly() != null
+                && config.p2p().dragonfly().enabledOrDefault()) {
+            p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config.p2p().dragonfly());
+        }
         return new ImageLoadingFacade(
-                new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), fs),
+                new SimpleRequestDispatcher(client, cache, p2p, fs),
                 new RuntimeRegistry(runtimes),
                 client,
                 fs,
