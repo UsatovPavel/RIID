@@ -11,7 +11,7 @@ import java.util.Optional;
  */
 public final class NoOpP2PExecutor implements P2PExecutor {
     @Override
-    public Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType) {
+    public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) {
         return Optional.empty();
     }
 
