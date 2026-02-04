@@ -72,6 +72,8 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
             }
             String computed = computeSha256(tempPath);
             if (!computed.equals(digest.toString())) {
+                LOGGER.warn("P2P digest mismatch for {}: got {} (size={}, stdout={}, stderr={})",
+                        digest, computed, actualSize, result.stdout(), result.stderr());
                 throw new ValidationException(
                         "P2P digest mismatch for " + digest + ": got " + computed);
             }
