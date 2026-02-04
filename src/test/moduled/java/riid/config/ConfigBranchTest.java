@@ -169,17 +169,17 @@ class ConfigBranchTest {
 
     @Test
     void throwsWhenDispatcherMissing() {
-        GlobalConfig cfg = new GlobalConfig(validClient(), null, null, null);
+        GlobalConfig cfg = new GlobalConfig(validClient(), null, null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        assertEquals(ConfigValidationException.Reason.MISSING_DISPATCHER.message(), ex.getMessage());
+        assertEquals(ConfigValidationException.Dispatcher.MISSING.message(), ex.getMessage());
     }
 
     @Test
     void throwsWhenRegistriesNull() {
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), null);
-        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        assertEquals(ConfigValidationException.Reason.MISSING_REGISTRIES.message(), ex.getMessage());
+        assertEquals(ConfigValidationException.Registry.MISSING_REGISTRIES.message(), ex.getMessage());
     }
 
     @Test
@@ -187,9 +187,9 @@ class ConfigBranchTest {
         var regs = new java.util.ArrayList<RegistryEndpoint>();
         regs.add(null);
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), regs);
-        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        assertEquals(ConfigValidationException.Reason.NULL_REGISTRY.message(), ex.getMessage());
+        assertEquals(ConfigValidationException.Registry.NULL_REGISTRY.message(), ex.getMessage());
     }
 
     @Test
@@ -198,9 +198,9 @@ class ConfigBranchTest {
         var regs = new java.util.ArrayList<RegistryEndpoint>();
         regs.add(ep);
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), regs);
-        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        Assertions.assertEquals(ConfigValidationException.Reason.MISSING_SCHEME.message(), ex.getMessage());
+        Assertions.assertEquals(ConfigValidationException.Registry.MISSING_SCHEME.message(), ex.getMessage());
     }
 
     @Test
@@ -209,9 +209,9 @@ class ConfigBranchTest {
         var regs = new java.util.ArrayList<RegistryEndpoint>();
         regs.add(ep);
         ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), regs);
-        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        assertEquals(ConfigValidationException.Reason.MISSING_HOST.message(), ex.getMessage());
+        assertEquals(ConfigValidationException.Registry.MISSING_HOST.message(), ex.getMessage());
     }
 
     @Test
@@ -269,10 +269,10 @@ class ConfigBranchTest {
                 .followRedirects(true)
                 .build();
         ClientConfig client = new ClientConfig(http, new AuthConfig(), List.of(RegistryEndpoint.https("example.org")));
-        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         Assertions.assertEquals(
-                ConfigValidationException.Reason.HTTP_CONNECT_TIMEOUT_POSITIVE.message(),
+                ConfigValidationException.Http.CONNECT_TIMEOUT_POSITIVE.message(),
                 ex.getMessage());
     }
 
@@ -284,7 +284,7 @@ class ConfigBranchTest {
         m.setAccessible(true);
         var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, (Object) null));
         Assertions.assertTrue(ex.getCause() instanceof ConfigValidationException);
-        assertEquals(ConfigValidationException.Reason.MISSING_REGISTRIES.message(), ex.getCause().getMessage());
+        assertEquals(ConfigValidationException.Registry.MISSING_REGISTRIES.message(), ex.getCause().getMessage());
     }
 
     @Test
@@ -295,7 +295,7 @@ class ConfigBranchTest {
         regs.add(null);
         var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, regs));
         Assertions.assertTrue(ex.getCause() instanceof ConfigValidationException);
-        assertEquals(ConfigValidationException.Reason.NULL_REGISTRY.message(), ex.getCause().getMessage());
+        assertEquals(ConfigValidationException.Registry.NULL_REGISTRY.message(), ex.getCause().getMessage());
     }
 
     @Test
@@ -305,7 +305,7 @@ class ConfigBranchTest {
         var regs = java.util.List.of(new RegistryEndpoint(" ", "host", -1, null));
         var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, regs));
         Assertions.assertTrue(ex.getCause() instanceof ConfigValidationException);
-        assertEquals(ConfigValidationException.Reason.MISSING_SCHEME.message(), ex.getCause().getMessage());
+        assertEquals(ConfigValidationException.Registry.MISSING_SCHEME.message(), ex.getCause().getMessage());
     }
 
     @Test
@@ -315,7 +315,7 @@ class ConfigBranchTest {
         var regs = java.util.List.of(new RegistryEndpoint("https", " ", -1, null));
         var ex = assertThrows(InvocationTargetException.class, () -> m.invoke(null, regs));
         Assertions.assertTrue(ex.getCause() instanceof ConfigValidationException);
-        assertEquals(ConfigValidationException.Reason.MISSING_HOST.message(), ex.getCause().getMessage());
+        assertEquals(ConfigValidationException.Registry.MISSING_HOST.message(), ex.getCause().getMessage());
     }
 
     @Test
@@ -326,19 +326,19 @@ class ConfigBranchTest {
         var exNull = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, null, "client.http.requestTimeout"));
         assertEquals(
-                ConfigValidationException.Reason.HTTP_REQUEST_TIMEOUT_POSITIVE.message(),
+                ConfigValidationException.Http.REQUEST_TIMEOUT_POSITIVE.message(),
                 exNull.getCause().getMessage());
         // zero
         var exZero = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, Duration.ZERO, "client.http.initialBackoff"));
         assertEquals(
-                ConfigValidationException.Reason.HTTP_INITIAL_BACKOFF_POSITIVE.message(),
+                ConfigValidationException.Http.INITIAL_BACKOFF_POSITIVE.message(),
                 exZero.getCause().getMessage());
         // negative
         var exNeg = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, Duration.ofSeconds(-1), "client.http.maxBackoff"));
         assertEquals(
-                ConfigValidationException.Reason.HTTP_MAX_BACKOFF_POSITIVE.message(),
+                ConfigValidationException.Http.MAX_BACKOFF_POSITIVE.message(),
                 exNeg.getCause().getMessage());
 
         // fallback branch (unknown field)
@@ -360,21 +360,21 @@ class ConfigBranchTest {
                 () -> m.invoke(null, "no-such-file.pem", "client.auth.certPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exMissing.getCause());
         assertEquals(
-                ConfigValidationException.Reason.AUTH_CERT_MISSING.message() + ": no-such-file.pem",
+                ConfigValidationException.Auth.CERT_MISSING.message() + ": no-such-file.pem",
                 exMissing.getCause().getMessage());
 
         var exKey = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-key.pem", "client.auth.keyPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exKey.getCause());
         assertEquals(
-                ConfigValidationException.Reason.AUTH_KEY_MISSING.message() + ": no-such-key.pem",
+                ConfigValidationException.Auth.KEY_MISSING.message() + ": no-such-key.pem",
                 exKey.getCause().getMessage());
 
         var exCa = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-ca.pem", "client.auth.caPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exCa.getCause());
         assertEquals(
-                ConfigValidationException.Reason.AUTH_CA_MISSING.message() + ": no-such-ca.pem",
+                ConfigValidationException.Auth.CA_MISSING.message() + ": no-such-ca.pem",
                 exCa.getCause().getMessage());
 
         // fallback branch (unknown field)
@@ -392,10 +392,10 @@ class ConfigBranchTest {
                 HttpClientConfig.builder().build(),
                 auth,
                 List.of(RegistryEndpoint.https("example.org")));
-        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null);
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(
-                ConfigValidationException.Reason.AUTH_CERT_MISSING.message() + ": " + missing,
+                ConfigValidationException.Auth.CERT_MISSING.message() + ": " + missing,
                 ex.getMessage());
     }
 
