@@ -1,16 +1,37 @@
 package riid.cache;
 
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import riid.cache.oci.ImageDigest;
-
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import com.code_intelligence.jazzer.api.FuzzedDataProvider;
+import com.code_intelligence.jazzer.junit.FuzzTest;
+
+import riid.cache.oci.ImageDigest;
 
 @Tag("stress")
 class ImageDigestFuzzTest {
+
+    @FuzzTest
+    void fuzzDigestsDoNotThrowUnexpectedExceptions(FuzzedDataProvider data) {
+        String raw = data.consumeString(128);
+        try {
+            ImageDigest.parse(raw);
+        } catch (IllegalArgumentException e) {
+            // Expected for invalid inputs.
+        } catch (RuntimeException | Error e) {
+            recordCrash("ImageDigestFuzzTestInputs", "fuzzDigestsDoNotThrowUnexpectedExceptions", raw);
+            throw e;
+        }
+    }
 
     @Test
     void randomDigestsDoNotThrowUnexpectedExceptions() {
@@ -71,5 +92,16 @@ class ImageDigestFuzzTest {
             }
         }
         return sb.toString();
+    }
+
+    private static void recordCrash(String testDir, String methodDir, String input) {
+        Path dir = Path.of("src", "test", "fuzzing", "resources", "riid", "cache", testDir, methodDir);
+        String fileName = "crash-" + Instant.now().toEpochMilli() + "-" + Integer.toHexString(input.hashCode()) + ".txt";
+        try {
+            Files.createDirectories(dir);
+            Files.writeString(dir.resolve(fileName), input, StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+            // best-effort crash capture
+        }
     }
 }
