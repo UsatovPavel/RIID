@@ -4,4 +4,7 @@ download:
 daemon:
   dataDir: /var/lib/dragonfly
   cacheDir: /var/cache/dragonfly
+scheduler:
+  netAddrs:
+    - "dfscheduler:65002"
 
