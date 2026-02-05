@@ -59,6 +59,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         String url = endpoint.uri(RegistryApi.blobPath(repository, digest.toString())).toString();
         List<String> cmd = buildDfgetCommand(url, tempPath);
         try {
+            LOGGER.info("P2P dfget start: url={}, target={}, cmd={}", url, tempPath, cmd);
             var result = BoundedCommandExecution.run(cmd);
             if (result.exitCode() != 0) {
                 String msg = "dfget failed (exit " + result.exitCode() + "): "
@@ -68,14 +69,17 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
             long actualSize = tempPath.toFile().length();
             if (size > 0 && actualSize > 0 && actualSize != size) {
                 throw new ValidationException(
-                        "P2P size mismatch for " + digest + ": expected " + size + ", got " + actualSize);
+                        "P2P size mismatch for " + digest + ": expected " + size + ", got " + actualSize
+                                + ". dfget stdout=" + result.stdout() + " stderr=" + result.stderr());
             }
             String computed = computeSha256(tempPath);
             if (!computed.equals(digest.toString())) {
                 LOGGER.warn("P2P digest mismatch for {}: got {} (size={}, stdout={}, stderr={})",
                         digest, computed, actualSize, result.stdout(), result.stderr());
                 throw new ValidationException(
-                        "P2P digest mismatch for " + digest + ": got " + computed);
+                        "P2P digest mismatch for " + digest + ": got " + computed
+                                + ". size=" + actualSize
+                                + ". dfget stdout=" + result.stdout() + " stderr=" + result.stderr());
             }
             return Optional.of(cacheOrTemp(tempPath, digest, mediaType, actualSize));
         } catch (InterruptedException e) {
