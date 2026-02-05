@@ -43,16 +43,16 @@ class DragonflyP2PExecutorTest {
 
     @Test
     void fetchesBlobViaDfgetAndCaches() throws Exception {
-        String dfgetPath = dfgetPath();
-        ensureDfgetAvailable(dfgetPath);
+        DfgetEnv dfgetEnv = dfgetEnv();
+        ensureDfgetAvailable(dfgetEnv.path());
 
         byte[] payload = "p2p-test-payload".getBytes(StandardCharsets.UTF_8);
         String digest = "sha256:" + sha256(payload);
         startServer(payload, digest);
 
-        RegistryEndpoint endpoint = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
+        RegistryEndpoint endpoint = new RegistryEndpoint("http", dfgetEnv.host(), server.getAddress().getPort(), null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, dfgetPath, null, null, null);
+        DragonflyConfig config = new DragonflyConfig(true, dfgetEnv.path(), null, null, null);
 
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs)) {
             DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
@@ -88,18 +88,101 @@ class DragonflyP2PExecutorTest {
         server.start();
     }
 
-    private static String dfgetPath() {
+    private static DfgetEnv dfgetEnv() {
         String env = System.getenv("DFGET_PATH");
         if (env != null && !env.isBlank()) {
-            return env;
+            return new DfgetEnv(env, "localhost");
         }
-        String resourcePath = DragonflyP2PExecutorTest.class
-                .getResource("/dfget.sh") != null
-                        ? DragonflyP2PExecutorTest.class.getResource("/dfget.sh").getPath()
-                        : null;
-        return resourcePath != null ? resourcePath : "dfget";
+        var resource = DragonflyP2PExecutorTest.class.getResource("/dfget.sh");
+        if (resource != null) {
+            return new DfgetEnv(extractDfgetScript(), resolveDockerGateway());
+        }
+        return new DfgetEnv("dfget", "localhost");
     }
 
+    private record DfgetEnv(String path, String host) {
+    }
+
+    private static String extractDfgetScript() {
+        try (var in = DragonflyP2PExecutorTest.class.getResourceAsStream("/dfget.sh")) {
+            if (in == null) {
+                return "dfget";
+            }
+            Path tmp = java.nio.file.Files.createTempFile("dfget-", ".sh");
+            java.nio.file.Files.write(tmp, in.readAllBytes());
+            tmp.toFile().setExecutable(true, false);
+            return tmp.toAbsolutePath().toString();
+        } catch (IOException e) {
+            return "dfget";
+        }
+    }
+
+    private static String resolveDockerGateway() {
+        String gateway = inspectDockerNetworkGateway("dragonfly-net");
+        if (gateway != null) {
+            return gateway;
+        }
+        gateway = inspectContainerGateway("dfdaemon1");
+        if (gateway != null) {
+            return gateway;
+        }
+        return "host.docker.internal";
+    }
+
+    private static String inspectDockerNetworkGateway(String networkName) {
+        try {
+            Process process = new ProcessBuilder(
+                    "docker",
+                    "network",
+                    "inspect",
+                    "-f",
+                    "{{(index .IPAM.Config 0).Gateway}}",
+                    networkName)
+                    .redirectErrorStream(true)
+                    .start();
+            byte[] output = process.getInputStream().readAllBytes();
+            int code = process.waitFor();
+            if (code == 0) {
+                String text = new String(output, StandardCharsets.UTF_8).trim();
+                if (!text.isBlank()) {
+                    return text;
+                }
+            }
+        } catch (IOException e) {
+            // ignore
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return null;
+    }
+
+    private static String inspectContainerGateway(String containerName) {
+        try {
+            Process process = new ProcessBuilder(
+                    "docker",
+                    "inspect",
+                    "-f",
+                    "{{range $k,$v := .NetworkSettings.Networks}}{{println $v.Gateway}}{{end}}",
+                    containerName)
+                    .redirectErrorStream(true)
+                    .start();
+            byte[] output = process.getInputStream().readAllBytes();
+            int code = process.waitFor();
+            if (code == 0) {
+                String text = new String(output, StandardCharsets.UTF_8).trim();
+                if (!text.isBlank()) {
+                    return text.split("\\s+")[0];
+                }
+            }
+        } catch (IOException e) {
+            // ignore
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return null;
+    }
+
+    
     private static void ensureDfgetAvailable(String dfgetPath) {
         try {
             Process process = new ProcessBuilder(dfgetPath, "--help")
