@@ -76,3 +76,15 @@ docker pull dragonflyoss/dfdaemon:latest
 docker pull dragonflyoss/manager:latest
 docker pull dragonflyoss/scheduler:latest
 ```
+
+
+## Supported runtimes
+- podman
+- docker
+If you need another inherit from runtime adapter in runtime module
+
+## P2P (Dragonfly)
+Currently supported via `dfget` CLI. 
+
+## Module docs:
+For more info see docs/*.md

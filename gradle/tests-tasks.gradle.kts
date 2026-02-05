@@ -4,6 +4,7 @@ import org.gradle.kotlin.dsl.the
 
 val sourceSets = the<SourceSetContainer>()
 val skipQuality = project.hasProperty("skipQuality")
+val disableLocal = project.hasProperty("disableLocal")
 
 tasks.named<Test>("test") {
     useJUnitPlatform {
@@ -11,7 +12,7 @@ tasks.named<Test>("test") {
             excludeTags("stress")
         }
         excludeTags("porto")
-        if (project.hasProperty("disableLocal")) {
+        if (disableLocal) {
             excludeTags("local")
         }
         if (skipQuality) {
@@ -73,7 +74,11 @@ tasks.register("integrationTest", Test::class) {
     dependsOn(integration.classesTaskName)
     testClassesDirs = integration.output.classesDirs
     classpath = integration.runtimeClasspath
-    useJUnitPlatform()
+    useJUnitPlatform {
+        if (disableLocal) {
+            excludeTags("local")
+        }
+    }
     testLogging {
         showStandardStreams = true
         events("failed", "skipped", "passed", "standardOut", "standardError")
