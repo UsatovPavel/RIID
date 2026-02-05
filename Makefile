@@ -51,15 +51,18 @@ dragonfly-multi:
 		dragonflyoss/scheduler:latest \
 		--config /etc/dragonfly/scheduler.yaml --console
 	docker run -d --name dfdaemon1 --network dragonfly-net --privileged \
-		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
+	-v "/tmp:/tmp" \
+	-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-multi.yaml
 	docker run -d --name dfdaemon2 --network dragonfly-net --privileged \
-		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
+	-v "/tmp:/tmp" \
+	-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-multi.yaml
 	docker run -d --name dfdaemon3 --network dragonfly-net --privileged \
-		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
+	-v "/tmp:/tmp" \
+	-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-multi.yaml
 

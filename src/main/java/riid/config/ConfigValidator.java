@@ -146,7 +146,8 @@ public final class ConfigValidator {
         if (dragonfly.enabledOrDefault()) {
             String dfgetPath = dragonfly.dfgetPath();
             if (dfgetPath == null || dfgetPath.isBlank()) {
-                throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_DFGET_PATH_REQUIRED.message());
+                throw new ConfigValidationException(
+                        ConfigValidationException.P2P.DRAGONFLY_DFGET_PATH_REQUIRED.message());
             }
         }
         String schedulerAddr = dragonfly.schedulerAddr();
