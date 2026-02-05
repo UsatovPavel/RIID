@@ -70,9 +70,14 @@ tasks.register("integrationTest", Test::class) {
     description = "Runs integration tests."
     group = "verification"
     val integration = sourceSets.getByName("integrationTest")
+    dependsOn(integration.classesTaskName)
     testClassesDirs = integration.output.classesDirs
     classpath = integration.runtimeClasspath
     useJUnitPlatform()
+    testLogging {
+        showStandardStreams = true
+        events("failed", "skipped", "passed", "standardOut", "standardError")
+    }
 }
 
 tasks.register("performanceTest", Test::class) {

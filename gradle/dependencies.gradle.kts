@@ -11,6 +11,7 @@ dependencies {
     add("testImplementation", platform("org.testcontainers:testcontainers-bom:1.21.4"))//idea say<=1.21 it vulnerable
     add("testImplementation", "org.testcontainers:junit-jupiter")//but this lib only in 1.21 version// TODO: at May check 2.0.3
     add("testImplementation", "org.testcontainers:testcontainers")//this lib has 2.0.3 version
+    add("testRuntimeOnly", "ch.qos.logback:logback-classic:1.5.12")
     add("compileOnly", "com.github.spotbugs:spotbugs-annotations:4.9.8")
     add("testCompileOnly", "com.github.spotbugs:spotbugs-annotations:4.9.8")
     add("implementation", "org.slf4j:slf4j-api:2.0.13")
