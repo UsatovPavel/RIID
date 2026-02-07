@@ -23,11 +23,17 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         if (!imagePath.toFile().exists()) {
             throw new IOException("Image file not found: " + imagePath);
         }
+        var fileName = imagePath.getFileName();
+        if (fileName == null) {
+            throw new IOException("Image file has no filename: " + imagePath);
+        }
+        String layerName = fileName.toString();
 
         List<String> cmd = List.of(
                 PORTOCTL_BIN,
                 "layer",
                 "-I",
+                layerName,
                 imagePath.toAbsolutePath().toString()
         );
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
