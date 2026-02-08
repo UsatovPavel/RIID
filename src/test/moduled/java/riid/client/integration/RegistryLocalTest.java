@@ -10,8 +10,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.function.Executable;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,6 +61,8 @@ public class RegistryLocalTest {
 
     @BeforeAll
     public static void startRegistryAndSeed() throws Exception {
+        Assumptions.assumeTrue(DockerClientFactory.instance().isDockerAvailable(),
+                "Docker is required for RegistryLocalTest");
         REGISTRY.start();
         String host = REGISTRY.getHost();
         int port = REGISTRY.getMappedPort(5000);

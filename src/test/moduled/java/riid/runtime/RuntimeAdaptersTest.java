@@ -115,8 +115,7 @@ class RuntimeAdaptersTest {
 
     @Test
     void portoThrowsOnNonZeroExit() throws Exception {
-        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "porto-", TAR_SUFFIX);
-        fs.writeString(tmp, PAYLOAD);
+        Path tmp = createMinimalOciArchive();
         PortoRuntimeAdapter adapter = new TestPortoAdapter(2, "o", ERR);
         IOException ex = assertThrows(IOException.class, () -> adapter.importImage(tmp));
         assertContains(ex.getMessage(), "portoctl layer import failed");
@@ -125,8 +124,7 @@ class RuntimeAdaptersTest {
 
     @Test
     void portoSuccess() throws Exception {
-        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "porto-", TAR_SUFFIX);
-        fs.writeString(tmp, PAYLOAD);
+        Path tmp = createMinimalOciArchive();
         PortoRuntimeAdapter adapter = new TestPortoAdapter(0, "ok", "");
         assertDoesNotThrow(() -> adapter.importImage(tmp));
     }
@@ -148,7 +146,11 @@ class RuntimeAdaptersTest {
         String configDigest = sha256(configBytes);
         Files.write(blobs.resolve(configDigest), configBytes);
 
-        byte[] layerBytes = "layer".getBytes(StandardCharsets.UTF_8);
+        Path layerDir = Files.createTempDirectory("oci-layer");
+        Path layerTar = Files.createTempFile("oci-layer", TAR_SUFFIX);
+        Files.writeString(layerDir.resolve("hello.txt"), "hello");
+        runTar(layerTar, layerDir);
+        byte[] layerBytes = Files.readAllBytes(layerTar);
         String layerDigest = sha256(layerBytes);
         Files.write(blobs.resolve(layerDigest), layerBytes);
 
