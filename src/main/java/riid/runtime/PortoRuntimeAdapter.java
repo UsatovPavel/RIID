@@ -3,13 +3,10 @@ package riid.runtime;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +26,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     private static final Logger LOGGER = LoggerFactory.getLogger(PortoRuntimeAdapter.class);
     private static final String PORTOCTL_BIN = "portoctl";
     private static final String TAR_BIN = "tar";
+    private static final String EXIT_SUFFIX = "): ";
     private static final String WHITEOUT_PREFIX = ".wh.";
     private static final String WHITEOUT_OPAQUE = ".wh..wh..opq";
     private static final String OCI_LAYOUT = "oci-layout";
@@ -122,7 +120,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         );
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         if (shellResult.exitCode() != 0) {
-            throw new IOException("portoctl layer import failed (exit " + shellResult.exitCode() + "): "
+            throw new IOException("portoctl layer import failed (exit " + shellResult.exitCode() + EXIT_SUFFIX
                     + shellResult.stdout() + shellResult.stderr());
         }
     }
@@ -151,51 +149,66 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     private static void applyLayer(Path layerBlob, boolean gzipLayer, Path rootfsDir)
             throws IOException, InterruptedException {
-        Path layerDir = Files.createTempDirectory("porto-layer-");
-        try {
-            untar(layerBlob, layerDir, gzipLayer);
-            applyLayerDir(layerDir, rootfsDir);
-        } finally {
-            deleteRecursively(layerDir);
+        // Stream layer into rootfs: apply whiteouts first, then extract layer, then remove whiteout markers.
+        List<String> entries = listTarEntries(layerBlob, gzipLayer);
+        List<String> whiteouts = applyWhiteoutsFromEntries(entries, rootfsDir);
+        untar(layerBlob, rootfsDir, gzipLayer);
+        deleteWhiteoutMarkers(whiteouts, rootfsDir);
+    }
+
+    private static List<String> applyWhiteoutsFromEntries(List<String> entries, Path rootfsDir) throws IOException {
+        List<String> whiteouts = new java.util.ArrayList<>();
+        for (String rawEntry : entries) {
+            String entry = normalizeTarEntry(rawEntry);
+            if (entry.isBlank()) {
+                continue;
+            }
+            Path rel = Path.of(entry);
+            Path fileName = rel.getFileName();
+            if (fileName == null) {
+                continue;
+            }
+            String name = fileName.toString();
+            if (!name.startsWith(WHITEOUT_PREFIX)) {
+                continue;
+            }
+            whiteouts.add(entry);
+            Path parentRel = rel.getParent();
+            Path parent = parentRel == null ? rootfsDir : rootfsDir.resolve(parentRel);
+            if (WHITEOUT_OPAQUE.equals(name)) {
+                deleteChildren(parent);
+            } else {
+                String targetName = name.substring(WHITEOUT_PREFIX.length());
+                Path target = parent.resolve(targetName);
+                if (!Files.exists(target)) {
+                    LOGGER.warn("Whiteout target missing: {}", target);
+                    continue;
+                }
+                deleteRecursively(target);
+            }
+        }
+        return whiteouts;
+    }
+
+    private static void deleteWhiteoutMarkers(List<String> whiteouts, Path rootfsDir) throws IOException {
+        for (String entry : whiteouts) {
+            Path marker = rootfsDir.resolve(entry);
+            if (Files.exists(marker)) {
+                Files.deleteIfExists(marker);
+            }
         }
     }
 
-    /**
-     * Apply extracted layer directory onto rootfs, honoring whiteouts.
-     */
-    private static void applyLayerDir(Path layerDir, Path rootfsDir) throws IOException {
-        // First pass: apply whiteouts
-        try (Stream<Path> stream = Files.walk(layerDir)) {
+    private static void deleteChildren(Path dir) throws IOException {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (var stream = Files.list(dir)) {
             stream.forEach(path -> {
-                var fileName = path.getFileName();
-                if (fileName == null) {
-                    return;
-                }
-                String name = fileName.toString();
-                if (!name.startsWith(WHITEOUT_PREFIX)) {
-                    return;
-                }
-                Path rel = layerDir.relativize(path);
-                Path parentRel = rel.getParent();
-                Path parent = parentRel == null ? rootfsDir : rootfsDir.resolve(parentRel);
-                if (WHITEOUT_OPAQUE.equals(name)) {
-                    try {
-                        deleteChildren(parent);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                } else {
-                    String targetName = name.substring(WHITEOUT_PREFIX.length());
-                    Path target = parent.resolve(targetName);
-                    if (!Files.exists(target)) {
-                        LOGGER.warn("Whiteout target missing: {}", target);
-                        return;
-                    }
-                    try {
-                        deleteRecursively(target);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                try {
+                    deleteRecursively(path);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
                 }
             });
         } catch (RuntimeException e) {
@@ -204,63 +217,13 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
             }
             throw e;
         }
-
-        // Second pass: copy layer contents into rootfs, skipping whiteouts
-        try (Stream<Path> stream = Files.walk(layerDir)) {
-            for (Path path : stream.toList()) {
-                Path rel = layerDir.relativize(path);
-                if (rel.toString().isEmpty()) {
-                    continue;
-                }
-                if (isWhiteoutPath(rel)) {
-                    continue;
-                }
-                Path dest = rootfsDir.resolve(rel);
-                if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-                    Files.createDirectories(dest);
-                } else if (Files.isSymbolicLink(path)) {
-                    Path parent = dest.getParent();
-                    if (parent != null) {
-                        Files.createDirectories(parent);
-                    }
-                    Path target = Files.readSymbolicLink(path);
-                    Files.deleteIfExists(dest);
-                    Files.createSymbolicLink(dest, target);
-                } else {
-                    Path parent = dest.getParent();
-                    if (parent != null) {
-                        Files.createDirectories(parent);
-                    }
-                    Files.copy(path, dest,
-                            LinkOption.NOFOLLOW_LINKS,
-                            StandardCopyOption.REPLACE_EXISTING,
-                            StandardCopyOption.COPY_ATTRIBUTES);
-                }
-            }
-        }
-    }
-
-    private static boolean isWhiteoutPath(Path relPath) {
-        Path fileName = relPath.getFileName();
-        return fileName != null && fileName.toString().startsWith(WHITEOUT_PREFIX);
-    }
-
-    private static void deleteChildren(Path dir) throws IOException {
-        if (!Files.exists(dir)) {
-            return;
-        }
-        try (Stream<Path> stream = Files.list(dir)) {
-            for (Path child : stream.toList()) {
-                deleteRecursively(child);
-            }
-        }
     }
 
     private static void deleteRecursively(Path path) throws IOException {
         if (!Files.exists(path)) {
             return;
         }
-        try (Stream<Path> stream = Files.walk(path)) {
+        try (var stream = Files.walk(path)) {
             List<Path> paths = stream.toList();
             for (int i = paths.size() - 1; i >= 0; i--) {
                 Files.deleteIfExists(paths.get(i));
@@ -274,7 +237,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 : List.of(TAR_BIN, "-xf", archive.toString(), "-C", destDir.toString());
         BoundedCommandExecution.ShellResult result = BoundedCommandExecution.run(cmd);
         if (result.exitCode() != 0) {
-            throw new IOException("tar extract failed (exit " + result.exitCode() + "): "
+            throw new IOException("tar extract failed (exit " + result.exitCode() + EXIT_SUFFIX
                     + result.stdout() + result.stderr());
         }
     }
@@ -283,7 +246,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         List<String> cmd = List.of(TAR_BIN, "-cf", destTar.toString(), "-C", sourceDir.toString(), ".");
         BoundedCommandExecution.ShellResult result = BoundedCommandExecution.run(cmd);
         if (result.exitCode() != 0) {
-            throw new IOException("tar create failed (exit " + result.exitCode() + "): "
+            throw new IOException("tar create failed (exit " + result.exitCode() + EXIT_SUFFIX
                     + result.stdout() + result.stderr());
         }
     }
@@ -294,7 +257,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 : List.of(TAR_BIN, "-tf", archive.toString());
         BoundedCommandExecution.ShellResult result = BoundedCommandExecution.run(cmd);
         if (result.exitCode() != 0) {
-            throw new IOException("tar list failed (exit " + result.exitCode() + "): "
+            throw new IOException("tar list failed (exit " + result.exitCode() + EXIT_SUFFIX
                     + result.stdout() + result.stderr());
         }
         return result.stdout().lines()

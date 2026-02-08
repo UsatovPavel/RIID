@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import riid.app.ImageId;
 import riid.app.ImageLoadingFacade;
@@ -27,7 +26,7 @@ import riid.runtime.PortoRuntimeAdapter;
 
 @Tag("filesystem")
 @Tag("local")
-@EnabledIfEnvironmentVariable(named = "PORTO_INTEGRATION", matches = ".*")
+@Tag("porto")
 class PortoRuntimeAdapterIntegrationTest {
 
     private static final String REPO = "library/alpine";
@@ -80,7 +79,6 @@ class PortoRuntimeAdapterIntegrationTest {
 
     @Test
     @Tag("local")
-    @EnabledIfEnvironmentVariable(named = "PORTO_INTEGRATION", matches = ".*")
     void downloadsViaRiidAndExportsRootfsTar() throws Exception {
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
@@ -111,7 +109,6 @@ class PortoRuntimeAdapterIntegrationTest {
 
     @Test
     @Tag("local")
-    @EnabledIfEnvironmentVariable(named = "PORTO_INTEGRATION", matches = ".*")
     void exportsRootfsAndLoadsViaPortoctl() throws Exception {
         String image = System.getenv().getOrDefault("PODMAN_IMAGE", "alpine:latest");
         if (!imageExists(image)) {

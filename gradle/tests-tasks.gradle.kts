@@ -16,6 +16,7 @@ tasks.named<Test>("test") {
         if (skipQuality) {
             excludeTags("archunit")
         }
+        excludeTags("porto")
     }
     dependsOn("integrationTest", "moduledTest")
     testClassesDirs = files()
@@ -43,6 +44,14 @@ tasks.register("testLocal", Test::class) {
     }
 }
 
+tasks.register("testPorto", Test::class) {
+    group = "verification"
+    description = "Run porto-tagged tests"
+    useJUnitPlatform {
+        includeTags("porto")
+    }
+}
+
 tasks.register("testNoFilesystem", Test::class) {
     group = "verification"
     description = "Run tests excluding filesystem-tagged tests"
@@ -63,7 +72,9 @@ tasks.register("integrationTest", Test::class) {
     val integration = sourceSets.getByName("integrationTest")
     testClassesDirs = integration.output.classesDirs
     classpath = integration.runtimeClasspath
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("porto")
+    }
 }
 
 tasks.register("performanceTest", Test::class) {
