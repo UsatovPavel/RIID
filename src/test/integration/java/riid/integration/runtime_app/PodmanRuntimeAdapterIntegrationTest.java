@@ -63,8 +63,9 @@ class PodmanRuntimeAdapterIntegrationTest {
         fs.writeString(configPath, configYaml);
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
-        ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
+            ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
             loadedId = app.load(imageId, PODMAN);
+            System.out.println("loadedId=" + loadedId);
         }
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
@@ -102,6 +103,7 @@ class PodmanRuntimeAdapterIntegrationTest {
                     java.util.List.of())) {
             ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
             ImageId loadedId = app.load(imageId, "podman");
+            System.out.println("loadedId=" + loadedId);
             // Verify the image can run a trivial command
             run(List.of(PODMAN, "run", "--rm", loadedId.toString(), "true"));
             }
