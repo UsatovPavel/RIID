@@ -63,7 +63,7 @@ class PodmanRuntimeAdapterIntegrationTest {
         fs.writeString(configPath, configYaml);
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
-            ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
+        ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
             loadedId = app.load(imageId, PODMAN);
             System.out.println("loadedId=" + loadedId);
         }
