@@ -36,7 +36,12 @@ public class BlobRetryLiveTest {
         var manifestResult = client.fetchManifest(repo, ref);
         var layer = manifestResult.manifest().layers().getFirst();
 
-        BlobRequest req = new BlobRequest(repo, layer.digest(), layer.size(), layer.mediaType());
+        BlobRequest req = new BlobRequest(
+                repo,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
 
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "alpine-layer-retry", ".tar").toFile();
         tmp.deleteOnExit();

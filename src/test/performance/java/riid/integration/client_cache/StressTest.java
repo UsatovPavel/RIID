@@ -60,7 +60,12 @@ public class StressTest {
     void downloadManyInParallel() throws Exception {
         Manifest manifest = CLIENT.fetchManifest(REPO, REF).manifest();
         var layer = manifest.layers().getFirst(); // tiny layer in busybox
-        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
+        BlobRequest req = new BlobRequest(
+                REPO,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
 
         int count = 1000;
         try (ExecutorService pool = Executors.newFixedThreadPool(8)) {

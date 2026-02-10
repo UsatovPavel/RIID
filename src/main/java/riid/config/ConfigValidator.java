@@ -19,6 +19,8 @@ import riid.runtime.RuntimeConfig;
  * Validates application configuration.
  */
 public final class ConfigValidator {
+    private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
+
     private ConfigValidator() {
     }
 
@@ -83,8 +85,10 @@ public final class ConfigValidator {
         if (http.initialBackoff().compareTo(http.maxBackoff()) > 0) {
             throw new ConfigValidationException(ConfigValidationException.Reason.HTTP_BACKOFF_INVERTED.message());
         }
-        if (http.backoffExponentBase() < 2) {
-            throw new ConfigValidationException(ConfigValidationException.Reason.HTTP_BACKOFF_EXPONENT_BASE_MIN.message());
+        if (http.backoffExponentBase() < MIN_BACKOFF_EXPONENT_BASE) {
+            throw new ConfigValidationException(
+                ConfigValidationException.Reason.HTTP_BACKOFF_EXPONENT_BASE_MIN.message()
+            );
         }
         String userAgent = http.userAgent();
         if (userAgent == null || userAgent.isBlank()) {

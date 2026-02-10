@@ -31,6 +31,7 @@ import riid.runtime.RuntimeAdapter;
  * Minimal CLI parser/runner for ImageLoadingFacade.
  */
 public final class CliApplication {
+    private static final String OPTION_CONFIG = "config";
     private static final Path DEFAULT_CONFIG_PATH = Paths.get("config", "config.yaml");
     private static final RegistryEndpoint DEFAULT_REGISTRY_ENDPOINT =
             new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
@@ -242,7 +243,7 @@ public final class CliApplication {
                     .longOpt("help")
                     .desc("Show help")
                     .build());
-            addOption(parsedOptions, "config", ARG_PATH);
+            addOption(parsedOptions, OPTION_CONFIG, ARG_PATH);
             addOption(parsedOptions, "repo", "name");
             addOption(parsedOptions, "tag", "tag");
             addOption(parsedOptions, "ref", "ref");
@@ -276,8 +277,8 @@ public final class CliApplication {
                 return new ParseResult(null, true, null);
             }
 
-            boolean configProvidedByUser = cmd.hasOption("config");
-            Path configPath = Paths.get(cmd.getOptionValue("config", DEFAULT_CONFIG_PATH.toString()));
+            boolean configProvidedByUser = cmd.hasOption(OPTION_CONFIG);
+            Path configPath = Paths.get(cmd.getOptionValue(OPTION_CONFIG, DEFAULT_CONFIG_PATH.toString()));
             String repo = cmd.getOptionValue("repo");
             String tag = cmd.getOptionValue("tag");
             String ref = cmd.getOptionValue("ref");

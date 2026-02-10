@@ -46,7 +46,12 @@ class DockerHubLiveTest {
             assertFalse(mf.layers().isEmpty(), "layers should not be empty");
 
             Descriptor layer = mf.layers().getFirst();
-            BlobRequest req = new BlobRequest(repo, layer.digest(), layer.size(), layer.mediaType());
+            BlobRequest req = new BlobRequest(
+                    repo,
+                    layer.digest(),
+                    layer.size(),
+                    layer.mediaType(),
+                    new BlobRequest.RangeSpec.All());
 
             var sizeOpt = client.headBlob(repo, layer.digest());
             File tmp = Files.createTempFile("dockerhub-layer-", ".tar").toFile();

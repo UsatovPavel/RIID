@@ -84,7 +84,8 @@ public final class RegistryClientImpl implements RegistryClient {
                 repository,
                 manifest.config().digest(),
                 manifest.config().size(),
-                manifest.config().mediaType());
+                manifest.config().mediaType(),
+                new BlobRequest.RangeSpec.All());
         return blobService.fetchBlob(endpoint, req, target, scope);
     }
 

@@ -112,7 +112,7 @@ public class BlobService implements BlobServiceApi {
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
         boolean rangeEnabled = blobRangeConfig.mode() != BlobRangeConfig.RangeMode.OFF;
         String rangeValue = rangeEnabled ? req.rangeHeaderValue() : null;
-        if (req.range() != null && !rangeEnabled) {
+        if (req.isRangeRequest() && !rangeEnabled) {
             LOGGER.warn("Range disabled by config for {}, ignoring requested range", req.digest());
         }
         if (rangeValue != null) {
@@ -120,7 +120,7 @@ public class BlobService implements BlobServiceApi {
         }
         HttpResult<InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
-        if (status == HttpStatus.RANGE_NOT_SATISFIABLE_416 && req.range() != null && rangeEnabled) {
+        if (status == HttpStatus.RANGE_NOT_SATISFIABLE_416 && req.isRangeRequest() && rangeEnabled) {
             closeQuietly(resp.body());
             if (allowRetryWithoutRange && blobRangeConfig.fallbackOn416()) {
                 LOGGER.warn("Range not satisfiable for {} (range={}), retrying without Range",
@@ -129,7 +129,8 @@ public class BlobService implements BlobServiceApi {
                         req.repository(),
                         req.digest(),
                         req.expectedSizeBytes(),
-                        req.mediaType());
+                        req.mediaType(),
+                        new BlobRequest.RangeSpec.All());
                 return fetchBlob(endpoint, noRange, sink, scope, false);
             }
         }
@@ -144,7 +145,7 @@ public class BlobService implements BlobServiceApi {
         }
 
         ContentRange contentRange = null;
-        if (status == HttpStatus.PARTIAL_CONTENT_206 && req.range() != null && rangeEnabled) {
+        if (status == HttpStatus.PARTIAL_CONTENT_206 && req.isRangeRequest() && rangeEnabled) {
             String raw = resp.firstHeader("Content-Range").orElse(null);
             if (raw == null || raw.isBlank()) {
                 throw new ClientException(
@@ -162,7 +163,7 @@ public class BlobService implements BlobServiceApi {
                             "Content-Length mismatch for partial blob download");
                 }
             }
-        } else if (req.range() != null && status == HttpStatus.OK_200) {
+        } else if (req.isRangeRequest() && status == HttpStatus.OK_200) {
             LOGGER.warn("Range ignored by registry for {} (range={})", req.digest(), rangeValue);
         }
 
@@ -186,12 +187,14 @@ public class BlobService implements BlobServiceApi {
             boolean isFullRange = contentRange != null && contentRange.coversFull();
             if (contentRange != null
                     && !isFullRange
-                    && blobRangeConfig.partialDigestValidation() == BlobRangeConfig.PartialDigestValidation.REQUIRE_FULL) {
+                    && blobRangeConfig.partialDigestValidation() 
+                    == BlobRangeConfig.PartialDigestValidation.REQUIRE_FULL
+                ) {
                 throw new ClientException(
                         new ClientError.Parse(ClientError.ParseKind.RANGE, "Partial range requires full validation"),
                         "Partial range requires full validation");
             }
-            boolean shouldValidateDigest = req.range() == null || isFullRange;
+            boolean shouldValidateDigest = !req.isRangeRequest() || isFullRange;
             String digest;
             if (shouldValidateDigest) {
                 digest = writeAndHashStreaming(is, os);
@@ -320,6 +323,7 @@ public class BlobService implements BlobServiceApi {
         try {
             md = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
+            LOGGER.warn("Blob SHA-256 not available {}/{}: {}", is.toString(), os.toString(), e.getMessage(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "SHA-256 not available"),
                     "SHA-256 not available",

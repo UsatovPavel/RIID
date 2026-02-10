@@ -1,8 +1,8 @@
 package riid.client.api;
 
-/**
- * Request to fetch a blob.
- */
+import java.util.Objects;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 
@@ -11,48 +11,104 @@ public record BlobRequest(
         String digest,
         Long expectedSizeBytes,
         String mediaType,
-        RangeSpec range
+        @NonNull RangeSpec range
 ) {
-    public BlobRequest(String repository, String digest, Long expectedSizeBytes, String mediaType) {
-        this(repository, digest, expectedSizeBytes, mediaType, null);
+    private static final String RANGE_START_MUST_BE_NON_NEGATIVE = "Range startOffsetBytes must be >= 0";
+
+    public BlobRequest {
+        range = Objects.requireNonNull(range, "range");
     }
 
     public String rangeHeaderValue() {
-        return range != null ? range.toHeaderValue() : null;
+        return range.toHeaderValue();
+    }
+
+    public boolean isRangeRequest() {
+        return !(range instanceof RangeSpec.All);
     }
 
     /**
      * Byte range request according to RFC 7233.
-     * startOffsetBytes/endOffsetBytes are measured in bytes and may be null to represent open/suffix ranges.
+     * Implementations represent all supported single-range forms.
      */
-    public record RangeSpec(Long startOffsetBytes, Long endOffsetBytes) {
-        public RangeSpec {
-            if (startOffsetBytes == null && endOffsetBytes == null) {
-                throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range startOffsetBytes/endOffsetBytes cannot both be null"),
-                        "Range startOffsetBytes/endOffsetBytes cannot both be null");
-            }
-            if (startOffsetBytes != null && startOffsetBytes < 0) {
-                throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range startOffsetBytes must be >= 0"),
-                        "Range startOffsetBytes must be >= 0");
-            }
-            if (endOffsetBytes != null && endOffsetBytes < 0) {
-                throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range endOffsetBytes must be >= 0"),
-                        "Range endOffsetBytes must be >= 0");
-            }
-            if (startOffsetBytes != null && endOffsetBytes != null && endOffsetBytes < startOffsetBytes) {
-                throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range endOffsetBytes must be >= startOffsetBytes"),
-                        "Range endOffsetBytes must be >= startOffsetBytes");
+    public sealed interface RangeSpec permits RangeSpec.All, RangeSpec.From, RangeSpec.Bounded, RangeSpec.Suffix {
+        String toHeaderValue();
+
+        /**
+         * Full blob download, without Range header.
+         */
+        record All() implements RangeSpec {
+            @Override
+            public String toHeaderValue() {
+                return null;
             }
         }
 
-        public String toHeaderValue() {
-            String startPart = startOffsetBytes != null ? startOffsetBytes.toString() : "";
-            String endPart = endOffsetBytes != null ? endOffsetBytes.toString() : "";
-            return "bytes=" + startPart + "-" + endPart;
+        /**
+         * Range from startOffsetBytes to the end: "bytes=start-".
+         */
+        record From(long startOffsetBytes) implements RangeSpec {
+            public From {
+                if (startOffsetBytes < 0) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, RANGE_START_MUST_BE_NON_NEGATIVE),
+                            RANGE_START_MUST_BE_NON_NEGATIVE);
+                }
+            }
+
+            @Override
+            public String toHeaderValue() {
+                return "bytes=" + startOffsetBytes + "-";
+            }
+        }
+
+        /**
+         * Bounded range: "bytes=start-end".
+         */
+        record Bounded(long startOffsetBytes, long endOffsetBytes) implements RangeSpec {
+            public Bounded {
+                if (startOffsetBytes < 0) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, RANGE_START_MUST_BE_NON_NEGATIVE),
+                            RANGE_START_MUST_BE_NON_NEGATIVE);
+                }
+                if (endOffsetBytes < 0) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, "Range endOffsetBytes must be >= 0"),
+                            "Range endOffsetBytes must be >= 0");
+                }
+                if (endOffsetBytes < startOffsetBytes) {
+                    throw new ClientException(
+                            new ClientError.Parse(
+                                ClientError.ParseKind.RANGE,
+                                "Range endOffsetBytes must be >= startOffsetBytes"
+                            ),
+                            "Range endOffsetBytes must be >= startOffsetBytes");
+                }
+            }
+
+            @Override
+            public String toHeaderValue() {
+                return "bytes=" + startOffsetBytes + "-" + endOffsetBytes;
+            }
+        }
+
+        /**
+         * Suffix range: "bytes=-lastBytes".
+         */
+        record Suffix(long lastBytes) implements RangeSpec {
+            public Suffix {
+                if (lastBytes <= 0) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, "Range lastBytes must be > 0"),
+                            "Range lastBytes must be > 0");
+                }
+            }
+
+            @Override
+            public String toHeaderValue() {
+                return "bytes=-" + lastBytes;
+            }
         }
     }
 }

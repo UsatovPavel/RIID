@@ -13,33 +13,46 @@ class BlobRequestTest {
     @Test
     void rangeHeaderForBoundedRange() {
         BlobRequest req = new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream",
-                new BlobRequest.RangeSpec(2L, 5L));
+                new BlobRequest.RangeSpec.Bounded(2L, 5L));
         assertEquals("bytes=2-5", req.rangeHeaderValue());
     }
 
     @Test
     void rangeHeaderForOpenEndedRange() {
         BlobRequest req = new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream",
-                new BlobRequest.RangeSpec(2L, null));
+                new BlobRequest.RangeSpec.From(2L));
         assertEquals("bytes=2-", req.rangeHeaderValue());
     }
 
     @Test
     void rangeHeaderForSuffixRange() {
         BlobRequest req = new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream",
-                new BlobRequest.RangeSpec(null, 10L));
+                new BlobRequest.RangeSpec.Suffix(10L));
         assertEquals("bytes=-10", req.rangeHeaderValue());
     }
 
     @Test
     void rangeHeaderIsNullWhenRangeNotProvided() {
-        BlobRequest req = new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream");
+        BlobRequest req = new BlobRequest(
+                "repo",
+                "sha256:a",
+                10L,
+                "application/octet-stream",
+                new BlobRequest.RangeSpec.All());
         assertNull(req.rangeHeaderValue());
     }
 
     @Test
-    void rangeSpecRejectsBothBoundsNull() {
-        var ex = assertThrows(ClientException.class, () -> new BlobRequest.RangeSpec(null, null));
+    void blobRequestRejectsNullRangeSpec() {
+        var ex = assertThrows(
+                NullPointerException.class,
+                () -> new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream", null));
+        assertNotNull(ex.getMessage());
+    }
+
+    @Test
+    void boundedRangeRejectsInvertedBounds() {
+        var ex = assertThrows(ClientException.class, () -> new BlobRequest.RangeSpec.Bounded(5L, 2L));
         assertNotNull(ex.getMessage());
     }
 }

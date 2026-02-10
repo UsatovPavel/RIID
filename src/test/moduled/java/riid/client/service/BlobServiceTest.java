@@ -45,7 +45,7 @@ class BlobServiceTest {
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest(REPO, "sha256:ignored", 4L, MEDIA_TYPE);
+        BlobRequest req = new BlobRequest(REPO, "sha256:ignored", 4L, MEDIA_TYPE, new BlobRequest.RangeSpec.All());
 
         var ex = assertThrows(ClientException.class, () -> svc.fetchBlob(endpoint, req, sink, SCOPE));
         assertNotNull(ex.getMessage());
@@ -61,7 +61,7 @@ class BlobServiceTest {
 
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest(REPO, null, (long) data.length, MEDIA_TYPE);
+        BlobRequest req = new BlobRequest(REPO, null, (long) data.length, MEDIA_TYPE, new BlobRequest.RangeSpec.All());
 
         BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
 
@@ -80,7 +80,7 @@ class BlobServiceTest {
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
-                new BlobRequest.RangeSpec(0L, 1L));
+                new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         svc.fetchBlob(endpoint, req, sink, SCOPE);
         assertEquals("bytes=0-1", http.lastHeaders.get("Range"));
@@ -100,7 +100,7 @@ class BlobServiceTest {
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, "sha256:full", 10L, MEDIA_TYPE,
-                new BlobRequest.RangeSpec(0L, 1L));
+                new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
 
@@ -118,7 +118,7 @@ class BlobServiceTest {
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, "sha256:full", 10L, MEDIA_TYPE,
-                new BlobRequest.RangeSpec(0L, 1L));
+                new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         var ex = assertThrows(ClientException.class, () -> svc.fetchBlob(endpoint, req, sink, SCOPE));
         assertNotNull(ex.getMessage());
@@ -136,7 +136,7 @@ class BlobServiceTest {
         BlobService svc = new BlobService(http, new NoAuth(), null);
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
-                new BlobRequest.RangeSpec(0L, 1L));
+                new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
         assertEquals(data.length, result.size());
