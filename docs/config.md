@@ -29,9 +29,10 @@ app:
     - registry.example.com
 ```
 
-### Optional runtime output limits
+### Optional runtime settings
 ```yaml
 runtime:
+  dockerBin: "/usr/bin/docker" # optional, default: "docker"
   output:
     maxStdoutBytes: 32768
     maxStderrBytes: 32768
@@ -59,6 +60,7 @@ runtime:
 - `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `userAgent` not blank, `maxRetries` and `maxRedirects` must be >= 0.
 - `client.auth.defaultTokenTtlSeconds` > 0; cert/key/ca paths, if provided, must exist.
 - `app.tempDirectory`, if present, must not be blank; `app.allowedRegistries` entries must not be blank.
+- `runtime.dockerBin`, if present, must not be blank.
 - `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.
 
 ### Known notes

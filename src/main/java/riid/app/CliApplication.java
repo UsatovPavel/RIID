@@ -144,6 +144,7 @@ public final class CliApplication {
             }
         };
     }
+    
     private void printUsage(PrintWriter writer) {
         Path defaultConfigPath = Paths.get("config.yaml");
         String usage = String.join("%n",
