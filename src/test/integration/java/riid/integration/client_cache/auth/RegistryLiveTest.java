@@ -57,7 +57,12 @@ public class RegistryLiveTest {
         assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
+        BlobRequest req = new BlobRequest(
+                REPO,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
 
         // HEAD
         Optional<Long> sizeOpt = blobService.headBlob(DOCKER_HUB, REPO, layer.digest(), SCOPE);

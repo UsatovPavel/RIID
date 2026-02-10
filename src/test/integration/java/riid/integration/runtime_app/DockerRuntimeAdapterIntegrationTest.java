@@ -17,8 +17,10 @@ import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 import riid.cache.oci.TempFileCacheAdapter;
+import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
+import riid.config.TestConfigYaml;
 import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.runtime.DockerRuntimeAdapter;
@@ -38,28 +40,7 @@ class DockerRuntimeAdapterIntegrationTest {
         ImageId loadedId;
         HostFilesystem fs = new NioHostFilesystem();
         Path configPath = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-docker-", ".yaml");
-        String configYaml = """
-                client:
-                  http:
-                    connectTimeout: PT5S
-                    requestTimeout: PT10S
-                    maxRetries: 2
-                    retryIdempotentOnly: true
-                    followRedirects: true
-                    initialBackoff: PT0.2S
-                    maxBackoff: PT2S
-                  auth:
-                    defaultTokenTtlSeconds: 600
-                  registries:
-                    - scheme: https
-                      host: registry-1.docker.io
-                      port: -1
-                dispatcher:
-                  maxConcurrentRegistry: 3
-                app:
-                  tempDirectory: "build/test-fs"
-                """;
-        fs.writeString(configPath, configYaml);
+        fs.writeString(configPath, TestConfigYaml.dockerHubConfigWithRuntimeTempDir(3, "build/test-fs"));
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
             ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
@@ -83,8 +64,8 @@ class DockerRuntimeAdapterIntegrationTest {
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
-             riid.client.api.RegistryClientImpl client =
-                     new riid.client.api.RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
+             RegistryClientImpl client =
+                     new RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
             RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
                     client, cache, new P2PExecutor.NoOp(), fs);
             RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(DOCKER, new DockerRuntimeAdapter()));

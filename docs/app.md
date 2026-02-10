@@ -31,7 +31,10 @@ Reference:
 - `--digest` — `sha256:...` (overrides tag/ref)
 
 Config:
-- `--config` — path to YAML config (default: `config/config.yaml`)
+- `--config` — path to YAML config
+- If `--config` is omitted, CLI first checks default path `config/config.yaml`.
+- If default path is missing, CLI uses built-in defaults (Docker Hub endpoint + default HTTP/auth/dispatcher settings).
+- If `--config` is explicitly provided and file is missing/invalid, CLI fails with an error.
 
 Basic auth (password options are mutually exclusive):
 - `--username <user>`

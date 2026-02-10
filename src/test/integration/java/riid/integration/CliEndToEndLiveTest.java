@@ -11,6 +11,7 @@ import riid.app.fs.TestPaths;
 import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
 import riid.config.ConfigLoader;
+import riid.config.TestConfigYaml;
 import riid.p2p.P2PExecutor;
 import riid.runtime.RuntimeAdapter;
 
@@ -37,17 +38,7 @@ class CliEndToEndLiveTest {
     void cliDownloadsAndInvokesRuntimeStub() throws Exception {
         HostFilesystem fs = new NioHostFilesystem();
         Path config = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
-        fs.writeString(config, """
-                client:
-                  http: {}
-                  auth: {}
-                  registries:
-                    - scheme: https
-                      host: registry-1.docker.io
-                      port: -1
-                dispatcher:
-                  maxConcurrentRegistry: 2
-                """);
+        fs.writeString(config, TestConfigYaml.minimalDockerHubConfigWithEmptyAuth(2));
 
         RecordingRuntimeAdapter runtime = new RecordingRuntimeAdapter(fs);
         ByteArrayOutputStream outBuf = new ByteArrayOutputStream();

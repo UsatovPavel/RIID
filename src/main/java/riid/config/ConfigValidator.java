@@ -21,6 +21,8 @@ import riid.runtime.RuntimeConfig;
  * Validates application configuration.
  */
 public final class ConfigValidator {
+    private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
+
     private ConfigValidator() {
     }
 
@@ -86,6 +88,11 @@ public final class ConfigValidator {
         if (http.initialBackoff().compareTo(http.maxBackoff()) > 0) {
             throw new ConfigValidationException(ConfigValidationException.Http.BACKOFF_INVERTED.message());
         }
+        if (http.backoffExponentBase() < MIN_BACKOFF_EXPONENT_BASE) {
+            throw new ConfigValidationException(
+                ConfigValidationException.Http.BACKOFF_EXPONENT_BASE_MIN.message()
+            );
+        }
         String userAgent = http.userAgent();
         if (userAgent == null || userAgent.isBlank()) {
             throw new ConfigValidationException(ConfigValidationException.Http.USER_AGENT_BLANK.message());
@@ -122,6 +129,10 @@ public final class ConfigValidator {
     private static void validateRuntime(RuntimeConfig runtime) {
         if (runtime == null) {
             return;
+        }
+        String dockerBin = runtime.dockerBin();
+        if (dockerBin != null && dockerBin.isBlank()) {
+            throw new ConfigValidationException("runtime.dockerBin must not be blank");
         }
         OutputConfig output = runtime.output();
         if (output == null) {

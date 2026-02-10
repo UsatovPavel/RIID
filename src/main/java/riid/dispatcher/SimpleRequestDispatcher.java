@@ -112,7 +112,12 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             File tmp = createTemp();
             Path tempPath = tmp.toPath();
             BlobResult blob = client.fetchBlob(
-                    new BlobRequest(repository.value(), digest.toString(), sizeBytes, mediaType.value()),
+                    new BlobRequest(
+                            repository.value(),
+                            digest.toString(),
+                            sizeBytes,
+                            mediaType.value(),
+                            new BlobRequest.RangeSpec.All()),
                     tmp);
             LOGGER.info("downloaded layer {} from registry", digest);
 
