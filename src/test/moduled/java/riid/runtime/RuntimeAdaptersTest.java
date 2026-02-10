@@ -225,8 +225,12 @@ class RuntimeAdaptersTest {
         }
 
         @Override
-        protected BoundedCommandExecution.ShellResult runCommand(List<String> command) {
-            return new BoundedCommandExecution.ShellResult(exitCode, stdout, stderr);
+        protected BoundedCommandExecution.ShellResult runCommand(List<String> command)
+                throws IOException, InterruptedException {
+            if (!command.isEmpty() && "docker".equals(command.get(0))) {
+                return new BoundedCommandExecution.ShellResult(exitCode, stdout, stderr);
+            }
+            return super.runCommand(command);
         }
     }
 

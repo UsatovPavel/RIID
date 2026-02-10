@@ -31,6 +31,7 @@ import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
+import riid.runtime.DockerRuntimeAdapter;
 import riid.runtime.PodmanRuntimeAdapter;
 import riid.runtime.PortoRuntimeAdapter;
 import riid.runtime.RuntimeAdapter;
@@ -170,10 +171,13 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
-        runtimes.put("docker", new riid.runtime.DockerRuntimeAdapter());
+        RuntimeConfig runtimeConfig = config.runtime();
+        String dockerBin = runtimeConfig != null
+                ? runtimeConfig.dockerBinOrDefault()
+                : RuntimeConfig.DEFAULT_DOCKER_BIN;
+        runtimes.put("docker", new DockerRuntimeAdapter(fs, null, dockerBin));
 
         AppConfig appConfig = config.app();
-        RuntimeConfig runtimeConfig = config.runtime();
         if (runtimeConfig != null) {
             BoundedCommandExecution.setDefaultOutputConfig(runtimeConfig.outputConfigOrDefault());
         }
@@ -231,7 +235,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
-        runtimes.put("docker", new riid.runtime.DockerRuntimeAdapter());
+        runtimes.put("docker", new DockerRuntimeAdapter());
         return Map.copyOf(runtimes);
     }
 
