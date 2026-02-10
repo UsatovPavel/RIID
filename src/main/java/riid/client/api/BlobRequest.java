@@ -23,35 +23,35 @@ public record BlobRequest(
 
     /**
      * Byte range request according to RFC 7233.
-     * start/end are measured in bytes and may be null to represent open/suffix ranges.
+     * startOffsetBytes/endOffsetBytes are measured in bytes and may be null to represent open/suffix ranges.
      */
-    public record RangeSpec(Long start, Long end) {
+    public record RangeSpec(Long startOffsetBytes, Long endOffsetBytes) {
         public RangeSpec {
-            if (start == null && end == null) {
+            if (startOffsetBytes == null && endOffsetBytes == null) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range start/end cannot both be null"),
-                        "Range start/end cannot both be null");
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range startOffsetBytes/endOffsetBytes cannot both be null"),
+                        "Range startOffsetBytes/endOffsetBytes cannot both be null");
             }
-            if (start != null && start < 0) {
+            if (startOffsetBytes != null && startOffsetBytes < 0) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range start must be >= 0"),
-                        "Range start must be >= 0");
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range startOffsetBytes must be >= 0"),
+                        "Range startOffsetBytes must be >= 0");
             }
-            if (end != null && end < 0) {
+            if (endOffsetBytes != null && endOffsetBytes < 0) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range end must be >= 0"),
-                        "Range end must be >= 0");
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range endOffsetBytes must be >= 0"),
+                        "Range endOffsetBytes must be >= 0");
             }
-            if (start != null && end != null && end < start) {
+            if (startOffsetBytes != null && endOffsetBytes != null && endOffsetBytes < startOffsetBytes) {
                 throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range end must be >= start"),
-                        "Range end must be >= start");
+                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Range endOffsetBytes must be >= startOffsetBytes"),
+                        "Range endOffsetBytes must be >= startOffsetBytes");
             }
         }
 
         public String toHeaderValue() {
-            String startPart = start != null ? start.toString() : "";
-            String endPart = end != null ? end.toString() : "";
+            String startPart = startOffsetBytes != null ? startOffsetBytes.toString() : "";
+            String endPart = endOffsetBytes != null ? endOffsetBytes.toString() : "";
             return "bytes=" + startPart + "-" + endPart;
         }
     }

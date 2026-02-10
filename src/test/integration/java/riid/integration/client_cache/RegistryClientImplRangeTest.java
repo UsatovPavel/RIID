@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,7 @@ import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.junit.jupiter.api.AfterEach;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +46,7 @@ class RegistryClientImplRangeTest {
     private static final int STATUS_METHOD_NOT_ALLOWED = HttpStatus.METHOD_NOT_ALLOWED_405;
 
     private HttpServer server;
+    private final List<String> seenRangeHeaders = new ArrayList<>();
 
     @AfterEach
     @SuppressWarnings("unused")
@@ -55,6 +58,7 @@ class RegistryClientImplRangeTest {
 
     @Test
     void fetchBlobRangeReturnsPartialContent() throws Exception {
+        seenRangeHeaders.clear();
         byte[] layer = "0123456789".getBytes(StandardCharsets.UTF_8);
         String layerDigest = SHA_PREFIX + sha256(layer);
         Manifest manifest = manifest(layerDigest, layer.length);
@@ -74,11 +78,14 @@ class RegistryClientImplRangeTest {
 
             assertEquals(4L, br.size());
             assertEquals(4L, tmp.length());
+            assertEquals(1, seenRangeHeaders.size());
+            assertEquals("bytes=2-5", seenRangeHeaders.getFirst());
         }
     }
 
     @Test
     void fetchBlobRange416FallsBackToFull() throws Exception {
+        seenRangeHeaders.clear();
         byte[] layer = "0123456789".getBytes(StandardCharsets.UTF_8);
         String layerDigest = SHA_PREFIX + sha256(layer);
         Manifest manifest = manifest(layerDigest, layer.length);
@@ -98,6 +105,9 @@ class RegistryClientImplRangeTest {
 
             assertEquals(layer.length, br.size());
             assertEquals(layer.length, tmp.length());
+            assertEquals(2, seenRangeHeaders.size());
+            assertEquals("bytes=100-110", seenRangeHeaders.get(0));
+            assertNull(seenRangeHeaders.get(1));
         }
     }
 
@@ -128,6 +138,7 @@ class RegistryClientImplRangeTest {
             }
             if (METHOD_GET.equals(exchange.getRequestMethod())) {
                 String rangeHeader = exchange.getRequestHeaders().getFirst("Range");
+                seenRangeHeaders.add(rangeHeader);
                 if (rangeHeader != null) {
                     long[] range = parseRange(rangeHeader);
                     if (range.length != 2 || range[0] >= layer.length || range[1] < range[0]) {

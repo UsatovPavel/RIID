@@ -60,7 +60,7 @@ class PodmanRuntimeAdapterIntegrationTest {
     }
 
     /**
-     * End-to-end using App facade: load via dispatcher/runtime and then run with podman.
+     * End-to-endOffsetBytes using App facade: load via dispatcher/runtime and then run with podman.
      */
     @Test
     void oneShotLoadAndRun() throws Exception {

@@ -18,7 +18,7 @@ import riid.app.fs.TestPaths;
 import riid.config.TestConfigYaml;
 
 /**
- * End-to-end via CLI with real podman runtime.
+ * End-to-endOffsetBytes via CLI with real podman runtime.
  * Requires podman and network access to Docker Hub.
  */
 @Tag("filesystem")

@@ -173,10 +173,10 @@ public class HttpExecutor {
 
     public static String rangeHeader(long startInclusive, Long endInclusive) {
         if (startInclusive < 0) {
-            throw new IllegalArgumentException("start must be >= 0");
+            throw new IllegalArgumentException("startOffsetBytes must be >= 0");
         }
         if (endInclusive != null && endInclusive < startInclusive) {
-            throw new IllegalArgumentException("end must be >= start");
+            throw new IllegalArgumentException("endOffsetBytes must be >= startOffsetBytes");
         }
         return endInclusive == null
                 ? "bytes=%d-".formatted(startInclusive)

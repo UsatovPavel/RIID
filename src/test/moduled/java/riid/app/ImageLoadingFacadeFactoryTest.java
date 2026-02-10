@@ -18,7 +18,8 @@ class ImageLoadingFacadeFactoryTest {
     void createsServiceFromConfig() throws Exception {
         String yaml = """
                 client:
-                  http: {}
+                  http:
+                    backoffExponentBase: 2
                   auth: {}
                   registries:
                     - scheme: https

@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * Range handling policy for blob downloads.
  */
-public record RangeConfig(
+public record BlobRangeConfig(
         @JsonProperty("mode") RangeMode mode,
         @JsonProperty("partialDigestValidation")
         @JsonAlias("partialValidation")
@@ -21,19 +21,19 @@ public record RangeConfig(
     public static final PartialDigestValidation DEFAULT_PARTIAL_VALIDATION = DEFAULT_PARTIAL_DIGEST_VALIDATION;
     public static final boolean DEFAULT_FALLBACK_ON_416 = true;
 
-    public RangeConfig() {
+    public BlobRangeConfig() {
         this(DEFAULT_MODE, DEFAULT_PARTIAL_DIGEST_VALIDATION, DEFAULT_FALLBACK_ON_416);
     }
 
     @Deprecated
-    public RangeConfig(RangeMode mode, PartialValidation partialValidation, boolean fallbackToFullOn416) {
+    public BlobRangeConfig(RangeMode mode, PartialValidation partialValidation, boolean fallbackToFullOn416) {
         this(
                 mode,
                 partialValidation != null ? PartialDigestValidation.valueOf(partialValidation.name()) : null,
                 fallbackToFullOn416);
     }
 
-    public RangeConfig {
+    public BlobRangeConfig {
         mode = mode != null ? mode : DEFAULT_MODE;
         partialDigestValidation = partialDigestValidation != null
                 ? partialDigestValidation
