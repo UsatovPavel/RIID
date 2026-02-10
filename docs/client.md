@@ -2,8 +2,8 @@
 
 ### Config
 - Registry endpoints via `RegistryEndpoint` (scheme/host/port/creds); list provided by external config/Orchestrator.
-- HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, User-Agent, followRedirects=true для GHCR CDN 302/307).
-- Range policy: `RangeConfig` (mode/partialValidation/fallbackToFullOn416) controls Range usage, 206/416 handling, and partial validation.
+- HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, configurable `backoffExponentBase`, User-Agent, followRedirects=true для GHCR CDN 302/307).
+- Range policy: `RangeConfig` (mode/partialDigestValidation/fallbackOn416) controls Range usage, 206/416 handling, and partial validation.
 - Cache: external `CacheAdapter` (optional); client writes to cache after download. Source choice (cache/P2P/registry) is up to Orchestrator.
 
 ### Supported operations

@@ -14,7 +14,7 @@ public record ClientConfig(
         @JsonProperty("http") HttpClientConfig http,
         @JsonProperty("auth") AuthConfig auth,
         @JsonProperty("registries") List<RegistryEndpoint> registries,
-        @JsonProperty("range") RangeConfig range
+        @JsonProperty("range") BlobRangeConfig range
 ) {
     public ClientConfig(HttpClientConfig http, AuthConfig auth, List<RegistryEndpoint> registries) {
         this(http, auth, registries, null);
@@ -38,7 +38,7 @@ public record ClientConfig(
         return registries == null;
     }
 
-    public RangeConfig rangeOrDefault() {
-        return range != null ? range : new RangeConfig();
+    public BlobRangeConfig rangeOrDefault() {
+        return range != null ? range : new BlobRangeConfig();
     }
 }

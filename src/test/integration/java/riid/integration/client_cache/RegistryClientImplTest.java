@@ -77,7 +77,12 @@ class RegistryClientImplTest {
 
             File tmp = File.createTempFile("blob-", ".bin");
             tmp.deleteOnExit();
-            BlobRequest req = new BlobRequest(REPO, layerDigest, (long) layer.length, OCTET);
+            BlobRequest req = new BlobRequest(
+                    REPO,
+                    layerDigest,
+                    (long) layer.length,
+                    OCTET,
+                    new BlobRequest.RangeSpec.All());
             BlobResult br = client.fetchBlob(req, tmp);
             assertEquals(layerDigest, br.digest());
             assertEquals(layer.length, br.size());

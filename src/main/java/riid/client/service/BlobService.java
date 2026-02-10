@@ -3,6 +3,7 @@ package riid.client.service;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Path;
 import java.security.DigestInputStream;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -27,7 +29,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.BlobSink;
 import riid.client.api.FileBlobSink;
-import riid.client.core.config.RangeConfig;
+import riid.client.core.config.BlobRangeConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
@@ -48,7 +50,7 @@ public class BlobService implements BlobServiceApi {
     private final HttpExecutor http;
     private final AuthService authService;
     private final CacheAdapter cacheAdapter;
-    private final RangeConfig rangeConfig;
+    private final BlobRangeConfig blobRangeConfig;
 
     public BlobService(HttpExecutor http, AuthService authService) {
         this(http, authService, null, null);
@@ -63,11 +65,11 @@ public class BlobService implements BlobServiceApi {
     public BlobService(HttpExecutor http,
                        AuthService authService,
                        CacheAdapter cacheAdapter,
-                       RangeConfig rangeConfig) {
+                       BlobRangeConfig blobRangeConfig) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
         this.cacheAdapter = cacheAdapter;
-        this.rangeConfig = rangeConfig != null ? rangeConfig : new RangeConfig();
+        this.blobRangeConfig = blobRangeConfig != null ? blobRangeConfig : new BlobRangeConfig();
     }
 
     @Override
@@ -76,11 +78,13 @@ public class BlobService implements BlobServiceApi {
         try (BlobSink sink = new FileBlobSink(target)) {
             return fetchBlob(endpoint, req, sink, scope);
         } catch (IOException e) {
+            LOGGER.warn("Blob IO error for {}/{}: {}", req.repository(), req.digest(), e.getMessage(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, BLOB_IO_ERROR),
                     BLOB_IO_ERROR,
                     e);
         } catch (Exception e) {
+            LOGGER.warn("Blob sink error for {}/{}: {}", req.repository(), req.digest(), e.getMessage(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, BLOB_SINK_ERROR),
                     BLOB_SINK_ERROR,
@@ -106,9 +110,9 @@ public class BlobService implements BlobServiceApi {
         URI uri = endpoint.uri(RegistryApi.blobPath(req.repository(), req.digest()));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
-        boolean rangeEnabled = rangeConfig.mode() != RangeConfig.RangeMode.OFF;
+        boolean rangeEnabled = blobRangeConfig.mode() != BlobRangeConfig.RangeMode.OFF;
         String rangeValue = rangeEnabled ? req.rangeHeaderValue() : null;
-        if (req.range() != null && !rangeEnabled) {
+        if (req.isRangeRequest() && !rangeEnabled) {
             LOGGER.warn("Range disabled by config for {}, ignoring requested range", req.digest());
         }
         if (rangeValue != null) {
@@ -116,16 +120,17 @@ public class BlobService implements BlobServiceApi {
         }
         HttpResult<InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
-        if (status == HttpStatus.RANGE_NOT_SATISFIABLE_416 && req.range() != null && rangeEnabled) {
+        if (status == HttpStatus.RANGE_NOT_SATISFIABLE_416 && req.isRangeRequest() && rangeEnabled) {
             closeQuietly(resp.body());
-            if (allowRetryWithoutRange && rangeConfig.fallbackToFullOn416()) {
+            if (allowRetryWithoutRange && blobRangeConfig.fallbackOn416()) {
                 LOGGER.warn("Range not satisfiable for {} (range={}), retrying without Range",
                         req.digest(), rangeValue);
                 BlobRequest noRange = new BlobRequest(
                         req.repository(),
                         req.digest(),
                         req.expectedSizeBytes(),
-                        req.mediaType());
+                        req.mediaType(),
+                        new BlobRequest.RangeSpec.All());
                 return fetchBlob(endpoint, noRange, sink, scope, false);
             }
         }
@@ -140,7 +145,7 @@ public class BlobService implements BlobServiceApi {
         }
 
         ContentRange contentRange = null;
-        if (status == HttpStatus.PARTIAL_CONTENT_206 && req.range() != null && rangeEnabled) {
+        if (status == HttpStatus.PARTIAL_CONTENT_206 && req.isRangeRequest() && rangeEnabled) {
             String raw = resp.firstHeader("Content-Range").orElse(null);
             if (raw == null || raw.isBlank()) {
                 throw new ClientException(
@@ -158,41 +163,44 @@ public class BlobService implements BlobServiceApi {
                             "Content-Length mismatch for partial blob download");
                 }
             }
-        } else if (req.range() != null && status == HttpStatus.OK_200) {
+        } else if (req.isRangeRequest() && status == HttpStatus.OK_200) {
             LOGGER.warn("Range ignored by registry for {} (range={})", req.digest(), rangeValue);
         }
 
-        long expectedSize = resolveExpectedSize(req, resp, contentRange);
-        if (expectedSize <= 0) {
+        OptionalLong expectedSizeOpt = resolveExpectedSizeBytes(req, resp, contentRange);
+        if (expectedSizeOpt.isEmpty()) {
             LOGGER.warn("Missing Content-Length for blob {}", req.digest());
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length for blob"),
                     "Missing Content-Length for blob download");
         }
+        long expectedSize = expectedSizeOpt.getAsLong();
         Path sinkPath = null;
         if (sink instanceof FileBlobSink fbs) {
             sinkPath = fbs.file().toPath();
         }
         InputStream is = null;
-        java.io.OutputStream os = null;
+        OutputStream os = null;
         try {
             is = resp.body();
             os = sink.open();
             boolean isFullRange = contentRange != null && contentRange.coversFull();
             if (contentRange != null
                     && !isFullRange
-                    && rangeConfig.partialValidation() == RangeConfig.PartialValidation.REQUIRE_FULL) {
+                    && blobRangeConfig.partialDigestValidation() 
+                    == BlobRangeConfig.PartialDigestValidation.REQUIRE_FULL
+                ) {
                 throw new ClientException(
                         new ClientError.Parse(ClientError.ParseKind.RANGE, "Partial range requires full validation"),
                         "Partial range requires full validation");
             }
-            boolean shouldValidateDigest = req.range() == null || isFullRange;
+            boolean shouldValidateDigest = !req.isRangeRequest() || isFullRange;
             String digest;
             if (shouldValidateDigest) {
                 digest = writeAndHashStreaming(is, os);
                 validateDigest(digest, req.digest());
             } else {
-                writeStreaming(is, os);
+                writeStreamingWithoutHash(is, os);
                 digest = req.digest();
             }
             long actualSize = sinkPath != null ? sinkPath.toFile().length() : expectedSize;
@@ -209,11 +217,13 @@ public class BlobService implements BlobServiceApi {
                         locator = cacheAdapter.resolve(entry.key()).map(Path::toString).orElse(locator);
                     }
                 } catch (ValidationException ve) {
+                    LOGGER.warn("Blob cache validation error for {}: {}", req.digest(), ve.getMessage(), ve);
                     throw new ClientException(
                             new ClientError.Parse(ClientError.ParseKind.MANIFEST, ve.getMessage()),
                             "Invalid blob media type: " + mediaType,
                             ve);
                 } catch (IllegalArgumentException iae) {
+                    LOGGER.warn("Blob cache argument error for {}: {}", req.digest(), iae.getMessage(), iae);
                     throw new ClientException(
                             new ClientError.Parse(ClientError.ParseKind.MANIFEST, iae.getMessage()),
                             "Invalid blob media type: " + mediaType,
@@ -222,6 +232,7 @@ public class BlobService implements BlobServiceApi {
             }
             return new BlobResult(digest, actualSize, mediaType, locator);
         } catch (IOException e) {
+            LOGGER.warn("Blob stream error for {}/{}: {}", req.repository(), req.digest(), e.getMessage(), e);
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, BLOB_IO_ERROR),
                     BLOB_IO_ERROR,
@@ -290,28 +301,29 @@ public class BlobService implements BlobServiceApi {
         }
     }
 
-    private static long resolveExpectedSize(BlobRequest req,
-                                            HttpResult<InputStream> resp,
-                                            ContentRange contentRange) {
+    private static OptionalLong resolveExpectedSizeBytes(BlobRequest req,
+                                                         HttpResult<InputStream> resp,
+                                                         ContentRange contentRange) {
         if (contentRange != null) {
-            return contentRange.length();
+            return OptionalLong.of(contentRange.length());
         }
         Long expected = req.expectedSizeBytes();
         if (expected != null) {
-            return expected;
+            return OptionalLong.of(expected);
         }
-        return resp.firstHeaderAsLong(HEADER_CONTENT_LENGTH).orElse(-1);
+        return resp.firstHeaderAsLong(HEADER_CONTENT_LENGTH);
     }
 
-    private static void writeStreaming(InputStream is, java.io.OutputStream os) throws IOException {
+    private static void writeStreamingWithoutHash(InputStream is, OutputStream os) throws IOException {
         is.transferTo(os);
     }
 
-    private String writeAndHashStreaming(InputStream is, java.io.OutputStream os) throws IOException {
+    private String writeAndHashStreaming(InputStream is, OutputStream os) throws IOException {
         MessageDigest md;
         try {
             md = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
+            LOGGER.warn("Blob SHA-256 not available {}/{}: {}", is.toString(), os.toString(), e.getMessage(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "SHA-256 not available"),
                     "SHA-256 not available",

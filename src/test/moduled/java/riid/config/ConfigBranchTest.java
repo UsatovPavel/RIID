@@ -138,7 +138,8 @@ class ConfigBranchTest {
     void smokePrintsDefaultsFromMinimalConfig() throws Exception {
         String yaml = """
                 client:
-                  http: {}
+                  http:
+                    backoffExponentBase: 2
                   auth:
                     defaultTokenTtlSeconds: 300
                   registries:

@@ -104,7 +104,12 @@ public class RegistryLocalTest {
         Assertions.assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
+        BlobRequest req = new BlobRequest(
+                REPO,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
 
         Optional<Long> sizeOpt = BLOB_SERVICE.headBlob(LOCAL, REPO, layer.digest(), SCOPE);
         Assertions.assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
@@ -138,7 +143,7 @@ public class RegistryLocalTest {
                 layer.digest(),
                 rangeLen,
                 layer.mediaType(),
-                new BlobRequest.RangeSpec(start, end)
+                new BlobRequest.RangeSpec.Bounded(start, end)
         );
 
         File tmp = Files.createTempFile("local-layer-range", ".bin").toFile();

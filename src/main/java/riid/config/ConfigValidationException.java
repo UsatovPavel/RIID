@@ -61,6 +61,7 @@ public class ConfigValidationException extends RuntimeException {
         MAX_REDIRECTS_NEGATIVE("HTTP: client.http.maxRedirects must be >= 0"),
         CONNECT_TIMEOUT_POSITIVE("HTTP: client.http.connectTimeout must be positive"),
         REQUEST_TIMEOUT_POSITIVE("HTTP: client.http.requestTimeout must be positive"),
+        BACKOFF_EXPONENT_BASE_MIN("HTTP: client.http.backoffExponentBase must be >= 2"),
         INITIAL_BACKOFF_POSITIVE("HTTP: client.http.initialBackoff must be positive"),
         MAX_BACKOFF_POSITIVE("HTTP: client.http.maxBackoff must be positive"),
         BACKOFF_INVERTED("HTTP: client.http.initialBackoff must not exceed maxBackoff"),
