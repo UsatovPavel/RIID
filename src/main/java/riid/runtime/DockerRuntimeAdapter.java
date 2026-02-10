@@ -1,8 +1,7 @@
 package riid.runtime;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -13,37 +12,68 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import riid.app.fs.HostFilesystem;
+import riid.app.fs.NioHostFilesystem;
+import riid.app.fs.PathSupport;
+
 /**
  * Docker adapter: accepts OCI archive, rewrites to docker-save format, feeds to `docker load`.
  */
 public class DockerRuntimeAdapter implements RuntimeAdapter {
-    private static final String DOCKER_BIN = "docker";
-    private static final String DIGEST_KEY = "digest";
+    private static final String RUNTIME_ID = "docker";
+    private static final String DEFAULT_DOCKER_BIN = "docker";
+    private static final String DIGEST_FIELD = "digest";
+    private final HostFilesystem fs;
+    private final Path tempRoot;
+    private final String dockerBin;
+
+    public DockerRuntimeAdapter() {
+        this(new NioHostFilesystem(), null, DEFAULT_DOCKER_BIN);
+    }
+
+    public DockerRuntimeAdapter(HostFilesystem fs) {
+        this(fs, null, DEFAULT_DOCKER_BIN);
+    }
+
+    public DockerRuntimeAdapter(HostFilesystem fs, Path tempRoot) {
+        this(fs, tempRoot, DEFAULT_DOCKER_BIN);
+    }
+
+    public DockerRuntimeAdapter(HostFilesystem fs, Path tempRoot, String dockerBin) {
+        this.fs = fs != null ? fs : new NioHostFilesystem();
+        this.tempRoot = tempRoot;
+        this.dockerBin = normalizeDockerBin(dockerBin);
+    }
 
     @Override
     public String runtimeId() {
-        return DOCKER_BIN;
+        return RUNTIME_ID;
     }
 
     @Override
     public void importImage(Path imagePath) throws IOException, InterruptedException {
         Objects.requireNonNull(imagePath, "imagePath");
-        if (!imagePath.toFile().exists()) {
+        if (!fs.exists(imagePath) || !fs.isRegularFile(imagePath)) {
             throw new IOException("Image file not found: " + imagePath);
         }
 
-        Path workDir = Files.createTempDirectory("docker-import-oci");
+        Path workDir = PathSupport.tempDirPath(tempRoot, "docker-import-oci-");
+        fs.createDirectory(workDir);
         // unpack OCI archive
         untar(imagePath, workDir);
 
         // read index and manifest
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode index = mapper.readTree(workDir.resolve("index.json").toFile());
+        JsonNode index;
+        try (InputStream in = fs.newInputStream(workDir.resolve("index.json"))) {
+            index = mapper.readTree(in);
+        }
         JsonNode manifestNode = index.path("manifests").get(0);
         if (manifestNode == null || manifestNode.isMissingNode()) {
             throw new IOException("OCI archive missing manifests");
         }
-        String manifestDigest = stripSha256(manifestNode.path(DIGEST_KEY).asText(""));
+        String manifestDigest = stripSha256(manifestNode.path(DIGEST_FIELD).asText(""));
+
         if (manifestDigest.isBlank()) {
             throw new IOException("OCI archive manifest digest missing");
         }
@@ -55,14 +85,17 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
             refName = "docker.io/library/unknown:latest";
         }
 
-        JsonNode manifest = mapper.readTree(
-                workDir.resolve("blobs").resolve("sha256").resolve(manifestDigest).toFile());
+        JsonNode manifest;
+        try (InputStream in = fs.newInputStream(workDir.resolve("blobs").resolve("sha256").resolve(manifestDigest))) {
+            manifest = mapper.readTree(in);
+        }
 
         // compose docker save manifest.json
         writeDockerManifestJson(workDir, manifest, refName, mapper);
         writeDockerRepositories(workDir, refName, manifest, mapper);
 
-        Path dockerArchive = Files.createTempFile("docker-load", ".tar");
+        Path dockerArchive = PathSupport.temporaryPath(tempRoot, "docker-load-", ".tar");
+        fs.createFile(dockerArchive);
         tar(workDir, dockerArchive);
 
         runDockerLoad(dockerArchive);
@@ -73,19 +106,19 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
                                          String refName,
                                          ObjectMapper mapper) throws IOException {
         String configPath = "blobs/sha256/" + stripSha256(
-                manifest.path("config").path(DIGEST_KEY).asText(""));
+                manifest.path("config").path(DIGEST_FIELD).asText(""));
 
         List<String> layers = new ArrayList<>();
         Map<String, Object> layerSources = new LinkedHashMap<>();
         for (JsonNode layer : manifest.path("layers")) {
-            String digest = layer.path(DIGEST_KEY).asText("");
+            String digest = layer.path(DIGEST_FIELD).asText("");
             String hex = stripSha256(digest);
             layers.add("blobs/sha256/" + hex);
 
             Map<String, Object> meta = new LinkedHashMap<>();
             meta.put("mediaType", layer.path("mediaType").asText(""));
             meta.put("size", layer.path("size").asLong());
-            meta.put("digest", digest);
+            meta.put(DIGEST_FIELD, digest);
             layerSources.put(digest, meta);
         }
 
@@ -95,7 +128,9 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         entry.put("Layers", layers);
         entry.put("LayerSources", layerSources);
 
-        mapper.writeValue(workDir.resolve("manifest.json").toFile(), List.of(entry));
+        try (var out = fs.newOutputStream(workDir.resolve("manifest.json"))) {
+            mapper.writeValue(out, List.of(entry));
+        }
     }
 
     private void writeDockerRepositories(Path workDir,
@@ -106,44 +141,36 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         String repoKey = sep > 0 ? refName.substring(0, sep) : refName;
         String tag = sep > 0 ? refName.substring(sep + 1) : "latest";
         JsonNode firstLayer = manifest.path("layers").get(0);
-        String topLayer = stripSha256(firstLayer.path(DIGEST_KEY).asText(""));
+        String topLayer = stripSha256(firstLayer.path(DIGEST_FIELD).asText(""));
 
         Map<String, Map<String, String>> repositories = new LinkedHashMap<>();
         repositories.put(repoKey, Map.of(tag, topLayer));
-        mapper.writeValue(workDir.resolve("repositories").toFile(), repositories);
+        try (var out = fs.newOutputStream(workDir.resolve("repositories"))) {
+            mapper.writeValue(out, repositories);
+        }
     }
 
     protected void untar(Path archive, Path destDir) throws IOException, InterruptedException {
-        Process p = new ProcessBuilder("tar", "-xf", archive.toString(), "-C", destDir.toString())
-                .redirectErrorStream(true)
-                .start();
-        int code = p.waitFor();
-        if (code != 0) {
-            String out;
-            try (var in = p.getInputStream()) {
-                out = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            }
-            throw new IOException("Failed to unpack OCI archive: " + out);
+        List<String> cmd = List.of("tar", "-xf", archive.toString(), "-C", destDir.toString());
+        BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
+        if (shellResult.exitCode() != 0) {
+            throw new IOException("Failed to unpack OCI archive (exit " + shellResult.exitCode() + "): "
+                    + shellResult.stdout() + shellResult.stderr());
         }
     }
 
     protected void tar(Path sourceDir, Path destTar) throws IOException, InterruptedException {
-        Process p = new ProcessBuilder("tar", "-cf", destTar.toString(), "-C", sourceDir.toString(), ".")
-                .redirectErrorStream(true)
-                .start();
-        int code = p.waitFor();
-        if (code != 0) {
-            String out;
-            try (var in = p.getInputStream()) {
-                out = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            }
-            throw new IOException("Failed to create docker archive: " + out);
+        List<String> cmd = List.of("tar", "-cf", destTar.toString(), "-C", sourceDir.toString(), ".");
+        BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
+        if (shellResult.exitCode() != 0) {
+            throw new IOException("Failed to create docker archive (exit " + shellResult.exitCode() + "): "
+                    + shellResult.stdout() + shellResult.stderr());
         }
     }
 
     private void runDockerLoad(Path dockerArchive) throws IOException, InterruptedException {
         List<String> cmd = List.of(
-                DOCKER_BIN,
+                dockerBin,
                 "load",
                 "-q",
                 "-i",
@@ -158,6 +185,10 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
 
     private static String stripSha256(String digest) {
         return digest.startsWith("sha256:") ? digest.substring("sha256:".length()) : digest;
+    }
+
+    private static String normalizeDockerBin(String value) {
+        return value == null || value.isBlank() ? DEFAULT_DOCKER_BIN : value;
     }
 
     protected BoundedCommandExecution.ShellResult runCommand(List<String> command)

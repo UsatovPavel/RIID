@@ -7,6 +7,7 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.config.GlobalConfig;
 import riid.config.ConfigLoader;
 import riid.config.ConfigValidationException;
+import riid.config.TestConfigYaml;
 
 import java.nio.file.Path;
 
@@ -37,6 +38,7 @@ class ConfigLoaderTest {
                     followRedirects: true
                     initialBackoff: PT0.2S
                     maxBackoff: PT2S
+                    backoffExponentBase: 2
                   auth:
                     defaultTokenTtlSeconds: 600
                   registries:
@@ -99,6 +101,7 @@ class ConfigLoaderTest {
                     maxRetries: 5
                     initialBackoff: PT0.15S
                     maxBackoff: PT3S
+                    backoffExponentBase: 2
                     retryIdempotentOnly: false
                     userAgent: "riid-test-agent"
                     followRedirects: false

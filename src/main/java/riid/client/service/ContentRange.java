@@ -4,10 +4,15 @@ import riid.client.api.BlobRequest;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 
+/**
+ * Parsed Content-Range header.
+ * totalSize is nullable because registries may return wildcard form: "bytes startOffsetBytes-endOffsetBytes/*".
+ */
 record ContentRange(long start, long end, Long totalSize) {
     private static final String RANGE_UNIT = "bytes";
     private static final String RANGE_WILDCARD = "*";
     private static final String INVALID_CONTENT_RANGE = "Invalid Content-Range";
+    private static final String CONTENT_RANGE_START_MISMATCH = "Content-Range startOffsetBytes mismatch";
     private static final int EXPECTED_RANGE_PARTS = 2;
 
     long length() {
@@ -19,27 +24,43 @@ record ContentRange(long start, long end, Long totalSize) {
     }
 
     void validateAgainst(BlobRequest.RangeSpec reqRange) {
-        if (reqRange == null) {
-            return;
-        }
-        if (reqRange.start() != null && !reqRange.start().equals(start)) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range start mismatch"),
-                    "Content-Range start mismatch");
-        }
-        if (reqRange.start() != null && reqRange.end() != null && !reqRange.end().equals(end)) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range end mismatch"),
-                    "Content-Range end mismatch");
-        }
-        if (reqRange.start() == null && reqRange.end() != null && totalSize != null) {
-            long total = totalSize;
-            long expectedStart = total - reqRange.end();
-            long expectedEnd = total - 1;
-            if (start != expectedStart || end != expectedEnd) {
-                throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range suffix mismatch"),
-                        "Content-Range suffix mismatch");
+        switch (reqRange) {
+            case BlobRequest.RangeSpec.All ignored -> {
+                return;
+            }
+            case BlobRequest.RangeSpec.Bounded bounded -> {
+                if (bounded.startOffsetBytes() != start) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE,
+                                    CONTENT_RANGE_START_MISMATCH),
+                            CONTENT_RANGE_START_MISMATCH);
+                }
+                if (bounded.endOffsetBytes() != end) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range endOffsetBytes mismatch"),
+                            "Content-Range endOffsetBytes mismatch");
+                }
+            }
+            case BlobRequest.RangeSpec.From from -> {
+                if (from.startOffsetBytes() != start) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE,
+                                    CONTENT_RANGE_START_MISMATCH),
+                            CONTENT_RANGE_START_MISMATCH);
+                }
+            }
+            case BlobRequest.RangeSpec.Suffix suffix -> {
+                if (totalSize == null) {
+                    return;
+                }
+                long total = totalSize;
+                long expectedStart = Math.max(0, total - suffix.lastBytes());
+                long expectedEnd = total - 1;
+                if (start != expectedStart || end != expectedEnd) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range suffix mismatch"),
+                            "Content-Range suffix mismatch");
+                }
             }
         }
     }
@@ -69,12 +90,12 @@ record ContentRange(long start, long end, Long totalSize) {
                     new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
                     INVALID_CONTENT_RANGE + ": " + header);
         }
-        long start = parseLong(range[0], "Content-Range start");
-        long end = parseLong(range[1], "Content-Range end");
+        long start = parseLong(range[0], "Content-Range startOffsetBytes");
+        long end = parseLong(range[1], "Content-Range endOffsetBytes");
         if (end < start) {
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
-                    "Content-Range end < start");
+                    "Content-Range endOffsetBytes < startOffsetBytes");
         }
         Long total = null;
         String totalRaw = rangeAndTotal[1].trim();

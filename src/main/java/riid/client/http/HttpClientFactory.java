@@ -18,7 +18,7 @@ public final class HttpClientFactory {
             client.start();
             return client;
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to start Jetty HttpClient", e);
+            throw new IllegalStateException("Failed to startOffsetBytes Jetty HttpClient", e);
         }
     }
 }
