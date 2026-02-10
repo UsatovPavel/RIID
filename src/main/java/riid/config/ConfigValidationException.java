@@ -20,6 +20,7 @@ public class ConfigValidationException extends RuntimeException {
         HTTP_INITIAL_BACKOFF_POSITIVE("client.http.initialBackoff must be positive"),
         HTTP_MAX_BACKOFF_POSITIVE("client.http.maxBackoff must be positive"),
         HTTP_BACKOFF_INVERTED("client.http.initialBackoff must not exceed maxBackoff"),
+        HTTP_BACKOFF_EXPONENT_BASE_MIN("client.http.backoffExponentBase must be >= 2"),
         HTTP_USER_AGENT_BLANK("client.http.userAgent must not be blank"),
         AUTH_MISSING("client.auth is required"),
         AUTH_TTL_POSITIVE("auth.defaultTokenTtlSeconds must be > 0"),
