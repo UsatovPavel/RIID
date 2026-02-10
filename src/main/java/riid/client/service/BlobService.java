@@ -29,7 +29,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.BlobSink;
 import riid.client.api.FileBlobSink;
-import riid.client.core.config.RangeConfig;
+import riid.client.core.config.BlobRangeConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
@@ -50,7 +50,7 @@ public class BlobService implements BlobServiceApi {
     private final HttpExecutor http;
     private final AuthService authService;
     private final CacheAdapter cacheAdapter;
-    private final RangeConfig rangeConfig;
+    private final BlobRangeConfig blobRangeConfig;
 
     public BlobService(HttpExecutor http, AuthService authService) {
         this(http, authService, null, null);
@@ -65,11 +65,11 @@ public class BlobService implements BlobServiceApi {
     public BlobService(HttpExecutor http,
                        AuthService authService,
                        CacheAdapter cacheAdapter,
-                       RangeConfig rangeConfig) {
+                       BlobRangeConfig blobRangeConfig) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
         this.cacheAdapter = cacheAdapter;
-        this.rangeConfig = rangeConfig != null ? rangeConfig : new RangeConfig();
+        this.blobRangeConfig = blobRangeConfig != null ? blobRangeConfig : new BlobRangeConfig();
     }
 
     @Override
@@ -110,7 +110,7 @@ public class BlobService implements BlobServiceApi {
         URI uri = endpoint.uri(RegistryApi.blobPath(req.repository(), req.digest()));
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, req.repository(), scope).ifPresent(v -> headers.put("Authorization", v));
-        boolean rangeEnabled = rangeConfig.mode() != RangeConfig.RangeMode.OFF;
+        boolean rangeEnabled = blobRangeConfig.mode() != BlobRangeConfig.RangeMode.OFF;
         String rangeValue = rangeEnabled ? req.rangeHeaderValue() : null;
         if (req.range() != null && !rangeEnabled) {
             LOGGER.warn("Range disabled by config for {}, ignoring requested range", req.digest());
@@ -122,7 +122,7 @@ public class BlobService implements BlobServiceApi {
         int status = resp.statusCode();
         if (status == HttpStatus.RANGE_NOT_SATISFIABLE_416 && req.range() != null && rangeEnabled) {
             closeQuietly(resp.body());
-            if (allowRetryWithoutRange && rangeConfig.fallbackOn416()) {
+            if (allowRetryWithoutRange && blobRangeConfig.fallbackOn416()) {
                 LOGGER.warn("Range not satisfiable for {} (range={}), retrying without Range",
                         req.digest(), rangeValue);
                 BlobRequest noRange = new BlobRequest(
@@ -186,7 +186,7 @@ public class BlobService implements BlobServiceApi {
             boolean isFullRange = contentRange != null && contentRange.coversFull();
             if (contentRange != null
                     && !isFullRange
-                    && rangeConfig.partialDigestValidation() == RangeConfig.PartialDigestValidation.REQUIRE_FULL) {
+                    && blobRangeConfig.partialDigestValidation() == BlobRangeConfig.PartialDigestValidation.REQUIRE_FULL) {
                 throw new ClientException(
                         new ClientError.Parse(ClientError.ParseKind.RANGE, "Partial range requires full validation"),
                         "Partial range requires full validation");

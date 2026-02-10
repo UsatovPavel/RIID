@@ -6,7 +6,7 @@ import riid.client.core.error.ClientException;
 
 /**
  * Parsed Content-Range header.
- * totalSize is nullable because registries may return wildcard form: "bytes start-end/*".
+ * totalSize is nullable because registries may return wildcard form: "bytes startOffsetBytes-endOffsetBytes/*".
  */
 record ContentRange(long start, long end, Long totalSize) {
     private static final String RANGE_UNIT = "bytes";
@@ -26,19 +26,19 @@ record ContentRange(long start, long end, Long totalSize) {
         if (reqRange == null) {
             return;
         }
-        if (reqRange.start() != null && !reqRange.start().equals(start)) {
+        if (reqRange.startOffsetBytes() != null && !reqRange.startOffsetBytes().equals(start)) {
             throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range start mismatch"),
-                    "Content-Range start mismatch");
+                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range startOffsetBytes mismatch"),
+                    "Content-Range startOffsetBytes mismatch");
         }
-        if (reqRange.start() != null && reqRange.end() != null && !reqRange.end().equals(end)) {
+        if (reqRange.startOffsetBytes() != null && reqRange.endOffsetBytes() != null && !reqRange.endOffsetBytes().equals(end)) {
             throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range end mismatch"),
-                    "Content-Range end mismatch");
+                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range endOffsetBytes mismatch"),
+                    "Content-Range endOffsetBytes mismatch");
         }
-        if (reqRange.start() == null && reqRange.end() != null && totalSize != null) {
+        if (reqRange.startOffsetBytes() == null && reqRange.endOffsetBytes() != null && totalSize != null) {
             long total = totalSize;
-            long expectedStart = total - reqRange.end();
+            long expectedStart = total - reqRange.endOffsetBytes();
             long expectedEnd = total - 1;
             if (start != expectedStart || end != expectedEnd) {
                 throw new ClientException(
@@ -73,12 +73,12 @@ record ContentRange(long start, long end, Long totalSize) {
                     new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
                     INVALID_CONTENT_RANGE + ": " + header);
         }
-        long start = parseLong(range[0], "Content-Range start");
-        long end = parseLong(range[1], "Content-Range end");
+        long start = parseLong(range[0], "Content-Range startOffsetBytes");
+        long end = parseLong(range[1], "Content-Range endOffsetBytes");
         if (end < start) {
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
-                    "Content-Range end < start");
+                    "Content-Range endOffsetBytes < startOffsetBytes");
         }
         Long total = null;
         String totalRaw = rangeAndTotal[1].trim();

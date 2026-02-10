@@ -8,6 +8,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.ServerSocket;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +28,7 @@ class HttpExecutorTest {
     private HttpServer server;
 
     @AfterEach
+    @SuppressWarnings("unused")
     void tearDown() {
         if (server != null) {
             server.stop(0);
@@ -48,8 +50,10 @@ class HttpExecutorTest {
                 .build();
         HttpExecutor exec = new HttpExecutor(client, config);
 
-        assertThrows(IllegalStateException.class, () -> exec.shouldRetry(503, 1, false));
-        assertThrows(IllegalStateException.class, () -> exec.shouldRetryIOException(1, false));
+        var retryStatusEx = assertThrows(IllegalStateException.class, () -> exec.shouldRetry(503, 1, false));
+        var retryIoEx = assertThrows(IllegalStateException.class, () -> exec.shouldRetryIOException(1, false));
+        assertTrue(retryStatusEx.getMessage().contains("idempotent"));
+        assertTrue(retryIoEx.getMessage().contains("idempotent"));
     }
 
     @Test
@@ -93,13 +97,50 @@ class HttpExecutorTest {
         assertEquals(2, calls.get(), "should stop after max retries + first attempt");
     }
 
+    @Test
+    void retriesOnIOExceptionThenSucceeds() throws Exception {
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+        AtomicInteger calls = new AtomicInteger();
+        Thread delayedServer = new Thread(() -> {
+            try {
+                Thread.sleep(20);
+                setupServerOnPort(port, exchange -> {
+                    calls.incrementAndGet();
+                    respond(exchange, 200, Map.of(), "ok");
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        delayedServer.start();
+
+        HttpExecutor exec = executor(3, Duration.ofMillis(100));
+        var resp = exec.get(URI.create("http://localhost:" + port + "/io"), Map.of());
+
+        assertEquals(200, resp.statusCode());
+        String body = new String(resp.body().readAllBytes(), StandardCharsets.UTF_8);
+        assertEquals("ok", body);
+        assertEquals(1, calls.get(), "server should eventually receive the successful retry");
+        delayedServer.join(1000);
+    }
+
     private HttpExecutor executor(int maxRetries) {
+        return executor(maxRetries, Duration.ofMillis(10));
+    }
+
+    private HttpExecutor executor(int maxRetries, Duration backoff) {
         HttpClientConfig cfg = HttpClientConfig.builder()
                 .connectTimeout(Duration.ofSeconds(1))
                 .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(1)
-                .initialBackoff(Duration.ofMillis(10))
-                .maxBackoff(Duration.ofMillis(10))
+                .maxRetries(maxRetries)
+                .initialBackoff(backoff)
+                .maxBackoff(backoff)
                 .retryIdempotentOnly(true)
                 .userAgent("ua")
                 .followRedirects(true)
@@ -110,6 +151,12 @@ class HttpExecutorTest {
 
     private void setupServer(HttpHandler handler) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/", handler);
+        server.start();
+    }
+
+    private void setupServerOnPort(int port, HttpHandler handler) throws IOException {
+        server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/", handler);
         server.start();
     }
