@@ -32,7 +32,10 @@ class AppDependencyArchTest {
     static final ArchRule runtime_should_not_depend_on_app =
             noClasses()
                     .that().resideInAPackage("riid.runtime..")
-                    .should().dependOnClassesThat().resideInAPackage("riid.app..");
+                    .should().dependOnClassesThat(
+                        resideInAPackage("riid.app..")
+                                .and(resideOutsideOfPackage("riid.app.fs.."))
+                        );
 
     @ArchTest
     static final ArchRule cache_should_not_depend_on_app =

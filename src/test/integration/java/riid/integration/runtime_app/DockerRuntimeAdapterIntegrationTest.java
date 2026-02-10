@@ -17,6 +17,7 @@ import riid.app.fs.HostFilesystem;
 import riid.app.fs.NioHostFilesystem;
 import riid.app.fs.TestPaths;
 import riid.cache.oci.TempFileCacheAdapter;
+import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.dispatcher.RequestDispatcher;
@@ -83,8 +84,8 @@ class DockerRuntimeAdapterIntegrationTest {
         var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
-             riid.client.api.RegistryClientImpl client =
-                     new riid.client.api.RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
+             RegistryClientImpl client =
+                     new RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
             RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
                     client, cache, new P2PExecutor.NoOp(), fs);
             RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(DOCKER, new DockerRuntimeAdapter()));
