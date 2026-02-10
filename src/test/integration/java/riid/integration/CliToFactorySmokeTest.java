@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import riid.app.CliApplication;
 import riid.app.ImageLoadingFacade;
 import riid.app.fs.NioHostFilesystem;
+import riid.config.TestConfigYaml;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
@@ -30,17 +31,7 @@ class CliToFactorySmokeTest {
     void reachesFactoryFromCli() throws Exception {
         var fs = new NioHostFilesystem();
         Path config = riid.app.fs.TestPaths.tempFile(fs, riid.app.fs.TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
-        fs.writeString(config, """
-                client:
-                  http: {}
-                  auth: {}
-                  registries:
-                    - scheme: https
-                      host: registry-1.docker.io
-                      port: -1
-                dispatcher:
-                  maxConcurrentRegistry: 2
-                """);
+        fs.writeString(config, TestConfigYaml.minimalDockerHubConfigWithEmptyAuth(2));
 
         AtomicBoolean factoryCalled = new AtomicBoolean(false);
 

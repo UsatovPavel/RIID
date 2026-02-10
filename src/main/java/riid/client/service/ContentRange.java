@@ -4,6 +4,10 @@ import riid.client.api.BlobRequest;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 
+/**
+ * Parsed Content-Range header.
+ * totalSize is nullable because registries may return wildcard form: "bytes start-end/*".
+ */
 record ContentRange(long start, long end, Long totalSize) {
     private static final String RANGE_UNIT = "bytes";
     private static final String RANGE_WILDCARD = "*";

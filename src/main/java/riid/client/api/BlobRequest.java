@@ -21,6 +21,10 @@ public record BlobRequest(
         return range != null ? range.toHeaderValue() : null;
     }
 
+    /**
+     * Byte range request according to RFC 7233.
+     * start/end are measured in bytes and may be null to represent open/suffix ranges.
+     */
     public record RangeSpec(Long start, Long end) {
         public RangeSpec {
             if (start == null && end == null) {

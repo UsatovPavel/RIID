@@ -83,6 +83,9 @@ public final class ConfigValidator {
         if (http.initialBackoff().compareTo(http.maxBackoff()) > 0) {
             throw new ConfigValidationException(ConfigValidationException.Reason.HTTP_BACKOFF_INVERTED.message());
         }
+        if (http.backoffExponentBase() < 2) {
+            throw new ConfigValidationException(ConfigValidationException.Reason.HTTP_BACKOFF_EXPONENT_BASE_MIN.message());
+        }
         String userAgent = http.userAgent();
         if (userAgent == null || userAgent.isBlank()) {
             throw new ConfigValidationException(ConfigValidationException.Reason.HTTP_USER_AGENT_BLANK.message());
