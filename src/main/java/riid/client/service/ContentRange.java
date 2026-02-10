@@ -12,6 +12,7 @@ record ContentRange(long start, long end, Long totalSize) {
     private static final String RANGE_UNIT = "bytes";
     private static final String RANGE_WILDCARD = "*";
     private static final String INVALID_CONTENT_RANGE = "Invalid Content-Range";
+    private static final String CONTENT_RANGE_START_MISMATCH = "Content-Range startOffsetBytes mismatch";
     private static final int EXPECTED_RANGE_PARTS = 2;
 
     long length() {
@@ -23,27 +24,43 @@ record ContentRange(long start, long end, Long totalSize) {
     }
 
     void validateAgainst(BlobRequest.RangeSpec reqRange) {
-        if (reqRange == null) {
-            return;
-        }
-        if (reqRange.startOffsetBytes() != null && !reqRange.startOffsetBytes().equals(start)) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range startOffsetBytes mismatch"),
-                    "Content-Range startOffsetBytes mismatch");
-        }
-        if (reqRange.startOffsetBytes() != null && reqRange.endOffsetBytes() != null && !reqRange.endOffsetBytes().equals(end)) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range endOffsetBytes mismatch"),
-                    "Content-Range endOffsetBytes mismatch");
-        }
-        if (reqRange.startOffsetBytes() == null && reqRange.endOffsetBytes() != null && totalSize != null) {
-            long total = totalSize;
-            long expectedStart = total - reqRange.endOffsetBytes();
-            long expectedEnd = total - 1;
-            if (start != expectedStart || end != expectedEnd) {
-                throw new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range suffix mismatch"),
-                        "Content-Range suffix mismatch");
+        switch (reqRange) {
+            case BlobRequest.RangeSpec.All ignored -> {
+                return;
+            }
+            case BlobRequest.RangeSpec.Bounded bounded -> {
+                if (bounded.startOffsetBytes() != start) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE,
+                                    CONTENT_RANGE_START_MISMATCH),
+                            CONTENT_RANGE_START_MISMATCH);
+                }
+                if (bounded.endOffsetBytes() != end) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range endOffsetBytes mismatch"),
+                            "Content-Range endOffsetBytes mismatch");
+                }
+            }
+            case BlobRequest.RangeSpec.From from -> {
+                if (from.startOffsetBytes() != start) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE,
+                                    CONTENT_RANGE_START_MISMATCH),
+                            CONTENT_RANGE_START_MISMATCH);
+                }
+            }
+            case BlobRequest.RangeSpec.Suffix suffix -> {
+                if (totalSize == null) {
+                    return;
+                }
+                long total = totalSize;
+                long expectedStart = Math.max(0, total - suffix.lastBytes());
+                long expectedEnd = total - 1;
+                if (start != expectedStart || end != expectedEnd) {
+                    throw new ClientException(
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, "Content-Range suffix mismatch"),
+                            "Content-Range suffix mismatch");
+                }
             }
         }
     }

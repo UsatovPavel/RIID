@@ -24,6 +24,7 @@ public record HttpClientConfig(
     private static final int DEFAULT_MAX_RETRIES = 2;
     private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofMillis(200);
     private static final Duration DEFAULT_MAX_BACKOFF = Duration.ofSeconds(2);
+    private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
     private static final int DEFAULT_BACKOFF_EXPONENT_BASE = 2;
     private static final boolean DEFAULT_RETRY_IDEMPOTENT_ONLY = true;
     private static final String DEFAULT_USER_AGENT = "riid-registry-client";
@@ -77,7 +78,7 @@ public record HttpClientConfig(
         if (maxRetries < 0) {
             throw new IllegalArgumentException("maxRetries must be >= 0");
         }
-        if (backoffExponentBase < 2) {
+        if (backoffExponentBase < MIN_BACKOFF_EXPONENT_BASE) {
             throw new IllegalArgumentException("backoffExponentBase must be >= 2");
         }
         if (maxRedirects < 0) {

@@ -72,7 +72,7 @@ class RegistryClientImplRangeTest {
             File tmp = File.createTempFile("blob-range-", ".bin");
             tmp.deleteOnExit();
             BlobRequest req = new BlobRequest(REPO, layerDigest, null, OCTET,
-                    new BlobRequest.RangeSpec(2L, 5L));
+                    new BlobRequest.RangeSpec.Bounded(2L, 5L));
 
             BlobResult br = client.fetchBlob(req, tmp);
 
@@ -99,7 +99,7 @@ class RegistryClientImplRangeTest {
             File tmp = File.createTempFile("blob-range-416-", ".bin");
             tmp.deleteOnExit();
             BlobRequest req = new BlobRequest(REPO, layerDigest, null, OCTET,
-                    new BlobRequest.RangeSpec(100L, 110L));
+                    new BlobRequest.RangeSpec.Bounded(100L, 110L));
 
             BlobResult br = client.fetchBlob(req, tmp);
 

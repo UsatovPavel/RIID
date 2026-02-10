@@ -171,7 +171,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
         long ttl = config.client() != null && config.client().auth() != null
                 ? config.client().auth().defaultTokenTtlSeconds()
                 : AuthConfig.DEFAULT_TTL_SECONDS;
-        BlobRangeConfig blobRangeConfig = config.client() != null ? config.client().rangeOrDefault() : new BlobRangeConfig();
+        BlobRangeConfig blobRangeConfig = 
+        config.client() != null ? config.client().
+        rangeOrDefault() : new BlobRangeConfig();
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, blobRangeConfig);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();

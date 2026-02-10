@@ -53,14 +53,14 @@ class ContentRangeTest {
     @Test
     void validateAgainstSuffixRangePassesWhenExpected() {
         ContentRange parsed = ContentRange.parse("bytes 90-99/100");
-        parsed.validateAgainst(new BlobRequest.RangeSpec(null, 10L));
+        parsed.validateAgainst(new BlobRequest.RangeSpec.Suffix(10L));
     }
 
     @Test
     void validateAgainstSuffixRangeFailsOnMismatch() {
         ContentRange parsed = ContentRange.parse("bytes 80-99/100");
         var ex = assertThrows(ClientException.class,
-                () -> parsed.validateAgainst(new BlobRequest.RangeSpec(null, 10L)));
+                () -> parsed.validateAgainst(new BlobRequest.RangeSpec.Suffix(10L)));
         assertNotNull(ex.getMessage());
     }
 }
