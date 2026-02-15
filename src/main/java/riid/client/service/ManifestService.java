@@ -63,7 +63,7 @@ public final class ManifestService implements ManifestServiceApi {
         }
         try (var body = resp.body()) {
             byte[] bytes = body.readAllBytes();
-            String contentType = resp.firstHeader("Content-Type").orElse(null);
+            String contentType = resp.firstHeader(HttpResult.HeaderName.CONTENT_TYPE).orElse(null);
             // Detect manifest list / index
             boolean isIndex = isIndexMediaType(contentType) || looksLikeIndex(bytes);
             if (isIndex) {
@@ -109,7 +109,7 @@ public final class ManifestService implements ManifestServiceApi {
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest HEAD failed"),
                     "Manifest HEAD failed: " + resp.statusCode());
         }
-        String dcd = resp.firstHeader("Docker-Content-Digest").orElse(null);
+        String dcd = resp.firstHeader(HttpResult.HeaderName.DOCKER_CONTENT_DIGEST).orElse(null);
         if (dcd == null || dcd.isBlank()) {
             LOGGER.warn("Manifest HEAD missing Docker-Content-Digest for {}/{}", repository, reference);
             throw new ClientException(
@@ -118,8 +118,8 @@ public final class ManifestService implements ManifestServiceApi {
                             "Missing Docker-Content-Digest on manifest HEAD"),
                     "Missing Docker-Content-Digest on manifest HEAD");
         }
-        String mediaType = resp.firstHeader("Content-Type").orElse(null);
-        long len = resp.firstHeaderAsLong("Content-Length").orElse(-1);
+        String mediaType = resp.firstHeader(HttpResult.HeaderName.CONTENT_TYPE).orElse(null);
+        long len = resp.firstHeaderAsLong(HttpResult.HeaderName.CONTENT_LENGTH).orElse(-1);
         if (len <= 0) {
             LOGGER.warn("Manifest HEAD missing Content-Length for {}/{}", repository, reference);
             throw new ClientException(
@@ -136,7 +136,7 @@ public final class ManifestService implements ManifestServiceApi {
     }
 
     private void validateDigestHeader(HttpFields headers, String computed) {
-        String header = headers.get("Docker-Content-Digest");
+        String header = headers.get(HttpResult.HeaderName.DOCKER_CONTENT_DIGEST.value());
         if (header != null && !header.equals(computed)) {
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Digest mismatch"),

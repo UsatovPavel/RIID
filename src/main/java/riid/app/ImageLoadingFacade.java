@@ -23,7 +23,7 @@ import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.AuthConfig;
-import riid.client.core.config.BlobRangeConfig;
+import riid.client.core.config.BlobPartialDownloadConfig;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
@@ -46,13 +46,15 @@ import riid.runtime.RuntimeConfig;
  */
 public final class ImageLoadingFacade implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadingFacade.class);
-    private static final CacheCleaner NOOP_CACHE_CLEANER = () -> { };
+    private static final CacheCleaner NOOP_CACHE_CLEANER = () -> {
+    };
 
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
     private final Set<String> allowedRegistries;
     private final CacheCleaner cacheCleaner;
+
     public ImageLoadingFacade(RequestDispatcher dispatcher,
                               RuntimeRegistry runtimeRegistry,
                               RegistryClient client,
@@ -94,7 +96,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
         ManifestResult manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
-            RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
+        RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
         ImageId resolved = imageId.withDigest(manifestResult.digest());
         return load(manifestResult, runtime, resolved);
     }
@@ -152,8 +154,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
     }
 
     public static ImageLoadingFacade createFromConfig(
-        Path configPath, 
-        Credentials credentialsOverride) throws Exception {
+            Path configPath,
+            Credentials credentialsOverride) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         GlobalConfig config = ConfigLoader.load(configPath);
 
@@ -172,19 +174,19 @@ public final class ImageLoadingFacade implements AutoCloseable {
         long ttl = config.client() != null && config.client().auth() != null
                 ? config.client().auth().defaultTokenTtlSeconds()
                 : AuthConfig.DEFAULT_TTL_SECONDS;
-        BlobRangeConfig blobRangeConfig = 
-        config.client() != null ? config.client().
-        rangeOrDefault() : new BlobRangeConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, blobRangeConfig);
+        BlobPartialDownloadConfig blobPartialDownloadConfig =
+                config.client() != null ?
+                        config.client().partialDownloadingOrDefault() : new BlobPartialDownloadConfig();
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, blobPartialDownloadConfig);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
         RuntimeConfig runtimeConfig = config.runtime();
-        String dockerBin = runtimeConfig != null
-                ? runtimeConfig.dockerBinOrDefault()
+        String dockerCmd = runtimeConfig != null
+                ? runtimeConfig.dockerCmdOrDefault()
                 : RuntimeConfig.DEFAULT_DOCKER_BIN;
-        runtimes.put("docker", new DockerRuntimeAdapter(fs, null, dockerBin));
+        runtimes.put("docker", new DockerRuntimeAdapter(fs, null, dockerCmd));
 
         AppConfig appConfig = config.app();
         if (runtimeConfig != null) {
