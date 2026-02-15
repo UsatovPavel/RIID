@@ -145,24 +145,25 @@ public class HttpExecutor {
 
     private void backoff(int attempts) {
         long base = config.initialBackoff().toMillis();
-        long max = config.maxBackoff().toMillis();
+        long maxBackoff = config.maxBackoff().toMillis();
         long expo = base;
         int exponent = config.backoffExponentBase();
         for (int i = 1; i < attempts; i++) {
-            if (expo >= max) {
-                expo = max;
+            if (expo >= maxBackoff) {
+                expo = maxBackoff;
                 break;
             }
             long next = expo * exponent;
             if (next < 0 || next < expo) {
-                expo = max;
+                expo = maxBackoff;
                 break;
             }
-            expo = Math.min(max, next);
+            expo = Math.min(maxBackoff, next);
         }
-        long jitter = ThreadLocalRandom.current().nextLong(base);
-        long withJitter = expo >= Long.MAX_VALUE - jitter ? Long.MAX_VALUE : expo + jitter;
-        long sleep = Math.min(max, withJitter);
+        long cappedExpo = Math.min(expo, maxBackoff);
+        long remainingToMax = Math.max(0, maxBackoff - cappedExpo);
+        long jitter = remainingToMax > 0 ? ThreadLocalRandom.current().nextLong(remainingToMax + 1) : 0;
+        long sleep = cappedExpo + jitter;
         try {
             Thread.sleep(sleep);
         } catch (InterruptedException e) {
