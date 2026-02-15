@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public record RuntimeConfig(
         @JsonProperty("output") OutputConfig output,
-        @JsonProperty("dockerBin") String dockerBin
+        @JsonProperty("dockerCmd") String dockerCmd
 ) {
     public static final String DEFAULT_DOCKER_BIN = "docker";
 
@@ -15,8 +15,8 @@ public record RuntimeConfig(
         return output == null ? OutputConfig.defaults() : output;
     }
 
-    public String dockerBinOrDefault() {
-        return dockerBin == null || dockerBin.isBlank() ? DEFAULT_DOCKER_BIN : dockerBin;
+    public String dockerCmdOrDefault() {
+        return dockerCmd == null || dockerCmd.isBlank() ? DEFAULT_DOCKER_BIN : dockerCmd;
     }
 }
 

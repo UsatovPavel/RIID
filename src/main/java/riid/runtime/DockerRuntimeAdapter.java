@@ -25,7 +25,7 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
     private static final String DIGEST_FIELD = "digest";
     private final HostFilesystem fs;
     private final Path tempRoot;
-    private final String dockerBin;
+    private final String dockerCmd;
 
     public DockerRuntimeAdapter() {
         this(new NioHostFilesystem(), null, DEFAULT_DOCKER_BIN);
@@ -39,10 +39,10 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         this(fs, tempRoot, DEFAULT_DOCKER_BIN);
     }
 
-    public DockerRuntimeAdapter(HostFilesystem fs, Path tempRoot, String dockerBin) {
+    public DockerRuntimeAdapter(HostFilesystem fs, Path tempRoot, String dockerCmd) {
         this.fs = fs != null ? fs : new NioHostFilesystem();
         this.tempRoot = tempRoot;
-        this.dockerBin = normalizeDockerBin(dockerBin);
+        this.dockerCmd = normalizeDockerCmd(dockerCmd);
     }
 
     @Override
@@ -169,7 +169,7 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
 
     private void runDockerLoad(Path dockerArchive) throws IOException, InterruptedException {
         List<String> cmd = List.of(
-                dockerBin,
+                dockerCmd,
                 "load",
                 "-q",
                 "-i",
@@ -186,7 +186,7 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         return digest.startsWith("sha256:") ? digest.substring("sha256:".length()) : digest;
     }
 
-    private static String normalizeDockerBin(String value) {
+    private static String normalizeDockerCmd(String value) {
         return value == null || value.isBlank() ? DEFAULT_DOCKER_BIN : value;
     }
 
