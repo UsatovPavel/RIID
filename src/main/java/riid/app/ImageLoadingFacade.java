@@ -172,10 +172,10 @@ public final class ImageLoadingFacade implements AutoCloseable {
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
         RuntimeConfig runtimeConfig = config.runtime();
-        String dockerBin = runtimeConfig != null
-                ? runtimeConfig.dockerBinOrDefault()
+        String dockerCmd = runtimeConfig != null
+                ? runtimeConfig.dockerCmdOrDefault()
                 : RuntimeConfig.DEFAULT_DOCKER_BIN;
-        runtimes.put("docker", new DockerRuntimeAdapter(fs, null, dockerBin));
+        runtimes.put("docker", new DockerRuntimeAdapter(fs, null, dockerCmd));
 
         AppConfig appConfig = config.app();
         if (runtimeConfig != null) {
