@@ -120,6 +120,10 @@ public final class ConfigValidator {
         if (runtime == null) {
             return;
         }
+        String dockerCmd = runtime.dockerCmd();
+        if (dockerCmd != null && dockerCmd.isBlank()) {
+            throw new ConfigValidationException("runtime.dockerCmd must not be blank");
+        }
         OutputConfig output = runtime.output();
         if (output == null) {
             return;
