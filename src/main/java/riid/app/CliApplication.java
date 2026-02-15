@@ -20,6 +20,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.UnrecognizedOptionException;
 
+import riid.app.fs.NioHostFilesystem;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.config.ConfigLoader;
@@ -162,7 +163,7 @@ public final class CliApplication {
 
     private static ImageLoader defaultLoaderWithBuiltInConfig(RegistryEndpoint endpoint) {
         return (repository, reference, runtimeId) -> {
-            var fs = new riid.app.fs.NioHostFilesystem();
+            var fs = new NioHostFilesystem();
             try (ImageLoadingFacade facade = ImageLoadingFacade.createDefault(
                     endpoint,
                     null,

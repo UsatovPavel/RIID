@@ -10,10 +10,10 @@ client:
     retryIdempotentOnly: true
     userAgent: "riid-client"
     followRedirects: true
-  range:
+  partialDownloading:
     mode: AUTO
     partialDigestValidation: SKIP
-    fallbackOn416: true
+    retryWithoutRangeOnUnsatisfiableRange: true
   auth:
     defaultTokenTtlSeconds: 300
     certPath: null

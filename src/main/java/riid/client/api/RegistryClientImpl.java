@@ -5,7 +5,7 @@ import org.eclipse.jetty.client.HttpClient;
 import riid.cache.auth.TokenCache;
 import riid.cache.oci.CacheAdapter;
 import riid.client.core.config.AuthConfig;
-import riid.client.core.config.BlobRangeConfig;
+import riid.client.core.config.BlobPartialDownloadConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.core.error.ClientError;
@@ -61,7 +61,7 @@ public final class RegistryClientImpl implements RegistryClient {
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds,
-                              BlobRangeConfig rangeConfig) {
+                              BlobPartialDownloadConfig rangeConfig) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
         this.jettyClient = HttpClientFactory.create(httpConfig);
