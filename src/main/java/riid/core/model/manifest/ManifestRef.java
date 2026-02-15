@@ -1,9 +1,8 @@
-package riid.client.core.model.manifest;
+package riid.core.model.manifest;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import riid.client.core.model.Platform;
 
 /**
  * Entry in a manifest list / index.

@@ -27,9 +27,9 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
-import riid.client.core.model.manifest.Descriptor;
-import riid.client.core.model.manifest.Manifest;
-import riid.client.core.model.manifest.TagList;
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.TagList;
 import riid.client.http.HttpClientConfig;
 
 class RegistryClientImplTest {

@@ -20,8 +20,8 @@ import org.junit.jupiter.api.Test;
 
 import com.sun.net.httpserver.HttpServer;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
 import riid.cache.oci.TempFileCacheAdapter;
@@ -30,9 +30,9 @@ import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.core.config.RegistryEndpoint;
-import riid.client.core.model.manifest.Descriptor;
-import riid.client.core.model.manifest.Manifest;
-import riid.client.core.model.manifest.TagList;
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.TagList;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;

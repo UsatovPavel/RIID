@@ -8,7 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
-import riid.client.core.model.manifest.TagList;
+import riid.core.model.manifest.TagList;
 import riid.client.http.HttpClientConfig;
 
 import java.io.IOException;

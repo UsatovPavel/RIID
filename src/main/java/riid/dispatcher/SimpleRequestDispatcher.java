@@ -1,6 +1,7 @@
 package riid.dispatcher;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
@@ -10,8 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.PathSupport;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.PathSupport;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
@@ -22,7 +23,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
-import riid.client.core.model.manifest.MediaType;
+import riid.core.model.manifest.MediaType;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
@@ -101,7 +102,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     LOGGER.info("p2p hit for layer {}", digest);
                     return new FetchResult(digest, mediaType, p2pPath.get());
                 }
-            } catch (Exception ex) {
+            } catch (IOException ex) {
                 LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
             }
         }

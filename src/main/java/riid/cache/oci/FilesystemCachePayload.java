@@ -5,8 +5,8 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Objects;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 
 /**
  * Cache payload backed by a filesystem path.

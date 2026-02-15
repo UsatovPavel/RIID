@@ -1,6 +1,6 @@
 package riid.client.api;
 
-import riid.client.core.model.manifest.Manifest;
+import riid.core.model.manifest.Manifest;
 
 /**
  * Result of manifest fetch.

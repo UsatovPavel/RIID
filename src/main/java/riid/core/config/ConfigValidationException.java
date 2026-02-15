@@ -1,4 +1,4 @@
-package riid.config;
+package riid.core.config;
 
 import java.util.Locale;
 

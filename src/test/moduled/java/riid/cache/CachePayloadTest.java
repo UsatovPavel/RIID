@@ -9,9 +9,9 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.HostFilesystemTestSupport;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.HostFilesystemTestSupport;
+import riid.core.fs.TestPaths;
 
 class CachePayloadTest {
 

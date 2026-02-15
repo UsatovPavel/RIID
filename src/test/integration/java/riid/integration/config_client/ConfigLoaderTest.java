@@ -4,10 +4,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
-import riid.config.GlobalConfig;
-import riid.config.ConfigLoader;
-import riid.config.ConfigValidationException;
-import riid.config.TestConfigYaml;
+import riid.core.config.GlobalConfig;
+import riid.core.config.ConfigLoader;
+import riid.core.config.ConfigValidationException;
 
 import java.nio.file.Path;
 
@@ -15,9 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 
 @Tag("filesystem")
 class ConfigLoaderTest {

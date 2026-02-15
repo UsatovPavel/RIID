@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
 
-import riid.app.fs.HostFilesystem;
+import riid.core.fs.HostFilesystem;
 
 /**
  * OCI archive with cleanup support.
