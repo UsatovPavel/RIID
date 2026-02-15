@@ -5,9 +5,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -152,14 +152,14 @@ class RuntimeAdaptersTest {
         String layerDigest = sha256(layerBytes);
         Files.write(blobs.resolve(layerDigest), layerBytes);
 
-        var manifest = new riid.client.core.model.manifest.Manifest(
+        var manifest = new riid.core.model.manifest.Manifest(
                 2,
                 "application/vnd.oci.image.manifest.v1+json",
-                new riid.client.core.model.manifest.Descriptor(
+                new riid.core.model.manifest.Descriptor(
                         "application/vnd.oci.image.config.v1+json",
                         "sha256:" + configDigest,
                         configBytes.length),
-                List.of(new riid.client.core.model.manifest.Descriptor(
+                List.of(new riid.core.model.manifest.Descriptor(
                         "application/vnd.oci.image.layer.v1.tar",
                         "sha256:" + layerDigest,
                         layerBytes.length))

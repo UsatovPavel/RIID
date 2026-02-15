@@ -9,7 +9,7 @@ import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.Digests;
-import riid.client.core.model.manifest.MediaTypes;
+import riid.core.model.manifest.MediaTypes;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpResult;

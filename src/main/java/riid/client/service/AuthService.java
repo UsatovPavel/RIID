@@ -14,7 +14,7 @@ import riid.client.core.error.ClientException;
 import riid.client.core.model.auth.AuthChallenge;
 import riid.client.core.model.auth.AuthParser;
 import riid.client.core.model.auth.TokenResponse;
-import riid.client.core.model.manifest.RegistryApi;
+import riid.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 import riid.client.http.HttpResult;

@@ -12,10 +12,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.CliApplication;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
-import riid.config.TestConfigYaml;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
+import riid.core.config.TestConfigYaml;
 
 /**
  * End-to-endOffsetBytes via CLI with real podman runtime.

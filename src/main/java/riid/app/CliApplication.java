@@ -20,11 +20,11 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.UnrecognizedOptionException;
 
-import riid.app.fs.NioHostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
-import riid.config.ConfigLoader;
-import riid.config.GlobalConfig;
+import riid.core.config.ConfigLoader;
+import riid.core.config.GlobalConfig;
 import riid.p2p.P2PExecutor;
 import riid.runtime.RuntimeAdapter;
 

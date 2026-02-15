@@ -12,9 +12,9 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.PathSupport;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.PathSupport;
 
 /**
  * Docker adapter: accepts OCI archive, rewrites to docker-save format, feeds to `docker load`.

@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.app.CliApplication;
 import riid.app.ImageLoadingFacade;
-import riid.app.fs.NioHostFilesystem;
-import riid.config.TestConfigYaml;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.config.TestConfigYaml;
 import riid.runtime.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
@@ -30,7 +30,7 @@ class CliToFactorySmokeTest {
     @Test
     void reachesFactoryFromCli() throws Exception {
         var fs = new NioHostFilesystem();
-        Path config = riid.app.fs.TestPaths.tempFile(fs, riid.app.fs.TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
+        Path config = riid.core.fs.TestPaths.tempFile(fs, riid.core.fs.TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
         fs.writeString(config, TestConfigYaml.minimalDockerHubConfigWithEmptyAuth(2));
 
         AtomicBoolean factoryCalled = new AtomicBoolean(false);

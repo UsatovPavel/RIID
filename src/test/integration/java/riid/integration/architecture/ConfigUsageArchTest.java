@@ -17,7 +17,7 @@ class ConfigUsageArchTest {
             noClasses()
                     .that().resideOutsideOfPackage("riid.app..")
                     .and().resideOutsideOfPackage("riid.integration..")
-                    .and().resideOutsideOfPackage("riid.config..")
-                    .should().dependOnClassesThat().resideInAPackage("riid.config..");
+                    .and().resideOutsideOfPackage("riid.core.config..")
+                    .should().dependOnClassesThat().resideInAPackage("riid.core.config..");
 }
 

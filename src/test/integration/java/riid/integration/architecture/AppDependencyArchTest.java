@@ -26,7 +26,7 @@ class AppDependencyArchTest {
                     .that().resideInAPackage("riid.dispatcher..")
                     .should().dependOnClassesThat(
                             resideInAPackage("riid.app..")
-                                    .and(resideOutsideOfPackage("riid.app.fs.."))
+                                    .and(resideOutsideOfPackage("riid.core.fs.."))
                     );
     @ArchTest
     static final ArchRule runtime_should_not_depend_on_app =
@@ -34,7 +34,7 @@ class AppDependencyArchTest {
                     .that().resideInAPackage("riid.runtime..")
                     .should().dependOnClassesThat(
                         resideInAPackage("riid.app..")
-                                .and(resideOutsideOfPackage("riid.app.fs.."))
+                                .and(resideOutsideOfPackage("riid.core.fs.."))
                         );
 
     @ArchTest
@@ -43,7 +43,7 @@ class AppDependencyArchTest {
                     .that().resideInAPackage("riid.cache..")
                     .should().dependOnClassesThat(
                             resideInAPackage("riid.app..")
-                                    .and(resideOutsideOfPackage("riid.app.fs.."))
+                                    .and(resideOutsideOfPackage("riid.core.fs.."))
                     );
                     
     @ArchTest
@@ -52,7 +52,7 @@ class AppDependencyArchTest {
                     .that().resideInAPackage("riid.p2p..")
                     .should().dependOnClassesThat(
                             resideInAPackage("riid.app..")
-                                    .and(resideOutsideOfPackage("riid.app.fs.."))
+                                    .and(resideOutsideOfPackage("riid.core.fs.."))
                     );
 }
 

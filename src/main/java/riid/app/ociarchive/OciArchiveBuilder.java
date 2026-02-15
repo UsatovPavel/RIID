@@ -12,12 +12,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import riid.app.ImageId;
 import riid.app.error.AppError;
 import riid.app.error.OciArchiveException;
-import riid.app.fs.HostFilesystem;
+import riid.core.fs.HostFilesystem;
 import riid.cache.oci.ImageDigest;
-import riid.app.fs.PathSupport;
+import riid.core.fs.PathSupport;
 import riid.client.api.ManifestResult;
-import riid.client.core.model.manifest.Manifest;
-import riid.client.core.model.manifest.MediaType;
+import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.MediaType;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.RepositoryName;
 

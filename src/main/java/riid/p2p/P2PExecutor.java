@@ -1,5 +1,6 @@
 package riid.p2p;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -15,7 +16,7 @@ public interface P2PExecutor {
      *
      * @return path if found, empty otherwise
      */
-    Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType);
+    Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) throws IOException;
 
     /**
      * Publish blob to peers (best effort).

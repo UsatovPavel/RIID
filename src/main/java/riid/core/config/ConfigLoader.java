@@ -1,4 +1,4 @@
-package riid.config;
+package riid.core.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -8,8 +8,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.IOException;
 import java.nio.file.Path;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 
 /**
  * Loads AppConfig from YAML file.

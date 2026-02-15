@@ -1,4 +1,4 @@
-package riid.config;
+package riid.core.config;
 
 /**
  * Shared YAML snippets for integration tests.

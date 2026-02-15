@@ -3,7 +3,7 @@ package riid.dispatcher;
 import java.util.Objects;
 
 import riid.cache.oci.ImageDigest;
-import riid.client.core.model.manifest.MediaType;
+import riid.core.model.manifest.MediaType;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;

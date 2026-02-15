@@ -1,4 +1,4 @@
-package riid.app.fs;
+package riid.core.fs;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

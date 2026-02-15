@@ -13,14 +13,14 @@ import org.junit.jupiter.api.Test;
 
 import riid.app.error.AppError;
 import riid.app.error.AppException;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 import riid.cache.oci.ImageDigest;
-import riid.app.fs.TestPaths;
+import riid.core.fs.TestPaths;
 import riid.client.api.ManifestResult;
-import riid.client.core.model.manifest.Descriptor;
-import riid.client.core.model.manifest.Manifest;
-import riid.client.core.model.manifest.MediaType;
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.MediaType;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
@@ -104,7 +104,7 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
-        public riid.client.core.model.manifest.TagList listTags(String repository, Integer n, String last) {
+        public riid.core.model.manifest.TagList listTags(String repository, Integer n, String last) {
             throw new UnsupportedOperationException(NOT_USED);
         }
 

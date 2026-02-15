@@ -3,9 +3,6 @@ package riid.p2p;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -15,8 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.PathSupport;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.PathSupport;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
@@ -24,7 +21,8 @@ import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
 import riid.cache.oci.ValidationException;
 import riid.client.core.config.RegistryEndpoint;
-import riid.client.core.model.manifest.RegistryApi;
+import riid.core.model.manifest.RegistryApi;
+import riid.core.hash.Sha256Utils;
 import riid.runtime.BoundedCommandExecution;
 
 /**
@@ -53,7 +51,8 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
     }
 
     @Override
-    public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) {
+    public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType)
+            throws IOException {
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest, "digest");
         if (!config.enabledOrDefault()) {
@@ -72,7 +71,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
             }
             long actualSize = tempPath.toFile().length();
             if (size > 0 && actualSize > 0 && actualSize != size) {
-                throw new ValidationException(
+                throw new IOException(
                         "P2P size mismatch for " + digest + ": expected " + size + ", got " + actualSize
                                 + ". dfget stdout=" + result.stdout() + " stderr=" + result.stderr());
             }
@@ -80,7 +79,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
             if (!computed.equals(digest.toString())) {
                 LOGGER.warn("P2P digest mismatch for {}: got {} (size={}, stdout={}, stderr={})",
                         digest, computed, actualSize, result.stdout(), result.stderr());
-                throw new ValidationException(
+                throw new IOException(
                         "P2P digest mismatch for " + digest + ": got " + computed
                                 + ". size=" + actualSize
                                 + ". dfget stdout=" + result.stdout() + " stderr=" + result.stderr());
@@ -88,11 +87,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
             return Optional.of(cacheOrTemp(tempPath, digest, mediaType, actualSize));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("P2P dfget interrupted for " + digest, e);
-        } catch (ValidationException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        } catch (IOException e) {
-            throw new RuntimeException("P2P dfget failed for " + digest, e);
+            throw new IOException("P2P dfget interrupted for " + digest, e);
         }
     }
 
@@ -115,14 +110,10 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         return cmd;
     }
 
-    private Path createTempFile() {
-        try {
-            Path path = PathSupport.temporaryPath("p2p-", ".bin");
-            fs.createFile(path);
-            return path;
-        } catch (IOException e) {
-            throw new RuntimeException("Cannot create temp file for dfget", e);
-        }
+    private Path createTempFile() throws IOException {
+        Path path = PathSupport.temporaryPath("p2p-", ".bin");
+        fs.createFile(path);
+        return path;
     }
 
     private Path cacheOrTemp(Path tempPath, ImageDigest digest, CacheMediaType mediaType, long size) {
@@ -153,27 +144,10 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
     }
 
     private String computeSha256(Path path) throws IOException {
-        MessageDigest md;
-        try {
-            md = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
+        try (InputStream input = fs.newInputStream(path)) {
+            return Sha256Utils.digest(input);
+        } catch (IllegalStateException e) {
             throw new IOException("SHA-256 digest not available", e);
         }
-        try (InputStream input = fs.newInputStream(path);
-             DigestInputStream digestStream = new DigestInputStream(input, md)) {
-            byte[] buffer = new byte[8192];
-            while (digestStream.read(buffer) != -1) {
-                // digest updated by stream
-            }
-        }
-        return "sha256:" + bytesToHex(md.digest());
-    }
-
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
     }
 }

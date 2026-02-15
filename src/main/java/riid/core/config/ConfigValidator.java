@@ -1,4 +1,4 @@
-package riid.config;
+package riid.core.config;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

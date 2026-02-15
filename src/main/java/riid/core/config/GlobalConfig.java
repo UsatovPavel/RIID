@@ -1,4 +1,4 @@
-package riid.config;
+package riid.core.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import riid.app.AppConfig;

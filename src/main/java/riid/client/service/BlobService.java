@@ -6,9 +6,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Path;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -33,10 +30,11 @@ import riid.client.core.config.BlobPartialDownloadConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
-import riid.client.core.model.manifest.RegistryApi;
+import riid.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
 import riid.client.http.HttpResult;
+import riid.core.hash.Sha256Utils;
 
 /**
  * Downloads blobs with optional Range and on-the-fly SHA256 validation.
@@ -319,21 +317,15 @@ public class BlobService implements BlobServiceApi {
     }
 
     private String writeAndHashStreaming(InputStream is, OutputStream os) throws IOException {
-        MessageDigest md;
         try {
-            md = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
+            return Sha256Utils.copyAndDigest(is, os);
+        } catch (IllegalStateException e) {
             LOGGER.warn("Blob SHA-256 not available {}/{}: {}", is.toString(), os.toString(), e.getMessage(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "SHA-256 not available"),
                     "SHA-256 not available",
                     e);
         }
-        try (DigestInputStream dis = new DigestInputStream(is, md)) {
-            dis.transferTo(os);
-        }
-        String hex = bytesToHex(md.digest());
-        return "sha256:" + hex;
     }
 
     private static void closeQuietly(InputStream body) {
@@ -345,15 +337,6 @@ public class BlobService implements BlobServiceApi {
         } catch (IOException ignored) {
             // best effort
         }
-    }
-
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-            sb.append(Character.forDigit((b) & 0xF, 16));
-        }
-        return sb.toString();
     }
 
 }

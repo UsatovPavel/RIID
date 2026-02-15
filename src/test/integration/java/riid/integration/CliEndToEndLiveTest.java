@@ -5,13 +5,13 @@ import org.junit.jupiter.api.Test;
 import riid.app.CliApplication;
 import riid.app.ImageId;
 import riid.app.ImageLoadingFacade;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
-import riid.config.ConfigLoader;
-import riid.config.TestConfigYaml;
+import riid.core.config.ConfigLoader;
+import riid.core.config.TestConfigYaml;
 import riid.p2p.P2PExecutor;
 import riid.runtime.RuntimeAdapter;
 
