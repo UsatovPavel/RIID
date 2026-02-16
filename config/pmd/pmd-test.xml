@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="riid-test-pmd"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.github.io/pmd-7.0.0/ruleset_xml_schema.xsd">
+    <description>PMD profile for test source sets.</description>
+
+    <rule ref="category/java/errorprone.xml">
+        <exclude name="TestClassWithoutTestCases"/>
+        <exclude name="AvoidDuplicateLiterals"/>
+    </rule>
+
+    <rule ref="category/java/errorprone.xml/AvoidDuplicateLiterals">
+        <properties>
+            <property name="maxDuplicateLiterals" value="5"/>
+        </properties>
+    </rule>
+</ruleset>

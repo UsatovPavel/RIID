@@ -22,6 +22,9 @@ import riid.runtime.RuntimeConfig;
  */
 public final class ConfigValidator {
     private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
+    private static final String AUTH_CERT_PATH = "client.auth.certPath";
+    private static final String AUTH_KEY_PATH = "client.auth.keyPath";
+    private static final String AUTH_CA_PATH = "client.auth.caPath";
 
     private ConfigValidator() {
     }
@@ -111,9 +114,9 @@ public final class ConfigValidator {
         if (hasCert != hasKey) {
             throw new ConfigValidationException(ConfigValidationException.Auth.CERT_KEY_PAIR_REQUIRED.message());
         }
-        validatePathIfPresent(auth.certPath(), "client.auth.certPath");
-        validatePathIfPresent(auth.keyPath(), "client.auth.keyPath");
-        validatePathIfPresent(auth.caPath(), "client.auth.caPath");
+        validatePathIfPresent(auth.certPath(), AUTH_CERT_PATH);
+        validatePathIfPresent(auth.keyPath(), AUTH_KEY_PATH);
+        validatePathIfPresent(auth.caPath(), AUTH_CA_PATH);
     }
 
     private static void validateApp(AppConfig app) {
@@ -201,9 +204,9 @@ public final class ConfigValidator {
         Path p = Path.of(value);
         if (!Files.exists(p)) {
             String message = switch (field) {
-                case "client.auth.certPath" -> ConfigValidationException.Auth.CERT_MISSING.message();
-                case "client.auth.keyPath" -> ConfigValidationException.Auth.KEY_MISSING.message();
-                case "client.auth.caPath" -> ConfigValidationException.Auth.CA_MISSING.message();
+                case AUTH_CERT_PATH -> ConfigValidationException.Auth.CERT_MISSING.message();
+                case AUTH_KEY_PATH -> ConfigValidationException.Auth.KEY_MISSING.message();
+                case AUTH_CA_PATH -> ConfigValidationException.Auth.CA_MISSING.message();
                 default -> null;
             };
             if (message != null) {
@@ -215,9 +218,9 @@ public final class ConfigValidator {
         }
         if (!Files.isRegularFile(p)) {
             String message = switch (field) {
-                case "client.auth.certPath" -> ConfigValidationException.Auth.CERT_NOT_FILE.message();
-                case "client.auth.keyPath" -> ConfigValidationException.Auth.KEY_NOT_FILE.message();
-                case "client.auth.caPath" -> ConfigValidationException.Auth.CA_NOT_FILE.message();
+                case AUTH_CERT_PATH -> ConfigValidationException.Auth.CERT_NOT_FILE.message();
+                case AUTH_KEY_PATH -> ConfigValidationException.Auth.KEY_NOT_FILE.message();
+                case AUTH_CA_PATH -> ConfigValidationException.Auth.CA_NOT_FILE.message();
                 default -> null;
             };
             if (message != null) {
@@ -227,9 +230,9 @@ public final class ConfigValidator {
         }
         if (!Files.isReadable(p)) {
             String message = switch (field) {
-                case "client.auth.certPath" -> ConfigValidationException.Auth.CERT_NOT_READABLE.message();
-                case "client.auth.keyPath" -> ConfigValidationException.Auth.KEY_NOT_READABLE.message();
-                case "client.auth.caPath" -> ConfigValidationException.Auth.CA_NOT_READABLE.message();
+                case AUTH_CERT_PATH -> ConfigValidationException.Auth.CERT_NOT_READABLE.message();
+                case AUTH_KEY_PATH -> ConfigValidationException.Auth.KEY_NOT_READABLE.message();
+                case AUTH_CA_PATH -> ConfigValidationException.Auth.CA_NOT_READABLE.message();
                 default -> null;
             };
             if (message != null) {

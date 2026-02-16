@@ -45,6 +45,8 @@ class DragonflyP2PExecutorTest {
     private static final String REPO = "repo";
     private static final String CONTENT_TYPE = "application/octet-stream";
     private static final String MEDIA_LAYER = "application/vnd.oci.image.layer.v1.tar";
+    private static final String JAVA_IO_TMPDIR = "java.io.tmpdir";
+    private static final String V2_PATH_PREFIX = "/v2/";
 
     private HttpServer server;
 
@@ -94,13 +96,13 @@ class DragonflyP2PExecutorTest {
 
         RegistryEndpoint endpoint = new RegistryEndpoint("http", dfgetEnv.host(), server.getAddress().getPort(), null);
         HostFilesystem fs = new NioHostFilesystem();
-        String previousTmp = System.getProperty("java.io.tmpdir");
-        System.setProperty("java.io.tmpdir", "/tmp");
+        String previousTmp = System.getProperty(JAVA_IO_TMPDIR);
+        System.setProperty(JAVA_IO_TMPDIR, "/tmp");
         try {
             String seedDfget = createDfgetWrapper(dfgetEnv.path(), "dfdaemon1", true);
             Path seedPath = Files.createTempFile("dfget-seed-", ".bin");
             seedPath.toFile().deleteOnExit();
-            String seedUrl = endpoint.uri("/v2/" + REPO + "/blobs/" + digest).toString();
+            String seedUrl = endpoint.uri(V2_PATH_PREFIX + REPO + "/blobs/" + digest).toString();
             runDfget(seedDfget, seedUrl, seedPath);
             assertTrue(Files.exists(seedPath), "seed file should exist");
             assertTrue(Files.size(seedPath) > 0, "seed file should not be empty");
@@ -118,7 +120,7 @@ class DragonflyP2PExecutorTest {
             }
         } finally {
             if (previousTmp != null) {
-                System.setProperty("java.io.tmpdir", previousTmp);
+                System.setProperty(JAVA_IO_TMPDIR, previousTmp);
             }
         }
     }
@@ -135,13 +137,13 @@ class DragonflyP2PExecutorTest {
 
         RegistryEndpoint endpoint = new RegistryEndpoint("http", dfgetEnv.host(), server.getAddress().getPort(), null);
         HostFilesystem fs = new NioHostFilesystem();
-        String previousTmp = System.getProperty("java.io.tmpdir");
-        System.setProperty("java.io.tmpdir", "/tmp");
+        String previousTmp = System.getProperty(JAVA_IO_TMPDIR);
+        System.setProperty(JAVA_IO_TMPDIR, "/tmp");
         try {
             String seedDfget = createDfgetWrapper(dfgetEnv.path(), "dfdaemon1", true);
             Path seedPath = Files.createTempFile("dfget-seed-", ".bin");
             seedPath.toFile().deleteOnExit();
-            String seedUrl = endpoint.uri("/v2/" + REPO + "/blobs/" + digest).toString();
+            String seedUrl = endpoint.uri(V2_PATH_PREFIX + REPO + "/blobs/" + digest).toString();
             runDfget(seedDfget, seedUrl, seedPath);
 
             int seedRequests = blobRequests.get();
@@ -163,7 +165,7 @@ class DragonflyP2PExecutorTest {
             }
         } finally {
             if (previousTmp != null) {
-                System.setProperty("java.io.tmpdir", previousTmp);
+                System.setProperty(JAVA_IO_TMPDIR, previousTmp);
             }
         }
     }
@@ -174,12 +176,12 @@ class DragonflyP2PExecutorTest {
 
     private void startServer(byte[] payload, String digest, AtomicInteger blobRequests) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/v2/", exchange -> {
+        server.createContext(V2_PATH_PREFIX, exchange -> {
             try (exchange) {
                 exchange.sendResponseHeaders(200, 0);
             }
         });
-        server.createContext("/v2/" + REPO + "/blobs/" + digest, exchange -> {
+        server.createContext(V2_PATH_PREFIX + REPO + "/blobs/" + digest, exchange -> {
             try (exchange) {
                 if (blobRequests != null) {
                     blobRequests.incrementAndGet();
@@ -274,7 +276,7 @@ class DragonflyP2PExecutorTest {
                 }
             }
         } catch (IOException e) {
-            // ignore
+            return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -300,7 +302,7 @@ class DragonflyP2PExecutorTest {
                 }
             }
         } catch (IOException e) {
-            // ignore
+            return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
