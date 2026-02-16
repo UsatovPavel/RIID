@@ -13,6 +13,7 @@ import riid.core.model.manifest.MediaTypes;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpResult;
+import riid.core.config.TestRegistryConfig;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ManifestServiceTest {
 
-    private final RegistryEndpoint endpoint = RegistryEndpoint.https("registry-1.docker.io");
+    private final RegistryEndpoint endpoint = TestRegistryConfig.endpoint();
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test

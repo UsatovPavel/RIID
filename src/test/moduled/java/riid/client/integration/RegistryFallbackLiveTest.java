@@ -8,6 +8,7 @@ import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
+import riid.core.config.TestRegistryConfig;
 
 import java.time.Duration;
 
@@ -23,7 +24,7 @@ class RegistryFallbackLiveTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(RegistryFallbackLiveTest.class);
 
     private static final RegistryEndpoint BAD = new RegistryEndpoint("http", "127.0.0.1", 65500, null);
-    private static final RegistryEndpoint HUB = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+    private static final RegistryEndpoint HUB = TestRegistryConfig.endpoint();
     private static final String REPO = "library/busybox";
     private static final String REF = "latest";
 

@@ -388,7 +388,7 @@ class ConfigBranchTest {
     @Test
     void throwsWhenCertPathMissing() {
         String missing = "no-such-file.pem";
-        AuthConfig auth = new AuthConfig(300, missing, null, null);
+        AuthConfig auth = new AuthConfig(300, missing, "no-such-key.pem", null);
         ClientConfig client = new ClientConfig(
                 HttpClientConfig.builder().build(),
                 auth,
@@ -398,6 +398,35 @@ class ConfigBranchTest {
         assertEquals(
                 ConfigValidationException.Auth.CERT_MISSING.message() + ": " + missing,
                 ex.getMessage());
+    }
+
+    @Test
+    void throwsWhenCertAndKeyPairIsIncomplete() {
+        AuthConfig auth = new AuthConfig(300, "client.pem", null, null);
+        ClientConfig client = new ClientConfig(
+                HttpClientConfig.builder().build(),
+                auth,
+                List.of(RegistryEndpoint.https("example.org")));
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
+        assertEquals(ConfigValidationException.Auth.CERT_KEY_PAIR_REQUIRED.message(), ex.getMessage());
+    }
+
+    @Tag("filesystem")
+    @Test
+    void acceptsCertAndKeyPairWhenBothProvided() throws Exception {
+        Path cert = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cert-", ".pem");
+        Path key = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "key-", ".pem");
+        fs.writeString(cert, "cert");
+        fs.writeString(key, "key");
+        AuthConfig auth = new AuthConfig(300, cert.toString(), key.toString(), null);
+        ClientConfig client = new ClientConfig(
+                HttpClientConfig.builder().build(),
+                auth,
+                List.of(RegistryEndpoint.https("example.org")));
+        GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
+
+        ConfigValidator.validate(cfg);
     }
 
     private static ClientConfig validClient() {
