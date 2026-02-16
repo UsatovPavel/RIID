@@ -309,7 +309,6 @@ class DragonflyP2PExecutorTest {
         return null;
     }
 
-    
     private static void ensureDfgetAvailable(String dfgetPath) {
         try {
             Process process = new ProcessBuilder(dfgetPath, "--help")

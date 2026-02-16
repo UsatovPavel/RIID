@@ -3,6 +3,9 @@
 ### Config
 - Registry endpoints via `RegistryEndpoint` (scheme/host/port/creds); list provided by external config/Orchestrator.
 - HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, configurable `backoffExponentBase`, User-Agent, followRedirects=true для GHCR CDN 302/307).
+- TLS/Auth client wiring: `AuthConfig` supports `defaultTokenTtlSeconds`, `certPath`, `keyPath`, `caPath`.
+  - `certPath` + `keyPath` are used as mTLS client cert/key pair.
+  - `caPath` is used as custom CA trust source.
 - Range policy: `BlobPartialDownloadConfig` (mode/partialDigestValidation/retryWithoutRangeOnUnsatisfiableRange) controls Range usage, 206/416 handling, and partial validation.
 - Cache: external `CacheAdapter` (optional); client writes to cache after download. Source choice (cache/P2P/registry) is up to Orchestrator.
 
@@ -18,7 +21,8 @@
 RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
 HttpClientConfig httpCfg = HttpClientConfig.builder().maxRetries(2).build();
 CacheAdapter cache = null; // optional
-RegistryClient client = new RegistryClientImpl(endpoint, httpCfg, cache);
+AuthConfig authCfg = new AuthConfig(300, "/etc/riid/client.crt", "/etc/riid/client.key", "/etc/riid/ca.pem");
+RegistryClient client = new RegistryClientImpl(endpoint, httpCfg, cache, authCfg, null);
 
 var manifest = client.fetchManifest("library/busybox", "latest").manifest();
 var layer = manifest.layers().getFirst();
@@ -41,4 +45,7 @@ var res = client.fetchBlob(new BlobRequest("library/busybox", layer.digest(), la
 - Client does not choose source (cache/P2P/registry) and is runtime-agnostic; Orchestrator/Runtime Adapter decides.
 - Client validates digest/size on download; final verification/import is in the Runtime Adapter layer.
 - Range: for partial responses (206), digest validation is skipped unless the range covers the full blob; 416 fallback to full GET is configurable.
+- Security error format for runtime paths is unified and safe for logs:
+  - `SECURITY:TLS:<kind>: <safe_message>`
+  - `SECURITY:AUTH:<kind>: <safe_message>`
 

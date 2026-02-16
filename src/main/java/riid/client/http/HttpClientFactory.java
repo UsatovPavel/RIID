@@ -87,7 +87,8 @@ public final class HttpClientFactory {
             throw new IllegalArgumentException(
                     tlsMessage("CERT_KEY_PAIR_INVALID", "certPath and keyPath must be set together for mTLS"));
         }
-        KeyManagerFactory keyManagerFactory = hasCert ? createKeyManagerFactory(Path.of(certPath), Path.of(keyPath)) : null;
+        KeyManagerFactory keyManagerFactory = hasCert ?
+         createKeyManagerFactory(Path.of(certPath), Path.of(keyPath)) : null;
         TrustManagerFactory trustManagerFactory = hasCa ? createTrustManagerFactory(Path.of(caPath)) : null;
         SSLContext sslContext = SSLContext.getInstance(TLS_PROTOCOL);
         sslContext.init(

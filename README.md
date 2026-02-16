@@ -30,7 +30,12 @@ java -jar build/libs/riid.jar \
   --username user --password-env RIID_PASS
 ```
 
-Cert/key/CA flags are validated but currently stubbed (not yet wired to HTTP client).
+TLS/mTLS options (wired to HTTP client):
+- `--cert-path` + `--key-path` for client certificate authentication (mTLS).
+- `--ca-path` for custom CA trust.
+- Runtime security failures are emitted in safe unified format:
+  - `SECURITY:TLS:<kind>: <safe_message>`
+  - `SECURITY:AUTH:<kind>: <safe_message>`
 
 ## Tests
 ```bash
@@ -68,6 +73,10 @@ Porto runtime adapters are wired the same way via `--runtime porto`; ensure Port
 - `./gradlew test` (unit + integration). Live/e2e tests that hit public registries may require network; disable/skip if offline.
 - For Podman integration end-to-end: run local registry as above, then `./gradlew test --tests "riid.integration.runtime_app.CliPodmanIntegrationTest"` (requires podman and network for base images).
 - For Porto: use analogous CLI invocation with `--runtime porto` after ensuring runtime availability.
+- Registry endpoint for live tests is configurable via system properties:
+  - `riid.test.registry.scheme` (default: `https`)
+  - `riid.test.registry.host` (default: `registry-1.docker.io`)
+  - `riid.test.registry.port` (default: `-1`)
 
 # Dragonfly
 Pull container images 
