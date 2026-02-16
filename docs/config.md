@@ -73,7 +73,12 @@ p2p:
 - `client`, `dispatcher`, `registries` required; at least one registry with `scheme` and `host`.
 - `dispatcher.maxConcurrentRegistry` > 0.
 - `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `backoffExponentBase >= 2`, `userAgent` not blank, `maxRetries` and `maxRedirects` must be >= 0.
-- `client.auth.defaultTokenTtlSeconds` > 0; cert/key/ca paths, if provided, must exist.
+- `client.auth.defaultTokenTtlSeconds` > 0.
+- `client.auth.certPath` and `client.auth.keyPath` must be set together (mTLS pair policy).
+- `client.auth.certPath`/`keyPath`/`caPath`, if provided, must:
+  - exist,
+  - point to regular files,
+  - be readable.
 - `app.tempDirectory`, if present, must not be blank; `app.allowedRegistries` entries must not be blank.
 - `runtime.dockerCmd`, if present, must not be blank.
 - `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.
@@ -83,6 +88,9 @@ p2p:
 - Missing `registries` throws `ConfigValidationException`.
 - Для GHCR скачивание blob/manifest использует 302/307 CDN, поэтому `client.http.followRedirects` должен быть true (явно прописывать в config/config.yaml).
 - Partial downloading: `partialDigestValidation=SKIP` means digest is validated only for a full blob; `retryWithoutRangeOnUnsatisfiableRange` enables retry without Range.
+- Runtime TLS/Auth errors use unified safe message prefixes:
+  - `SECURITY:TLS:<kind>: ...`
+  - `SECURITY:AUTH:<kind>: ...`
 
 ### Tests
 - `ConfigBranchTest`: validation branches (including maxRetries < 0, missing http/auth/registries/dispatcher).

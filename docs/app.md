@@ -40,10 +40,12 @@ Basic auth (password options are mutually exclusive):
 - `--username <user>`
 - `--password <pwd>` | `--password-env <VAR>` | `--password-file <path>`
 
-TLS (stub for now: only validates file existence, not yet used):
+TLS (wired to HTTP client):
 - `--cert-path <path>`
 - `--key-path <path>`
 - `--ca-path <path>`
+- `cert`/`key` are used as a client certificate pair for mTLS.
+- `ca` is used as custom trust store for server certificate validation.
 
 Other:
 - `--help` — show usage
@@ -75,3 +77,6 @@ java -jar riid.jar --config ./config/config.yaml --repo registry.example.com/app
 Coverage includes:
 - `CliApplicationTest` for negative cases (no args, unknown runtime) and happy-path argument propagation.
 - `ImageLoadServiceFactoryTest` for building the service from a minimal YAML config.
+- Password source handling:
+  - positive path for `--password-file` (non-empty file),
+  - negative paths for missing env var / empty password file / conflicting password sources.
