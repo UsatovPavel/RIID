@@ -27,6 +27,7 @@ import riid.client.core.error.ClientException;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpResult;
+import riid.core.config.TestRegistryConfig;
 
 @SuppressWarnings("PMD.CloseResource")
 class BlobServiceTest {
@@ -35,7 +36,7 @@ class BlobServiceTest {
     private static final String REPO = "library/busybox";
     private static final String MEDIA_TYPE = "application/octet-stream";
     private static final String SCOPE = "scope";
-    private final RegistryEndpoint endpoint = RegistryEndpoint.https("registry-1.docker.io");
+    private final RegistryEndpoint endpoint = TestRegistryConfig.endpoint();
 
     @Test
     void closesSinkOnIoFailure() {

@@ -7,6 +7,7 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.core.config.GlobalConfig;
 import riid.core.config.ConfigLoader;
 import riid.core.config.ConfigValidationException;
+import riid.core.config.TestRegistryConfig;
 
 import java.nio.file.Path;
 
@@ -27,6 +28,9 @@ class ConfigLoaderTest {
 
     @Test
     void loadsValidConfig() throws Exception {
+        String scheme = TestRegistryConfig.scheme();
+        String host = TestRegistryConfig.host();
+        int port = TestRegistryConfig.port();
         String yaml = """
                 client:
                   http:
@@ -41,20 +45,21 @@ class ConfigLoaderTest {
                   auth:
                     defaultTokenTtlSeconds: 600
                   registries:
-                    - scheme: https
-                      host: registry-1.docker.io
-                      port: -1
+                    - scheme: %s
+                      host: %s
+                      port: %d
                 dispatcher:
                   maxConcurrentRegistry: 3
-                """;
+                """.formatted(scheme, host, port);
         Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
 
         GlobalConfig cfg = ConfigLoader.load(tmp);
         assertEquals(1, cfg.client().registries().size());
         RegistryEndpoint ep = cfg.client().registries().get(0);
-        assertEquals("https", ep.scheme());
-        assertEquals("registry-1.docker.io", ep.host());
+        assertEquals(scheme, ep.scheme());
+        assertEquals(host, ep.host());
+        assertEquals(port, ep.port());
         assertEquals(3, cfg.dispatcher().maxConcurrentRegistry());
     }
 

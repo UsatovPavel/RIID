@@ -301,6 +301,30 @@ class CliApplicationTest {
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Password file is empty"));
     }
 
+    @Tag("filesystem")
+    @Test
+    void acceptsPasswordFromFileWhenNotEmpty() throws Exception {
+        HostFilesystem fs = new NioHostFilesystem();
+        Path passwordFile = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "pwd-ok-", ".txt");
+        fs.writeString(passwordFile, "secret-from-file");
+
+        CliApplication app = new CliApplication(
+                options -> (repo, ref, runtime) -> "ok",
+                ImageLoadingFacade.defaultRuntimes(),
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
+        );
+
+        int code = app.run(new String[]{
+                "--repo", REPO_BUSYBOX,
+                "--runtime", RUNTIME_PODMAN,
+                "--username", "user",
+                "--password-file", passwordFile.toString()
+        });
+
+        assertEquals(CliApplication.ExitCode.OK.code(), code);
+    }
+
     @Test
     void validatesCertPath() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();

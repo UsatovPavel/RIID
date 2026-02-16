@@ -18,6 +18,7 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.client.http.HttpClientConfig;
+import riid.core.config.TestRegistryConfig;
 
 /**
  * Live Docker Hub public smoke (no tokens).
@@ -34,7 +35,7 @@ class DockerHubLiveTest {
         String repo = "library/busybox";
         String reference = "latest";
 
-        RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+        RegistryEndpoint endpoint = TestRegistryConfig.endpoint();
         HttpClientConfig cfg = HttpClientConfig.builder()
                 .followRedirects(true)
                 .maxRetries(1)
