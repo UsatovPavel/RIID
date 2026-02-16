@@ -106,6 +106,11 @@ public final class ConfigValidator {
         if (auth.defaultTokenTtlSeconds() <= 0) {
             throw new ConfigValidationException(ConfigValidationException.Auth.TTL_POSITIVE.message());
         }
+        boolean hasCert = hasText(auth.certPath());
+        boolean hasKey = hasText(auth.keyPath());
+        if (hasCert != hasKey) {
+            throw new ConfigValidationException(ConfigValidationException.Auth.CERT_KEY_PAIR_REQUIRED.message());
+        }
         validatePathIfPresent(auth.certPath(), "client.auth.certPath");
         validatePathIfPresent(auth.keyPath(), "client.auth.keyPath");
         validatePathIfPresent(auth.caPath(), "client.auth.caPath");
@@ -204,7 +209,37 @@ public final class ConfigValidator {
             if (message != null) {
                 throw new ConfigValidationException(message + ": " + value);
             }
-            throw new ConfigValidationException(ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value));
+            throw new ConfigValidationException(
+                ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value)
+            );
         }
+        if (!Files.isRegularFile(p)) {
+            String message = switch (field) {
+                case "client.auth.certPath" -> ConfigValidationException.Auth.CERT_NOT_FILE.message();
+                case "client.auth.keyPath" -> ConfigValidationException.Auth.KEY_NOT_FILE.message();
+                case "client.auth.caPath" -> ConfigValidationException.Auth.CA_NOT_FILE.message();
+                default -> null;
+            };
+            if (message != null) {
+                throw new ConfigValidationException(message + ": " + value);
+            }
+            throw new ConfigValidationException(field + " must point to a regular file: " + value);
+        }
+        if (!Files.isReadable(p)) {
+            String message = switch (field) {
+                case "client.auth.certPath" -> ConfigValidationException.Auth.CERT_NOT_READABLE.message();
+                case "client.auth.keyPath" -> ConfigValidationException.Auth.KEY_NOT_READABLE.message();
+                case "client.auth.caPath" -> ConfigValidationException.Auth.CA_NOT_READABLE.message();
+                default -> null;
+            };
+            if (message != null) {
+                throw new ConfigValidationException(message + ": " + value);
+            }
+            throw new ConfigValidationException(field + " must be readable: " + value);
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

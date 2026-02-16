@@ -35,6 +35,7 @@ import static java.util.Base64.getEncoder;
  */
 public class AuthService {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthService.class);
+    private static final String AUTH_PREFIX = "SECURITY:AUTH:";
 
     private final HttpExecutor http;
     private final ObjectMapper mapper;
@@ -75,22 +76,28 @@ public class AuthService {
             return Optional.empty(); // no auth needed
         }
         if (pingResp.statusCode() != HttpStatus.UNAUTHORIZED_401) {
+            String message = authMessage(
+                    "UNEXPECTED_PING_STATUS",
+                    "registry ping returned status " + pingResp.statusCode());
             throw new ClientException(
                     new ClientError.Auth(
                             ClientError.AuthKind.UNEXPECTED_PING_STATUS,
                             pingResp.statusCode(),
-                            "Unexpected ping status"),
-                    "Unexpected ping status: " + pingResp.statusCode()
+                            message),
+                    message
             );
         }
         Optional<AuthChallenge> ch = extractChallenge(pingResp.headers());
         if (ch.isEmpty()) {
+            String message = authMessage(
+                    "MISSING_CHALLENGE",
+                    "WWW-Authenticate challenge is missing");
             throw new ClientException(
                     new ClientError.Auth(
                             ClientError.AuthKind.MISSING_CHALLENGE,
                             pingResp.statusCode(),
-                            "Missing WWW-Authenticate"),
-                    "Missing WWW-Authenticate challenge");
+                            message),
+                    message);
         }
         AuthChallenge c = ch.get();
         String token = fetchToken(c, endpoint.credentialsOpt().orElse(null), scope);
@@ -142,12 +149,15 @@ public class AuthService {
             }
             HttpResult<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
             if (resp.statusCode() != HttpStatus.OK_200) {
+                String message = authMessage(
+                        "TOKEN_ENDPOINT_FAILED",
+                        "token endpoint returned status " + resp.statusCode());
                 throw new ClientException(
                         new ClientError.Auth(
                                 ClientError.AuthKind.TOKEN_FAILED,
                                 resp.statusCode(),
-                                "Token endpoint failed"),
-                        "Token endpoint status: " + resp.statusCode()
+                                message),
+                        message
                 );
             }
             TokenResponse tr = mapper.readValue(resp.body(), TokenResponse.class);
@@ -156,8 +166,8 @@ public class AuthService {
                             new ClientError.Auth(
                                     ClientError.AuthKind.NO_TOKEN,
                                     resp.statusCode(),
-                                    "No token in response"),
-                            "No token in response"));
+                                    authMessage("TOKEN_MISSING", "token is absent in auth response")),
+                            authMessage("TOKEN_MISSING", "token is absent in auth response")));
             long ttl = Optional.ofNullable(tr.expiresInSeconds()).orElse(defaultTokenTtlSeconds);
             if (tr.expiresInSeconds() == null) {
                 LOGGER.warn("Token response missing expires_in; using default {}s", defaultTokenTtlSeconds);
@@ -165,9 +175,15 @@ public class AuthService {
             cache.put(cacheKeyFromChallenge(challenge, scope, creds), token, ttl);
             return token;
         } catch (IOException e) {
+            String message = authMessage(
+                    "TOKEN_ENDPOINT_IO_ERROR",
+                    "I/O error while requesting auth token");
             throw new ClientException(
-                    new ClientError.Auth(ClientError.AuthKind.TOKEN_FAILED, null, "Token endpoint IO error"),
-                    "Token endpoint IO error",
+                            new ClientError.Auth(
+                            ClientError.AuthKind.TOKEN_FAILED,
+                            null,
+                            message),
+                    message,
                     e
             );
         }
@@ -191,6 +207,10 @@ public class AuthService {
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
+    }
+
+    private static String authMessage(String kind, String details) {
+        return AUTH_PREFIX + kind + ": " + details;
     }
 }
 
