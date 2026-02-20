@@ -138,8 +138,17 @@ public class ConfigValidationException extends RuntimeException {
 
     public enum P2P {
         DRAGONFLY_DFGET_PATH_REQUIRED("P2P: p2p.dragonfly.dfgetPath must not be blank when enabled"),
+        DRAGONFLY_DFCACHE_PATH_BLANK("P2P: p2p.dragonfly.dfcachePath must not be blank when set"),
         DRAGONFLY_SCHEDULER_ADDR_BLANK("P2P: p2p.dragonfly.schedulerAddr must not be blank when set"),
         DRAGONFLY_DAEMON_ENDPOINT_BLANK("P2P: p2p.dragonfly.daemonEndpoint must not be blank when set"),
+        DRAGONFLY_APPLICATION_BLANK("P2P: p2p.dragonfly.application must not be blank when set"),
+        DRAGONFLY_TAG_BLANK("P2P: p2p.dragonfly.tag must not be blank when set"),
+        DRAGONFLY_HEADER_BLANK("P2P: p2p.dragonfly.headers entries must not be blank"),
+        DRAGONFLY_HEADER_INVALID("P2P: p2p.dragonfly.headers entries must be in 'Key: Value' format"),
+        DRAGONFLY_PERSISTENT_CACHE_REDIS_REQUIRED(
+                "P2P: p2p.dragonfly.persistentCacheEnabled requires scheduler Redis (set p2p.dragonfly.schedulerRedisEnabled=true)"),
+        DRAGONFLY_PERSISTENT_CACHE_SCHEDULER_ADDR_REQUIRED(
+                "P2P: p2p.dragonfly.persistentCacheEnabled requires non-empty p2p.dragonfly.schedulerAddr"),
         DRAGONFLY_MAX_RETRIES_NEGATIVE("P2P: p2p.dragonfly.maxRetries must be >= 0");
 
         private final String reasonMessage;

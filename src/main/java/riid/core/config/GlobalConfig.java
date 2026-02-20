@@ -5,7 +5,7 @@ import riid.app.AppConfig;
 import riid.client.core.config.ClientConfig;
 import riid.dispatcher.DispatcherConfig;
 import riid.runtime.RuntimeConfig;
-import riid.p2p.P2PConfig;
+import riid.p2p.config.P2PConfig;
 
 /**
  * Global application configuration holder.

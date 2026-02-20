@@ -12,8 +12,11 @@ import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.dispatcher.DispatcherConfig;
-import riid.p2p.DragonflyConfig;
-import riid.p2p.P2PConfig;
+import riid.p2p.config.DragonflyConnectionConfig;
+import riid.p2p.config.DragonflyConfig;
+import riid.p2p.config.DragonflyPersistentCacheConfig;
+import riid.p2p.config.DragonflyRequestConfig;
+import riid.p2p.config.P2PConfig;
 import riid.runtime.OutputConfig;
 import riid.runtime.RuntimeConfig;
 
@@ -162,27 +165,66 @@ public final class ConfigValidator {
         if (dragonfly == null) {
             return;
         }
+        DragonflyConnectionConfig connection = dragonfly.connection();
+        DragonflyRequestConfig request = dragonfly.request();
+        DragonflyPersistentCacheConfig persistentCache = dragonfly.persistentCache();
         if (dragonfly.enabledOrDefault()) {
-            String dfgetPath = dragonfly.dfgetPath();
+            String dfgetPath = connection != null ? connection.dfgetPath() : null;
             if (dfgetPath == null || dfgetPath.isBlank()) {
                 throw new ConfigValidationException(
                         ConfigValidationException.P2P.DRAGONFLY_DFGET_PATH_REQUIRED.message());
             }
         }
-        String schedulerAddr = dragonfly.schedulerAddr();
+        String schedulerAddr = connection != null ? connection.schedulerAddr() : null;
         if (schedulerAddr != null && schedulerAddr.isBlank()) {
             throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_SCHEDULER_ADDR_BLANK.message());
         }
-        String daemonEndpoint = dragonfly.daemonEndpoint();
+        String dfcachePath = connection != null ? connection.dfcachePath() : null;
+        if (dfcachePath != null && dfcachePath.isBlank()) {
+            throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_DFCACHE_PATH_BLANK.message());
+        }
+        String daemonEndpoint = connection != null ? connection.daemonEndpoint() : null;
         if (daemonEndpoint != null && daemonEndpoint.isBlank()) {
             throw new ConfigValidationException(
                     ConfigValidationException.P2P.DRAGONFLY_DAEMON_ENDPOINT_BLANK.message());
         }
-        if (dragonfly.maxRetries() != null && dragonfly.maxRetries() < 0) {
+        String application = request != null ? request.application() : null;
+        if (application != null && application.isBlank()) {
+            throw new ConfigValidationException(
+                    ConfigValidationException.P2P.DRAGONFLY_APPLICATION_BLANK.message());
+        }
+        String tag = request != null ? request.tag() : null;
+        if (tag != null && tag.isBlank()) {
+            throw new ConfigValidationException(
+                    ConfigValidationException.P2P.DRAGONFLY_TAG_BLANK.message());
+        }
+        for (String header : request != null ? request.headersOrEmpty() : List.<String>of()) {
+            if (header == null || header.isBlank()) {
+                throw new ConfigValidationException(
+                        ConfigValidationException.P2P.DRAGONFLY_HEADER_BLANK.message());
+            }
+            if (!header.contains(":")) {
+                throw new ConfigValidationException(
+                        ConfigValidationException.P2P.DRAGONFLY_HEADER_INVALID.message());
+            }
+        }
+        Integer maxRetries = request != null ? request.maxRetries() : null;
+        if (maxRetries != null && maxRetries < 0) {
             throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_MAX_RETRIES_NEGATIVE.message());
         }
-        if (dragonfly.requestTimeout() != null) {
-            checkDuration(dragonfly.requestTimeout(), "p2p.dragonfly.requestTimeout");
+        Duration requestTimeout = request != null ? request.requestTimeout() : null;
+        if (requestTimeout != null) {
+            checkDuration(requestTimeout, "p2p.dragonfly.requestTimeout");
+        }
+        if (persistentCache != null && persistentCache.enabledOrDefault()) {
+            if (!persistentCache.schedulerRedisEnabledOrDefault()) {
+                throw new ConfigValidationException(
+                        ConfigValidationException.P2P.DRAGONFLY_PERSISTENT_CACHE_REDIS_REQUIRED.message());
+            }
+            if (schedulerAddr == null || schedulerAddr.isBlank()) {
+                throw new ConfigValidationException(
+                        ConfigValidationException.P2P.DRAGONFLY_PERSISTENT_CACHE_SCHEDULER_ADDR_REQUIRED.message());
+            }
         }
     }
 

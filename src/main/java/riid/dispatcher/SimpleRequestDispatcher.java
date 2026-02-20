@@ -31,7 +31,7 @@ import riid.p2p.DragonflyClientException;
 import riid.p2p.P2PExecutor;
 
 /**
- * Simple dispatcher: cache -> P2P -> registry (registry concurrency limit is configurable).
+ * Simple dispatcher with Dragonfly-first policy and registry fallback.
  */
 @SuppressFBWarnings({"EI_EXPOSE_REP2"})
 public class SimpleRequestDispatcher implements RequestDispatcher {
@@ -79,26 +79,15 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest);
 
-        if (isDragonflyMode()) {
-            Optional<FetchResult> p2pResult = fetchFromP2P(repository, digest, sizeBytes, mediaType);
-            if (p2pResult.isPresent()) {
-                return p2pResult.get();
-            }
-            Path cachedPath = resolveFromCache(digest);
-            if (cachedPath != null) {
-                LOGGER.info("cache hit for layer {} after p2p path", digest);
-                return new FetchResult(digest, mediaType, cachedPath);
-            }
-        } else {
-            Path cachedPath = resolveFromCache(digest);
-            if (cachedPath != null) {
-                LOGGER.info("cache hit for layer {}", digest);
-                return new FetchResult(digest, mediaType, cachedPath);
-            }
-            Optional<FetchResult> p2pResult = fetchFromP2P(repository, digest, sizeBytes, mediaType);
-            if (p2pResult.isPresent()) {
-                return p2pResult.get();
-            }
+        Optional<FetchResult> p2pResult = fetchFromP2P(repository, digest, sizeBytes, mediaType);
+        if (p2pResult.isPresent()) {
+            return p2pResult.get();
+        }
+
+        Path cachedPath = resolveFromCache(digest);
+        if (cachedPath != null) {
+            LOGGER.info("cache hit for layer {} after p2p path", digest);
+            return new FetchResult(digest, mediaType, cachedPath);
         }
 
         // 3) Registry download
@@ -189,10 +178,6 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         registryLimiter.ifPresent(Semaphore::release);
     }
 
-    private boolean isDragonflyMode() {
-        return p2p != null && !(p2p instanceof P2PExecutor.NoOp);
-    }
-
     private Path resolveFromCache(ImageDigest digest) {
         if (cache == null || !cache.has(digest)) {
             return null;
@@ -207,6 +192,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                                                long sizeBytes,
                                                MediaType mediaType) {
         if (p2p == null) {
+            LOGGER.info("P2P is not configured for layer {}, fallback to registry path", digest);
             return Optional.empty();
         }
         try {
@@ -219,16 +205,29 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 LOGGER.info("p2p hit for layer {}", digest);
                 return Optional.of(new FetchResult(digest, mediaType, p2pPath.get()));
             }
+            LOGGER.info("P2P returned empty for layer {}, fallback to registry path", digest);
         } catch (IOException ex) {
             Throwable cause = ex.getCause();
             if (cause instanceof DragonflyClientException dce) {
-                LOGGER.warn("P2P fetch failed for layer {} with {}: {}",
-                        digest, dce.kind(), dce.getMessage());
+                if (isRecoverable(dce)) {
+                    LOGGER.warn("P2P fetch recoverable failure for layer {} with {}: {}, fallback to registry",
+                            digest, dce.kind(), dce.getMessage());
+                } else {
+                    throw new DispatcherRuntimeException("Non-recoverable P2P failure for " + digest, ex);
+                }
             } else {
                 LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
             }
         }
         return Optional.empty();
     }
+
+    private static boolean isRecoverable(DragonflyClientException ex) {
+        return ex.kind() == DragonflyClientException.ErrorKind.UNHEALTHY
+                || ex.kind() == DragonflyClientException.ErrorKind.TIMEOUT
+                || ex.kind() == DragonflyClientException.ErrorKind.PROCESS_FAILED
+                || ex.kind() == DragonflyClientException.ErrorKind.IO;
+    }
+
 }
 

@@ -21,6 +21,7 @@ import riid.cache.oci.ValidationException;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.model.manifest.RegistryApi;
 import riid.core.hash.Sha256Utils;
+import riid.p2p.config.DragonflyConfig;
 
 /**
  * P2P executor backed by Dragonfly dfget CLI.
@@ -36,6 +37,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
     private final HostFilesystem fs;
     private final DragonflyConfig config;
     private final DragonflyClientAdapter clientAdapter;
+    private final DfcacheAdapter dfcacheAdapter;
 
     public DragonflyP2PExecutor(RegistryEndpoint endpoint,
                                 CacheAdapter cache,
@@ -46,6 +48,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         this.fs = Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
         this.clientAdapter = new DragonflyClientAdapter(config);
+        this.dfcacheAdapter = new DfcacheAdapter(config);
     }
 
     @Override
@@ -58,9 +61,17 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         }
         Path tempPath = createTempFile();
         String url = endpoint.uri(RegistryApi.blobPath(repository, digest.toString())).toString();
+        String taskId = dfcacheAdapter.taskIdForDigest(digest.toString());
         try {
+            if (dfcacheAdapter.tryExportPersistentCache(taskId, tempPath)) {
+                LOGGER.info("P2P persistent cache hit for layer {} (task_id={})", digest, taskId);
+                return Optional.of(cacheOrTemp(tempPath, digest, mediaType, tempPath.toFile().length()));
+            }
             LOGGER.info("P2P dfget start: url={}, target={}", url, tempPath);
             clientAdapter.download(url, tempPath, digest.toString());
+            if (dfcacheAdapter.importIntoPersistentCache(taskId, tempPath)) {
+                LOGGER.info("P2P persistent cache import success for layer {} (task_id={})", digest, taskId);
+            }
             long actualSize = tempPath.toFile().length();
             if (size > 0 && actualSize > 0 && actualSize != size) {
                 throw new IOException(

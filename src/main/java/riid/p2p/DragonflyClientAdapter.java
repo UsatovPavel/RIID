@@ -14,16 +14,18 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import riid.p2p.config.DragonflyConfig;
+import riid.p2p.config.DragonflyConnectionConfig;
+import riid.p2p.config.DragonflyHealthConfig;
+import riid.p2p.config.DragonflyRequestConfig;
 import riid.runtime.BoundedCommandExecution;
 import riid.runtime.OutputConfig;
 
 /**
- * Boundary adapter for Dragonfly CLI calls.
+ * Boundary adapter for Dragonfly dfget CLI calls.
  */
 public final class DragonflyClientAdapter {
     private static final String DEFAULT_DFGET = "dfget";
-    private static final String DEFAULT_ENDPOINT = "/tmp/dfdaemon.sock";
-    private static final Duration HEALTHCHECK_TIMEOUT = Duration.ofSeconds(1);
 
     private final DragonflyConfig config;
 
@@ -36,8 +38,9 @@ public final class DragonflyClientAdapter {
         Objects.requireNonNull(output, "output");
         Objects.requireNonNull(digest, "digest");
 
+        DragonflyRequestConfig request = config.request();
         ensureHealthy();
-        int attempts = Math.max(1, config.maxRetriesOrDefault() + 1);
+        int attempts = Math.max(1, request.maxRetriesOrDefault() + 1);
         DragonflyClientException lastFailure = null;
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
@@ -56,10 +59,11 @@ public final class DragonflyClientAdapter {
     }
 
     private void runDfget(String url, Path output, String digest) throws IOException {
+        DragonflyRequestConfig request = config.request();
         List<String> command = buildDfgetCommand(url, output, digest);
         Future<BoundedCommandExecution.ShellResult> future =
                 BoundedCommandExecution.run(command, OutputConfig.defaults());
-        Duration timeout = config.requestTimeoutOrDefault();
+        Duration timeout = request.requestTimeoutOrDefault();
         try {
             BoundedCommandExecution.ShellResult result = future.get(
                     timeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -81,7 +85,10 @@ public final class DragonflyClientAdapter {
                     "dfget interrupted",
                     ex);
         } catch (ExecutionException ex) {
-            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+            Throwable cause = ex.getCause();
+            if (cause == null) {
+                cause = ex;
+            }
             if (cause instanceof IOException io) {
                 throw new DragonflyClientException(
                         DragonflyClientException.ErrorKind.IO,
@@ -96,14 +103,15 @@ public final class DragonflyClientAdapter {
     }
 
     private void ensureHealthy() throws DragonflyClientException {
-        String endpoint = config.daemonEndpointOrDefault();
+        DragonflyConnectionConfig connection = config.connection();
+        String endpoint = connection.daemonEndpointOrDefault();
         if (!Files.exists(Path.of(endpoint))) {
             throw new DragonflyClientException(
                     DragonflyClientException.ErrorKind.UNHEALTHY,
                     "dragonfly endpoint is unavailable");
         }
-        String scheduler = config.schedulerAddr();
-        if (scheduler != null && !scheduler.isBlank() && !schedulerReachable(scheduler)) {
+        String scheduler = connection.schedulerAddr();
+        if (scheduler != null && !scheduler.isBlank() && !schedulerReachable(scheduler, config.health())) {
             throw new DragonflyClientException(
                     DragonflyClientException.ErrorKind.UNHEALTHY,
                     "dragonfly scheduler is unreachable");
@@ -111,20 +119,34 @@ public final class DragonflyClientAdapter {
     }
 
     private List<String> buildDfgetCommand(String url, Path output, String digest) {
+        DragonflyConnectionConfig connection = config.connection();
+        DragonflyRequestConfig request = config.request();
         List<String> cmd = new ArrayList<>();
-        String bin = config.dfgetPath() != null && !config.dfgetPath().isBlank()
-                ? config.dfgetPath()
+        String bin = connection.dfgetPath() != null && !connection.dfgetPath().isBlank()
+                ? connection.dfgetPath()
                 : DEFAULT_DFGET;
         cmd.add(bin);
         cmd.add("-e");
-        cmd.add(config.daemonEndpointOrDefault());
+        cmd.add(connection.daemonEndpointOrDefault());
         cmd.add("-O");
         cmd.add(output.toAbsolutePath().toString());
         cmd.add(url);
         cmd.add("--digest");
         cmd.add(digest);
+        if (request.tag() != null && !request.tag().isBlank()) {
+            cmd.add("--tag");
+            cmd.add(request.tag());
+        }
+        if (request.application() != null && !request.application().isBlank()) {
+            cmd.add("--application");
+            cmd.add(request.application());
+        }
+        for (String header : request.headersOrEmpty()) {
+            cmd.add("-H");
+            cmd.add(header);
+        }
         cmd.add("--timeout");
-        cmd.add(toCliDuration(config.requestTimeoutOrDefault()));
+        cmd.add(toCliDuration(request.requestTimeoutOrDefault()));
         cmd.add("--console");
         return cmd;
     }
@@ -143,7 +165,7 @@ public final class DragonflyClientAdapter {
                 || exception.kind() == DragonflyClientException.ErrorKind.PROCESS_FAILED;
     }
 
-    private static boolean schedulerReachable(String scheduler) {
+    private static boolean schedulerReachable(String scheduler, DragonflyHealthConfig health) {
         String[] hostPort = scheduler.split(":", 2);
         if (hostPort.length != 2) {
             return false;
@@ -157,10 +179,11 @@ public final class DragonflyClientAdapter {
         }
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(host, port),
-                    Math.toIntExact(HEALTHCHECK_TIMEOUT.toMillis()));
+                    Math.toIntExact(health.schedulerConnectTimeoutOrDefault().toMillis()));
             return true;
         } catch (IOException ex) {
             return false;
         }
     }
+
 }

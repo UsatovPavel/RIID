@@ -1,4 +1,4 @@
-package riid.p2p;
+package riid.p2p.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

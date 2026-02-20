@@ -36,7 +36,7 @@ import riid.core.model.manifest.TagList;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
-import riid.p2p.DragonflyConfig;
+import riid.p2p.config.DragonflyConfig;
 import riid.p2p.DragonflyP2PExecutor;
 
 @Tag("local")
