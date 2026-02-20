@@ -133,6 +133,68 @@ class DragonflyP2PExecutorTest {
         }
     }
 
+    /**
+     * Warm download (cache hit) via dragonfly-single: first fetch cold, second from Dragonfly cache.
+     * Uses docker exec to run dfget inside dfdaemon container — no Makefile changes required.
+     * Verifies no repeated WAN-fetch on second request.
+     */
+    @Test
+    void warmDownloadFromDragonflyCacheNoRepeatedWanFetch() throws Exception {
+        if (!dockerContainerExists("dfdaemon")) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false,
+                    "dragonfly-single not running: container dfdaemon not found. Run: make dragonfly-single");
+        }
+
+        byte[] payload = "p2p-warm-test-payload".getBytes(StandardCharsets.UTF_8);
+        String digest = "sha256:" + sha256(payload);
+        AtomicInteger blobRequests = new AtomicInteger();
+        startServer(payload, digest, blobRequests);
+
+        String host = inspectDockerNetworkGateway("dragonfly-net");
+        if (host == null) {
+            host = "host.docker.internal";
+        }
+        String url = "http://" + host + ":" + server.getAddress().getPort() + V2_PATH_PREFIX + REPO + "/blobs/" + digest;
+        String socketInContainer = "/tmp/dfdaemon.sock";
+
+        runDfgetInContainer("dfdaemon", url, "/tmp/warm_test_1.bin", digest, socketInContainer);
+        int afterCold = blobRequests.get();
+        assertTrue(afterCold > 0, "cold fetch should hit registry (WAN)");
+
+        runDfgetInContainer("dfdaemon", url, "/tmp/warm_test_2.bin", digest, socketInContainer);
+        int afterWarm = blobRequests.get();
+        assertEquals(afterCold, afterWarm,
+                "warm fetch should not repeat WAN: blobRequests unchanged (Dragonfly cache reuse)");
+    }
+
+    private static boolean dockerContainerExists(String name) {
+        try {
+            Process p = new ProcessBuilder("docker", "ps", "-q", "-f", "name=" + name)
+                    .redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            return p.waitFor() == 0 && !out.isBlank();
+        } catch (IOException | InterruptedException e) {
+            return false;
+        }
+    }
+
+    private static void runDfgetInContainer(String container, String url, String outputPath,
+            String digest, String daemonEndpoint) throws IOException, InterruptedException {
+        Process p = new ProcessBuilder(
+                "docker", "exec", container,
+                "/usr/local/bin/dfget",
+                "-e", daemonEndpoint,
+                "-O", outputPath,
+                url,
+                "--content-for-calculating-task-id", digest,
+                "--digest", digest,
+                "--console")
+                .redirectErrorStream(true).start();
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        int code = p.waitFor();
+        assertTrue(code == 0, () -> "dfget in container failed (exit=" + code + "): " + (out.isBlank() ? "no output" : out.trim()));
+    }
+
     @Test
     void dispatcherUsesP2PWhenAvailable() throws Exception {
         DfgetEnv dfgetEnv = dfgetEnv();

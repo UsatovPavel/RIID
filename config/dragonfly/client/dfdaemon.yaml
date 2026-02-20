@@ -1,0 +1,34 @@
+manager:
+  addr: "http://dfmanager:65003"
+
+scheduler:
+  announceInterval: 5m
+  scheduleTimeout: 3h
+  enableBackToSource: true
+
+host:
+  hostname: "dfdaemon"
+
+server:
+  cacheDir: .dragonfly/cache
+
+storage:
+  dir: .dragonfly/data
+
+download:
+  server:
+    socketPath: /tmp/dfdaemon.sock
+  protocol: tcp
+  concurrentPieceCount: 8
+  pieceTimeout: 30s
+
+upload:
+  server:
+    port: 4000
+
+gc:
+  interval: 3600s
+  policy:
+    taskTTL: 720h
+    persistentTaskTTL: 720h
+    persistentCacheTaskTTL: 720h

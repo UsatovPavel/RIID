@@ -30,6 +30,7 @@ import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.TagList;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
+import riid.p2p.DragonflyClientException;
 import riid.p2p.P2PExecutor;
 
 class SimpleRequestDispatcherTest {
@@ -76,6 +77,24 @@ class SimpleRequestDispatcherTest {
             assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    void fallbackToRegistryWhenP2PThrowsRecoverableDragonflyException() throws IOException {
+        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+            HostFilesystem fs = new NioHostFilesystem();
+            Path cachedPath = TestPaths.tempFile(fs, "cache-", ".bin");
+            fs.writeString(cachedPath, "cached");
+            RecordingCacheAdapter cache = new RecordingCacheAdapter(cachedPath);
+            P2PExecutor p2p = new ThrowingP2PExecutor(DragonflyClientException.ErrorKind.UNHEALTHY);
+
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
+                    registry, cache, p2p, new DispatcherConfig(1), fs);
+            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
+
+            assertEquals(cachedPath, result.path());
+            assertTrue(registry.blobCalls > 0, "should fallback to registry on UNHEALTHY");
         }
     }
 
@@ -237,6 +256,25 @@ class SimpleRequestDispatcherTest {
         @Override
         public void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType) {
             publishCalled = true;
+        }
+    }
+
+    private static final class ThrowingP2PExecutor implements P2PExecutor {
+        private final DragonflyClientException.ErrorKind kind;
+
+        ThrowingP2PExecutor(DragonflyClientException.ErrorKind kind) {
+            this.kind = kind;
+        }
+
+        @Override
+        public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType)
+                throws IOException {
+            throw new IOException("P2P failed", new DragonflyClientException(kind, "test"));
+        }
+
+        @Override
+        public void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType) {
+            // no-op
         }
     }
 

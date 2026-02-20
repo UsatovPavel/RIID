@@ -21,6 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import riid.core.fs.TestPaths;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
+import riid.p2p.config.DragonflyConfig;
+import riid.p2p.config.DragonflyConnectionConfig;
+import riid.p2p.config.DragonflyHealthConfig;
+import riid.p2p.config.DragonflyRequestConfig;
+import riid.p2p.config.P2PConfig;
 
 @SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.AvoidAccessibilityAlteration"})
 class ConfigBranchTest {
@@ -426,6 +431,75 @@ class ConfigBranchTest {
                 List.of(RegistryEndpoint.https("example.org")));
         GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
 
+        ConfigValidator.validate(cfg);
+    }
+
+    @Test
+    void throwsWhenDragonflyCheckIntervalTooSmall() {
+        DragonflyHealthConfig health = new DragonflyHealthConfig(
+                Duration.ofSeconds(1),
+                Duration.ofSeconds(3),
+                null);
+        DragonflyConfig dragonfly = new DragonflyConfig(
+                true,
+                new DragonflyConnectionConfig("dfget", null, "/tmp/sock", "scheduler:8002"),
+                new DragonflyRequestConfig(Duration.ofMinutes(2), 0, null, null, List.of()),
+                null,
+                health);
+        GlobalConfig cfg = new GlobalConfig(
+                validClient(),
+                new DispatcherConfig(1),
+                new P2PConfig(dragonfly),
+                null,
+                null);
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
+        assertEquals(
+                ConfigValidationException.P2P.DRAGONFLY_CHECK_INTERVAL_RANGE.message(),
+                ex.getMessage());
+    }
+
+    @Test
+    void throwsWhenDragonflyCheckIntervalTooLarge() {
+        DragonflyHealthConfig health = new DragonflyHealthConfig(
+                Duration.ofSeconds(1),
+                Duration.ofSeconds(400),
+                null);
+        DragonflyConfig dragonfly = new DragonflyConfig(
+                true,
+                new DragonflyConnectionConfig("dfget", null, "/tmp/sock", "scheduler:8002"),
+                new DragonflyRequestConfig(Duration.ofMinutes(2), 0, null, null, List.of()),
+                null,
+                health);
+        GlobalConfig cfg = new GlobalConfig(
+                validClient(),
+                new DispatcherConfig(1),
+                new P2PConfig(dragonfly),
+                null,
+                null);
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
+        assertEquals(
+                ConfigValidationException.P2P.DRAGONFLY_CHECK_INTERVAL_RANGE.message(),
+                ex.getMessage());
+    }
+
+    @Test
+    void acceptsValidDragonflyHealthCheckInterval() {
+        DragonflyHealthConfig health = new DragonflyHealthConfig(
+                Duration.ofSeconds(1),
+                Duration.ofSeconds(30),
+                null);
+        DragonflyConfig dragonfly = new DragonflyConfig(
+                true,
+                new DragonflyConnectionConfig("dfget", null, "/tmp/sock", "scheduler:8002"),
+                new DragonflyRequestConfig(Duration.ofMinutes(2), 0, null, null, List.of()),
+                null,
+                health);
+        GlobalConfig cfg = new GlobalConfig(
+                validClient(),
+                new DispatcherConfig(1),
+                new P2PConfig(dragonfly),
+                null,
+                null);
         ConfigValidator.validate(cfg);
     }
 
