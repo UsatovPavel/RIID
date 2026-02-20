@@ -14,6 +14,7 @@ import riid.client.http.HttpClientConfig;
 import riid.dispatcher.DispatcherConfig;
 import riid.p2p.config.DragonflyConnectionConfig;
 import riid.p2p.config.DragonflyConfig;
+import riid.p2p.config.DragonflyHealthConfig;
 import riid.p2p.config.DragonflyPersistentCacheConfig;
 import riid.p2p.config.DragonflyRequestConfig;
 import riid.p2p.config.P2PConfig;
@@ -224,6 +225,16 @@ public final class ConfigValidator {
             if (schedulerAddr == null || schedulerAddr.isBlank()) {
                 throw new ConfigValidationException(
                         ConfigValidationException.P2P.DRAGONFLY_PERSISTENT_CACHE_SCHEDULER_ADDR_REQUIRED.message());
+            }
+        }
+        DragonflyHealthConfig health = dragonfly.health();
+        if (health != null && health.checkInterval() != null
+                && !health.checkInterval().isZero() && !health.checkInterval().isNegative()) {
+            Duration ci = health.checkInterval();
+            if (ci.compareTo(DragonflyHealthConfig.MIN_CHECK_INTERVAL) < 0
+                    || ci.compareTo(DragonflyHealthConfig.MAX_CHECK_INTERVAL) > 0) {
+                throw new ConfigValidationException(
+                        ConfigValidationException.P2P.DRAGONFLY_CHECK_INTERVAL_RANGE.message());
             }
         }
     }

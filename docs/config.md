@@ -45,11 +45,26 @@ runtime:
 p2p:
   dragonfly:
     enabled: true
-    dfgetPath: "/opt/dragonfly/bin/dfget"
-    schedulerAddr: "dfscheduler:8002"
-    requestTimeout: PT30S
-    maxRetries: 2
+    connection:
+      dfgetPath: "/opt/dragonfly/bin/dfget"
+      dfcachePath: "/opt/dragonfly/bin/dfcache"   # optional, derived from dfgetPath if omitted
+      daemonEndpoint: "/var/run/dragonfly/dfdaemon.sock"  # dfget -e <socket>
+      schedulerAddr: "dfscheduler:8002"
+    request:
+      requestTimeout: PT2M
+      maxRetries: 0
+      application: ""   # optional dfget --application
+      tag: ""           # optional dfget --tag
+      headers: []       # optional dfget -H "Key: Value"
+    persistentCache:
+      enabled: false
+      schedulerRedisEnabled: false   # MUST be true if persistentCache.enabled
+    health:
+      schedulerConnectTimeout: PT2S
+      checkInterval: PT30S   # periodic health check; PT0S disables; 5s–300s
+      grpcHealthProbePath: null   # optional; if set (e.g. "grpc_health_probe"), use grpc_health_probe for daemon check instead of socket file existence
 ```
+- **Redis precondition:** для `dfcache import/stat/export` (persistent cache) в Dragonfly scheduler **обязательна** настройка Redis в `scheduler.yaml` (`database.redis`). Без Redis persistent cache не работает. Если `p2p.dragonfly.persistentCache.enabled: true`, то `schedulerRedisEnabled: true` обязательно и валидация выдаст ошибку при его отсутствии.
 
 ### Defaults (from smoke test)
 - client.http.connectTimeout = PT5S
@@ -83,9 +98,11 @@ p2p:
 - `runtime.dockerCmd`, if present, must not be blank.
 - `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.
 - `p2p.dragonfly.dfgetPath` must not be blank when enabled; `schedulerAddr` must not be blank when set; `maxRetries` must be >= 0; `requestTimeout` must be positive when set.
+- `p2p.dragonfly.persistentCache.enabled: true` требует `schedulerRedisEnabled: true` (Redis в scheduler.yaml) и непустой `schedulerAddr`.
 
 ### Known notes
 - Missing `registries` throws `ConfigValidationException`.
+- Dragonfly persistent cache требует Redis в `scheduler.yaml`; см. ADR-01 и `docs/design records/PR 11/`.
 - Для GHCR скачивание blob/manifest использует 302/307 CDN, поэтому `client.http.followRedirects` должен быть true (явно прописывать в config/config.yaml).
 - Partial downloading: `partialDigestValidation=SKIP` means digest is validated only for a full blob; `retryWithoutRangeOnUnsatisfiableRange` enables retry without Range.
 - Runtime TLS/Auth errors use unified safe message prefixes:

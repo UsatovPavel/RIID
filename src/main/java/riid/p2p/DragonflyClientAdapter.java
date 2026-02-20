@@ -3,7 +3,6 @@ package riid.p2p;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -28,9 +27,15 @@ public final class DragonflyClientAdapter {
     private static final String DEFAULT_DFGET = "dfget";
 
     private final DragonflyConfig config;
+    private final DragonflyHealthMonitor healthMonitor;
 
     public DragonflyClientAdapter(DragonflyConfig config) {
+        this(config, null);
+    }
+
+    public DragonflyClientAdapter(DragonflyConfig config, DragonflyHealthMonitor healthMonitor) {
         this.config = Objects.requireNonNull(config, "config");
+        this.healthMonitor = healthMonitor;
     }
 
     public void download(String url, Path output, String digest) throws IOException {
@@ -39,7 +44,14 @@ public final class DragonflyClientAdapter {
         Objects.requireNonNull(digest, "digest");
 
         DragonflyRequestConfig request = config.request();
-        ensureHealthy();
+        try {
+            ensureHealthy();
+        } catch (DragonflyClientException ex) {
+            if (ex.kind() == DragonflyClientException.ErrorKind.UNHEALTHY && healthMonitor != null) {
+                healthMonitor.markUnhealthy();
+            }
+            throw ex;
+        }
         int attempts = Math.max(1, request.maxRetriesOrDefault() + 1);
         DragonflyClientException lastFailure = null;
         for (int attempt = 1; attempt <= attempts; attempt++) {
@@ -103,14 +115,12 @@ public final class DragonflyClientAdapter {
     }
 
     private void ensureHealthy() throws DragonflyClientException {
-        DragonflyConnectionConfig connection = config.connection();
-        String endpoint = connection.daemonEndpointOrDefault();
-        if (!Files.exists(Path.of(endpoint))) {
+        if (!DragonflyDaemonHealthCheck.isDaemonReachable(config)) {
             throw new DragonflyClientException(
                     DragonflyClientException.ErrorKind.UNHEALTHY,
                     "dragonfly endpoint is unavailable");
         }
-        String scheduler = connection.schedulerAddr();
+        String scheduler = config.connection().schedulerAddr();
         if (scheduler != null && !scheduler.isBlank() && !schedulerReachable(scheduler, config.health())) {
             throw new DragonflyClientException(
                     DragonflyClientException.ErrorKind.UNHEALTHY,

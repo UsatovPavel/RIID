@@ -36,6 +36,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
     private final CacheAdapter cache;
     private final HostFilesystem fs;
     private final DragonflyConfig config;
+    private final DragonflyHealthMonitor healthMonitor;
     private final DragonflyClientAdapter clientAdapter;
     private final DfcacheAdapter dfcacheAdapter;
 
@@ -47,7 +48,9 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         this.cache = cache;
         this.fs = Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
-        this.clientAdapter = new DragonflyClientAdapter(config);
+        this.healthMonitor = new DragonflyHealthMonitor(config);
+        this.healthMonitor.start();
+        this.clientAdapter = new DragonflyClientAdapter(config, healthMonitor);
         this.dfcacheAdapter = new DfcacheAdapter(config);
     }
 
@@ -57,6 +60,10 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest, "digest");
         if (!config.enabledOrDefault()) {
+            return Optional.empty();
+        }
+        if (!healthMonitor.isHealthy()) {
+            LOGGER.debug("P2P skipped: Dragonfly unhealthy, fallback to cache/registry");
             return Optional.empty();
         }
         Path tempPath = createTempFile();

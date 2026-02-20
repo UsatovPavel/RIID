@@ -149,7 +149,9 @@ public class ConfigValidationException extends RuntimeException {
                 "P2P: p2p.dragonfly.persistentCacheEnabled requires scheduler Redis (set p2p.dragonfly.schedulerRedisEnabled=true)"),
         DRAGONFLY_PERSISTENT_CACHE_SCHEDULER_ADDR_REQUIRED(
                 "P2P: p2p.dragonfly.persistentCacheEnabled requires non-empty p2p.dragonfly.schedulerAddr"),
-        DRAGONFLY_MAX_RETRIES_NEGATIVE("P2P: p2p.dragonfly.maxRetries must be >= 0");
+        DRAGONFLY_MAX_RETRIES_NEGATIVE("P2P: p2p.dragonfly.maxRetries must be >= 0"),
+        DRAGONFLY_CHECK_INTERVAL_RANGE(
+                "P2P: p2p.dragonfly.health.checkInterval must be between 5s and 300s when set");
 
         private final String reasonMessage;
 
