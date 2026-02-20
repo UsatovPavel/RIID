@@ -14,9 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
@@ -26,9 +26,9 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
-import riid.client.core.model.manifest.Descriptor;
-import riid.client.core.model.manifest.Manifest;
-import riid.client.core.model.manifest.TagList;
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.TagList;
 import riid.dispatcher.DispatcherConfig;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.dispatcher.model.FetchResult;
@@ -234,7 +234,7 @@ class SimpleRequestDispatcherTest {
         Optional<Path> fetchResult = Optional.empty();
 
         @Override
-        public Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType) {
+        public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) {
             fetchCalled = true;
             return fetchResult;
         }

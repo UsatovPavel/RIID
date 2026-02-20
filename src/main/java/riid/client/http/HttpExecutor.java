@@ -145,10 +145,25 @@ public class HttpExecutor {
 
     private void backoff(int attempts) {
         long base = config.initialBackoff().toMillis();
-        long max = config.maxBackoff().toMillis();
-        long expo = base * (1L << Math.max(0, attempts - 1));
-        long jitter = ThreadLocalRandom.current().nextLong(base);
-        long sleep = Math.min(max, expo + jitter);
+        long maxBackoff = config.maxBackoff().toMillis();
+        long expo = base;
+        int exponent = config.backoffExponentBase();
+        for (int i = 1; i < attempts; i++) {
+            if (expo >= maxBackoff) {
+                expo = maxBackoff;
+                break;
+            }
+            long next = expo * exponent;
+            if (next < 0 || next < expo) {
+                expo = maxBackoff;
+                break;
+            }
+            expo = Math.min(maxBackoff, next);
+        }
+        long cappedExpo = Math.min(expo, maxBackoff);
+        long remainingToMax = Math.max(0, maxBackoff - cappedExpo);
+        long jitter = remainingToMax > 0 ? ThreadLocalRandom.current().nextLong(remainingToMax + 1) : 0;
+        long sleep = cappedExpo + jitter;
         try {
             Thread.sleep(sleep);
         } catch (InterruptedException e) {
@@ -159,10 +174,10 @@ public class HttpExecutor {
 
     public static String rangeHeader(long startInclusive, Long endInclusive) {
         if (startInclusive < 0) {
-            throw new IllegalArgumentException("start must be >= 0");
+            throw new IllegalArgumentException("startOffsetBytes must be >= 0");
         }
         if (endInclusive != null && endInclusive < startInclusive) {
-            throw new IllegalArgumentException("end must be >= start");
+            throw new IllegalArgumentException("endOffsetBytes must be >= startOffsetBytes");
         }
         return endInclusive == null
                 ? "bytes=%d-".formatted(startInclusive)

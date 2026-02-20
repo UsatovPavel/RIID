@@ -1,10 +1,11 @@
 package riid.p2p;
 
-import riid.cache.oci.CacheMediaType;
-import riid.cache.oci.ImageDigest;
-
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Optional;
+
+import riid.cache.oci.CacheMediaType;
+import riid.cache.oci.ImageDigest;
 
 /**
  * P2P layer contract (stub).
@@ -15,7 +16,7 @@ public interface P2PExecutor {
      *
      * @return path if found, empty otherwise
      */
-    Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType);
+    Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) throws IOException;
 
     /**
      * Publish blob to peers (best effort).
@@ -27,7 +28,7 @@ public interface P2PExecutor {
      */
     final class NoOp implements P2PExecutor {
         @Override
-        public Optional<Path> fetch(ImageDigest digest, long size, CacheMediaType mediaType) {
+        public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) {
             return Optional.empty();
         }
 

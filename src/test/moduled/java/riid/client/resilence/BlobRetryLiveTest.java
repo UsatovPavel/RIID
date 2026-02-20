@@ -13,9 +13,9 @@ import java.io.File;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 
 /**
  * Retry test against real Docker Hub.
@@ -36,7 +36,12 @@ public class BlobRetryLiveTest {
         var manifestResult = client.fetchManifest(repo, ref);
         var layer = manifestResult.manifest().layers().getFirst();
 
-        BlobRequest req = new BlobRequest(repo, layer.digest(), layer.size(), layer.mediaType());
+        BlobRequest req = new BlobRequest(
+                repo,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
 
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "alpine-layer-retry", ".tar").toFile();
         tmp.deleteOnExit();

@@ -12,12 +12,13 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.CliApplication;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
+import riid.core.config.TestConfigYaml;
 
 /**
- * End-to-end via CLI with real podman runtime.
+ * End-to-endOffsetBytes via CLI with real podman runtime.
  * Requires podman and network access to Docker Hub.
  */
 @Tag("filesystem")
@@ -34,17 +35,7 @@ class CliPodmanIntegrationTest {
 
         HostFilesystem fs = new NioHostFilesystem();
         Path config = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
-        fs.writeString(config, """
-                client:
-                  http: {}
-                  auth: {}
-                  registries:
-                    - scheme: https
-                      host: registry-1.docker.io
-                      port: -1
-                dispatcher:
-                  maxConcurrentRegistry: 2
-                """);
+        fs.writeString(config, TestConfigYaml.minimalDockerHubConfigWithEmptyAuth(2));
 
         ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();

@@ -30,9 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 
 @Tag("filesystem")
 @SuppressWarnings("PMD.CloseResource")
@@ -107,7 +107,12 @@ class BlobServiceTest {
         // GET
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
-        BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, (long) data.length, Strings.OCTET.v());
+        BlobRequest req = new BlobRequest(
+                Strings.REPO.v(),
+                digest,
+                (long) data.length,
+                Strings.OCTET.v(),
+                new BlobRequest.RangeSpec.All());
         BlobResult result = blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v());
         assertEquals(digest, result.digest());
         assertEquals(data.length, result.size());
@@ -139,7 +144,12 @@ class BlobServiceTest {
 
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
-        BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, null, Strings.OCTET.v());
+        BlobRequest req = new BlobRequest(
+                Strings.REPO.v(),
+                digest,
+                null,
+                Strings.OCTET.v(),
+                new BlobRequest.RangeSpec.All());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));
     }
 
@@ -163,7 +173,12 @@ class BlobServiceTest {
         BlobService blob = new BlobService(exec, auth, null);
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
-        BlobRequest req = new BlobRequest(Strings.REPO.v(), expectedDigest, (long) data.length, Strings.OCTET.v());
+        BlobRequest req = new BlobRequest(
+                Strings.REPO.v(),
+                expectedDigest,
+                (long) data.length,
+                Strings.OCTET.v(),
+                new BlobRequest.RangeSpec.All());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));
     }
 

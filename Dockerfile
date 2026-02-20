@@ -15,7 +15,7 @@ COPY README* ./
 
 RUN --mount=type=cache,id=gradle-cache,target=/root/.gradle \
     --mount=type=cache,id=gradle-wrapper,target=/workspace/.gradle/wrapper \
-    chmod +x ./gradlew && ./gradlew shadowJar -x test --no-daemon
+    chmod +x ./gradlew && ./gradlew shadowJar -x test -PskipQuality --no-daemon
 
 ## Runtime stage
 FROM eclipse-temurin:25-jdk-jammy

@@ -4,13 +4,15 @@ import org.gradle.kotlin.dsl.the
 
 val sourceSets = the<SourceSetContainer>()
 val skipQuality = project.hasProperty("skipQuality")
+val disableLocal = project.hasProperty("disableLocal")
 
 tasks.named<Test>("test") {
     useJUnitPlatform {
         if (!project.hasProperty("includeStress")) {
             excludeTags("stress")
         }
-        if (project.hasProperty("disableLocal")) {
+        excludeTags("porto")
+        if (disableLocal) {
             excludeTags("local")
         }
         if (skipQuality) {
@@ -43,6 +45,14 @@ tasks.register("testLocal", Test::class) {
     }
 }
 
+tasks.register("testPorto", Test::class) {
+    group = "verification"
+    description = "Run porto-tagged tests (Porto runtime/manual env)"
+    useJUnitPlatform {
+        includeTags("porto")
+    }
+}
+
 tasks.register("testNoFilesystem", Test::class) {
     group = "verification"
     description = "Run tests excluding filesystem-tagged tests"
@@ -61,9 +71,18 @@ tasks.register("integrationTest", Test::class) {
     description = "Runs integration tests."
     group = "verification"
     val integration = sourceSets.getByName("integrationTest")
+    dependsOn(integration.classesTaskName)
     testClassesDirs = integration.output.classesDirs
     classpath = integration.runtimeClasspath
-    useJUnitPlatform()
+    useJUnitPlatform {
+        if (disableLocal) {
+            excludeTags("local")
+        }
+    }
+    testLogging {
+        showStandardStreams = true
+        events("failed", "skipped", "passed", "standardOut", "standardError")
+    }
 }
 
 tasks.register("performanceTest", Test::class) {

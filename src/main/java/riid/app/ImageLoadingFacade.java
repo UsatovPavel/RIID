@@ -14,21 +14,24 @@ import org.slf4j.LoggerFactory;
 
 import riid.app.error.AppError;
 import riid.app.error.AppException;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 import riid.app.ociarchive.OciArchiveBuilder;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
+import riid.client.core.config.AuthConfig;
+import riid.client.core.config.BlobPartialDownloadConfig;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
-import riid.config.ConfigLoader;
-import riid.config.GlobalConfig;
+import riid.core.config.ConfigLoader;
+import riid.core.config.GlobalConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
+import riid.p2p.DragonflyP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
 import riid.runtime.DockerRuntimeAdapter;
@@ -43,13 +46,15 @@ import riid.runtime.RuntimeConfig;
  */
 public final class ImageLoadingFacade implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadingFacade.class);
-    private static final CacheCleaner NOOP_CACHE_CLEANER = () -> { };
+    private static final CacheCleaner NOOP_CACHE_CLEANER = () -> {
+    };
 
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
     private final Set<String> allowedRegistries;
     private final CacheCleaner cacheCleaner;
+
     public ImageLoadingFacade(RequestDispatcher dispatcher,
                               RuntimeRegistry runtimeRegistry,
                               RegistryClient client,
@@ -91,7 +96,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
         ManifestResult manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
-            RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
+        RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
         ImageId resolved = imageId.withDigest(manifestResult.digest());
         return load(manifestResult, runtime, resolved);
     }
@@ -149,8 +154,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
     }
 
     public static ImageLoadingFacade createFromConfig(
-        Path configPath, 
-        Credentials credentialsOverride) throws Exception {
+            Path configPath,
+            Credentials credentialsOverride) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         GlobalConfig config = ConfigLoader.load(configPath);
 
@@ -166,7 +171,13 @@ public final class ImageLoadingFacade implements AutoCloseable {
         HostFilesystem fs = new NioHostFilesystem();
         TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
         HttpClientConfig httpConfig = new HttpClientConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
+        long ttl = config.client() != null && config.client().auth() != null
+                ? config.client().auth().defaultTokenTtlSeconds()
+                : AuthConfig.DEFAULT_TTL_SECONDS;
+        BlobPartialDownloadConfig blobPartialDownloadConfig =
+                config.client() != null ?
+                        config.client().partialDownloadingOrDefault() : new BlobPartialDownloadConfig();
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, blobPartialDownloadConfig);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
@@ -183,8 +194,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
         }
         Path tempDir = appConfig != null ? appConfig.tempDirectoryPath() : null;
         List<String> allowedRegistries = appConfig != null ? appConfig.allowedRegistriesOrEmpty() : List.of();
+        P2PExecutor p2p = new P2PExecutor.NoOp();
+        if (config.p2p() != null
+                && config.p2p().dragonfly() != null
+                && config.p2p().dragonfly().enabledOrDefault()) {
+            p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config.p2p().dragonfly());
+        }
         return new ImageLoadingFacade(
-                new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), fs),
+                new SimpleRequestDispatcher(client, cache, p2p, fs),
                 new RuntimeRegistry(runtimes),
                 client,
                 fs,

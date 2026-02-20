@@ -40,15 +40,30 @@ runtime:
     captureStderr: false
 ```
 
+### Optional P2P Dragonfly section
+```yaml
+p2p:
+  dragonfly:
+    enabled: true
+    dfgetPath: "/opt/dragonfly/bin/dfget"
+    schedulerAddr: "dfscheduler:65002"
+    requestTimeout: PT30S
+    maxRetries: 2
+```
+
 ### Defaults (from smoke test)
 - client.http.connectTimeout = PT5S
 - client.http.requestTimeout = PT30S
-- client.http.maxRetries = 0
+- client.http.maxRetries = 2
 - client.http.initialBackoff = PT0.2S
 - client.http.maxBackoff = PT2S
-- client.http.retryIdempotentOnly = false
+- client.http.backoffExponentBase = 2
+- client.http.retryIdempotentOnly = true
 - client.http.userAgent = riid-registry-client
-- client.http.followRedirects = false
+- client.http.followRedirects = true (для GHCR обязательно оставить включённым)
+- client.partialDownloading.mode = AUTO
+- client.partialDownloading.partialDigestValidation = SKIP
+- client.partialDownloading.retryWithoutRangeOnUnsatisfiableRange = true
 - client.http.maxRedirects = 5
 - client.auth.defaultTokenTtlSeconds = 300
 - client.auth.certPath / keyPath / caPath = null
@@ -57,14 +72,17 @@ runtime:
 ### Validation rules (ConfigValidator)
 - `client`, `dispatcher`, `registries` required; at least one registry with `scheme` and `host`.
 - `dispatcher.maxConcurrentRegistry` > 0.
-- `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `userAgent` not blank, `maxRetries` and `maxRedirects` must be >= 0.
+- `client.http`: timeouts/backoff > 0, `initialBackoff <= maxBackoff`, `backoffExponentBase >= 2`, `userAgent` not blank, `maxRetries` and `maxRedirects` must be >= 0.
 - `client.auth.defaultTokenTtlSeconds` > 0; cert/key/ca paths, if provided, must exist.
 - `app.tempDirectory`, if present, must not be blank; `app.allowedRegistries` entries must not be blank.
 - `runtime.dockerCmd`, if present, must not be blank.
 - `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.
+- `p2p.dragonfly.dfgetPath` must not be blank when enabled; `schedulerAddr` must not be blank when set; `maxRetries` must be >= 0; `requestTimeout` must be positive when set.
 
 ### Known notes
 - Missing `registries` throws `ConfigValidationException`.
+- Для GHCR скачивание blob/manifest использует 302/307 CDN, поэтому `client.http.followRedirects` должен быть true (явно прописывать в config/config.yaml).
+- Partial downloading: `partialDigestValidation=SKIP` means digest is validated only for a full blob; `retryWithoutRangeOnUnsatisfiableRange` enables retry without Range.
 
 ### Tests
 - `ConfigBranchTest`: validation branches (including maxRetries < 0, missing http/auth/registries/dispatcher).

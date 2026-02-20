@@ -6,8 +6,14 @@ client:
     maxRetries: 2
     initialBackoff: "PT0.2S"
     maxBackoff: "PT2S"
+    backoffExponentBase: 2
     retryIdempotentOnly: true
     userAgent: "riid-client"
+    followRedirects: true
+  partialDownloading:
+    mode: AUTO
+    partialDigestValidation: SKIP
+    retryWithoutRangeOnUnsatisfiableRange: true
   auth:
     defaultTokenTtlSeconds: 300
     certPath: null
@@ -21,4 +27,3 @@ client:
 
 dispatcher:
   maxConcurrentRegistry: 4
-

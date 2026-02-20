@@ -15,9 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 import riid.runtime.PodmanRuntimeAdapter;
 
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
@@ -115,14 +115,14 @@ class CliApplicationTest {
         );
 
         int code = app.run(new String[]{
-                "--config", "config.yaml",
+                "--config", "config/config.yaml",
                 "--repo", REPO_BUSYBOX,
                 "--tag", "latest",
                 "--runtime", RUNTIME_PODMAN
         });
 
         assertEquals(CliApplication.ExitCode.OK.code(), code);
-        assertEquals(Path.of("config.yaml"), configSeen.get());
+        assertEquals(Path.of("config/config.yaml"), configSeen.get());
         assertEquals(REPO_BUSYBOX, repoSeen.get());
         assertEquals("latest", refSeen.get());
         assertEquals(RUNTIME_PODMAN, runtimeSeen.get());
@@ -142,6 +142,29 @@ class CliApplicationTest {
 
         assertEquals(CliApplication.ExitCode.OK.code(), code);
         assertTrue(outBuf.toString(StandardCharsets.UTF_8).contains("Usage"));
+    }
+
+    @Test
+    void parserMarksConfigAsImplicitByDefault() {
+        var result = CliApplication.CliParser.parse(new String[]{
+                "--repo", REPO_BUSYBOX,
+                "--runtime", RUNTIME_PODMAN
+        });
+
+        assertEquals(false, result.options().configProvidedByUser());
+        assertEquals(Path.of("config", "config.yaml"), result.options().configPath());
+    }
+
+    @Test
+    void parserMarksConfigAsExplicitWhenProvided() {
+        var result = CliApplication.CliParser.parse(new String[]{
+                "--config", "custom.yaml",
+                "--repo", REPO_BUSYBOX,
+                "--runtime", RUNTIME_PODMAN
+        });
+
+        assertEquals(true, result.options().configProvidedByUser());
+        assertEquals(Path.of("custom.yaml"), result.options().configPath());
     }
 
     @Test

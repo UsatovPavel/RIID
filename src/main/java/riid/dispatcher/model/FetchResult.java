@@ -3,7 +3,7 @@ package riid.dispatcher.model;
 import java.nio.file.Path;
 
 import riid.cache.oci.ImageDigest;
-import riid.client.core.model.manifest.MediaType;
+import riid.core.model.manifest.MediaType;
 
 /**
  * Result of image fetch orchestration.
