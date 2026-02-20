@@ -1,4 +1,4 @@
-package riid.app.fs;
+package riid.core.fs;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;

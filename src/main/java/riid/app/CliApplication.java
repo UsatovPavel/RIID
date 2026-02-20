@@ -20,16 +20,23 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.UnrecognizedOptionException;
 
+import riid.core.fs.NioHostFilesystem;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
-import riid.config.ConfigLoader;
-import riid.config.GlobalConfig;
+import riid.core.config.ConfigLoader;
+import riid.core.config.GlobalConfig;
+import riid.p2p.P2PExecutor;
 import riid.runtime.RuntimeAdapter;
 
 /**
  * Minimal CLI parser/runner for ImageLoadingFacade.
  */
 public final class CliApplication {
+    private static final String OPTION_CONFIG = "config";
+    private static final Path DEFAULT_CONFIG_PATH = Paths.get("config", "config.yaml");
+    private static final RegistryEndpoint DEFAULT_REGISTRY_ENDPOINT =
+            new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+
     enum ExitCode {
         OK(0),
         USAGE(64),
@@ -119,16 +126,13 @@ public final class CliApplication {
     }
 
     private static ImageLoader defaultServiceFactory(CliOptions options) throws Exception {
+        if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
+            RegistryEndpoint endpoint = applyCredentials(DEFAULT_REGISTRY_ENDPOINT, options.credentials());
+            return defaultLoaderWithBuiltInConfig(endpoint);
+        }
         GlobalConfig config = ConfigLoader.load(options.configPath());
         RegistryEndpoint endpoint = config.client().registries().getFirst();
-        if (options.credentials() != null) {
-            endpoint = new RegistryEndpoint(
-                    endpoint.scheme(),
-                    endpoint.host(),
-                    endpoint.port(),
-                    options.credentials()
-            );
-        }
+        endpoint = applyCredentials(endpoint, options.credentials());
         String registry = endpoint.registryName();
         return (repository, reference, runtimeId) -> {
             try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(
@@ -144,9 +148,40 @@ public final class CliApplication {
             }
         };
     }
+
+    private static RegistryEndpoint applyCredentials(RegistryEndpoint endpoint, Credentials credentials) {
+        if (credentials == null) {
+            return endpoint;
+        }
+        return new RegistryEndpoint(
+                endpoint.scheme(),
+                endpoint.host(),
+                endpoint.port(),
+                credentials
+        );
+    }
+
+    private static ImageLoader defaultLoaderWithBuiltInConfig(RegistryEndpoint endpoint) {
+        return (repository, reference, runtimeId) -> {
+            var fs = new NioHostFilesystem();
+            try (ImageLoadingFacade facade = ImageLoadingFacade.createDefault(
+                    endpoint,
+                    null,
+                    new P2PExecutor.NoOp(),
+                    ImageLoadingFacade.defaultRuntimes(),
+                    fs
+            )) {
+                return facade.load(
+                        ImageId.fromRegistry(endpoint.registryName(), repository, reference),
+                        runtimeId
+                ).toString();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to load image", e);
+            }
+        };
+    }
     
     private void printUsage(PrintWriter writer) {
-        Path defaultConfigPath = Paths.get("config.yaml");
         String usage = String.join("%n",
                 "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
                 "       [--config <path>] [--username <user>",
@@ -157,7 +192,8 @@ public final class CliApplication {
                 "  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided",
                 "  --digest         Digest to pull (format: sha256:...)",
                 "  --runtime        Runtime id (available: %s)".formatted(String.join(", ", availableRuntimes)),
-                "  --config         Path to YAML config (default: %s)".formatted(defaultConfigPath),
+                "  --config         Path to YAML config (default path: %s)".formatted(DEFAULT_CONFIG_PATH),
+                "                   If omitted and default file is missing, built-in defaults are used",
                 "  --username       Registry username for basic auth",
                 "  --password       Registry password (mutually exclusive with",
                 "                     --password-env/--password-file)",
@@ -173,13 +209,14 @@ public final class CliApplication {
     }
 
     public record CliOptions(Path configPath,
-                      String repository,
-                      String reference,
-                      String runtimeId,
-                      Credentials credentials,
-                      Path certPath,
-                      Path keyPath,
-                      Path caPath) {
+                             boolean configProvidedByUser,
+                             String repository,
+                             String reference,
+                             String runtimeId,
+                             Credentials credentials,
+                             Path certPath,
+                             Path keyPath,
+                             Path caPath) {
         boolean hasCerts() {
             return certPath != null || keyPath != null || caPath != null;
         }
@@ -207,7 +244,7 @@ public final class CliApplication {
                     .longOpt("help")
                     .desc("Show help")
                     .build());
-            addOption(parsedOptions, "config", ARG_PATH);
+            addOption(parsedOptions, OPTION_CONFIG, ARG_PATH);
             addOption(parsedOptions, "repo", "name");
             addOption(parsedOptions, "tag", "tag");
             addOption(parsedOptions, "ref", "ref");
@@ -241,7 +278,8 @@ public final class CliApplication {
                 return new ParseResult(null, true, null);
             }
 
-            Path configPath = Paths.get(cmd.getOptionValue("config", "config.yaml"));
+            boolean configProvidedByUser = cmd.hasOption(OPTION_CONFIG);
+            Path configPath = Paths.get(cmd.getOptionValue(OPTION_CONFIG, DEFAULT_CONFIG_PATH.toString()));
             String repo = cmd.getOptionValue("repo");
             String tag = cmd.getOptionValue("tag");
             String ref = cmd.getOptionValue("ref");
@@ -308,6 +346,7 @@ public final class CliApplication {
 
             CliOptions cliOptions = new CliOptions(
                     configPath,
+                    configProvidedByUser,
                     repo,
                     reference,
                     runtimeId,

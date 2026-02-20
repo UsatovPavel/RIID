@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
-import riid.config.GlobalConfig;
-import riid.config.ConfigLoader;
-import riid.config.ConfigValidationException;
+import riid.core.config.GlobalConfig;
+import riid.core.config.ConfigLoader;
+import riid.core.config.ConfigValidationException;
 
 import java.nio.file.Path;
 
@@ -14,9 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 
 @Tag("filesystem")
 class ConfigLoaderTest {
@@ -37,6 +37,7 @@ class ConfigLoaderTest {
                     followRedirects: true
                     initialBackoff: PT0.2S
                     maxBackoff: PT2S
+                    backoffExponentBase: 2
                   auth:
                     defaultTokenTtlSeconds: 600
                   registries:
@@ -99,6 +100,7 @@ class ConfigLoaderTest {
                     maxRetries: 5
                     initialBackoff: PT0.15S
                     maxBackoff: PT3S
+                    backoffExponentBase: 2
                     retryIdempotentOnly: false
                     userAgent: "riid-test-agent"
                     followRedirects: false

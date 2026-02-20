@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import riid.app.fs.TestPaths;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 
 @Tag("filesystem")
 class ImageLoadingFacadeFactoryTest {
@@ -18,7 +18,8 @@ class ImageLoadingFacadeFactoryTest {
     void createsServiceFromConfig() throws Exception {
         String yaml = """
                 client:
-                  http: {}
+                  http:
+                    backoffExponentBase: 2
                   auth: {}
                   registries:
                     - scheme: https

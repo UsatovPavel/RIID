@@ -1,4 +1,4 @@
-package riid.client.core.model.manifest;
+package riid.core.model.manifest;
 
 /**
  * Supported media types for OCI/Docker manifests and layers.

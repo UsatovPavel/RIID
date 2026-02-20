@@ -1,12 +1,22 @@
 package riid.integration.client_cache.auth;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
+import org.eclipse.jetty.client.HttpClient;
+import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import org.eclipse.jetty.client.HttpClient;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+
 import riid.cache.auth.TokenCache;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
@@ -14,15 +24,6 @@ import riid.client.http.HttpClientFactory;
 import riid.client.http.HttpExecutor;
 import riid.client.service.AuthService;
 import riid.client.service.ManifestService;
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SuppressWarnings("PMD.CloseResource")
 class ManifestServiceHeadTest {

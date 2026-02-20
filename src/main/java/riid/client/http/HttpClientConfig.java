@@ -13,6 +13,7 @@ public record HttpClientConfig(
         @JsonProperty("maxRetries") int maxRetries,
         @JsonProperty("initialBackoff") Duration initialBackoff,
         @JsonProperty("maxBackoff") Duration maxBackoff,
+        @JsonProperty("backoffExponentBase") int backoffExponentBase,
         @JsonProperty("retryIdempotentOnly") boolean retryIdempotentOnly,
         @JsonProperty("userAgent") String userAgent,
         @JsonProperty("followRedirects") boolean followRedirects,
@@ -23,6 +24,8 @@ public record HttpClientConfig(
     private static final int DEFAULT_MAX_RETRIES = 2;
     private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofMillis(200);
     private static final Duration DEFAULT_MAX_BACKOFF = Duration.ofSeconds(2);
+    private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
+    private static final int DEFAULT_BACKOFF_EXPONENT_BASE = 2;
     private static final boolean DEFAULT_RETRY_IDEMPOTENT_ONLY = true;
     private static final String DEFAULT_USER_AGENT = "riid-registry-client";
     private static final boolean DEFAULT_FOLLOW_REDIRECTS = true;
@@ -30,7 +33,8 @@ public record HttpClientConfig(
 
     public HttpClientConfig() {
         this(DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES,
-                DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT,
+                DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_BACKOFF_EXPONENT_BASE,
+                DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT,
                 DEFAULT_FOLLOW_REDIRECTS, DEFAULT_MAX_REDIRECTS);
     }
 
@@ -40,6 +44,7 @@ public record HttpClientConfig(
                             int maxRetries,
                             Duration initialBackoff,
                             Duration maxBackoff,
+                            int backoffExponentBase,
                             boolean retryIdempotentOnly,
                             String userAgent,
                             boolean followRedirects,
@@ -49,6 +54,7 @@ public record HttpClientConfig(
         this.maxRetries = maxRetries;
         this.initialBackoff = initialBackoff != null ? initialBackoff : DEFAULT_INITIAL_BACKOFF;
         this.maxBackoff = maxBackoff != null ? maxBackoff : DEFAULT_MAX_BACKOFF;
+        this.backoffExponentBase = backoffExponentBase;
         this.retryIdempotentOnly = retryIdempotentOnly;
         this.userAgent = userAgent != null ? userAgent : DEFAULT_USER_AGENT;
         this.followRedirects = followRedirects;
@@ -72,6 +78,9 @@ public record HttpClientConfig(
         if (maxRetries < 0) {
             throw new IllegalArgumentException("maxRetries must be >= 0");
         }
+        if (backoffExponentBase < MIN_BACKOFF_EXPONENT_BASE) {
+            throw new IllegalArgumentException("backoffExponentBase must be >= 2");
+        }
         if (maxRedirects < 0) {
             throw new IllegalArgumentException("maxRedirects must be >= 0");
         }
@@ -91,6 +100,7 @@ public record HttpClientConfig(
                 .maxRetries(maxRetries)
                 .initialBackoff(initialBackoff)
                 .maxBackoff(maxBackoff)
+                .backoffExponentBase(backoffExponentBase)
                 .retryIdempotentOnly(retryIdempotentOnly)
                 .userAgent(userAgent)
                 .followRedirects(followRedirects)
@@ -103,6 +113,7 @@ public record HttpClientConfig(
         private Integer maxRetriesValue;
         private Duration initialBackoffValue;
         private Duration maxBackoffValue;
+        private Integer backoffExponentBaseValue;
         private Boolean retryIdempotentOnlyValue;
         private String userAgentValue;
         private Boolean followRedirectsValue;
@@ -136,6 +147,11 @@ public record HttpClientConfig(
             return this;
         }
 
+        public Builder backoffExponentBase(int v) {
+            this.backoffExponentBaseValue = v;
+            return this;
+        }
+
         public Builder retryIdempotentOnly(boolean v) {
             this.retryIdempotentOnlyValue = v;
             return this;
@@ -163,6 +179,7 @@ public record HttpClientConfig(
                     maxRetriesValue != null ? maxRetriesValue : DEFAULT_MAX_RETRIES,
                     initialBackoffValue != null ? initialBackoffValue : DEFAULT_INITIAL_BACKOFF,
                     maxBackoffValue != null ? maxBackoffValue : DEFAULT_MAX_BACKOFF,
+                    backoffExponentBaseValue != null ? backoffExponentBaseValue : DEFAULT_BACKOFF_EXPONENT_BASE,
                     retryIdempotentOnlyValue != null ? retryIdempotentOnlyValue : DEFAULT_RETRY_IDEMPOTENT_ONLY,
                     userAgentValue != null ? userAgentValue : DEFAULT_USER_AGENT,
                     followRedirectsValue != null ? followRedirectsValue : DEFAULT_FOLLOW_REDIRECTS,

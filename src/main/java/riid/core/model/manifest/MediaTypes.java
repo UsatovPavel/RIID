@@ -1,4 +1,4 @@
-package riid.client.core.model.manifest;
+package riid.core.model.manifest;
 
 /**
  * Common media type constants for Docker v2 and OCI images.

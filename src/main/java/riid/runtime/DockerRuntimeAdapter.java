@@ -12,9 +12,9 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.PathSupport;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.PathSupport;
 
 /**
  * Docker adapter: accepts OCI archive, rewrites to docker-save format, feeds to `docker load`.
@@ -73,6 +73,7 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
             throw new IOException("OCI archive missing manifests");
         }
         String manifestDigest = stripSha256(manifestNode.path(DIGEST_FIELD).asText(""));
+
         if (manifestDigest.isBlank()) {
             throw new IOException("OCI archive manifest digest missing");
         }

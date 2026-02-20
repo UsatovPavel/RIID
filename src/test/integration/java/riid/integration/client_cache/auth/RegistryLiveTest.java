@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 
 /**
  * Live smoke against Docker Hub for alpine:edge.
@@ -57,7 +57,12 @@ public class RegistryLiveTest {
         assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
+        BlobRequest req = new BlobRequest(
+                REPO,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
 
         // HEAD
         Optional<Long> sizeOpt = blobService.headBlob(DOCKER_HUB, REPO, layer.digest(), SCOPE);

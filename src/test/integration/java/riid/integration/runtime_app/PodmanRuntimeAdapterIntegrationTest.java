@@ -13,12 +13,13 @@ import org.junit.jupiter.api.Test;
 import riid.app.ImageId;
 import riid.app.ImageLoadingFacade;
 import riid.app.RuntimeRegistry;
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
+import riid.core.config.TestConfigYaml;
 import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.runtime.PodmanRuntimeAdapter;
@@ -39,28 +40,7 @@ class PodmanRuntimeAdapterIntegrationTest {
         ImageId loadedId;
         HostFilesystem fs = new NioHostFilesystem();
         Path configPath = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
-        String configYaml = """
-                client:
-                  http:
-                    connectTimeout: PT5S
-                    requestTimeout: PT10S
-                    maxRetries: 2
-                    retryIdempotentOnly: true
-                    followRedirects: true
-                    initialBackoff: PT0.2S
-                    maxBackoff: PT2S
-                  auth:
-                    defaultTokenTtlSeconds: 600
-                  registries:
-                    - scheme: https
-                      host: registry-1.docker.io
-                      port: -1
-                dispatcher:
-                  maxConcurrentRegistry: 3
-                app:
-                  tempDirectory: "build/test-fs"
-                """;
-        fs.writeString(configPath, configYaml);
+        fs.writeString(configPath, TestConfigYaml.dockerHubConfigWithRuntimeTempDir(3, "build/test-fs"));
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
         ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
@@ -80,7 +60,7 @@ class PodmanRuntimeAdapterIntegrationTest {
     }
 
     /**
-     * End-to-end using App facade: load via dispatcher/runtime and then run with podman.
+     * End-to-endOffsetBytes using App facade: load via dispatcher/runtime and then run with podman.
      */
     @Test
     void oneShotLoadAndRun() throws Exception {

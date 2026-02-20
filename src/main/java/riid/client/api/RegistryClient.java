@@ -1,7 +1,7 @@
 package riid.client.api;
 
-import riid.client.core.model.manifest.Manifest;
-import riid.client.core.model.manifest.TagList;
+import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.TagList;
 
 import java.io.File;
 import java.util.Optional;

@@ -8,7 +8,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
-import riid.client.core.model.manifest.Manifest;
+import riid.core.model.manifest.Manifest;
 import riid.client.http.HttpClientConfig;
 
 import java.io.File;
@@ -22,9 +22,9 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import riid.app.fs.HostFilesystem;
-import riid.app.fs.NioHostFilesystem;
-import riid.app.fs.TestPaths;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
+import riid.core.fs.TestPaths;
 
 /**
  * Stress/retry test (step 9.1).
@@ -60,7 +60,12 @@ public class StressTest {
     void downloadManyInParallel() throws Exception {
         Manifest manifest = CLIENT.fetchManifest(REPO, REF).manifest();
         var layer = manifest.layers().getFirst(); // tiny layer in busybox
-        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType());
+        BlobRequest req = new BlobRequest(
+                REPO,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
 
         int count = 1000;
         try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
