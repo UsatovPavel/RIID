@@ -173,6 +173,11 @@ public final class ConfigValidator {
         if (schedulerAddr != null && schedulerAddr.isBlank()) {
             throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_SCHEDULER_ADDR_BLANK.message());
         }
+        String daemonEndpoint = dragonfly.daemonEndpoint();
+        if (daemonEndpoint != null && daemonEndpoint.isBlank()) {
+            throw new ConfigValidationException(
+                    ConfigValidationException.P2P.DRAGONFLY_DAEMON_ENDPOINT_BLANK.message());
+        }
         if (dragonfly.maxRetries() != null && dragonfly.maxRetries() < 0) {
             throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_MAX_RETRIES_NEGATIVE.message());
         }

@@ -24,7 +24,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-docker exec "$container" /opt/dragonfly/bin/dfget "${args[@]}"
+docker exec "$container" sh -lc '
+if [ -x /usr/local/bin/dfget ]; then
+  exec /usr/local/bin/dfget "$@"
+fi
+exec /opt/dragonfly/bin/dfget "$@"
+' _ "${args[@]}"
 
 if [[ -n "$host_out" && -z "$direct_mount" ]]; then
   docker cp "${container}:${container_out}" "$host_out"

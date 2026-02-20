@@ -27,6 +27,7 @@ import riid.core.model.manifest.MediaType;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
+import riid.p2p.DragonflyClientException;
 import riid.p2p.P2PExecutor;
 
 /**
@@ -78,32 +79,25 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest);
 
-        // 1) cache
-        Path cachedPath = null;
-        if (cache != null && cache.has(digest)) {
-            cachedPath = cache.get(digest)
-                    .flatMap(entry -> cache.resolve(entry.key()))
-                    .orElse(null);
-        }
-        if (cachedPath != null) {
-            LOGGER.info("cache hit for layer {}", digest);
-            return new FetchResult(digest, mediaType, cachedPath);
-        }
-
-        // 2) P2P
-        if (p2p != null) {
-            try {
-                var p2pPath = p2p.fetch(
-                        repository.value(),
-                        digest,
-                        sizeBytes,
-                        CacheMediaType.from(mediaType.value()));
-                if (p2pPath.isPresent()) {
-                    LOGGER.info("p2p hit for layer {}", digest);
-                    return new FetchResult(digest, mediaType, p2pPath.get());
-                }
-            } catch (IOException ex) {
-                LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
+        if (isDragonflyMode()) {
+            Optional<FetchResult> p2pResult = fetchFromP2P(repository, digest, sizeBytes, mediaType);
+            if (p2pResult.isPresent()) {
+                return p2pResult.get();
+            }
+            Path cachedPath = resolveFromCache(digest);
+            if (cachedPath != null) {
+                LOGGER.info("cache hit for layer {} after p2p path", digest);
+                return new FetchResult(digest, mediaType, cachedPath);
+            }
+        } else {
+            Path cachedPath = resolveFromCache(digest);
+            if (cachedPath != null) {
+                LOGGER.info("cache hit for layer {}", digest);
+                return new FetchResult(digest, mediaType, cachedPath);
+            }
+            Optional<FetchResult> p2pResult = fetchFromP2P(repository, digest, sizeBytes, mediaType);
+            if (p2pResult.isPresent()) {
+                return p2pResult.get();
             }
         }
 
@@ -193,6 +187,48 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
     private void releaseRegistry() {
         registryLimiter.ifPresent(Semaphore::release);
+    }
+
+    private boolean isDragonflyMode() {
+        return p2p != null && !(p2p instanceof P2PExecutor.NoOp);
+    }
+
+    private Path resolveFromCache(ImageDigest digest) {
+        if (cache == null || !cache.has(digest)) {
+            return null;
+        }
+        return cache.get(digest)
+                .flatMap(entry -> cache.resolve(entry.key()))
+                .orElse(null);
+    }
+
+    private Optional<FetchResult> fetchFromP2P(RepositoryName repository,
+                                               ImageDigest digest,
+                                               long sizeBytes,
+                                               MediaType mediaType) {
+        if (p2p == null) {
+            return Optional.empty();
+        }
+        try {
+            var p2pPath = p2p.fetch(
+                    repository.value(),
+                    digest,
+                    sizeBytes,
+                    CacheMediaType.from(mediaType.value()));
+            if (p2pPath.isPresent()) {
+                LOGGER.info("p2p hit for layer {}", digest);
+                return Optional.of(new FetchResult(digest, mediaType, p2pPath.get()));
+            }
+        } catch (IOException ex) {
+            Throwable cause = ex.getCause();
+            if (cause instanceof DragonflyClientException dce) {
+                LOGGER.warn("P2P fetch failed for layer {} with {}: {}",
+                        digest, dce.kind(), dce.getMessage());
+            } else {
+                LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
+            }
+        }
+        return Optional.empty();
     }
 }
 

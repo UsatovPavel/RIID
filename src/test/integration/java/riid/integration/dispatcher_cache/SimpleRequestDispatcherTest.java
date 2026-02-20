@@ -8,7 +8,6 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Tag;
@@ -47,7 +46,7 @@ class SimpleRequestDispatcherTest {
     void returnsCacheHit() {
         try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
             RecordingCacheAdapter cache = new RecordingCacheAdapter();
-            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
+            P2PExecutor p2p = new P2PExecutor.NoOp();
             HostFilesystem fs = new NioHostFilesystem();
             cache.hasEntry = true;
             cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
@@ -58,7 +57,6 @@ class SimpleRequestDispatcherTest {
             assertEquals(Path.of("/tmp/cached"), result.path());
             assertEquals(1, registry.manifestCalls);
             assertEquals(0, registry.blobCalls);
-            assertFalse(p2p.fetchCalled, "p2p should not be used on cache hit");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

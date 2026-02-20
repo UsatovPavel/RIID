@@ -3,8 +3,6 @@ package riid.p2p;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -23,7 +21,6 @@ import riid.cache.oci.ValidationException;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.model.manifest.RegistryApi;
 import riid.core.hash.Sha256Utils;
-import riid.runtime.BoundedCommandExecution;
 
 /**
  * P2P executor backed by Dragonfly dfget CLI.
@@ -33,12 +30,12 @@ import riid.runtime.BoundedCommandExecution;
         justification = "CacheAdapter is a shared collaborator, not exposed mutably")
 public final class DragonflyP2PExecutor implements P2PExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger(DragonflyP2PExecutor.class);
-    private static final String DEFAULT_DFGET = "dfget";
 
     private final RegistryEndpoint endpoint;
     private final CacheAdapter cache;
     private final HostFilesystem fs;
     private final DragonflyConfig config;
+    private final DragonflyClientAdapter clientAdapter;
 
     public DragonflyP2PExecutor(RegistryEndpoint endpoint,
                                 CacheAdapter cache,
@@ -48,6 +45,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         this.cache = cache;
         this.fs = Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
+        this.clientAdapter = new DragonflyClientAdapter(config);
     }
 
     @Override
@@ -60,54 +58,31 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         }
         Path tempPath = createTempFile();
         String url = endpoint.uri(RegistryApi.blobPath(repository, digest.toString())).toString();
-        List<String> cmd = buildDfgetCommand(url, tempPath);
         try {
-            LOGGER.info("P2P dfget start: url={}, target={}, cmd={}", url, tempPath, cmd);
-            var result = BoundedCommandExecution.run(cmd);
-            if (result.exitCode() != 0) {
-                String msg = "dfget failed (exit " + result.exitCode() + "): "
-                        + result.stdout() + result.stderr();
-                throw new IOException(msg);
-            }
+            LOGGER.info("P2P dfget start: url={}, target={}", url, tempPath);
+            clientAdapter.download(url, tempPath, digest.toString());
             long actualSize = tempPath.toFile().length();
             if (size > 0 && actualSize > 0 && actualSize != size) {
                 throw new IOException(
-                        "P2P size mismatch for " + digest + ": expected " + size + ", got " + actualSize
-                                + ". dfget stdout=" + result.stdout() + " stderr=" + result.stderr());
+                        "P2P size mismatch for " + digest + ": expected " + size + ", got " + actualSize);
             }
             String computed = computeSha256(tempPath);
             if (!computed.equals(digest.toString())) {
-                LOGGER.warn("P2P digest mismatch for {}: got {} (size={}, stdout={}, stderr={})",
-                        digest, computed, actualSize, result.stdout(), result.stderr());
+                LOGGER.warn("P2P digest mismatch for {}: got {} (size={})",
+                        digest, computed, actualSize);
                 throw new IOException(
                         "P2P digest mismatch for " + digest + ": got " + computed
-                                + ". size=" + actualSize
-                                + ". dfget stdout=" + result.stdout() + " stderr=" + result.stderr());
+                                + ". size=" + actualSize);
             }
             return Optional.of(cacheOrTemp(tempPath, digest, mediaType, actualSize));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("P2P dfget interrupted for " + digest, e);
+        } catch (DragonflyClientException e) {
+            throw new IOException("P2P dfget failed for " + digest + ": " + e.kind(), e);
         }
     }
 
     @Override
     public void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType) {
         // Not supported by dfget CLI; leaving no-op for now.
-    }
-
-    private List<String> buildDfgetCommand(String url, Path targetPath) {
-        List<String> cmd = new ArrayList<>();
-        String bin = config.dfgetPath() != null && !config.dfgetPath().isBlank()
-                ? config.dfgetPath()
-                : DEFAULT_DFGET;
-        cmd.add(bin);
-        cmd.add("--url");
-        cmd.add(url);
-        cmd.add("-O");
-        cmd.add(targetPath.toAbsolutePath().toString());
-        cmd.add("--console");
-        return cmd;
     }
 
     private Path createTempFile() throws IOException {
