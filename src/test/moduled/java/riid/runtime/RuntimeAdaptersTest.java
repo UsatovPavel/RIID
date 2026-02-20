@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -152,14 +154,14 @@ class RuntimeAdaptersTest {
         String layerDigest = sha256(layerBytes);
         Files.write(blobs.resolve(layerDigest), layerBytes);
 
-        var manifest = new riid.core.model.manifest.Manifest(
+        var manifest = new Manifest(
                 2,
                 "application/vnd.oci.image.manifest.v1+json",
-                new riid.core.model.manifest.Descriptor(
+                new Descriptor(
                         "application/vnd.oci.image.config.v1+json",
                         "sha256:" + configDigest,
                         configBytes.length),
-                List.of(new riid.core.model.manifest.Descriptor(
+                List.of(new Descriptor(
                         "application/vnd.oci.image.layer.v1.tar",
                         "sha256:" + layerDigest,
                         layerBytes.length))
