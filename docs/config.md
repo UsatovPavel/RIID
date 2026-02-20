@@ -46,7 +46,7 @@ p2p:
   dragonfly:
     enabled: true
     dfgetPath: "/opt/dragonfly/bin/dfget"
-    schedulerAddr: "dfscheduler:65002"
+    schedulerAddr: "dfscheduler:8002"
     requestTimeout: PT30S
     maxRetries: 2
 ```

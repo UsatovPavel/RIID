@@ -98,7 +98,6 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
 
     private Path createTempFile() throws IOException {
         Path path = PathSupport.temporaryPath("p2p-", ".bin");
-        fs.createFile(path);
         return path;
     }
 

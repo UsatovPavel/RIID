@@ -56,7 +56,7 @@ services:
     depends_on:
       - dfmanager
     ports:
-      - "65002:65002"
+      - "8002:8002"
     networks:
       - dragonfly-net
 

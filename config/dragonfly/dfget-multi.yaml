@@ -6,5 +6,5 @@ daemon:
   cacheDir: /var/cache/dragonfly
 scheduler:
   netAddrs:
-    - "dfscheduler:65002"
+    - "dfscheduler:8002"
 

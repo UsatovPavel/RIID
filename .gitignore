@@ -43,6 +43,12 @@ bin/
 #TODO at end of dev all make builded files
 *.txt
 
+### Dragonfly runtime data ###
+.dragonfly/
+.dragonfly1/
+.dragonfly2/
+.dragonfly3/
+
 ###Internal artifacts###
 internalDocs/*
 План*

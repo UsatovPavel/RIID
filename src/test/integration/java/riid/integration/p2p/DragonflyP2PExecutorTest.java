@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
@@ -47,7 +48,8 @@ class DragonflyP2PExecutorTest {
     private static final String MEDIA_LAYER = "application/vnd.oci.image.layer.v1.tar";
     private static final String JAVA_IO_TMPDIR = "java.io.tmpdir";
     private static final String V2_PATH_PREFIX = "/v2/";
-    private static final String DFDAEMON_ENDPOINT = "/tmp/dfdaemon.sock";
+    private static final String DFDAEMON1_ENDPOINT = "/tmp/dfdaemon1.sock";
+    private static final String DFDAEMON2_ENDPOINT = "/tmp/dfdaemon2.sock";
 
     private HttpServer server;
 
@@ -70,7 +72,7 @@ class DragonflyP2PExecutorTest {
 
         RegistryEndpoint endpoint = new RegistryEndpoint("http", dfgetEnv.host(), server.getAddress().getPort(), null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, dfgetEnv.path(), null, null, null, DFDAEMON_ENDPOINT);
+        DragonflyConfig config = new DragonflyConfig(true, dfgetEnv.path(), null, null, null, DFDAEMON1_ENDPOINT);
 
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs)) {
             DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
@@ -101,10 +103,9 @@ class DragonflyP2PExecutorTest {
         System.setProperty(JAVA_IO_TMPDIR, "/tmp");
         try {
             String seedDfget = createDfgetWrapper(dfgetEnv.path(), "dfdaemon1", true);
-            Path seedPath = Files.createTempFile("dfget-seed-", ".bin");
-            seedPath.toFile().deleteOnExit();
+            Path seedPath = Path.of(System.getProperty("java.io.tmpdir"), "dfget-seed-" + UUID.randomUUID() + ".bin");
             String seedUrl = endpoint.uri(V2_PATH_PREFIX + REPO + "/blobs/" + digest).toString();
-            runDfget(seedDfget, seedUrl, seedPath);
+            runDfget(seedDfget, seedUrl, seedPath, digest, DFDAEMON1_ENDPOINT);
             assertTrue(Files.exists(seedPath), "seed file should exist");
             assertTrue(Files.size(seedPath) > 0, "seed file should not be empty");
 
@@ -114,7 +115,7 @@ class DragonflyP2PExecutorTest {
                     null,
                     null,
                     null,
-                    DFDAEMON_ENDPOINT);
+                    DFDAEMON2_ENDPOINT);
             try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs)) {
                 DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
                 var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
@@ -148,13 +149,14 @@ class DragonflyP2PExecutorTest {
         System.setProperty(JAVA_IO_TMPDIR, "/tmp");
         try {
             String seedDfget = createDfgetWrapper(dfgetEnv.path(), "dfdaemon1", true);
-            Path seedPath = Files.createTempFile("dfget-seed-", ".bin");
-            seedPath.toFile().deleteOnExit();
+            Path seedPath = Path.of(System.getProperty("java.io.tmpdir"), "dfget-seed-" + UUID.randomUUID() + ".bin");
             String seedUrl = endpoint.uri(V2_PATH_PREFIX + REPO + "/blobs/" + digest).toString();
-            runDfget(seedDfget, seedUrl, seedPath);
+            runDfget(seedDfget, seedUrl, seedPath, digest, DFDAEMON1_ENDPOINT);
 
             int seedRequests = blobRequests.get();
             assertTrue(seedRequests > 0, "seed should hit registry server");
+
+            Thread.sleep(15_000);
 
             DragonflyConfig config = new DragonflyConfig(
                     true,
@@ -162,7 +164,7 @@ class DragonflyP2PExecutorTest {
                     null,
                     null,
                     null,
-                    DFDAEMON_ENDPOINT);
+                    DFDAEMON2_ENDPOINT);
             try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                  RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
                 DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
@@ -174,7 +176,12 @@ class DragonflyP2PExecutorTest {
                 assertEquals(payload.length, fs.size(result.path()), "downloaded size should match");
                 assertEquals(1, registry.manifestCalls, "manifest should be fetched once");
                 assertEquals(0, registry.blobCalls, "registry blob fetch should not be used when p2p hit");
-                assertEquals(seedRequests, blobRequests.get(), "dispatcher should not hit registry server for blob");
+                // Dragonfly always does HTTP HEAD at download_started (backend.stat) to get Content-Length
+                // even when P2P is used; seed = 1 HEAD + 1 GET, P2P client adds 1 HEAD.
+                int p2pHeadRequests = 1;
+                int expectedBlobRequests = seedRequests + p2pHeadRequests;
+                assertEquals(expectedBlobRequests, blobRequests.get(),
+                        "registry blob requests: seed (HEAD+GET) + P2P client HEAD");
             }
         } finally {
             if (previousTmp != null) {
@@ -215,7 +222,7 @@ class DragonflyP2PExecutorTest {
         if (env != null && !env.isBlank()) {
             return new DfgetEnv(env, "localhost");
         }
-        var resource = DragonflyP2PExecutorTest.class.getResource("/dfget.sh");
+        var resource = DragonflyP2PExecutorTest.class.getResource("/dfget-multi.sh");
         if (resource != null) {
             return new DfgetEnv(extractDfgetScript(), resolveDockerGateway());
         }
@@ -226,7 +233,7 @@ class DragonflyP2PExecutorTest {
     }
 
     private static String extractDfgetScript() {
-        try (var in = DragonflyP2PExecutorTest.class.getResourceAsStream("/dfget.sh")) {
+        try (var in = DragonflyP2PExecutorTest.class.getResourceAsStream("/dfget-multi.sh")) {
             if (in == null) {
                 return "dfget";
             }
@@ -337,19 +344,24 @@ class DragonflyP2PExecutorTest {
         }
     }
 
-    private static void runDfget(String dfgetPath, String url, Path out) throws IOException, InterruptedException {
+    private static void runDfget(String dfgetPath, String url, Path out, String digest, String daemonEndpoint) throws IOException, InterruptedException {
         Process process = new ProcessBuilder(
                 dfgetPath,
                 "-e",
-                DFDAEMON_ENDPOINT,
+                daemonEndpoint,
                 "-O",
                 out.toAbsolutePath().toString(),
                 url,
+                "--content-for-calculating-task-id",
+                digest,
+                "--digest",
+                digest,
                 "--console")
                 .redirectErrorStream(true)
                 .start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = process.waitFor();
-        assertTrue(code == 0, "dfget seed failed");
+        assertTrue(code == 0, () -> "dfget seed failed (exit=" + code + "): " + (output.isBlank() ? "no output" : output.trim()));
     }
 
     /**

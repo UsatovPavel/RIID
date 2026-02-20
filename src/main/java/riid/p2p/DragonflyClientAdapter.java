@@ -131,6 +131,8 @@ public final class DragonflyClientAdapter {
         cmd.add("-O");
         cmd.add(output.toAbsolutePath().toString());
         cmd.add(url);
+        cmd.add("--content-for-calculating-task-id");
+        cmd.add(digest);
         cmd.add("--digest");
         cmd.add(digest);
         if (request.tag() != null && !request.tag().isBlank()) {
