@@ -17,6 +17,7 @@ database:
     host: dfmysql
     port: 3306
     dbname: dragonfly
+    migrate: true
   redis:
     addrs:
       - "dfredis:6379"
