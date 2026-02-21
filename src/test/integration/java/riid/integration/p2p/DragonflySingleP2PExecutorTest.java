@@ -33,8 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Assumptions;
 
 /**
- * Integration tests for dragonfly-single mode (unix socket, --network host).
- * Run: make dragonfly-single && ./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+ * Integration tests for Dragonfly P2P (unix socket).
+ * Run: ./minikube-dragonfly.sh && ./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
  */
 @Tag("local")
 @Tag("filesystem")
@@ -43,7 +43,7 @@ class DragonflySingleP2PExecutorTest {
 
     private static final String REPO = "repo";
     private static final String CONTENT_TYPE = "application/octet-stream";
-    private static final String DFDAEMON_ADDR = "unix:///tmp/dragonfly-sock/dfdaemon.sock";
+    private static final String DFDAEMON_ADDR = "unix:///var/run/dragonfly/dfdaemon.sock";
 
     private static HttpServer server;
     private static byte[] payload;
@@ -55,8 +55,8 @@ class DragonflySingleP2PExecutorTest {
 
     @BeforeAll
     static void setUp() throws Exception {
-        Assumptions.assumeTrue(Files.exists(Path.of("/tmp/dragonfly-sock/dfdaemon.sock")),
-                "dfdaemon socket not found (run make dragonfly-single)");
+        Assumptions.assumeTrue(Files.exists(Path.of("/var/run/dragonfly/dfdaemon.sock")),
+                "dfdaemon socket not found (run ./minikube-dragonfly.sh)");
 
         payload = "p2p-single-cache-test".getBytes(StandardCharsets.UTF_8);
         digest = "sha256:" + sha256(payload);
@@ -81,7 +81,7 @@ class DragonflySingleP2PExecutorTest {
         });
         server.start();
 
-        endpoint = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
+        endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(), null);
         fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
         p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, StreamingDfdaemonDownloadClient::new);

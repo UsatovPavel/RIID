@@ -83,7 +83,7 @@ dragonfly-multi-stop:
 dragonfly-cluster-single:
 	docker network create dragonfly-net >/dev/null 2>&1 || true
 	docker rm -f dfdaemon dfmanager dfscheduler dfmysql dfredis >/dev/null 2>&1 || true
-	mkdir -p /tmp/dragonfly-sock
+	mkdir -p /tmp/dragonfly-sock /tmp/dragonfly-data/output /tmp/dragonfly-cache
 	docker run -d --name dfmysql --network dragonfly-net \
 		-e MYSQL_ROOT_PASSWORD=root \
 		-e MYSQL_DATABASE=dragonfly \
@@ -115,7 +115,10 @@ dragonfly-cluster-single:
 		dragonflyoss/scheduler:latest \
 		--config /etc/dragonfly/scheduler.yaml --console
 	docker run -d --name dfdaemon --network dragonfly-net --privileged \
+		--add-host=host.docker.internal:host-gateway \
 		-v /tmp/dragonfly-sock:/var/run \
+		-v /tmp/dragonfly-data:/var/lib/dragonfly \
+		-v /tmp/dragonfly-cache:/var/cache/dragonfly \
 		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-cluster-single.yaml
@@ -132,6 +135,7 @@ dragonfly-cluster-single:
 dragonfly-cluster-single-stop:
 	docker rm -f dfdaemon dfmanager dfscheduler dfmysql dfredis >/dev/null 2>&1 || true
 	docker network rm dragonfly-net >/dev/null 2>&1 || true
+	rm -rf /tmp/dragonfly-data /tmp/dragonfly-cache
 
 .PHONY: dragonfly-health dragonfly-health-single dragonfly-health-multi dragonfly-health-cluster-single
 
@@ -212,3 +216,15 @@ dragonfly-logs-daemon2:
 
 dragonfly-logs-daemon3:
 	@docker exec dfdaemon3 sh -c "tail -n 50 /var/log/dragonfly/daemon/stdout.log /var/log/dragonfly/daemon/stderr.log" > out.txt
+
+minikube-delete-and-start:
+	minikube start 
+	helm uninstall dragonfly -n dragonfly-system
+	minikube kubectl -- delete pvc --all -n dragonfly-system
+	sleep 10
+	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f values.yaml
+	sudo mkdir -p /var/run/dragonfly/output #на вcякий случай
+	sudo chmod 777 /var/run/dragonfly/output
+
+minikube-get-podes: 
+	kubectl get pods -n dragonfly-system --show-labels
