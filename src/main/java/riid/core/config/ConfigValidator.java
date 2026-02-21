@@ -155,10 +155,10 @@ public final class ConfigValidator {
             return;
         }
         if (dragonfly.enabledOrDefault()) {
-            String dfgetPath = dragonfly.dfgetPath();
-            if (dfgetPath == null || dfgetPath.isBlank()) {
+            String dfdaemonAddr = dragonfly.dfdaemonAddr();
+            if (dfdaemonAddr == null || dfdaemonAddr.isBlank()) {
                 throw new ConfigValidationException(
-                        ConfigValidationException.P2P.DRAGONFLY_DFGET_PATH_REQUIRED.message());
+                        ConfigValidationException.P2P.DRAGONFLY_DFDAEMON_ADDR_REQUIRED.message());
             }
         }
         String schedulerAddr = dragonfly.schedulerAddr();
