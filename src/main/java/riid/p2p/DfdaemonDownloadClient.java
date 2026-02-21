@@ -10,17 +10,20 @@ import org.slf4j.LoggerFactory;
 
 import DragonflyDfdaemon.v2.Dfdaemon;
 import DragonflyDfdaemon.v2.DfdaemonDownloadGrpc;
+import io.grpc.Deadline;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
+import java.net.UnixDomainSocketAddress;
+
 import io.grpc.netty.NettyChannelBuilder;
-import io.netty.channel.epoll.EpollDomainSocketChannel;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.unix.DomainSocketAddress;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioDomainSocketChannel;
 
 /**
  * gRPC client for dfdaemon DownloadTask. Sync/blocking.
+ * Uses need_piece_content=false; dfdaemon does hardlink/copy to output path.
  */
-public final class DfdaemonDownloadClient implements AutoCloseable {
+public final class DfdaemonDownloadClient implements DfdaemonDownloader {
     private static final Logger LOGGER = LoggerFactory.getLogger(DfdaemonDownloadClient.class);
 
     private final ManagedChannel channel;
@@ -31,29 +34,53 @@ public final class DfdaemonDownloadClient implements AutoCloseable {
         this.stub = DfdaemonDownloadGrpc.newBlockingStub(channel);
     }
 
+    private static final int DEADLINE_SECONDS = 120;
+    private static final int MAX_RETRIES = 2;
+
     /**
      * Downloads via dfdaemon. Consumes stream until done. Returns output path.
      * dfdaemon does hardlink/copy to outputPath when need_piece_content=false.
+     * Retries on UNAVAILABLE (transient network/connection issues).
      */
+    @Override
     public Path download(Dfdaemon.DownloadTaskRequest request, Path outputPath) throws IOException {
-        try {
-            Iterator<Dfdaemon.DownloadTaskResponse> it = stub.downloadTask(request);
-            while (it.hasNext()) {
-                Dfdaemon.DownloadTaskResponse r = it.next();
-                if (r.hasDownloadTaskStartedResponse()) {
-                    var started = r.getDownloadTaskStartedResponse();
-                    if (started.getIsFinished()) {
-                        break;
+        IOException lastException = null;
+        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            try {
+                if (attempt > 0) {
+                    LOGGER.debug("Retrying DownloadTask (attempt {})", attempt + 1);
+                }
+                Iterator<Dfdaemon.DownloadTaskResponse> it = stub
+                        .withDeadline(Deadline.after(DEADLINE_SECONDS, TimeUnit.SECONDS))
+                        .downloadTask(request);
+                while (it.hasNext()) {
+                    Dfdaemon.DownloadTaskResponse r = it.next();
+                    if (r.hasDownloadTaskStartedResponse()) {
+                        var started = r.getDownloadTaskStartedResponse();
+                        if (started.getIsFinished()) {
+                            break;
+                        }
                     }
                 }
+                if (!java.nio.file.Files.exists(outputPath)) {
+                    throw new IOException("dfdaemon did not create output file: " + outputPath);
+                }
+                return outputPath;
+            } catch (StatusRuntimeException e) {
+                lastException = new IOException("dfdaemon DownloadTask failed: " + e.getStatus(), e);
+                if (e.getStatus().getCode() == io.grpc.Status.Code.UNAVAILABLE && attempt < MAX_RETRIES - 1) {
+                    try {
+                        Thread.sleep(500L * (attempt + 1));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Interrupted during retry", ie);
+                    }
+                } else {
+                    throw lastException;
+                }
             }
-            if (!java.nio.file.Files.exists(outputPath)) {
-                throw new IOException("dfdaemon did not create output file: " + outputPath);
-            }
-            return outputPath;
-        } catch (StatusRuntimeException e) {
-            throw new IOException("dfdaemon DownloadTask failed: " + e.getStatus(), e);
         }
+        throw lastException != null ? lastException : new IOException("DownloadTask failed");
     }
 
     @Override
@@ -77,9 +104,9 @@ public final class DfdaemonDownloadClient implements AutoCloseable {
                 throw new IllegalArgumentException("Invalid unix address: " + addr);
             }
             return NettyChannelBuilder
-                    .forAddress(new DomainSocketAddress(path))
-                    .eventLoopGroup(new EpollEventLoopGroup())
-                    .channelType(EpollDomainSocketChannel.class)
+                    .forAddress(UnixDomainSocketAddress.of(path))
+                    .eventLoopGroup(new NioEventLoopGroup())
+                    .channelType(NioDomainSocketChannel.class)
                     .usePlaintext()
                     .build();
         }

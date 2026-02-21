@@ -53,26 +53,31 @@ dragonfly-multi:
 		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/scheduler:latest \
 		--config /etc/dragonfly/scheduler.yaml --console
+	@mkdir -p /tmp/dragonfly-d1 /tmp/dragonfly-d2 /tmp/dragonfly-d3
 	docker run -d --name dfdaemon1 --network dragonfly-net --privileged \
 		-p 65001:65001 \
 		-v "/tmp:/tmp" \
+		-v "/tmp/dragonfly-d1:/var/lib/dragonfly" \
 		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-multi.yaml
 	docker run -d --name dfdaemon2 --network dragonfly-net --privileged \
-	-v "/tmp:/tmp" \
-	-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
+		-v "/tmp:/tmp" \
+		-v "/tmp/dragonfly-d2:/var/lib/dragonfly" \
+		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-multi.yaml
 	docker run -d --name dfdaemon3 --network dragonfly-net --privileged \
-	-v "/tmp:/tmp" \
-	-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
+		-v "/tmp:/tmp" \
+		-v "/tmp/dragonfly-d3:/var/lib/dragonfly" \
+		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-multi.yaml
 
 dragonfly-multi-stop:
 	docker rm -f dfmanager dfscheduler dfdaemon1 dfdaemon2 dfdaemon3 >/dev/null 2>&1 || true
 	docker network rm dragonfly-net >/dev/null 2>&1 || true
+	@rm -rf /tmp/dragonfly-d1 /tmp/dragonfly-d2 /tmp/dragonfly-d3
 
 # Single-node cluster: MySQL + Redis + Manager + Scheduler + one dfdaemon (socket for RIID)
 dragonfly-cluster-single:
@@ -114,6 +119,15 @@ dragonfly-cluster-single:
 		-v "$(PWD)/config/dragonfly":/etc/dragonfly:ro \
 		dragonflyoss/dfdaemon:latest \
 		--config /etc/dragonfly/dfget-cluster-single.yaml
+	@echo "Waiting for dfdaemon socket..."
+	@for i in {1..15}; do \
+		if [ -S /tmp/dragonfly-sock/dfdaemon.sock ]; then \
+			chmod 666 /tmp/dragonfly-sock/dfdaemon.sock 2>/dev/null || sudo chmod 666 /tmp/dragonfly-sock/dfdaemon.sock; \
+			echo "dfdaemon socket ready"; \
+			break; \
+		fi; \
+		sleep 1; \
+	done
 
 dragonfly-cluster-single-stop:
 	docker rm -f dfdaemon dfmanager dfscheduler dfmysql dfredis >/dev/null 2>&1 || true
