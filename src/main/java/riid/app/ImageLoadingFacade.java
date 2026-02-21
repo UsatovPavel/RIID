@@ -31,7 +31,7 @@ import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
-import riid.p2p.DragonflyP2PExecutor;
+import riid.p2p.DragonflyGrpcP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
 import riid.runtime.DockerRuntimeAdapter;
@@ -198,7 +198,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         if (config.p2p() != null
                 && config.p2p().dragonfly() != null
                 && config.p2p().dragonfly().enabledOrDefault()) {
-            p2p = new DragonflyP2PExecutor(endpoint, fs, config.p2p().dragonfly());
+            p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config.p2p().dragonfly());
         }
         return new ImageLoadingFacade(
                 new SimpleRequestDispatcher(client, cache, p2p, fs),

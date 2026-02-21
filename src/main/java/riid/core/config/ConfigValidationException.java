@@ -127,7 +127,7 @@ public class ConfigValidationException extends RuntimeException {
     }
 
     public enum P2P {
-        DRAGONFLY_DFGET_PATH_REQUIRED("P2P: p2p.dragonfly.dfgetPath must not be blank when enabled"),
+        DRAGONFLY_DFDAEMON_ADDR_REQUIRED("P2P: p2p.dragonfly.dfdaemonAddr must not be blank when enabled"),
         DRAGONFLY_SCHEDULER_ADDR_BLANK("P2P: p2p.dragonfly.schedulerAddr must not be blank when set"),
         DRAGONFLY_MAX_RETRIES_NEGATIVE("P2P: p2p.dragonfly.maxRetries must be >= 0");
 

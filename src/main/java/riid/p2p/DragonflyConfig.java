@@ -5,11 +5,12 @@ import java.time.Duration;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Dragonfly (dfget) configuration.
+ * Dragonfly gRPC configuration.
+ * dfdaemonAddr: unix socket (e.g. unix:///var/run/dragonfly/dfdaemon.sock) or tcp (e.g. localhost:65001).
  */
 public record DragonflyConfig(
         @JsonProperty("enabled") Boolean enabled,
-        @JsonProperty("dfgetPath") String dfgetPath,
+        @JsonProperty("dfdaemonAddr") String dfdaemonAddr,
         @JsonProperty("schedulerAddr") String schedulerAddr,
         @JsonProperty("requestTimeout") Duration requestTimeout,
         @JsonProperty("maxRetries") Integer maxRetries
