@@ -1,0 +1,42 @@
+/*
+ *     Copyright 2022 The Dragonfly Authors
+ * Licensed under the Apache License, Version 2.0.
+ */
+
+syntax = "proto3";
+
+package dfdaemon.v2;
+
+option java_package = "DragonflyDfdaemon.v2";
+
+import "common.proto";
+
+message DownloadTaskRequest {
+  common.v2.Download download = 1;
+}
+
+message DownloadTaskStartedResponse {
+  uint64 content_length = 1;
+  optional common.v2.Range range = 2;
+  map<string, string> response_header = 3;
+  repeated common.v2.Piece pieces = 4;
+  bool is_finished = 5;
+}
+
+message DownloadPieceFinishedResponse {
+  common.v2.Piece piece = 1;
+}
+
+message DownloadTaskResponse {
+  string host_id = 1;
+  string task_id = 2;
+  string peer_id = 3;
+  oneof response {
+    DownloadTaskStartedResponse download_task_started_response = 4;
+    DownloadPieceFinishedResponse download_piece_finished_response = 5;
+  }
+}
+
+service DfdaemonDownload {
+  rpc DownloadTask(DownloadTaskRequest) returns (stream DownloadTaskResponse);
+}
