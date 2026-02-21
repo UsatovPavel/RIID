@@ -1,0 +1,232 @@
+/*
+ *     Copyright 2022 The Dragonfly Authors
+ * Licensed under the Apache License, Version 2.0.
+ */
+
+syntax = "proto3";
+
+package common.v2;
+
+option java_package = "DragonflyCommon.v2";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+enum SizeScope {
+  NORMAL = 0;
+  SMALL = 1;
+  TINY = 2;
+  EMPTY = 3;
+}
+
+enum TaskType {
+  STANDARD = 0;
+  PERSISTENT = 1;
+  PERSISTENT_CACHE = 2;
+  CACHE = 3;
+}
+
+enum TrafficType {
+  BACK_TO_SOURCE = 0;
+  REMOTE_PEER = 1;
+  LOCAL_PEER = 2;
+}
+
+enum Priority {
+  LEVEL0 = 0;
+  LEVEL1 = 1;
+  LEVEL2 = 2;
+  LEVEL3 = 3;
+  LEVEL4 = 4;
+  LEVEL5 = 5;
+  LEVEL6 = 6;
+}
+
+message Range {
+  uint64 start = 1;
+  uint64 length = 2;
+}
+
+message Piece {
+  uint32 number = 1;
+  optional string parent_id = 2;
+  uint64 offset = 3;
+  uint64 length = 4;
+  string digest = 5;
+  optional bytes content = 6;
+  optional TrafficType traffic_type = 7;
+  google.protobuf.Duration cost = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message Task {
+  string id = 1;
+  TaskType type = 2;
+  string url = 3;
+  optional string digest = 4;
+  optional string tag = 5;
+  optional string application = 6;
+  repeated string filtered_query_params = 7;
+  map<string, string> request_header = 8;
+  uint64 content_length = 9;
+  uint32 piece_count = 10;
+  SizeScope size_scope = 11;
+  repeated Piece pieces = 12;
+  string state = 13;
+  uint32 peer_count = 14;
+  bool has_available_peer = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+message CacheTask {
+  string id = 1;
+  TaskType type = 2;
+  string url = 3;
+  optional string digest = 4;
+  optional string tag = 5;
+  optional string application = 6;
+  repeated string filtered_query_params = 7;
+  map<string, string> request_header = 8;
+  uint64 content_length = 9;
+  uint32 piece_count = 10;
+  SizeScope size_scope = 11;
+  repeated Piece pieces = 12;
+  string state = 13;
+  uint32 peer_count = 14;
+  bool has_available_peer = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+message PersistentTask {
+  string id = 1;
+  uint64 persistent_replica_count = 2;
+  uint64 current_persistent_replica_count = 3;
+  uint64 current_replica_count = 4;
+  uint64 content_length = 5;
+  uint32 piece_count = 6;
+  string state = 7;
+  google.protobuf.Duration ttl = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message PersistentCacheTask {
+  string id = 1;
+  uint64 persistent_replica_count = 2;
+  uint64 current_persistent_replica_count = 3;
+  uint64 current_replica_count = 4;
+  optional string tag = 5;
+  optional string application = 6;
+  uint64 piece_length = 7;
+  uint64 content_length = 8;
+  uint32 piece_count = 9;
+  string state = 10;
+  google.protobuf.Duration ttl = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+message Host {
+  string id = 1;
+  uint32 type = 2;
+  string hostname = 3;
+  string ip = 4;
+  int32 port = 5;
+  int32 download_port = 6;
+  string os = 7;
+  string platform = 8;
+  string platform_family = 9;
+  string platform_version = 10;
+  string kernel_version = 11;
+  uint64 scheduler_cluster_id = 17;
+  bool disable_shared = 18;
+  int32 proxy_port = 19;
+  string name = 20;
+}
+
+message Peer {
+  string id = 1;
+  optional Range range = 2;
+  Priority priority = 3;
+  repeated Piece pieces = 4;
+  google.protobuf.Duration cost = 5;
+  string state = 6;
+  Task task = 7;
+  Host host = 8;
+  bool need_back_to_source = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  optional uint32 concurrent_piece_count = 12;
+}
+
+message CachePeer {
+  string id = 1;
+  optional Range range = 2;
+  Priority priority = 3;
+  repeated Piece pieces = 4;
+  google.protobuf.Duration cost = 5;
+  string state = 6;
+  CacheTask task = 7;
+  Host host = 8;
+  bool need_back_to_source = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  optional uint32 concurrent_piece_count = 12;
+}
+
+message PersistentPeer {
+  string id = 1;
+  bool persistent = 2;
+  google.protobuf.Duration cost = 3;
+  string state = 4;
+  PersistentTask task = 5;
+  Host host = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  uint32 concurrent_piece_count = 9;
+}
+
+message PersistentCachePeer {
+  string id = 1;
+  bool persistent = 2;
+  google.protobuf.Duration cost = 3;
+  string state = 4;
+  PersistentCacheTask task = 5;
+  Host host = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  uint32 concurrent_piece_count = 9;
+}
+
+message Download {
+  string url = 1;
+  optional string digest = 2;
+  optional Range range = 3;
+  TaskType type = 4;
+  optional string tag = 5;
+  optional string application = 6;
+  Priority priority = 7;
+  repeated string filtered_query_params = 8;
+  map<string, string> request_header = 9;
+  optional uint64 piece_length = 10;
+  optional string output_path = 11;
+  optional google.protobuf.Duration timeout = 12;
+  bool disable_back_to_source = 13;
+  bool need_back_to_source = 14;
+  repeated bytes certificate_chain = 15;
+  bool prefetch = 16;
+  bool is_prefetch = 19;
+  bool need_piece_content = 20;
+  bool force_hard_link = 22;
+  optional string content_for_calculating_task_id = 23;
+  optional string remote_ip = 24;
+  optional uint32 concurrent_piece_count = 25;
+  bool overwrite = 26;
+  bool enable_task_id_based_blob_digest = 30;
+}
+
+message ObjectStorage {}
+message HDFS {}
+message HuggingFace {}
