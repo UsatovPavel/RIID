@@ -68,7 +68,7 @@ public class RegistryLocalTest {
         HTTP = new HttpExecutor(HTTP_CLIENT, httpConfig);
         AUTH_SERVICE = new AuthService(HTTP, new ObjectMapper(), new TokenCache());
         MANIFEST_SERVICE = new ManifestService(HTTP, AUTH_SERVICE, new ObjectMapper());
-        BLOB_SERVICE = new BlobService(HTTP, AUTH_SERVICE, null);
+        BLOB_SERVICE = new BlobService(HTTP, AUTH_SERVICE);
 
         // Seed registry with alpine using host docker
         String localImage = "%s:%d/%s".formatted(host, port, REPO);

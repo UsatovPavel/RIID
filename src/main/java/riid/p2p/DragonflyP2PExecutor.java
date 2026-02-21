@@ -11,41 +11,31 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.PathSupport;
-import riid.cache.oci.CacheAdapter;
-import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
-import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
-import riid.cache.oci.ValidationException;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.model.manifest.RegistryApi;
 import riid.core.hash.Sha256Utils;
 import riid.runtime.BoundedCommandExecution;
 
 /**
- * P2P executor backed by Dragonfly dfget CLI.
+ * P2P executor backed by Dragonfly dfget CLI. Fetch-only: returns path to temp file.
+ * Dispatcher is responsible for cache.put().
  */
-@SuppressFBWarnings(
-        value = "EI_EXPOSE_REP2",
-        justification = "CacheAdapter is a shared collaborator, not exposed mutably")
 public final class DragonflyP2PExecutor implements P2PExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger(DragonflyP2PExecutor.class);
     private static final String DEFAULT_DFGET = "dfget";
 
     private final RegistryEndpoint endpoint;
-    private final CacheAdapter cache;
     private final HostFilesystem fs;
     private final DragonflyConfig config;
 
     public DragonflyP2PExecutor(RegistryEndpoint endpoint,
-                                CacheAdapter cache,
                                 HostFilesystem fs,
                                 DragonflyConfig config) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
-        this.cache = cache;
         this.fs = Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
     }
@@ -84,7 +74,7 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
                                 + ". size=" + actualSize
                                 + ". dfget stdout=" + result.stdout() + " stderr=" + result.stderr());
             }
-            return Optional.of(cacheOrTemp(tempPath, digest, mediaType, actualSize));
+            return Optional.of(tempPath);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("P2P dfget interrupted for " + digest, e);
@@ -114,33 +104,6 @@ public final class DragonflyP2PExecutor implements P2PExecutor {
         Path path = PathSupport.temporaryPath("p2p-", ".bin");
         fs.createFile(path);
         return path;
-    }
-
-    private Path cacheOrTemp(Path tempPath, ImageDigest digest, CacheMediaType mediaType, long size) {
-        if (cache == null) {
-            return tempPath;
-        }
-        try {
-            CacheEntry entry = cache.put(digest,
-                    FilesystemCachePayload.of(fs, tempPath, size),
-                    mediaType);
-            Path resolved = cache.resolve(entry.key()).orElse(tempPath);
-            if (!resolved.equals(tempPath)) {
-                try {
-                    fs.deleteIfExists(tempPath);
-                } catch (IOException ex) {
-                    LOGGER.warn("Failed to delete temp p2p file {}: {}", tempPath, ex.getMessage());
-                }
-            }
-            return resolved;
-        } catch (ValidationException ve) {
-            LOGGER.warn("Validation error for cache put ({}): {}", mediaType, ve.getMessage());
-        } catch (IllegalArgumentException iae) {
-            LOGGER.warn("Unsupported media type for cache put ({}): {}", mediaType, iae.getMessage());
-        } catch (IOException ex) {
-            LOGGER.warn("Failed to put layer {} to cache: {}", digest, ex.getMessage());
-        }
-        return tempPath;
     }
 
     private String computeSha256(Path path) throws IOException {

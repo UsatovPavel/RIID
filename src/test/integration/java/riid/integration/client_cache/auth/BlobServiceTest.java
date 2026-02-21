@@ -97,7 +97,7 @@ class BlobServiceTest {
         HttpClient client = HttpClientFactory.create(cfg);
         HttpExecutor exec = new HttpExecutor(client, cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
-        BlobService blob = new BlobService(exec, auth, null);
+        BlobService blob = new BlobService(exec, auth);
 
         // HEAD
         Optional<Long> head = blob.headBlob(ep, Strings.REPO.v(), digest, Strings.SCOPE.v());
@@ -140,7 +140,7 @@ class BlobServiceTest {
         HttpClient client = HttpClientFactory.create(cfg);
         HttpExecutor exec = new HttpExecutor(client, cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
-        BlobService blob = new BlobService(exec, auth, null);
+        BlobService blob = new BlobService(exec, auth);
 
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
@@ -170,7 +170,7 @@ class BlobServiceTest {
         HttpClientConfig cfg = new HttpClientConfig();
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
-        BlobService blob = new BlobService(exec, auth, null);
+        BlobService blob = new BlobService(exec, auth);
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
         BlobRequest req = new BlobRequest(
@@ -193,7 +193,7 @@ class BlobServiceTest {
         HttpClientConfig cfg = new HttpClientConfig();
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
-        BlobService blob = new BlobService(exec, auth, null);
+        BlobService blob = new BlobService(exec, auth);
         assertTrue(blob.headBlob(ep, Strings.REPO.v(), "sha256:zzz", Strings.SCOPE.v()).isEmpty());
     }
 
@@ -209,7 +209,7 @@ class BlobServiceTest {
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
         AuthService auth =
                 new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
-        BlobService blob = new BlobService(exec, auth, null);
+        BlobService blob = new BlobService(exec, auth);
         assertThrows(
                 RuntimeException.class,
                 () -> blob.headBlob(ep, Strings.REPO.v(), "sha256:zzz", Strings.SCOPE.v()));

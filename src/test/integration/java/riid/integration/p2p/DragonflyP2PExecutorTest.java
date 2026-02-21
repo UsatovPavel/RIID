@@ -69,18 +69,15 @@ class DragonflyP2PExecutorTest {
         HostFilesystem fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, dfgetEnv.path(), null, null, null);
 
-        try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs)) {
-            DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
+        DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, fs, config);
 
-            var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
+        var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
-            assertTrue(result.isPresent(), "dfget result should be present");
-            Path path = result.get();
-            assertNotNull(path);
-            assertTrue(fs.exists(path), "downloaded file should exist");
-            assertEquals(payload.length, fs.size(path), "downloaded size should match");
-            assertTrue(cache.has(ImageDigest.parse(digest)), "cache should contain fetched layer");
-        }
+        assertTrue(result.isPresent(), "dfget result should be present");
+        Path path = result.get();
+        assertNotNull(path);
+        assertTrue(fs.exists(path), "downloaded file should exist");
+        assertEquals(payload.length, fs.size(path), "downloaded size should match");
     }
 
     @Test
@@ -106,16 +103,14 @@ class DragonflyP2PExecutorTest {
             assertTrue(Files.size(seedPath) > 0, "seed file should not be empty");
 
             DragonflyConfig config = new DragonflyConfig(true, createDfgetWrapper(dfgetEnv.path(), "dfdaemon2", true), null, null, null);
-            try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs)) {
-                DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
-                var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
+            DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, fs, config);
+            var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
-                assertTrue(result.isPresent(), "dfget result should be present");
-                Path path = result.get();
-                assertNotNull(path);
-                assertTrue(fs.exists(path), "downloaded file should exist");
-                assertEquals(payload.length, fs.size(path), "downloaded size should match");
-            }
+            assertTrue(result.isPresent(), "dfget result should be present");
+            Path path = result.get();
+            assertNotNull(path);
+            assertTrue(fs.exists(path), "downloaded file should exist");
+            assertEquals(payload.length, fs.size(path), "downloaded size should match");
         } finally {
             if (previousTmp != null) {
                 System.setProperty("java.io.tmpdir", previousTmp);
@@ -150,7 +145,7 @@ class DragonflyP2PExecutorTest {
             DragonflyConfig config = new DragonflyConfig(true, createDfgetWrapper(dfgetEnv.path(), "dfdaemon2", true), null, null, null);
             try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                  RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
-                DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
+                DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, fs, config);
                 SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
                 FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, "tag", null));
 

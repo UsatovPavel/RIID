@@ -43,7 +43,7 @@ class BlobServiceTest {
         http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
                 new FailingInputStream(), URI.create(TEST_URI));
 
-        BlobService svc = new BlobService(http, new NoAuth(), null);
+        BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, "sha256:ignored", 4L, MEDIA_TYPE, new BlobRequest.RangeSpec.All());
 
@@ -59,7 +59,7 @@ class BlobServiceTest {
         http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
                 new ByteArrayInputStream(data), URI.create(TEST_URI));
 
-        BlobService svc = new BlobService(http, new NoAuth(), null);
+        BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, null, (long) data.length, MEDIA_TYPE, new BlobRequest.RangeSpec.All());
 
@@ -77,7 +77,7 @@ class BlobServiceTest {
         http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
                 new ByteArrayInputStream(data), URI.create(TEST_URI));
 
-        BlobService svc = new BlobService(http, new NoAuth(), null);
+        BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(0L, 1L));
@@ -97,7 +97,7 @@ class BlobServiceTest {
         http.nextGet = new HttpResult<>(HttpStatus.PARTIAL_CONTENT_206, headers,
                 new ByteArrayInputStream(data), URI.create(TEST_URI));
 
-        BlobService svc = new BlobService(http, new NoAuth(), null);
+        BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, "sha256:full", 10L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(0L, 1L));
@@ -115,7 +115,7 @@ class BlobServiceTest {
         http.nextGet = new HttpResult<>(HttpStatus.PARTIAL_CONTENT_206, HttpFields.EMPTY,
                 new ByteArrayInputStream(data), URI.create(TEST_URI));
 
-        BlobService svc = new BlobService(http, new NoAuth(), null);
+        BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, "sha256:full", 10L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(0L, 1L));
@@ -133,7 +133,7 @@ class BlobServiceTest {
         http.enqueue(new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
                 new ByteArrayInputStream(data), URI.create(TEST_URI)));
 
-        BlobService svc = new BlobService(http, new NoAuth(), null);
+        BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
         BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(0L, 1L));

@@ -140,7 +140,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                                                    Map<String, RuntimeAdapter> runtimes,
                                                    HostFilesystem fs) {
         HttpClientConfig httpConfig = new HttpClientConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig);
         RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, fs);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
         return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null);
@@ -177,7 +177,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         BlobPartialDownloadConfig blobPartialDownloadConfig =
                 config.client() != null ?
                         config.client().partialDownloadingOrDefault() : new BlobPartialDownloadConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, blobPartialDownloadConfig);
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, ttl, blobPartialDownloadConfig);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
@@ -198,7 +198,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         if (config.p2p() != null
                 && config.p2p().dragonfly() != null
                 && config.p2p().dragonfly().enabledOrDefault()) {
-            p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config.p2p().dragonfly());
+            p2p = new DragonflyP2PExecutor(endpoint, fs, config.p2p().dragonfly());
         }
         return new ImageLoadingFacade(
                 new SimpleRequestDispatcher(client, cache, p2p, fs),

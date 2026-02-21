@@ -65,7 +65,7 @@ class DockerRuntimeAdapterIntegrationTest {
         HostFilesystem fs = new NioHostFilesystem();
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
              RegistryClientImpl client =
-                     new RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
+                     new RegistryClientImpl(endpoint, new HttpClientConfig())) {
             RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
                     client, cache, new P2PExecutor.NoOp(), fs);
             RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(DOCKER, new DockerRuntimeAdapter()));
