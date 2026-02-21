@@ -3,7 +3,6 @@ package riid.integration.client_cache;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import riid.cache.oci.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.RegistryClient;
 import riid.client.api.RegistryClientImpl;
@@ -53,7 +52,7 @@ public class StressTest {
                 .retryIdempotentOnly(true)
                 .followRedirects(true)
                 .build();
-        CLIENT = new RegistryClientImpl(hub, cfg, (CacheAdapter) null);
+        CLIENT = new RegistryClientImpl(hub, cfg);
     }
 
     @Test

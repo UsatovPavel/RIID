@@ -69,7 +69,7 @@ class PodmanRuntimeAdapterIntegrationTest {
         HostFilesystem fs = new NioHostFilesystem();
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
              riid.client.api.RegistryClientImpl client =
-                     new riid.client.api.RegistryClientImpl(endpoint, new HttpClientConfig(), cache)) {
+                     new riid.client.api.RegistryClientImpl(endpoint, new HttpClientConfig())) {
             RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
                     client, cache, new P2PExecutor.NoOp(), fs);
             RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));

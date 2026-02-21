@@ -3,7 +3,6 @@ package riid.client.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.client.HttpClient;
 import riid.cache.auth.TokenCache;
-import riid.cache.oci.CacheAdapter;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.BlobPartialDownloadConfig;
 import riid.client.core.config.RegistryEndpoint;
@@ -45,21 +44,18 @@ public final class RegistryClientImpl implements RegistryClient {
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
-                              HttpClientConfig httpConfig,
-                              CacheAdapter cacheAdapter) {
-        this(endpoint, httpConfig, cacheAdapter, AuthConfig.DEFAULT_TTL_SECONDS, null);
+                              HttpClientConfig httpConfig) {
+        this(endpoint, httpConfig, AuthConfig.DEFAULT_TTL_SECONDS, null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
-                              CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds) {
-        this(endpoint, httpConfig, cacheAdapter, defaultTokenTtlSeconds, null);
+        this(endpoint, httpConfig, defaultTokenTtlSeconds, null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
-                              CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds,
                               BlobPartialDownloadConfig rangeConfig) {
         this.endpoint = Objects.requireNonNull(endpoint);
@@ -68,7 +64,7 @@ public final class RegistryClientImpl implements RegistryClient {
         this.http = new HttpExecutor(jettyClient, httpConfig);
         this.authService = new AuthService(http, mapper, new TokenCache(), defaultTokenTtlSeconds);
         this.manifestService = new ManifestService(http, authService, mapper);
-        this.blobService = new BlobService(http, authService, cacheAdapter, rangeConfig);
+        this.blobService = new BlobService(http, authService, rangeConfig);
     }
 
     @Override
