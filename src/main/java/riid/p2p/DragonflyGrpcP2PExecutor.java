@@ -23,13 +23,22 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final RegistryEndpoint endpoint;
     private final HostFilesystem fs;
     private final DragonflyConfig config;
+    private final DfdaemonDownloaderFactory downloaderFactory;
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
                                     HostFilesystem fs,
                                     DragonflyConfig config) {
+        this(endpoint, fs, config, DfdaemonDownloadClient::new);
+    }
+
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
+                                    HostFilesystem fs,
+                                    DragonflyConfig config,
+                                    DfdaemonDownloaderFactory downloaderFactory) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         this.fs = Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
+        this.downloaderFactory = Objects.requireNonNull(downloaderFactory, "downloaderFactory");
     }
 
     @Override
@@ -44,7 +53,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         Path outputPath = PathSupport.temporaryPath("p2p-", ".bin");
         var request = DownloadTaskRequestBuilder.build(url, outputPath.toAbsolutePath().toString(),
                 digest.toString(), Collections.emptyMap());
-        try (DfdaemonDownloadClient client = new DfdaemonDownloadClient(config.dfdaemonAddr())) {
+        try (DfdaemonDownloader client = downloaderFactory.create(config.dfdaemonAddr())) {
             Path result = client.download(request, outputPath);
             return Optional.of(result);
         }
