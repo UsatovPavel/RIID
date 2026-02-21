@@ -8,8 +8,9 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import DragonflyDfdaemon.v2.Dfdaemon;
 import DragonflyDfdaemon.v2.DfdaemonDownloadGrpc;
+import DragonflyDfdaemon.v2.DownloadTaskRequest;
+import DragonflyDfdaemon.v2.DownloadTaskResponse;
 import io.grpc.Deadline;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
@@ -20,8 +21,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDomainSocketChannel;
 
 /**
- * gRPC client for dfdaemon DownloadTask. Sync/blocking.
- * Uses need_piece_content=false; dfdaemon does hardlink/copy to output path.
+ * gRPC client for dfdaemon DfdaemonDownload.DownloadTask (v2 API). Sync/blocking.
+ * dfdaemon writes file directly to output path.
  */
 public final class DfdaemonDownloadClient implements DfdaemonDownloader {
     private static final Logger LOGGER = LoggerFactory.getLogger(DfdaemonDownloadClient.class);
@@ -37,29 +38,22 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
     private static final int DEADLINE_SECONDS = 120;
     private static final int MAX_RETRIES = 2;
 
-    /**
-     * Downloads via dfdaemon. Consumes stream until done. Returns output path.
-     * dfdaemon does hardlink/copy to outputPath when need_piece_content=false.
-     * Retries on UNAVAILABLE (transient network/connection issues).
-     */
     @Override
-    public Path download(Dfdaemon.DownloadTaskRequest request, Path outputPath) throws IOException {
+    public Path download(DownloadTaskRequest request, Path outputPath) throws IOException {
         IOException lastException = null;
         for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {
                 if (attempt > 0) {
                     LOGGER.debug("Retrying DownloadTask (attempt {})", attempt + 1);
                 }
-                Iterator<Dfdaemon.DownloadTaskResponse> it = stub
+                Iterator<DownloadTaskResponse> it = stub
                         .withDeadline(Deadline.after(DEADLINE_SECONDS, TimeUnit.SECONDS))
                         .downloadTask(request);
                 while (it.hasNext()) {
-                    Dfdaemon.DownloadTaskResponse r = it.next();
-                    if (r.hasDownloadTaskStartedResponse()) {
-                        var started = r.getDownloadTaskStartedResponse();
-                        if (started.getIsFinished()) {
-                            break;
-                        }
+                    DownloadTaskResponse r = it.next();
+                    if (r.hasDownloadTaskStartedResponse()
+                            && r.getDownloadTaskStartedResponse().getIsFinished()) {
+                        break;
                     }
                 }
                 if (!java.nio.file.Files.exists(outputPath)) {
@@ -80,7 +74,7 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                 }
             }
         }
-        throw lastException != null ? lastException : new IOException("DownloadTask failed");
+        throw lastException != null ? lastException : new IOException("Download failed");
     }
 
     @Override

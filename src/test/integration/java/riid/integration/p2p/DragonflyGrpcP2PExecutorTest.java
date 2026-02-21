@@ -60,7 +60,7 @@ class DragonflyGrpcP2PExecutorTest {
 
     @Test
     void fetchesBlobViaDfgetAndCaches() throws Exception {
-        String dfdaemonAddr = "unix:///tmp/dragonfly-sock/dfdaemon.sock";
+        String dfdaemonAddr = "unix:///var/run/dragonfly/dfdaemon.sock";
         ensureDfdaemonAvailable(dfdaemonAddr);
 
         byte[] payload = "p2p-test-payload".getBytes(StandardCharsets.UTF_8);
@@ -320,7 +320,7 @@ class DragonflyGrpcP2PExecutorTest {
         if (dfdaemonAddr.startsWith("unix://")) {
             String path = dfdaemonAddr.substring(7).trim();
             Assumptions.assumeTrue(Files.exists(Path.of(path)),
-                    () -> "dfdaemon socket not found at " + path + " (run make dragonfly-single or dragonfly-cluster-single)");
+                    () -> "dfdaemon socket not found at " + path + " (run ./minikube-dragonfly.sh)");
         } else {
             int colon = dfdaemonAddr.lastIndexOf(':');
             if (colon > 0) {

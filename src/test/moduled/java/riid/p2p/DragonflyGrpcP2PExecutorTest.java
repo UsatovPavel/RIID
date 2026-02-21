@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 
-import DragonflyDfdaemon.v2.Dfdaemon;
+import DragonflyDfdaemon.v2.DownloadTaskRequest;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
@@ -148,7 +148,7 @@ class DragonflyGrpcP2PExecutorTest {
     private static final class RecordingDfdaemonDownloader implements DfdaemonDownloader {
         final Path returnPath;
         final IOException throwOnDownload;
-        Dfdaemon.DownloadTaskRequest lastRequest;
+        DownloadTaskRequest lastRequest;
         Path lastOutputPath;
         final AtomicBoolean closeCalled = new AtomicBoolean();
 
@@ -158,7 +158,7 @@ class DragonflyGrpcP2PExecutorTest {
         }
 
         @Override
-        public Path download(Dfdaemon.DownloadTaskRequest request, Path outputPath) throws IOException {
+        public Path download(DownloadTaskRequest request, Path outputPath) throws IOException {
             lastRequest = request;
             lastOutputPath = outputPath;
             if (throwOnDownload != null) {
