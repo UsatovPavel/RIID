@@ -168,7 +168,27 @@ dragonfly-health-cluster-single:
 	@echo "dfdaemon logs:" >> out.txt
 	@docker exec dfdaemon sh -c "tail -n 30 /var/log/dragonfly/daemon/core.log /var/log/dragonfly/daemon/grpc.log 2>/dev/null" >> out.txt 2>&1 || docker logs dfdaemon 2>&1 | tail -n 30 >> out.txt
 
-.PHONY: dragonfly-logs-single dragonfly-logs-single-full dragonfly-logs-manager dragonfly-logs-scheduler dragonfly-logs-daemon1 dragonfly-logs-daemon2 dragonfly-logs-daemon3
+# Minikube/Helm: логи Dragonfly (после ./minikube-dragonfly.sh)
+dragonfly-logs-minikube:
+	@echo "=== Dragonfly client (dfdaemon) ===" > out.txt
+	@minikube kubectl -- logs -n dragonfly-system -l app=dragonfly,component=client --tail=100 2>/dev/null >> out.txt || kubectl logs -n dragonfly-system -l app=dragonfly,component=client --tail=100 >> out.txt
+	@echo "" >> out.txt
+	@echo "=== Dragonfly manager ===" >> out.txt
+	@minikube kubectl -- logs -n dragonfly-system -l app=dragonfly,component=manager --tail=50 2>/dev/null >> out.txt || kubectl logs -n dragonfly-system -l app=dragonfly,component=manager --tail=50 >> out.txt
+	@echo "" >> out.txt
+	@echo "=== Dragonfly scheduler ===" >> out.txt
+	@minikube kubectl -- logs -n dragonfly-system -l app=dragonfly,component=scheduler --tail=50 2>/dev/null >> out.txt || kubectl logs -n dragonfly-system -l app=dragonfly,component=scheduler --tail=50 >> out.txt
+	@echo "Logs written to out.txt"
+
+dragonfly-logs-minikube-client:
+	@minikube kubectl -- logs -n dragonfly-system -l app=dragonfly,component=client -f --tail=50 2>/dev/null || kubectl logs -n dragonfly-system -l app=dragonfly,component=client -f --tail=50
+
+
+dragonfly-logs-minikube-restart:
+	@minikube kubectl -- delete pod -n dragonfly-system -l app=dragonfly,component=client 2>/dev/null || kubectl delete pod -n dragonfly-system -l app=dragonfly,component=client
+	@echo "Client pod restarted, logs will be fresh"
+
+.PHONY: dragonfly-logs-single dragonfly-logs-single-full dragonfly-logs-manager dragonfly-logs-scheduler dragonfly-logs-daemon1 dragonfly-logs-daemon2 dragonfly-logs-daemon3 dragonfly-logs-minikube dragonfly-logs-minikube-client dragonfly-logs-clear dragonfly-logs-minikube-restart
 dragonfly-logs-single:
 	@docker exec dfdaemon sh -c "tail -n 50 /var/log/dragonfly/daemon/stdout.log /var/log/dragonfly/daemon/stderr.log /var/log/dragonfly/daemon/core.log /var/log/dragonfly/daemon/grpc.log 2>/dev/null" > out.txt 2>&1 || docker logs dfdaemon 2>&1 | tail -n 50 > out.txt
 
