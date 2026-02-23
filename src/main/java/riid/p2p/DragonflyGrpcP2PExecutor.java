@@ -76,18 +76,21 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     /**
      * For unix socket (e.g. unix:///var/run/dragonfly/dfdaemon.sock), returns host output dir
      * (parent of socket + /output). dfdaemon writes there via hostPath mount.
+     * For TCP proxy (e.g. 127.0.0.1:50051 via socat), use DFDAEMON_OUTPUT_DIR if set.
      */
     private static Path unixSocketHostOutputDir(String addr) {
-        if (addr == null || !addr.trim().startsWith("unix://")) {
-            return null;
+        if (addr != null && addr.trim().startsWith("unix://")) {
+            String path = addr.trim().substring(7).trim();
+            if (!path.isEmpty()) {
+                Path p = Path.of(path);
+                Path parent = p.getParent();
+                if (parent != null) {
+                    return parent.resolve("output");
+                }
+            }
         }
-        String path = addr.trim().substring(7).trim();
-        if (path.isEmpty()) {
-            return null;
-        }
-        Path p = Path.of(path);
-        Path parent = p.getParent();
-        return parent != null ? parent.resolve("output") : null;
+        String envDir = System.getenv("DFDAEMON_OUTPUT_DIR");
+        return (envDir != null && !envDir.isBlank()) ? Path.of(envDir.trim()) : null;
     }
 
     @Override

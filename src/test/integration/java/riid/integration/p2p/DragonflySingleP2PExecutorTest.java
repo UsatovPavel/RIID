@@ -43,7 +43,8 @@ class DragonflySingleP2PExecutorTest {
 
     private static final String REPO = "repo";
     private static final String CONTENT_TYPE = "application/octet-stream";
-    private static final String DFDAEMON_ADDR = "unix:///var/run/dragonfly/dfdaemon.sock";
+    /** Unix socket by default; use 127.0.0.1:50051 for TCP via socat (plan.md step 4.1). */
+    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR", "unix:///var/run/dragonfly/dfdaemon.sock");
 
     private static HttpServer server;
     private static byte[] payload;
@@ -55,8 +56,9 @@ class DragonflySingleP2PExecutorTest {
 
     @BeforeAll
     static void setUp() throws Exception {
-        Assumptions.assumeTrue(Files.exists(Path.of("/var/run/dragonfly/dfdaemon.sock")),
-                "dfdaemon socket not found (run ./minikube-dragonfly.sh)");
+        boolean useUnix = DFDAEMON_ADDR.startsWith("unix://");
+        Assumptions.assumeTrue(!useUnix || Files.exists(Path.of("/var/run/dragonfly/dfdaemon.sock")),
+                "dfdaemon socket not found (run ./minikube-dragonfly.sh); or use DFDAEMON_ADDR=127.0.0.1:50051 with socat");
 
         payload = "p2p-single-cache-test".getBytes(StandardCharsets.UTF_8);
         digest = "sha256:" + sha256(payload);

@@ -173,7 +173,7 @@ dragonfly-health-cluster-single:
 	@docker exec dfdaemon sh -c "tail -n 30 /var/log/dragonfly/daemon/core.log /var/log/dragonfly/daemon/grpc.log 2>/dev/null" >> out.txt 2>&1 || docker logs dfdaemon 2>&1 | tail -n 30 >> out.txt
 
 # Minikube/Helm: логи Dragonfly (после ./minikube-dragonfly.sh)
-dragonfly-logs-minikube:
+minikube-dragonfly-logs:
 	@echo "=== Dragonfly client (dfdaemon) ===" > out.txt
 	@minikube kubectl -- logs -n dragonfly-system -l app=dragonfly,component=client --tail=100 2>/dev/null >> out.txt || kubectl logs -n dragonfly-system -l app=dragonfly,component=client --tail=100 >> out.txt
 	@echo "" >> out.txt
