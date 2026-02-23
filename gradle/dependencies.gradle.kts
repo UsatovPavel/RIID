@@ -30,6 +30,7 @@ dependencies {
     add("implementation", "io.grpc:grpc-protobuf:1.79.0")
     add("implementation", "io.grpc:grpc-stub:1.79.0")
     add("implementation", "io.grpc:grpc-netty:1.79.0")
+    add("implementation", "io.netty:netty-transport-native-epoll:4.1.130.Final:linux-x86_64")
 }
 
  

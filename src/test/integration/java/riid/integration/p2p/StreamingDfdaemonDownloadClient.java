@@ -14,6 +14,9 @@ import io.grpc.StatusRuntimeException;
 import java.net.UnixDomainSocketAddress;
 
 import io.grpc.netty.NettyChannelBuilder;
+import io.netty.channel.epoll.EpollDomainSocketChannel;
+import io.netty.channel.unix.DomainSocketAddress;
+import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDomainSocketChannel;
 import riid.p2p.DfdaemonDownloader;
@@ -74,6 +77,14 @@ public final class StreamingDfdaemonDownloadClient implements DfdaemonDownloader
             if (path.isEmpty()) {
                 throw new IllegalArgumentException("Invalid unix address: " + addr);
             }
+            if (isLinux()) {
+                return NettyChannelBuilder
+                        .forAddress(new DomainSocketAddress(path))
+                        .eventLoopGroup(new EpollEventLoopGroup())
+                        .channelType(EpollDomainSocketChannel.class)
+                        .usePlaintext()
+                        .build();
+            }
             return NettyChannelBuilder
                     .forAddress(UnixDomainSocketAddress.of(path))
                     .eventLoopGroup(new NioEventLoopGroup())
@@ -91,5 +102,9 @@ public final class StreamingDfdaemonDownloadClient implements DfdaemonDownloader
                     .build();
         }
         throw new IllegalArgumentException("Invalid dfdaemonAddr (use unix:///path or host:port): " + addr);
+    }
+
+    private static boolean isLinux() {
+        return System.getProperty("os.name", "").toLowerCase().contains("linux");
     }
 }

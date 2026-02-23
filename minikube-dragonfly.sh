@@ -2,8 +2,8 @@
 # Minikube + Dragonfly для RIID: --driver=none (bare-metal), Unix socket на хосте
 # Требует: sudo, cri-dockerd, containernetworking-plugins (см. https://minikube.sigs.k8s.io/docs/drivers/none/)
 set -e
-## Устанавливаем kubectl(ОПЦИОНАЛЬНО)
-
+## Устанавливаем kubectl и socat (ОПЦИОНАЛЬНО)
+sudo apt install socat
 sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg # allow unprivileged APT programs to read this keyring
