@@ -1,5 +1,5 @@
 manager:
-  replicas: 2
+  replicas: 1
   image:
     repository: dragonflyoss/manager
     tag: latest

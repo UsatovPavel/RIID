@@ -1,0 +1,15 @@
+# Minikube 2-node: TCP gRPC для RIID + shared output dir (minikube mount)
+# Использовать: helm install ... -f values.yaml -f values-minikube-2nodes.yaml
+client:
+  config:
+    download:
+      downloadGRPC:
+        listen: 0.0.0.0:65001
+  extraVolumes:
+    - name: riid-output
+      hostPath:
+        path: /tmp/riid-output
+        type: DirectoryOrCreate
+  extraVolumeMounts:
+    - name: riid-output
+      mountPath: /tmp/riid-output
