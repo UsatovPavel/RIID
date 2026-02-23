@@ -30,3 +30,43 @@ jobs:
         run: chmod +x gradlew
       - name: Unit tests 
         run: ./gradlew test -PdisableLocal
+
+  dragonfly-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 23
+          cache: gradle
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      - name: Setup minikube (driver=none)
+        run: |
+          chmod +x scripts/ci-dragonfly-setup.sh
+          ./scripts/ci-dragonfly-setup.sh
+      - name: Install Dragonfly
+        run: |
+          KUBECONFIG=$HOME/.kube/config make -C scripts _helm-install _output-dir
+      - name: Wait for dfdaemon socket
+        run: |
+          for i in $(seq 1 30); do
+            if [ -S /var/run/dragonfly/dfdaemon.sock ]; then
+              sudo chmod 666 /var/run/dragonfly/dfdaemon.sock 2>/dev/null || true
+              echo "dfdaemon socket ready"
+              break
+            fi
+            echo "Waiting for dfdaemon socket... ($i/30)"
+            sleep 2
+          done
+          test -S /var/run/dragonfly/dfdaemon.sock || (echo "dfdaemon socket not found"; KUBECONFIG=$HOME/.kube/config kubectl get pods -n dragonfly-system -o wide; exit 1)
+      - name: Dragonfly integration test
+        run: |
+          socat TCP-LISTEN:50051,fork,reuseaddr UNIX-CONNECT:/var/run/dragonfly/dfdaemon.sock &
+          SOCAT_PID=$!
+          trap "kill $SOCAT_PID 2>/dev/null || true" EXIT
+          sleep 2
+          DFDAEMON_ADDR=127.0.0.1:50051 DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output \
+            ./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
