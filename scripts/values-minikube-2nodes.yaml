@@ -1,6 +1,8 @@
 # Minikube 2-node: TCP gRPC для RIID + shared output dir (minikube mount)
+# hostNetwork: false — поды получают pod IP (10.42.x.x), advertise IP будет корректным для P2P
 # Использовать: helm install ... -f values.yaml -f values-minikube-2nodes.yaml
 client:
+  hostNetwork: true
   config:
     download:
       downloadGRPC:
