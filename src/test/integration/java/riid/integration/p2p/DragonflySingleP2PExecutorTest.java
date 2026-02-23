@@ -24,6 +24,7 @@ import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
+import riid.p2p.DfdaemonDownloadClient;
 import riid.p2p.DragonflyConfig;
 import riid.p2p.DragonflyGrpcP2PExecutor;
 
@@ -33,8 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Assumptions;
 
 /**
- * Integration tests for Dragonfly P2P (unix socket).
- * Run: ./minikube-dragonfly.sh && ./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+ * Integration tests for Dragonfly P2P (TCP, plaintext).
+ * Run: ./minikube-dragonfly.sh && make dragonfly-integration-test
+ * Or: socat TCP-LISTEN:50051,fork UNIX-CONNECT:/var/run/dragonfly/dfdaemon.sock & \
+ *     DFDAEMON_ADDR=127.0.0.1:50051 DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output \
+ *     ./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
  */
 @Tag("local")
 @Tag("filesystem")
@@ -43,8 +47,8 @@ class DragonflySingleP2PExecutorTest {
 
     private static final String REPO = "repo";
     private static final String CONTENT_TYPE = "application/octet-stream";
-    /** Unix socket by default; use 127.0.0.1:50051 for TCP via socat (plan.md step 4.1). */
-    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR", "unix:///var/run/dragonfly/dfdaemon.sock");
+    /** TCP by default (grpc-java + tonic UDS = PROTOCOL_ERROR). Use socat to proxy unix→TCP. */
+    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR", "127.0.0.1:50051");
 
     private static HttpServer server;
     private static byte[] payload;
@@ -58,7 +62,9 @@ class DragonflySingleP2PExecutorTest {
     static void setUp() throws Exception {
         boolean useUnix = DFDAEMON_ADDR.startsWith("unix://");
         Assumptions.assumeTrue(!useUnix || Files.exists(Path.of("/var/run/dragonfly/dfdaemon.sock")),
-                "dfdaemon socket not found (run ./minikube-dragonfly.sh); or use DFDAEMON_ADDR=127.0.0.1:50051 with socat");
+                "dfdaemon socket not found (run ./minikube-dragonfly.sh)");
+        Assumptions.assumeTrue(useUnix || System.getenv("DFDAEMON_OUTPUT_DIR") != null,
+                "for TCP set DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output (socat proxies unix socket)");
 
         payload = "p2p-single-cache-test".getBytes(StandardCharsets.UTF_8);
         digest = "sha256:" + sha256(payload);
@@ -86,7 +92,7 @@ class DragonflySingleP2PExecutorTest {
         endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(), null);
         fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
-        p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, StreamingDfdaemonDownloadClient::new);
+        p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
     }
 
     @AfterAll

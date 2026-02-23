@@ -217,14 +217,27 @@ dragonfly-logs-daemon2:
 dragonfly-logs-daemon3:
 	@docker exec dfdaemon3 sh -c "tail -n 50 /var/log/dragonfly/daemon/stdout.log /var/log/dragonfly/daemon/stderr.log" > out.txt
 
-minikube-delete-and-start:
-	minikube start 
-	helm uninstall dragonfly -n dragonfly-system
-	minikube kubectl -- delete pvc --all -n dragonfly-system
-	sleep 10
-	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f values.yaml
-	sudo mkdir -p /var/run/dragonfly/output #на вcякий случай
-	sudo chmod 777 /var/run/dragonfly/output
 
-minikube-get-podes: 
-	kubectl get pods -n dragonfly-system --show-labels
+# Dragonfly integration test (1 node, TCP via socat)
+# Requires: ./scripts/minikube-dragonfly.sh (1 node) or make -C scripts minikube-delete-and-start
+dragonfly-integration-test:
+	@test -S /var/run/dragonfly/dfdaemon.sock || (echo "Run ./scripts/minikube-dragonfly.sh first"; exit 1)
+	@sudo mkdir -p /var/run/dragonfly/output && sudo chmod 777 /var/run/dragonfly/output
+	@socat TCP-LISTEN:50051,fork,reuseaddr UNIX-CONNECT:/var/run/dragonfly/dfdaemon.sock & \
+		SOCAT_PID=$$!; \
+		trap "kill $$SOCAT_PID 2>/dev/null || true" EXIT; \
+		sleep 1; \
+		DFDAEMON_ADDR=127.0.0.1:50051 DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output \
+		./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+
+# Dragonfly integration test (2 nodes, port-forward к dfdaemon pod)
+# Requires: make -C scripts minikube-2nodes
+dragonfly-integration-test-2nodes:
+	@POD=$$(kubectl get pods -n dragonfly-system -l app=dragonfly,component=client -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
+	test -n "$$POD" || (echo "Run make -C scripts minikube-2nodes first"; exit 1); \
+	kubectl port-forward -n dragonfly-system "$$POD" 65001:65001 & \
+		PF_PID=$$!; \
+		trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
+		sleep 2; \
+		DFDAEMON_ADDR=127.0.0.1:65001 DFDAEMON_OUTPUT_DIR=/tmp/riid-output \
+		./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
