@@ -8,11 +8,13 @@ minikube-delete-and-start:
 	@echo ">>> Остановка и пересоздание Minikube (1 узел, driver=none)..."
 	minikube stop 2>/dev/null || true
 	minikube delete 2>/dev/null || true
-	sudo minikube start --driver=none
+	@sudo mkdir -p /etc/cni/net.d
+	sudo env HOME="$$HOME" CHANGE_MINIKUBE_NONE_USER=true minikube start --driver=none
 	@if [ -f /root/.kube/config ] && [ "$$(id -u)" != "0" ]; then \
 		mkdir -p "$$HOME/.kube"; \
 		sudo cp /root/.kube/config "$$HOME/.kube/config"; \
 		sudo chown "$$(id -u):$$(id -g)" "$$HOME/.kube/config"; \
+		[ -d /root/.minikube ] && sudo cp -r /root/.minikube "$$HOME/.minikube" && sudo chown -R "$$(id -u):$$(id -g)" "$$HOME/.minikube" || true; \
 	fi
 	@minikube status || (echo ">>> Minikube не запустился. Проверьте: cri-dockerd, CNI plugins (install.sh)" >&2; exit 1)
 	@KUBECONFIG="$$HOME/.kube/config" $(MAKE) _helm-install
@@ -70,3 +72,25 @@ minikube-get-podes:
 # Интеграционный тест RIID для 2-node (из корня: make dragonfly-integration-test-2nodes)
 minikube-2nodes-integration-test:
 	@cd .. && $(MAKE) dragonfly-integration-test-2nodes
+# Остановить всё
+delete_all:
+	minikube stop 2>/dev/null || true
+	minikube delete --all --purge 2>/dev/null || true
+	sudo systemctl stop kubelet 2>/dev/null || true
+	sudo systemctl stop k3s 2>/dev/null || true
+	sudo systemctl stop k3s-agent 2>/dev/null || true
+	sudo systemctl stop cri-dockerd 2>/dev/null || true
+	sudo systemctl stop docker 2>/dev/null || true
+
+	# Убить процессы
+	sudo pkill -9 kubelet 2>/dev/null || true
+	sleep 2
+
+	# Удалить всё
+	sudo rm -rf /etc/kubernetes /var/lib/kubelet /var/lib/rancher /etc/rancher
+	sudo rm -rf /var/lib/minikube /var/lib/cni /etc/cni
+	sudo rm -rf /var/lib/etcd ~/.minikube
+	sudo mkdir -p /etc/cni/net.d
+
+	# Запустить Docker
+	sudo systemctl start docker

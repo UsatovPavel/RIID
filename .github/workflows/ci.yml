@@ -1,6 +1,6 @@
 name: CI
 
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   quality:
@@ -64,9 +64,5 @@ jobs:
           test -S /var/run/dragonfly/dfdaemon.sock || (echo "dfdaemon socket not found"; KUBECONFIG=$HOME/.kube/config kubectl get pods -n dragonfly-system -o wide; exit 1)
       - name: Dragonfly integration test
         run: |
-          socat TCP-LISTEN:50051,fork,reuseaddr UNIX-CONNECT:/var/run/dragonfly/dfdaemon.sock &
-          SOCAT_PID=$!
-          trap "kill $SOCAT_PID 2>/dev/null || true" EXIT
-          sleep 2
-          DFDAEMON_ADDR=127.0.0.1:50051 DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output \
+          DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
             ./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
