@@ -218,16 +218,12 @@ dragonfly-logs-daemon3:
 	@docker exec dfdaemon3 sh -c "tail -n 50 /var/log/dragonfly/daemon/stdout.log /var/log/dragonfly/daemon/stderr.log" > out.txt
 
 
-# Dragonfly integration test (1 node, TCP via socat)
+# Dragonfly integration test (1 node, unix socket)
 # Requires: ./scripts/minikube-dragonfly.sh (1 node) or make -C scripts minikube-delete-and-start
 dragonfly-integration-test:
 	@test -S /var/run/dragonfly/dfdaemon.sock || (echo "Run ./scripts/minikube-dragonfly.sh first"; exit 1)
 	@sudo mkdir -p /var/run/dragonfly/output && sudo chmod 777 /var/run/dragonfly/output
-	@socat TCP-LISTEN:50051,fork,reuseaddr UNIX-CONNECT:/var/run/dragonfly/dfdaemon.sock & \
-		SOCAT_PID=$$!; \
-		trap "kill $$SOCAT_PID 2>/dev/null || true" EXIT; \
-		sleep 1; \
-		DFDAEMON_ADDR=127.0.0.1:50051 DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output \
+	@DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
 		./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
 
 # Dragonfly integration test (2 nodes, port-forward к dfdaemon pod)

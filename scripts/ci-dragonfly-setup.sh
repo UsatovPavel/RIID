@@ -1,5 +1,6 @@
 #!/bin/bash
 # CI: установка зависимостей для minikube driver=none + Dragonfly
+# НЕ менять при изменении локальных скриптов
 # Запускать на ubuntu-latest (GitHub Actions)
 set -e
 

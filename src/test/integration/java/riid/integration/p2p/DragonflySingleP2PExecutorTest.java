@@ -34,10 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Assumptions;
 
 /**
- * Integration tests for Dragonfly P2P (TCP, plaintext).
- * Run: ./minikube-dragonfly.sh && make dragonfly-integration-test
- * Or: socat TCP-LISTEN:50051,fork UNIX-CONNECT:/var/run/dragonfly/dfdaemon.sock & \
- *     DFDAEMON_ADDR=127.0.0.1:50051 DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output \
+ * Integration tests for Dragonfly P2P (unix socket or TCP, plaintext).
+ * Run: ./scripts/minikube-dragonfly.sh && make dragonfly-integration-test
+ * Or: DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
  *     ./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
  */
 @Tag("local")
@@ -47,8 +46,7 @@ class DragonflySingleP2PExecutorTest {
 
     private static final String REPO = "repo";
     private static final String CONTENT_TYPE = "application/octet-stream";
-    /** TCP by default (grpc-java + tonic UDS = PROTOCOL_ERROR). Use socat to proxy unix→TCP. */
-    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR", "127.0.0.1:50051");
+    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR", "unix:///var/run/dragonfly/dfdaemon.sock");
 
     private static HttpServer server;
     private static byte[] payload;
@@ -64,7 +62,7 @@ class DragonflySingleP2PExecutorTest {
         Assumptions.assumeTrue(!useUnix || Files.exists(Path.of("/var/run/dragonfly/dfdaemon.sock")),
                 "dfdaemon socket not found (run ./minikube-dragonfly.sh)");
         Assumptions.assumeTrue(useUnix || System.getenv("DFDAEMON_OUTPUT_DIR") != null,
-                "for TCP set DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output (socat proxies unix socket)");
+                "for TCP set DFDAEMON_OUTPUT_DIR=/var/run/dragonfly/output");
 
         payload = "p2p-single-cache-test".getBytes(StandardCharsets.UTF_8);
         digest = "sha256:" + sha256(payload);

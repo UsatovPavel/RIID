@@ -105,6 +105,7 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                         .forAddress(new DomainSocketAddress(path))
                         .eventLoopGroup(new EpollEventLoopGroup())
                         .channelType(EpollDomainSocketChannel.class)
+                        .overrideAuthority("localhost")
                         .usePlaintext()
                         .build();
             }
@@ -112,6 +113,7 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                     .forAddress(UnixDomainSocketAddress.of(path))
                     .eventLoopGroup(new NioEventLoopGroup())
                     .channelType(NioDomainSocketChannel.class)
+                    .overrideAuthority("localhost")
                     .usePlaintext()
                     .build();
         }
