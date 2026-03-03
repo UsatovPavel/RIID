@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import riid.app.config.AppConfig;
 import riid.app.error.AppError;
 import riid.app.error.AppException;
+import riid.app.logging.AppStructuredEvents;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.app.ociarchive.OciArchiveBuilder;
@@ -31,7 +32,6 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
-import riid.core.logging.StructuredLog;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.DragonflyGrpcP2PExecutor;
@@ -102,34 +102,16 @@ public final class ImageLoadingFacade implements AutoCloseable {
         ManifestResult manifestResult;
         try {
             manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
-            StructuredLog.info(
-                    LOGGER,
-                    "manifest.fetch",
-                    "app",
-                    "load",
-                    "success",
-                    elapsedMs(manifestStarted),
-                    null,
-                    null,
-                    StructuredLog.fields(
-                            "repository", imageId.name(),
-                            "reference", imageId.reference()
-                    )
-            );
+            AppStructuredEvents.manifestFetchSuccess(
+                    LOGGER, elapsedMs(manifestStarted), imageId.name(), imageId.reference());
         } catch (RuntimeException e) {
-            StructuredLog.error(
+            AppStructuredEvents.manifestFetchError(
                     LOGGER,
-                    "manifest.fetch",
-                    "app",
-                    "load",
-                    "error",
                     elapsedMs(manifestStarted),
+                    imageId.name(),
+                    imageId.reference(),
                     "MANIFEST_FETCH_FAILED",
-                    e.getClass().getSimpleName(),
-                    StructuredLog.fields(
-                            "repository", imageId.name(),
-                            "reference", imageId.reference()
-                    )
+                    e.getClass().getSimpleName()
             );
             throw e;
         }
@@ -152,33 +134,19 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 long importStarted = System.nanoTime();
                 try {
                     runtime.importImage(archivePath);
-                    StructuredLog.info(
+                    AppStructuredEvents.engineImportSuccess(
                             LOGGER,
-                            "engine.import",
-                            "runtime",
-                            "import",
-                            "success",
                             elapsedMs(importStarted),
-                            null,
-                            null,
-                            StructuredLog.fields(
-                                    "runtime_id", runtime.runtimeId(),
-                                    "archive_path", archivePath.toString()
-                            )
+                            runtime.runtimeId(),
+                            archivePath.toString()
                     );
                 } catch (IOException | InterruptedException e) {
-                    StructuredLog.error(
+                    AppStructuredEvents.engineImportError(
                             LOGGER,
-                            "engine.import",
-                            "runtime",
-                            "import",
-                            "error",
                             elapsedMs(importStarted),
+                            runtime.runtimeId(),
                             "ENGINE_IMPORT_FAILED",
-                            e.getClass().getSimpleName(),
-                            StructuredLog.fields(
-                                    "runtime_id", runtime.runtimeId()
-                            )
+                            e.getClass().getSimpleName()
                     );
                     throw e;
                 }

@@ -10,12 +10,12 @@ import riid.app.CliApplication;
 import riid.app.CliParser;
 import riid.app.ImageId;
 import riid.app.ImageLoadingFacade;
+import riid.app.logging.AppStructuredEvents;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
 import riid.core.fs.NioHostFilesystem;
-import riid.core.logging.StructuredLog;
 import riid.p2p.P2PExecutor;
 
 /**
@@ -33,19 +33,11 @@ public final class ConfigResolvingServiceProvider {
         long started = System.nanoTime();
         if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
             RegistryEndpoint endpoint = applyCredentials(DEFAULT_REGISTRY_ENDPOINT, options.credentials());
-            StructuredLog.info(
+            AppStructuredEvents.configResolveSuccess(
                     LOGGER,
-                    "config.resolve",
-                    "app",
-                    "serviceFactory",
-                    "success",
                     elapsedMs(started),
-                    null,
-                    null,
-                    StructuredLog.fields(
-                            "config_source", "built_in_defaults",
-                            "config_path", options.configPath().toString()
-                    )
+                    "built_in_defaults",
+                    options.configPath().toString()
             );
             return defaultLoaderWithBuiltInConfig(endpoint);
         }
@@ -54,19 +46,11 @@ public final class ConfigResolvingServiceProvider {
             RegistryEndpoint endpoint = config.client().registries().getFirst();
             endpoint = applyCredentials(endpoint, options.credentials());
             String registry = endpoint.registryName();
-            StructuredLog.info(
+            AppStructuredEvents.configResolveSuccess(
                     LOGGER,
-                    "config.resolve",
-                    "app",
-                    "serviceFactory",
-                    "success",
                     elapsedMs(started),
-                    null,
-                    null,
-                    StructuredLog.fields(
-                            "config_source", options.configProvidedByUser() ? "explicit_yaml" : "default_yaml",
-                            "config_path", options.configPath().toString()
-                    )
+                    options.configProvidedByUser() ? "explicit_yaml" : "default_yaml",
+                    options.configPath().toString()
             );
             return (repository, reference, runtimeId) -> {
                 try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(
@@ -82,19 +66,13 @@ public final class ConfigResolvingServiceProvider {
                 }
             };
         } catch (Exception e) {
-            StructuredLog.error(
+            AppStructuredEvents.configResolveError(
                     LOGGER,
-                    "config.resolve",
-                    "app",
-                    "serviceFactory",
-                    "error",
                     elapsedMs(started),
+                    options.configProvidedByUser() ? "explicit_yaml" : "default_yaml",
+                    options.configPath().toString(),
                     "CONFIG_RESOLVE_FAILED",
-                    e.getClass().getSimpleName(),
-                    StructuredLog.fields(
-                            "config_source", options.configProvidedByUser() ? "explicit_yaml" : "default_yaml",
-                            "config_path", options.configPath().toString()
-                    )
+                    e.getClass().getSimpleName()
             );
             throw e;
         }

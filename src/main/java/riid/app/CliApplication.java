@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import riid.app.config.ConfigResolvingServiceProvider;
-import riid.core.logging.StructuredLog;
+import riid.app.logging.AppStructuredEvents;
 import riid.runtime.RuntimeAdapter;
 
 /**
@@ -76,17 +76,7 @@ public final class CliApplication {
         long requestStart = System.nanoTime();
         String traceId = UUID.randomUUID().toString();
         MDC.put("trace_id", traceId);
-        StructuredLog.info(
-                LOGGER,
-                "request.start",
-                "app",
-                "cli.run",
-                "start",
-                0L,
-                null,
-                null,
-                StructuredLog.fields("args_count", args == null ? 0 : args.length)
-        );
+        AppStructuredEvents.requestStart(LOGGER, args == null ? 0 : args.length);
 
         int exitCode = ExitCode.FAILURE.code();
         String finishResult = "error";
@@ -150,29 +140,10 @@ public final class CliApplication {
         } finally {
             long totalMs = elapsedMs(requestStart);
             if ("success".equals(finishResult)) {
-                StructuredLog.info(
-                        LOGGER,
-                        "request.finish",
-                        "app",
-                        "cli.run",
-                        finishResult,
-                        totalMs,
-                        null,
-                        null,
-                        StructuredLog.fields("exit_code", exitCode)
-                );
+                AppStructuredEvents.requestFinishSuccess(LOGGER, totalMs, exitCode);
             } else {
-                StructuredLog.error(
-                        LOGGER,
-                        "request.finish",
-                        "app",
-                        "cli.run",
-                        finishResult,
-                        totalMs,
-                        finishErrorCode,
-                        finishErrorKind,
-                        StructuredLog.fields("exit_code", exitCode)
-                );
+                AppStructuredEvents.requestFinishError(
+                        LOGGER, totalMs, exitCode, finishErrorCode, finishErrorKind);
             }
             MDC.remove("trace_id");
         }

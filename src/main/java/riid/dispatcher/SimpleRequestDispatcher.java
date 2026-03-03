@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.core.model.manifest.MediaType;
+import riid.dispatcher.logging.DispatcherStructuredEvents;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
@@ -79,6 +81,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         Objects.requireNonNull(digest);
 
         // 1) cache
+        long cacheStart = System.nanoTime();
         Path cachedPath = null;
         if (cache != null && cache.has(digest)) {
             cachedPath = cache.get(digest)
@@ -86,12 +89,15 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     .orElse(null);
         }
         if (cachedPath != null) {
-            LOGGER.info("cache hit for layer {}", digest);
+            DispatcherStructuredEvents.sourceSelected(LOGGER, "cache", null, repository, digest);
+            DispatcherStructuredEvents.sourceFetchSuccess(LOGGER, "cache", elapsedMs(cacheStart), repository, digest);
             return new FetchResult(digest, mediaType, cachedPath);
         }
 
         // 2) P2P
         if (p2p != null) {
+            DispatcherStructuredEvents.sourceSelected(LOGGER, "p2p", "cache_miss", repository, digest);
+            long p2pStarted = System.nanoTime();
             try {
                 var p2pPath = p2p.fetch(
                         repository.value(),
@@ -99,7 +105,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                         sizeBytes,
                         CacheMediaType.from(mediaType.value()));
                 if (p2pPath.isPresent()) {
-                    LOGGER.info("p2p hit for layer {}", digest);
+                    DispatcherStructuredEvents.sourceFetchSuccess(
+                            LOGGER, "p2p", elapsedMs(p2pStarted), repository, digest);
                     Path resultPath = p2pPath.get();
                     if (cache != null) {
                         try {
@@ -126,12 +133,25 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     }
                     return new FetchResult(digest, mediaType, resultPath);
                 }
+                DispatcherStructuredEvents.sourceFetchMiss(
+                        LOGGER, "p2p", elapsedMs(p2pStarted), "P2P_MISS", "not_found", repository, digest);
             } catch (IOException ex) {
-                LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
+                DispatcherStructuredEvents.sourceFetchError(
+                        LOGGER,
+                        "p2p",
+                        elapsedMs(p2pStarted),
+                        "P2P_FETCH_FAILED",
+                        ex.getClass().getSimpleName(),
+                        repository,
+                        digest
+                );
             }
         }
 
         // 3) Registry download
+        DispatcherStructuredEvents.sourceSelected(
+                LOGGER, "registry", "fallback_after_cache_p2p", repository, digest);
+        long registryStarted = System.nanoTime();
         acquireRegistry();
         try {
             File tmp = createTemp();
@@ -144,7 +164,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                             mediaType.value(),
                             new BlobRequest.RangeSpec.All()),
                     tmp);
-            LOGGER.info("downloaded layer {} from registry", digest);
+            DispatcherStructuredEvents.sourceFetchSuccess(
+                    LOGGER, "registry", elapsedMs(registryStarted), repository, digest);
 
             Path resultPath = tempPath;
             boolean deleteTemp = false;
@@ -189,6 +210,17 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             return new FetchResult(ImageDigest.parse(blob.digest()),
                     MediaType.from(blob.mediaType()),
                     resultPath);
+        } catch (RuntimeException ex) {
+            DispatcherStructuredEvents.sourceFetchError(
+                    LOGGER,
+                    "registry",
+                    elapsedMs(registryStarted),
+                    "REGISTRY_FETCH_FAILED",
+                    ex.getClass().getSimpleName(),
+                    repository,
+                    digest
+            );
+            throw ex;
         } finally {
             releaseRegistry();
         }
@@ -217,6 +249,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
     private void releaseRegistry() {
         registryLimiter.ifPresent(Semaphore::release);
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 }
 
