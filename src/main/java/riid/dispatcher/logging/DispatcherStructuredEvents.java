@@ -113,6 +113,75 @@ public final class DispatcherStructuredEvents {
         );
     }
 
+    public static void cachePutWarning(Logger logger,
+                                       String source,
+                                       DispatcherLogErrorCode errorCode,
+                                       String errorKind,
+                                       RepositoryName repository,
+                                       ImageDigest digest,
+                                       String mediaType) {
+        StructuredLog.warn(
+                logger,
+                "cache.put",
+                COMPONENT,
+                OPERATION_FETCH_LAYER,
+                "warn",
+                0L,
+                errorCode.name(),
+                errorKind,
+                StructuredLog.fields(
+                        "source", source,
+                        "digest", digest.toString(),
+                        "repository", repository.value(),
+                        "media_type", mediaType
+                )
+        );
+    }
+
+    public static void p2pPublishWarning(Logger logger,
+                                         RepositoryName repository,
+                                         ImageDigest digest,
+                                         String errorKind) {
+        StructuredLog.warn(
+                logger,
+                "p2p.publish",
+                COMPONENT,
+                OPERATION_FETCH_LAYER,
+                "warn",
+                0L,
+                DispatcherLogErrorCode.P2P_PUBLISH_FAILED.name(),
+                errorKind,
+                StructuredLog.fields(
+                        "digest", digest.toString(),
+                        "repository", repository.value()
+                )
+        );
+    }
+
+    public static void tempFileDeleteWarning(Logger logger,
+                                             String phase,
+                                             String path,
+                                             RepositoryName repository,
+                                             ImageDigest digest,
+                                             String errorKind) {
+        StructuredLog.warn(
+                logger,
+                "temp.delete",
+                COMPONENT,
+                OPERATION_FETCH_LAYER,
+                "warn",
+                0L,
+                DispatcherLogErrorCode.TEMP_FILE_DELETE_FAILED.name(),
+                errorKind,
+                StructuredLog.fields(
+                        "phase", phase,
+                        "path", path,
+                        "digest", digest.toString(),
+                        "repository", repository.value()
+                )
+        );
+    }
+
     private static Map<String, Object> baseFields(String source,
                                                   RepositoryName repository,
                                                   ImageDigest digest) {

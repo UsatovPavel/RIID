@@ -25,8 +25,10 @@ import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.core.model.manifest.MediaType;
+import riid.dispatcher.logging.DispatcherEventContext;
+import riid.dispatcher.logging.DispatcherEventEmitter;
 import riid.dispatcher.logging.DispatcherLogErrorCode;
-import riid.dispatcher.logging.DispatcherStructuredEvents;
+import riid.dispatcher.logging.StructuredDispatcherEventEmitter;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
@@ -43,6 +45,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     private final CacheAdapter cache;
     private final P2PExecutor p2p;
     private final HostFilesystem fs;
+    private final DispatcherEventEmitter events;
     private final Optional<Semaphore> registryLimiter; // limits concurrent downloads from registry
 
     public SimpleRequestDispatcher(RegistryClient client,
@@ -61,6 +64,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         this.cache = cache;
         this.p2p = p2p;
         this.fs = Objects.requireNonNull(fs, "fs");
+        this.events = new StructuredDispatcherEventEmitter(LOGGER);
         int maxConc = config != null ? config.maxConcurrentRegistry() : 0;
         this.registryLimiter = maxConc > 0 ? Optional.of(new Semaphore(maxConc)) : Optional.empty();
     }
@@ -80,6 +84,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest);
+        DispatcherEventContext context = new DispatcherEventContext(repository, digest, mediaType.value());
 
         // 1) cache
         long cacheStart = System.nanoTime();
@@ -90,14 +95,14 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     .orElse(null);
         }
         if (cachedPath != null) {
-            DispatcherStructuredEvents.sourceSelected(LOGGER, "cache", null, repository, digest);
-            DispatcherStructuredEvents.sourceFetchSuccess(LOGGER, "cache", elapsedMs(cacheStart), repository, digest);
+            events.sourceSelected(context, "cache", null);
+            events.sourceFetchSuccess(context, "cache", elapsedMs(cacheStart));
             return new FetchResult(digest, mediaType, cachedPath);
         }
 
         // 2) P2P
         if (p2p != null) {
-            DispatcherStructuredEvents.sourceSelected(LOGGER, "p2p", "cache_miss", repository, digest);
+            events.sourceSelected(context, "p2p", "cache_miss");
             long p2pStarted = System.nanoTime();
             try {
                 var p2pPath = p2p.fetch(
@@ -106,8 +111,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                         sizeBytes,
                         CacheMediaType.from(mediaType.value()));
                 if (p2pPath.isPresent()) {
-                    DispatcherStructuredEvents.sourceFetchSuccess(
-                            LOGGER, "p2p", elapsedMs(p2pStarted), repository, digest);
+                    events.sourceFetchSuccess(context, "p2p", elapsedMs(p2pStarted));
                     Path resultPath = p2pPath.get();
                     if (cache != null) {
                         try {
@@ -121,44 +125,52 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                                 try {
                                     fs.deleteIfExists(p2pPath.get());
                                 } catch (Exception ex) {
-                                    LOGGER.warn("Failed to delete temp p2p file {}: {}", p2pPath.get(), ex.getMessage());
+                                    events.tempFileDeleteWarning(
+                                            context,
+                                            "p2p_to_cache",
+                                            p2pPath.get().toString(),
+                                            ex.getClass().getSimpleName()
+                                    );
                                 }
                             }
                         } catch (ValidationException ve) {
-                            LOGGER.warn("Validation error for cache put ({}): {}", mediaType, ve.getMessage());
+                            events.cachePutWarning(
+                                    context,
+                                    "p2p",
+                                    DispatcherLogErrorCode.CACHE_PUT_VALIDATION_ERROR,
+                                    ve.getClass().getSimpleName()
+                            );
                         } catch (IllegalArgumentException iae) {
-                            LOGGER.warn("Unsupported media type for cache put ({}): {}", mediaType, iae.getMessage());
+                            events.cachePutWarning(
+                                    context,
+                                    "p2p",
+                                    DispatcherLogErrorCode.CACHE_PUT_UNSUPPORTED_MEDIA_TYPE,
+                                    iae.getClass().getSimpleName()
+                            );
                         } catch (Exception ex) {
-                            LOGGER.warn("Failed to put P2P layer {} to cache: {}", digest, ex.getMessage());
+                            events.cachePutWarning(
+                                    context,
+                                    "p2p",
+                                    DispatcherLogErrorCode.CACHE_PUT_FAILED,
+                                    ex.getClass().getSimpleName()
+                            );
                         }
                     }
                     return new FetchResult(digest, mediaType, resultPath);
                 }
-                DispatcherStructuredEvents.sourceFetchMiss(
-                        LOGGER,
-                        "p2p",
-                        elapsedMs(p2pStarted),
-                        DispatcherLogErrorCode.P2P_MISS,
-                        "not_found",
-                        repository,
-                        digest
-                );
+                events.sourceFetchMiss(
+                        context, "p2p", elapsedMs(p2pStarted), DispatcherLogErrorCode.P2P_MISS, "not_found");
             } catch (IOException ex) {
-                DispatcherStructuredEvents.sourceFetchError(
-                        LOGGER,
+                events.sourceFetchError(context,
                         "p2p",
                         elapsedMs(p2pStarted),
                         DispatcherLogErrorCode.P2P_FETCH_FAILED,
-                        ex.getClass().getSimpleName(),
-                        repository,
-                        digest
-                );
+                        ex.getClass().getSimpleName());
             }
         }
 
         // 3) Registry download
-        DispatcherStructuredEvents.sourceSelected(
-                LOGGER, "registry", "fallback_after_cache_p2p", repository, digest);
+        events.sourceSelected(context, "registry", "fallback_after_cache_p2p");
         long registryStarted = System.nanoTime();
         acquireRegistry();
         try {
@@ -172,8 +184,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                             mediaType.value(),
                             new BlobRequest.RangeSpec.All()),
                     tmp);
-            DispatcherStructuredEvents.sourceFetchSuccess(
-                    LOGGER, "registry", elapsedMs(registryStarted), repository, digest);
+            events.sourceFetchSuccess(context, "registry", elapsedMs(registryStarted));
 
             Path resultPath = tempPath;
             boolean deleteTemp = false;
@@ -188,11 +199,26 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                         deleteTemp = true;
                     }
                 } catch (ValidationException ve) {
-                    LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
+                    events.cachePutWarning(
+                            context,
+                            "registry",
+                            DispatcherLogErrorCode.CACHE_PUT_VALIDATION_ERROR,
+                            ve.getClass().getSimpleName()
+                    );
                 } catch (IllegalArgumentException iae) {
-                    LOGGER.warn("Unsupported media type for cache put ({}): {}", blob.mediaType(), iae.getMessage());
+                    events.cachePutWarning(
+                            context,
+                            "registry",
+                            DispatcherLogErrorCode.CACHE_PUT_UNSUPPORTED_MEDIA_TYPE,
+                            iae.getClass().getSimpleName()
+                    );
                 } catch (Exception ex) {
-                    LOGGER.warn("Failed to put layer {} to cache: {}", blob.digest(), ex.getMessage());
+                    events.cachePutWarning(
+                            context,
+                            "registry",
+                            DispatcherLogErrorCode.CACHE_PUT_FAILED,
+                            ex.getClass().getSimpleName()
+                    );
                 }
             }
             if (p2p != null) {
@@ -203,7 +229,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                             blob.size(),
                             CacheMediaType.from(blob.mediaType()));
                 } catch (Exception ex) {
-                    LOGGER.warn("P2P publish failed for {}: {}", blob.digest(), ex.getMessage());
+                    events.p2pPublishWarning(context, ex.getClass().getSimpleName());
                 }
             }
 
@@ -211,7 +237,12 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 try {
                     fs.deleteIfExists(tempPath);
                 } catch (Exception ex) {
-                    LOGGER.warn("Failed to delete temp layer {}: {}", tempPath, ex.getMessage());
+                    events.tempFileDeleteWarning(
+                            context,
+                            "registry_to_cache",
+                            tempPath.toString(),
+                            ex.getClass().getSimpleName()
+                    );
                 }
             }
 
@@ -219,15 +250,11 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     MediaType.from(blob.mediaType()),
                     resultPath);
         } catch (RuntimeException ex) {
-            DispatcherStructuredEvents.sourceFetchError(
-                    LOGGER,
+            events.sourceFetchError(context,
                     "registry",
                     elapsedMs(registryStarted),
                     DispatcherLogErrorCode.REGISTRY_FETCH_FAILED,
-                    ex.getClass().getSimpleName(),
-                    repository,
-                    digest
-            );
+                    ex.getClass().getSimpleName());
             throw ex;
         } finally {
             releaseRegistry();
