@@ -123,7 +123,8 @@ public class ConfigValidationException extends RuntimeException {
 
     public enum Runtime {
         MAX_STDOUT_BYTES_POSITIVE("RUNTIME: runtime.output.maxStdoutBytes must be positive"),
-        MAX_STDERR_BYTES_POSITIVE("RUNTIME: runtime.output.maxStderrBytes must be positive");
+        MAX_STDERR_BYTES_POSITIVE("RUNTIME: runtime.output.maxStderrBytes must be positive"),
+        MAX_TASKS_COMMAND_EXECUTOR_POSITIVE("RUNTIME: runtime.maxTasksCommandExecutor must be positive");
 
         private final String reasonMessage;
 
