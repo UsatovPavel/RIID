@@ -142,6 +142,11 @@ public final class ConfigValidator {
         if (dockerCmd != null && dockerCmd.isBlank()) {
             throw new ConfigValidationException("runtime.dockerCmd must not be blank");
         }
+        Integer maxTasksCommandExecutor = runtime.maxTasksCommandExecutor();
+        if (maxTasksCommandExecutor != null && maxTasksCommandExecutor <= 0) {
+            throw new ConfigValidationException(
+                    ConfigValidationException.Runtime.MAX_TASKS_COMMAND_EXECUTOR_POSITIVE.message());
+        }
         OutputConfig output = runtime.output();
         if (output == null) {
             return;
