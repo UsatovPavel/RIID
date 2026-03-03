@@ -146,7 +146,7 @@ class CliApplicationTest {
 
     @Test
     void parserMarksConfigAsImplicitByDefault() {
-        var result = CliApplication.CliParser.parse(new String[]{
+        var result = CliParser.parse(new String[]{
                 "--repo", REPO_BUSYBOX,
                 "--runtime", RUNTIME_PODMAN
         });
@@ -157,7 +157,7 @@ class CliApplicationTest {
 
     @Test
     void parserMarksConfigAsExplicitWhenProvided() {
-        var result = CliApplication.CliParser.parse(new String[]{
+        var result = CliParser.parse(new String[]{
                 "--config", "custom.yaml",
                 "--repo", REPO_BUSYBOX,
                 "--runtime", RUNTIME_PODMAN

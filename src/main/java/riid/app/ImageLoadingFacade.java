@@ -8,10 +8,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import riid.app.config.AppConfig;
 import riid.app.error.AppError;
 import riid.app.error.AppException;
 import riid.core.fs.HostFilesystem;
@@ -29,6 +31,7 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
+import riid.core.logging.StructuredLog;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.DragonflyGrpcP2PExecutor;
@@ -95,7 +98,41 @@ public final class ImageLoadingFacade implements AutoCloseable {
     public ImageId load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
-        ManifestResult manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
+        long manifestStarted = System.nanoTime();
+        ManifestResult manifestResult;
+        try {
+            manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
+            StructuredLog.info(
+                    LOGGER,
+                    "manifest.fetch",
+                    "app",
+                    "load",
+                    "success",
+                    elapsedMs(manifestStarted),
+                    null,
+                    null,
+                    StructuredLog.fields(
+                            "repository", imageId.name(),
+                            "reference", imageId.reference()
+                    )
+            );
+        } catch (RuntimeException e) {
+            StructuredLog.error(
+                    LOGGER,
+                    "manifest.fetch",
+                    "app",
+                    "load",
+                    "error",
+                    elapsedMs(manifestStarted),
+                    "MANIFEST_FETCH_FAILED",
+                    e.getClass().getSimpleName(),
+                    StructuredLog.fields(
+                            "repository", imageId.name(),
+                            "reference", imageId.reference()
+                    )
+            );
+            throw e;
+        }
         RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
         ImageId resolved = imageId.withDigest(manifestResult.digest());
         return load(manifestResult, runtime, resolved);
@@ -112,8 +149,39 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Objects.requireNonNull(imageId, "imageId");
         try {
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
-                runtime.importImage(archivePath);
-                LOGGER.info("Loaded {} into runtime {} at {}", imageId, runtime.runtimeId(), archivePath);
+                long importStarted = System.nanoTime();
+                try {
+                    runtime.importImage(archivePath);
+                    StructuredLog.info(
+                            LOGGER,
+                            "engine.import",
+                            "runtime",
+                            "import",
+                            "success",
+                            elapsedMs(importStarted),
+                            null,
+                            null,
+                            StructuredLog.fields(
+                                    "runtime_id", runtime.runtimeId(),
+                                    "archive_path", archivePath.toString()
+                            )
+                    );
+                } catch (IOException | InterruptedException e) {
+                    StructuredLog.error(
+                            LOGGER,
+                            "engine.import",
+                            "runtime",
+                            "import",
+                            "error",
+                            elapsedMs(importStarted),
+                            "ENGINE_IMPORT_FAILED",
+                            e.getClass().getSimpleName(),
+                            StructuredLog.fields(
+                                    "runtime_id", runtime.runtimeId()
+                            )
+                    );
+                    throw e;
+                }
                 return imageId;
             });
         } catch (AppException e) {
@@ -266,6 +334,10 @@ public final class ImageLoadingFacade implements AutoCloseable {
     @FunctionalInterface
     public interface CacheCleaner {
         void close() throws Exception;
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 }
 
