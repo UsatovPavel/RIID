@@ -16,6 +16,7 @@ import riid.client.http.HttpExecutor;
 import riid.client.service.AuthService;
 import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
+import riid.core.config.TestRegistryConfig;
 
 import java.io.File;
 import java.util.Optional;
@@ -35,10 +36,13 @@ import riid.core.fs.TestPaths;
  */
 public class RegistryLiveTest {
 
-    private static final RegistryEndpoint DOCKER_HUB = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+    private static final RegistryEndpoint DOCKER_HUB = TestRegistryConfig.endpoint();
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final String SCOPE = "repository:library/alpine:pull";
+    private static final String TLS_REPO = "library/busybox";
+    private static final String TLS_REF = "latest";
+    private static final String TLS_SCOPE = "repository:library/busybox:pull";
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClientConfig httpConfig = new HttpClientConfig();
@@ -72,6 +76,33 @@ public class RegistryLiveTest {
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "alpine-layer", ".tar").toFile();
         tmp.deleteOnExit();
         BlobResult result = blobService.fetchBlob(DOCKER_HUB, req, tmp, SCOPE);
+
+        assertEquals(layer.digest(), result.digest(), "digest must match manifest");
+        assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");
+        assertTrue(tmp.length() > 0, "downloaded file should not be empty");
+    }
+
+    @Tag("filesystem")
+    @Test
+    void fetchRealImageOverTlsFromDockerHub() throws Exception {
+        assertEquals("https", DOCKER_HUB.scheme(), "live registry test must use TLS endpoint");
+        ManifestResult manifest = manifestService.fetchManifest(DOCKER_HUB, TLS_REPO, TLS_REF, TLS_SCOPE);
+        assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
+
+        var layer = manifest.manifest().layers().getFirst();
+        BlobRequest req = new BlobRequest(
+                TLS_REPO,
+                layer.digest(),
+                layer.size(),
+                layer.mediaType(),
+                new BlobRequest.RangeSpec.All());
+
+        Optional<Long> sizeOpt = blobService.headBlob(DOCKER_HUB, TLS_REPO, layer.digest(), TLS_SCOPE);
+        assertTrue(sizeOpt.isPresent(), "blob HEAD should return size");
+
+        File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "busybox-layer", ".tar").toFile();
+        tmp.deleteOnExit();
+        BlobResult result = blobService.fetchBlob(DOCKER_HUB, req, tmp, TLS_SCOPE);
 
         assertEquals(layer.digest(), result.digest(), "digest must match manifest");
         assertEquals(sizeOpt.get(), result.size(), "size must match HEAD");

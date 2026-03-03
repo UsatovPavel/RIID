@@ -15,6 +15,7 @@ import riid.client.http.HttpExecutor;
 import riid.client.service.AuthService;
 import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
+import riid.core.config.TestRegistryConfig;
 
 import java.io.File;
 import java.util.Optional;
@@ -36,7 +37,7 @@ import riid.core.fs.TestPaths;
 public class RegistryLiveTest {
 
     private static final RegistryEndpoint DOCKER_HUB =
-            new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+            TestRegistryConfig.endpoint();
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final String SCOPE = "repository:library/alpine:pull";

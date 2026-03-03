@@ -171,13 +171,17 @@ public final class ImageLoadingFacade implements AutoCloseable {
         HostFilesystem fs = new NioHostFilesystem();
         TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
         HttpClientConfig httpConfig = new HttpClientConfig();
-        long ttl = config.client() != null && config.client().auth() != null
-                ? config.client().auth().defaultTokenTtlSeconds()
-                : AuthConfig.DEFAULT_TTL_SECONDS;
+        AuthConfig authConfig = config.client() != null && config.client().auth() != null
+                ? config.client().auth()
+                : new AuthConfig();
         BlobPartialDownloadConfig blobPartialDownloadConfig =
                 config.client() != null ?
                         config.client().partialDownloadingOrDefault() : new BlobPartialDownloadConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, ttl, blobPartialDownloadConfig);
+        RegistryClient client = new RegistryClientImpl(
+                endpoint,
+                httpConfig,
+                authConfig,
+                blobPartialDownloadConfig);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());

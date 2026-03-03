@@ -22,6 +22,9 @@ import riid.runtime.RuntimeConfig;
  */
 public final class ConfigValidator {
     private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
+    private static final String AUTH_CERT_PATH = "client.auth.certPath";
+    private static final String AUTH_KEY_PATH = "client.auth.keyPath";
+    private static final String AUTH_CA_PATH = "client.auth.caPath";
 
     private ConfigValidator() {
     }
@@ -106,9 +109,14 @@ public final class ConfigValidator {
         if (auth.defaultTokenTtlSeconds() <= 0) {
             throw new ConfigValidationException(ConfigValidationException.Auth.TTL_POSITIVE.message());
         }
-        validatePathIfPresent(auth.certPath(), "client.auth.certPath");
-        validatePathIfPresent(auth.keyPath(), "client.auth.keyPath");
-        validatePathIfPresent(auth.caPath(), "client.auth.caPath");
+        boolean hasCert = hasText(auth.certPath());
+        boolean hasKey = hasText(auth.keyPath());
+        if (hasCert != hasKey) {
+            throw new ConfigValidationException(ConfigValidationException.Auth.CERT_KEY_PAIR_REQUIRED.message());
+        }
+        validatePathIfPresent(auth.certPath(), AUTH_CERT_PATH);
+        validatePathIfPresent(auth.keyPath(), AUTH_KEY_PATH);
+        validatePathIfPresent(auth.caPath(), AUTH_CA_PATH);
     }
 
     private static void validateApp(AppConfig app) {
@@ -196,15 +204,45 @@ public final class ConfigValidator {
         Path p = Path.of(value);
         if (!Files.exists(p)) {
             String message = switch (field) {
-                case "client.auth.certPath" -> ConfigValidationException.Auth.CERT_MISSING.message();
-                case "client.auth.keyPath" -> ConfigValidationException.Auth.KEY_MISSING.message();
-                case "client.auth.caPath" -> ConfigValidationException.Auth.CA_MISSING.message();
+                case AUTH_CERT_PATH -> ConfigValidationException.Auth.CERT_MISSING.message();
+                case AUTH_KEY_PATH -> ConfigValidationException.Auth.KEY_MISSING.message();
+                case AUTH_CA_PATH -> ConfigValidationException.Auth.CA_MISSING.message();
                 default -> null;
             };
             if (message != null) {
                 throw new ConfigValidationException(message + ": " + value);
             }
-            throw new ConfigValidationException(ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value));
+            throw new ConfigValidationException(
+                ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value)
+            );
         }
+        if (!Files.isRegularFile(p)) {
+            String message = switch (field) {
+                case AUTH_CERT_PATH -> ConfigValidationException.Auth.CERT_NOT_FILE.message();
+                case AUTH_KEY_PATH -> ConfigValidationException.Auth.KEY_NOT_FILE.message();
+                case AUTH_CA_PATH -> ConfigValidationException.Auth.CA_NOT_FILE.message();
+                default -> null;
+            };
+            if (message != null) {
+                throw new ConfigValidationException(message + ": " + value);
+            }
+            throw new ConfigValidationException(field + " must point to a regular file: " + value);
+        }
+        if (!Files.isReadable(p)) {
+            String message = switch (field) {
+                case AUTH_CERT_PATH -> ConfigValidationException.Auth.CERT_NOT_READABLE.message();
+                case AUTH_KEY_PATH -> ConfigValidationException.Auth.KEY_NOT_READABLE.message();
+                case AUTH_CA_PATH -> ConfigValidationException.Auth.CA_NOT_READABLE.message();
+                default -> null;
+            };
+            if (message != null) {
+                throw new ConfigValidationException(message + ": " + value);
+            }
+            throw new ConfigValidationException(field + " must be readable: " + value);
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

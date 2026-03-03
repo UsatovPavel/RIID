@@ -11,13 +11,14 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import riid.core.config.TestRegistryConfig;
 
 /**
  * Smoke against Docker Hub registry API (public endpoints).
  */
 class RegistryHubStatusTest {
 
-    private static final String HUB = "https://registry-1.docker.io";
+    private static final String HUB = TestRegistryConfig.baseUrl();
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(Duration.ofSeconds(10))
