@@ -83,7 +83,17 @@ public class ConfigValidationException extends RuntimeException {
         TTL_POSITIVE("AUTH: auth.defaultTokenTtlSeconds must be > 0"),
         CERT_MISSING("AUTH: client.auth.certPath must point to existing file"),
         KEY_MISSING("AUTH: client.auth.keyPath must point to existing file"),
-        CA_MISSING("AUTH: client.auth.caPath must point to existing file");
+        CA_MISSING("AUTH: client.auth.caPath must point to existing file"),
+        CERT_KEY_PAIR_REQUIRED("AUTH: client.auth.certPath and client.auth.keyPath must be set together"),
+        CERT_NOT_FILE("AUTH: client.auth.certPath must point to a regular file"),
+        KEY_NOT_FILE("AUTH: client.auth.keyPath must point to a regular file"),
+        CA_NOT_FILE("AUTH: client.auth.caPath must point to a regular file"),
+        CERT_NOT_READABLE("AUTH: client.auth.certPath must be readable"),
+        KEY_NOT_READABLE("AUTH: client.auth.keyPath must be readable"),
+        CA_NOT_READABLE("AUTH: client.auth.caPath must be readable"),
+        CERT_INVALID_FORMAT("AUTH: client.auth.certPath must contain valid X.509 certificate(s)"),
+        KEY_INVALID_FORMAT("AUTH: client.auth.keyPath must contain a PKCS#8 private key"),
+        CA_INVALID_FORMAT("AUTH: client.auth.caPath must contain valid X.509 certificate(s)");
 
         private final String reasonMessage;
 

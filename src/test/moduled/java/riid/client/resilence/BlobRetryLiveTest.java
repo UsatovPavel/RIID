@@ -7,6 +7,7 @@ import riid.client.api.BlobResult;
 import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
+import riid.core.config.TestRegistryConfig;
 
 import java.io.File;
 
@@ -26,7 +27,7 @@ public class BlobRetryLiveTest {
 
     @Test
     void retryAfterConnectionDrop() throws Exception {
-        RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+        RegistryEndpoint hub = TestRegistryConfig.endpoint();
         HttpClientConfig cfg = new HttpClientConfig();
         HostFilesystem fs = new NioHostFilesystem();
         try (var client = new RegistryClientImpl(hub, cfg)) {

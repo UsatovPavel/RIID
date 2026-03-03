@@ -45,24 +45,36 @@ public final class RegistryClientImpl implements RegistryClient {
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig) {
-        this(endpoint, httpConfig, AuthConfig.DEFAULT_TTL_SECONDS, null);
+        this(endpoint, httpConfig, new AuthConfig(), null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               long defaultTokenTtlSeconds) {
-        this(endpoint, httpConfig, defaultTokenTtlSeconds, null);
+        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               long defaultTokenTtlSeconds,
                               BlobPartialDownloadConfig rangeConfig) {
+        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), rangeConfig);
+    }
+
+    public RegistryClientImpl(RegistryEndpoint endpoint,
+                              HttpClientConfig httpConfig,
+                              AuthConfig authConfig,
+                              BlobPartialDownloadConfig rangeConfig) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
-        this.jettyClient = HttpClientFactory.create(httpConfig);
+        AuthConfig effectiveAuthConfig = authConfig != null ? authConfig : new AuthConfig();
+        this.jettyClient = HttpClientFactory.create(httpConfig, effectiveAuthConfig);
         this.http = new HttpExecutor(jettyClient, httpConfig);
-        this.authService = new AuthService(http, mapper, new TokenCache(), defaultTokenTtlSeconds);
+        this.authService = new AuthService(
+                http,
+                mapper,
+                new TokenCache(),
+                effectiveAuthConfig.defaultTokenTtlSeconds());
         this.manifestService = new ManifestService(http, authService, mapper);
         this.blobService = new BlobService(http, authService, rangeConfig);
     }

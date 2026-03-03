@@ -9,6 +9,7 @@ import riid.client.api.RegistryClientImpl;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.model.manifest.Manifest;
 import riid.client.http.HttpClientConfig;
+import riid.core.config.TestRegistryConfig;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -46,7 +47,7 @@ public class StressTest {
 
     @BeforeAll
     static void setup() {
-        RegistryEndpoint hub = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+        RegistryEndpoint hub = TestRegistryConfig.endpoint();
         HttpClientConfig cfg = HttpClientConfig.builder()
                 .maxRetries(2)
                 .retryIdempotentOnly(true)

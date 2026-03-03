@@ -58,7 +58,8 @@ class AuthServiceTest {
     void throwsOnUnexpectedPingStatus() {
         http.enqueueHead(new HttpResult<>(500, HttpFields.EMPTY, null, URI.create("https://x")));
 
-        assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "scope"));
+        ClientException ex = assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "scope"));
+        assertTrue(ex.getMessage().contains("SECURITY:AUTH:UNEXPECTED_PING_STATUS"));
     }
 
     @Test
@@ -66,7 +67,20 @@ class AuthServiceTest {
         HttpFields.Mutable headers = HttpFields.build();
         http.enqueueHead(new HttpResult<>(HttpStatus.UNAUTHORIZED_401, headers, null, URI.create("https://x")));
 
-        assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "scope"));
+        ClientException ex = assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "scope"));
+        assertTrue(ex.getMessage().contains("SECURITY:AUTH:MISSING_CHALLENGE"));
+    }
+
+    @Test
+    void failsFastWithUnifiedMessageWhenTokenEndpointReturnsNonOk() {
+        HttpFields.Mutable pingHeaders = HttpFields.build();
+        pingHeaders.add("WWW-Authenticate", "Bearer realm=\"https://auth\", service=\"svc\"");
+        http.enqueueHead(new HttpResult<>(HttpStatus.UNAUTHORIZED_401, pingHeaders, null, URI.create("https://x")));
+        http.enqueueGet(new HttpResult<>(HttpStatus.UNAUTHORIZED_401, HttpFields.EMPTY,
+                new ByteArrayInputStream(new byte[0]), URI.create("https://auth")));
+
+        ClientException ex = assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "repo:pull"));
+        assertTrue(ex.getMessage().contains("SECURITY:AUTH:TOKEN_ENDPOINT_FAILED"));
     }
 
     @Test
