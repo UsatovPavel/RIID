@@ -1,6 +1,7 @@
 package riid.p2p;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
@@ -12,14 +13,15 @@ import DragonflyDfdaemon.v2.DfdaemonDownloadGrpc;
 import DragonflyDfdaemon.v2.DownloadTaskRequest;
 import DragonflyDfdaemon.v2.DownloadTaskResponse;
 import io.grpc.Deadline;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import java.net.UnixDomainSocketAddress;
 
 import io.grpc.netty.NettyChannelBuilder;
-import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
-import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDomainSocketChannel;
 
@@ -33,13 +35,17 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
     private final ManagedChannel channel;
     private final DfdaemonDownloadGrpc.DfdaemonDownloadBlockingStub stub;
 
-    public DfdaemonDownloadClient(String dfdaemonAddr) throws IOException {
-        this.channel = buildChannel(dfdaemonAddr);
+    public DfdaemonDownloadClient(String dfdaemonAddress) throws IOException {
+        this.channel = buildChannel(dfdaemonAddress);
         this.stub = DfdaemonDownloadGrpc.newBlockingStub(channel);
     }
 
     private static final int DEADLINE_SECONDS = 120;
     private static final int MAX_RETRIES = 2;
+    private static final EnumSet<Status.Code> RETRYABLE_CODES = EnumSet.of(
+            Status.Code.UNAVAILABLE,
+            Status.Code.DEADLINE_EXCEEDED,
+            Status.Code.RESOURCE_EXHAUSTED);
 
     @Override
     public Path download(DownloadTaskRequest request, Path outputPath) throws IOException {
@@ -54,8 +60,9 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                         .downloadTask(request);
                 while (it.hasNext()) {
                     DownloadTaskResponse r = it.next();
-                    if (r.hasDownloadTaskStartedResponse()
-                            && r.getDownloadTaskStartedResponse().getIsFinished()) {
+                    boolean finished = r.hasDownloadTaskStartedResponse()
+                            && r.getDownloadTaskStartedResponse().getIsFinished();
+                    if (finished) {
                         break;
                     }
                 }
@@ -65,7 +72,7 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                 return outputPath;
             } catch (StatusRuntimeException e) {
                 lastException = new IOException("dfdaemon DownloadTask failed: " + e.getStatus(), e);
-                if (e.getStatus().getCode() == io.grpc.Status.Code.UNAVAILABLE && attempt < MAX_RETRIES - 1) {
+                if (isRetryable(e) && attempt < MAX_RETRIES - 1) {
                     try {
                         Thread.sleep(500L * (attempt + 1));
                     } catch (InterruptedException ie) {
@@ -90,32 +97,42 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
         }
     }
 
-    private static ManagedChannel buildChannel(String addr) throws IOException {
-        if (addr == null || addr.isBlank()) {
+    private static ManagedChannel buildChannel(String address) throws IOException {
+        if (address == null || address.isBlank()) {
             throw new IllegalArgumentException("dfdaemonAddr must not be blank");
         }
-        String trimmed = addr.trim();
+        String trimmed = address.trim();
         if (trimmed.startsWith("unix://")) {
             String path = trimmed.substring(7).trim();
             if (path.isEmpty()) {
-                throw new IllegalArgumentException("Invalid unix address: " + addr);
+                throw new IllegalArgumentException("Invalid unix address: " + address);
             }
-            if (isLinux()) {
+            String target = "unix://" + path;
+            try {
+                return Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
+                        .overrideAuthority("localhost")
+                        .build();
+            } catch (RuntimeException ex) {
+                LOGGER.debug("Auto UDS channel init failed for {}, fallback to explicit netty config", target, ex);
+            }
+            try {
                 return NettyChannelBuilder
                         .forAddress(new DomainSocketAddress(path))
-                        .eventLoopGroup(new EpollEventLoopGroup())
-                        .channelType(EpollDomainSocketChannel.class)
+                        .eventLoopGroup(new NioEventLoopGroup())
+                        .channelType(NioDomainSocketChannel.class)
+                        .overrideAuthority("localhost")
+                        .usePlaintext()
+                        .build();
+            } catch (RuntimeException ex) {
+                LOGGER.debug("DomainSocketAddress path failed for {}, fallback to JDK UDS address", target, ex);
+                return NettyChannelBuilder
+                        .forAddress(UnixDomainSocketAddress.of(path))
+                        .eventLoopGroup(new NioEventLoopGroup())
+                        .channelType(NioDomainSocketChannel.class)
                         .overrideAuthority("localhost")
                         .usePlaintext()
                         .build();
             }
-            return NettyChannelBuilder
-                    .forAddress(UnixDomainSocketAddress.of(path))
-                    .eventLoopGroup(new NioEventLoopGroup())
-                    .channelType(NioDomainSocketChannel.class)
-                    .overrideAuthority("localhost")
-                    .usePlaintext()
-                    .build();
         }
         int colon = trimmed.lastIndexOf(':');
         if (colon > 0) {
@@ -126,10 +143,11 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                     .usePlaintext()
                     .build();
         }
-        throw new IllegalArgumentException("Invalid dfdaemonAddr (use unix:///path or host:port): " + addr);
+        throw new IllegalArgumentException("Invalid dfdaemonAddr (use unix:///path or host:port): " + address);
     }
 
-    private static boolean isLinux() {
-        return System.getProperty("os.name", "").toLowerCase().contains("linux");
+    private static boolean isRetryable(StatusRuntimeException e) {
+        return RETRYABLE_CODES.contains(e.getStatus().getCode());
     }
+
 }
