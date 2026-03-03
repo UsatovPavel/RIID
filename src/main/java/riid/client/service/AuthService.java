@@ -11,6 +11,7 @@ import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
+import riid.client.logging.service.AuthStructuredEvents;
 import riid.client.core.model.auth.AuthChallenge;
 import riid.client.core.model.auth.AuthParser;
 import riid.client.core.model.auth.TokenResponse;
@@ -104,7 +105,7 @@ public class AuthService {
         var ttlOpt = ttlFrom(pingResp.headers());
         long ttl = ttlOpt.orElse(defaultTokenTtlSeconds);
         if (ttlOpt.isEmpty()) {
-            LOGGER.warn("No token TTL in headers; using default {}s", defaultTokenTtlSeconds);
+            AuthStructuredEvents.tokenTtlHeaderMissing(LOGGER, defaultTokenTtlSeconds);
         }
         cache.put(cacheKey, token, ttl); // fallback from config
         return Optional.of("Bearer " + token);
@@ -170,7 +171,7 @@ public class AuthService {
                             authMessage("TOKEN_MISSING", "token is absent in auth response")));
             long ttl = Optional.ofNullable(tr.expiresInSeconds()).orElse(defaultTokenTtlSeconds);
             if (tr.expiresInSeconds() == null) {
-                LOGGER.warn("Token response missing expires_in; using default {}s", defaultTokenTtlSeconds);
+                AuthStructuredEvents.tokenExpiresInMissing(LOGGER, defaultTokenTtlSeconds);
             }
             cache.put(cacheKeyFromChallenge(challenge, scope, creds), token, ttl);
             return token;

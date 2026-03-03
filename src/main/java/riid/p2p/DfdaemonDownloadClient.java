@@ -25,6 +25,7 @@ import io.netty.channel.socket.nio.NioDomainSocketChannel;
 import org.dragonflyoss.api.dfdaemon.v2.DfdaemonDownloadGrpc;
 import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskRequest;
 import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskResponse;
+import riid.p2p.logging.P2pStructuredEvents;
 
 /**
  * gRPC client for dfdaemon DfdaemonDownload.DownloadTask (v2 API). Sync/blocking.
@@ -58,13 +59,17 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
     @Override
     public Path download(DownloadTaskRequest request, Path outputPath) throws IOException {
         String url = request.getDownload().getUrl();
+        long downloadStarted = System.nanoTime();
         LOGGER.debug("DownloadTask start: url={}, output={}, timeoutMs={}, maxAttempts={}",
                 url, outputPath, requestTimeoutMillis, maxAttempts);
+        P2pStructuredEvents.downloadStart(LOGGER, url, outputPath, requestTimeoutMillis, maxAttempts);
         IOException lastException = null;
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            long attemptStarted = System.nanoTime();
             try {
                 if (attempt > 0) {
                     LOGGER.debug("Retrying DownloadTask (attempt {})", attempt + 1);
+                    P2pStructuredEvents.downloadRetry(LOGGER, attempt + 1, maxAttempts);
                 }
                 Iterator<DownloadTaskResponse> it = stub
                         .withDeadline(Deadline.after(requestTimeoutMillis, TimeUnit.MILLISECONDS))
@@ -79,9 +84,16 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                 }
                 if (!java.nio.file.Files.exists(outputPath)) {
                     LOGGER.warn("DownloadTask completed but output file is missing: {}", outputPath);
+                    P2pStructuredEvents.outputMissing(LOGGER, outputPath, attempt + 1);
                     throw new IOException("dfdaemon did not create output file: " + outputPath);
                 }
                 LOGGER.debug("DownloadTask success: output={}", outputPath);
+                P2pStructuredEvents.downloadSuccess(
+                        LOGGER,
+                        outputPath,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - downloadStarted),
+                        attempt + 1
+                );
                 return outputPath;
             } catch (StatusRuntimeException e) {
                 lastException = new IOException("dfdaemon DownloadTask failed: " + e.getStatus(), e);
@@ -89,11 +101,21 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                 boolean hasMoreAttempts = attempt < maxAttempts - 1;
                 LOGGER.warn("DownloadTask attempt {}/{} failed with status {} (retryable={}, willRetry={})",
                         attempt + 1, maxAttempts, e.getStatus().getCode(), retryable, retryable && hasMoreAttempts);
+                P2pStructuredEvents.downloadAttemptFailed(
+                        LOGGER,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - attemptStarted),
+                        attempt + 1,
+                        maxAttempts,
+                        e.getStatus().getCode().name(),
+                        retryable,
+                        retryable && hasMoreAttempts
+                );
                 if (retryable && hasMoreAttempts) {
                     try {
                         Thread.sleep(500L * (attempt + 1));
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
+                        P2pStructuredEvents.downloadInterrupted(LOGGER, attempt + 1);
                         throw new IOException("Interrupted during retry", ie);
                     }
                 } else {
@@ -111,6 +133,7 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LOGGER.warn("Channel shutdown interrupted");
+            P2pStructuredEvents.shutdownInterrupted(LOGGER);
         }
     }
 

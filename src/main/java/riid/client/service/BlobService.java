@@ -24,6 +24,7 @@ import riid.client.core.config.BlobPartialDownloadConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
+import riid.client.logging.service.BlobStructuredEvents;
 import riid.core.model.manifest.RegistryApi;
 import riid.client.http.HttpExecutor;
 import riid.client.http.HttpRequestBuilder;
@@ -61,13 +62,13 @@ public class BlobService implements BlobServiceApi {
         try (BlobSink sink = new FileBlobSink(target)) {
             return fetchBlob(endpoint, req, sink, scope);
         } catch (IOException e) {
-            LOGGER.warn("Blob IO error for {}/{}: {}", req.repository(), req.digest(), e.getMessage(), e);
+            BlobStructuredEvents.blobIoError(LOGGER, req.repository(), req.digest(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, BLOB_IO_ERROR),
                     BLOB_IO_ERROR,
                     e);
         } catch (Exception e) {
-            LOGGER.warn("Blob sink error for {}/{}: {}", req.repository(), req.digest(), e.getMessage(), e);
+            BlobStructuredEvents.blobSinkError(LOGGER, req.repository(), req.digest(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, BLOB_SINK_ERROR),
                     BLOB_SINK_ERROR,
@@ -96,7 +97,7 @@ public class BlobService implements BlobServiceApi {
         boolean rangeEnabled = blobPartialDownloadConfig.mode() != BlobPartialDownloadConfig.RangeMode.OFF;
         String rangeValue = rangeEnabled ? req.rangeHeaderValue() : null;
         if (req.isRangeRequest() && !rangeEnabled) {
-            LOGGER.warn("Range disabled by config for {}, ignoring requested range", req.digest());
+            BlobStructuredEvents.rangeDisabled(LOGGER, req.digest());
         }
         if (rangeValue != null) {
             HttpRequestBuilder.withRange(headers, rangeValue);
@@ -106,8 +107,7 @@ public class BlobService implements BlobServiceApi {
         if (status == HttpStatus.RANGE_NOT_SATISFIABLE_416 && req.isRangeRequest() && rangeEnabled) {
             closeQuietly(resp.body());
             if (allowRetryWithoutRange && blobPartialDownloadConfig.retryWithoutRangeOnUnsatisfiableRange()) {
-                LOGGER.warn("Range not satisfiable for {} (range={}), retrying without Range",
-                        req.digest(), rangeValue);
+                BlobStructuredEvents.rangeNotSatisfiableRetry(LOGGER, req.digest(), rangeValue);
                 BlobRequest noRange = new BlobRequest(
                         req.repository(),
                         req.digest(),
@@ -147,12 +147,12 @@ public class BlobService implements BlobServiceApi {
                 }
             }
         } else if (req.isRangeRequest() && status == HttpStatus.OK_200) {
-            LOGGER.warn("Range ignored by registry for {} (range={})", req.digest(), rangeValue);
+            BlobStructuredEvents.rangeIgnoredByRegistry(LOGGER, req.digest(), rangeValue);
         }
 
         OptionalLong expectedSizeOpt = resolveExpectedSizeBytes(req, resp, contentRange);
         if (expectedSizeOpt.isEmpty()) {
-            LOGGER.warn("Missing Content-Length for blob {}", req.digest());
+            BlobStructuredEvents.missingContentLength(LOGGER, req.digest());
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length for blob"),
                     "Missing Content-Length for blob download");
@@ -191,7 +191,7 @@ public class BlobService implements BlobServiceApi {
             String mediaType = resp.firstHeader(HttpResult.HeaderName.CONTENT_TYPE).orElse(req.mediaType());
             return new BlobResult(digest, actualSize, mediaType, sink.locator());
         } catch (IOException e) {
-            LOGGER.warn("Blob stream error for {}/{}: {}", req.repository(), req.digest(), e.getMessage(), e);
+            BlobStructuredEvents.blobStreamError(LOGGER, req.repository(), req.digest(), e);
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, BLOB_IO_ERROR),
                     BLOB_IO_ERROR,
@@ -200,20 +200,20 @@ public class BlobService implements BlobServiceApi {
             try {
                 sink.close();
             } catch (Exception closeEx) {
-                LOGGER.warn("Failed to close sink: {}", closeEx.getMessage());
+                BlobStructuredEvents.sinkCloseFailed(LOGGER, closeEx);
             }
             if (os != null) {
                 try {
                     os.close();
                 } catch (IOException ignore) {
-                    LOGGER.warn("Failed to close sink stream: {}", ignore.getMessage());
+                    BlobStructuredEvents.sinkStreamCloseFailed(LOGGER, ignore);
                 }
             }
             if (is != null) {
                 try {
                     is.close();
                 } catch (IOException ignore) {
-                    LOGGER.warn("Failed to close response stream: {}", ignore.getMessage());
+                    BlobStructuredEvents.responseStreamCloseFailed(LOGGER, ignore);
                 }
             }
         }
@@ -244,7 +244,7 @@ public class BlobService implements BlobServiceApi {
 
     private void validateDigest(String computed, String expected) {
         if (expected != null && !expected.isBlank() && !expected.equals(computed)) {
-            LOGGER.warn("Blob digest mismatch: expected {}, got {}", expected, computed);
+            BlobStructuredEvents.digestMismatch(LOGGER, expected, computed);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob digest mismatch"),
                     "Blob digest mismatch: expected %s, got %s".formatted(expected, computed));
@@ -253,7 +253,7 @@ public class BlobService implements BlobServiceApi {
 
     private void validateSize(long actual, long expected) {
         if (expected > 0 && actual != expected) {
-            LOGGER.warn("Blob size mismatch: expected {}, got {}", expected, actual);
+            BlobStructuredEvents.sizeMismatch(LOGGER, expected, actual);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob size mismatch"),
                     "Blob size mismatch: expected %d, got %d".formatted(expected, actual));
@@ -281,7 +281,7 @@ public class BlobService implements BlobServiceApi {
         try {
             return Sha256Utils.copyAndDigest(is, os);
         } catch (IllegalStateException e) {
-            LOGGER.warn("Blob SHA-256 not available {}/{}: {}", is.toString(), os.toString(), e.getMessage(), e);
+            BlobStructuredEvents.sha256NotAvailable(LOGGER, is.toString(), os.toString(), e);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "SHA-256 not available"),
                     "SHA-256 not available",

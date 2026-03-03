@@ -9,6 +9,7 @@ import riid.client.api.ManifestResult;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
+import riid.client.logging.service.ManifestStructuredEvents;
 import riid.client.core.model.Digests;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.ManifestIndex;
@@ -111,7 +112,7 @@ public final class ManifestService implements ManifestServiceApi {
         }
         String dcd = resp.firstHeader(HttpResult.HeaderName.DOCKER_CONTENT_DIGEST).orElse(null);
         if (dcd == null || dcd.isBlank()) {
-            LOGGER.warn("Manifest HEAD missing Docker-Content-Digest for {}/{}", repository, reference);
+            ManifestStructuredEvents.missingDockerContentDigest(LOGGER, repository, reference);
             throw new ClientException(
                     new ClientError.Parse(
                             ClientError.ParseKind.MANIFEST,
@@ -121,7 +122,7 @@ public final class ManifestService implements ManifestServiceApi {
         String mediaType = resp.firstHeader(HttpResult.HeaderName.CONTENT_TYPE).orElse(null);
         long len = resp.firstHeaderAsLong(HttpResult.HeaderName.CONTENT_LENGTH).orElse(-1);
         if (len <= 0) {
-            LOGGER.warn("Manifest HEAD missing Content-Length for {}/{}", repository, reference);
+            ManifestStructuredEvents.missingContentLength(LOGGER, repository, reference);
             throw new ClientException(
                     new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Missing Content-Length on manifest HEAD"),
                     "Missing Content-Length on manifest HEAD");
