@@ -12,10 +12,17 @@ extensions.configure(CheckstyleExtension::class) {
 
 tasks.withType(Checkstyle::class).configureEach {
     enabled = !skipQuality
+    if (name != "checkstyleMain") {
+        configFile = file("config/checkstyle/checkstyle-test.xml")
+    }
 }
 
 tasks.withType(Pmd::class).configureEach {
     enabled = !skipQuality
+    if (name != "pmdMain") {
+        ruleSetFiles = files("config/pmd/pmd-test.xml")
+        ruleSets = emptyList()
+    }
 }
 
 tasks.withType(SpotBugsTask::class).configureEach {
@@ -34,13 +41,33 @@ tasks.register("allReports") {
     group = "verification"
     description = "Concatenate quality reports into build/reports/all-reports.html (best effort, no dependsOn check)"
     doLast {
+        val qualityReportTaskNames = listOf(
+            "checkstyleMain",
+            "checkstyleModuledTest",
+            "checkstyleIntegrationTest",
+            "checkstylePerformanceTest",
+            "pmdMain",
+            "pmdModuledTest",
+            "pmdIntegrationTest",
+            "pmdPerformanceTest",
+            "spotbugsMain",
+            "spotbugsModuledTest",
+            "spotbugsIntegrationTest",
+            "spotbugsPerformanceTest"
+        )
         val reports = listOf(
             "checkstyle/main.html",
-            "checkstyle/test.html",
+            "checkstyle/moduledTest.html",
+            "checkstyle/integrationTest.html",
+            "checkstyle/performanceTest.html",
             "pmd/main.html",
-            "pmd/test.html",
+            "pmd/moduledTest.html",
+            "pmd/integrationTest.html",
+            "pmd/performanceTest.html",
             "spotbugs/main.html",
-            "spotbugs/test.html"
+            "spotbugs/moduledTest.html",
+            "spotbugs/integrationTest.html",
+            "spotbugs/performanceTest.html"
         )
         val reportsDir = layout.buildDirectory.dir("reports").get().asFile
         reportsDir.mkdirs()
@@ -75,6 +102,7 @@ tasks.register("allReports") {
 
         val content = buildString {
             append(header)
+            append("<p>Expected quality tasks: ${qualityReportTaskNames.joinToString(", ")}</p>")
             reports.forEach { rel ->
                 val f = reportsDir.resolve(rel)
                 append("""<div class="section">""")
@@ -96,28 +124,40 @@ tasks.register("allReports") {
 // Always attempt concatenation after check (even if check fails)
 // Detach tests from check: run tests/jacoco explicitly when needed
 tasks.named("check") {
+    val qualityTaskNames = listOf(
+        "checkstyleMain",
+        "checkstyleModuledTest",
+        "checkstyleIntegrationTest",
+        "checkstylePerformanceTest",
+        "pmdMain",
+        "pmdModuledTest",
+        "pmdIntegrationTest",
+        "pmdPerformanceTest",
+        "spotbugsMain",
+        "spotbugsModuledTest",
+        "spotbugsIntegrationTest",
+        "spotbugsPerformanceTest"
+    ).filter(tasks.names::contains)
+
     // Explicit quality-only dependencies; tests are not part of check
-    setDependsOn(
-        listOf(
-            tasks.named("checkstyleMain"),
-            tasks.named("checkstyleTest"),
-            tasks.named("pmdMain"),
-            tasks.named("pmdTest"),
-            tasks.named("spotbugsMain"),
-            tasks.named("spotbugsTest")
-        )
-    )
+    setDependsOn(qualityTaskNames.map(tasks::named))
     finalizedBy("allReports")
 }
 
 // Ensure allReports runs after individual quality tasks too (even on failure)
 listOf(
-    "pmdMain",
-    "pmdTest",
-    "spotbugsMain",
-    "spotbugsTest",
     "checkstyleMain",
-    "checkstyleTest"
+    "checkstyleModuledTest",
+    "checkstyleIntegrationTest",
+    "checkstylePerformanceTest",
+    "pmdMain",
+    "pmdModuledTest",
+    "pmdIntegrationTest",
+    "pmdPerformanceTest",
+    "spotbugsMain",
+    "spotbugsModuledTest",
+    "spotbugsIntegrationTest",
+    "spotbugsPerformanceTest"
 ).forEach { taskName ->
     tasks.matching { it.name == taskName }.configureEach {
         finalizedBy("allReports")

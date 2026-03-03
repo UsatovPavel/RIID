@@ -140,7 +140,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                                                    Map<String, RuntimeAdapter> runtimes,
                                                    HostFilesystem fs) {
         HttpClientConfig httpConfig = new HttpClientConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache);
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, new AuthConfig(), null);
         RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, fs);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
         return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null);
@@ -171,13 +171,18 @@ public final class ImageLoadingFacade implements AutoCloseable {
         HostFilesystem fs = new NioHostFilesystem();
         TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
         HttpClientConfig httpConfig = new HttpClientConfig();
-        long ttl = config.client() != null && config.client().auth() != null
-                ? config.client().auth().defaultTokenTtlSeconds()
-                : AuthConfig.DEFAULT_TTL_SECONDS;
+        AuthConfig authConfig = config.client() != null && config.client().auth() != null
+                ? config.client().auth()
+                : new AuthConfig();
         BlobPartialDownloadConfig blobPartialDownloadConfig =
                 config.client() != null ?
                         config.client().partialDownloadingOrDefault() : new BlobPartialDownloadConfig();
-        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, cache, ttl, blobPartialDownloadConfig);
+        RegistryClient client = new RegistryClientImpl(
+                endpoint,
+                httpConfig,
+                cache,
+                authConfig,
+                blobPartialDownloadConfig);
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());

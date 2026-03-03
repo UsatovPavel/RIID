@@ -47,14 +47,14 @@ public final class RegistryClientImpl implements RegistryClient {
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter) {
-        this(endpoint, httpConfig, cacheAdapter, AuthConfig.DEFAULT_TTL_SECONDS, null);
+        this(endpoint, httpConfig, cacheAdapter, new AuthConfig(), null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds) {
-        this(endpoint, httpConfig, cacheAdapter, defaultTokenTtlSeconds, null);
+        this(endpoint, httpConfig, cacheAdapter, new AuthConfig(defaultTokenTtlSeconds, null, null, null), null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
@@ -62,11 +62,24 @@ public final class RegistryClientImpl implements RegistryClient {
                               CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds,
                               BlobPartialDownloadConfig rangeConfig) {
+        this(endpoint, httpConfig, cacheAdapter, new AuthConfig(defaultTokenTtlSeconds, null, null, null), rangeConfig);
+    }
+
+    public RegistryClientImpl(RegistryEndpoint endpoint,
+                              HttpClientConfig httpConfig,
+                              CacheAdapter cacheAdapter,
+                              AuthConfig authConfig,
+                              BlobPartialDownloadConfig rangeConfig) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
-        this.jettyClient = HttpClientFactory.create(httpConfig);
+        AuthConfig effectiveAuthConfig = authConfig != null ? authConfig : new AuthConfig();
+        this.jettyClient = HttpClientFactory.create(httpConfig, effectiveAuthConfig);
         this.http = new HttpExecutor(jettyClient, httpConfig);
-        this.authService = new AuthService(http, mapper, new TokenCache(), defaultTokenTtlSeconds);
+        this.authService = new AuthService(
+                http,
+                mapper,
+                new TokenCache(),
+                effectiveAuthConfig.defaultTokenTtlSeconds());
         this.manifestService = new ManifestService(http, authService, mapper);
         this.blobService = new BlobService(http, authService, cacheAdapter, rangeConfig);
     }
