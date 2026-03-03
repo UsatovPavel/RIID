@@ -7,12 +7,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 
-import DragonflyDfdaemon.v2.DownloadTaskRequest;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
+import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -56,7 +56,7 @@ class DragonflyGrpcP2PExecutorTest {
         assertTrue(result.isPresent());
         assertEquals(expectedPath, result.get());
         assertTrue(factory.createCalled);
-        assertTrue(factory.lastDownloader.closeCalled.get());
+        assertFalse(factory.lastDownloader.closeCalled.get(), "downloader is kept open for reuse");
         assertEquals(DFDAEMON_ADDR, factory.lastAddr);
         String expectedUrl = "https://registry.example.com:5000/v2/" + REPO + "/blobs/" + DIGEST;
         assertEquals(expectedUrl, factory.lastDownloader.lastRequest.getDownload().getUrl());
@@ -78,7 +78,7 @@ class DragonflyGrpcP2PExecutorTest {
 
         assertEquals("dfdaemon unreachable", thrown.getMessage());
         assertTrue(factory.createCalled);
-        assertTrue(factory.lastDownloader.closeCalled.get());
+        assertFalse(factory.lastDownloader.closeCalled.get(), "downloader is kept open for reuse");
     }
 
     @Test

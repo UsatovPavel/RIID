@@ -38,6 +38,7 @@ import riid.core.model.manifest.TagList;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
+import riid.p2p.DfdaemonDownloadClient;
 import riid.p2p.DragonflyConfig;
 import riid.p2p.DragonflyGrpcP2PExecutor;
 
@@ -73,7 +74,7 @@ class DragonflyGrpcP2PExecutorTest {
         HostFilesystem fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, dfdaemonAddr, null, null, null);
 
-        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, StreamingDfdaemonDownloadClient::new);
+        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
 
         var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
@@ -108,7 +109,7 @@ class DragonflyGrpcP2PExecutorTest {
             assertTrue(Files.size(seedPath) > 0, "seed file should not be empty");
 
             DragonflyConfig config = new DragonflyConfig(true, "localhost:65001", null, null, null);
-            DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, StreamingDfdaemonDownloadClient::new);
+            DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
             var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
             assertTrue(result.isPresent(), "gRPC result should be present");
@@ -151,7 +152,7 @@ class DragonflyGrpcP2PExecutorTest {
             DragonflyConfig config = new DragonflyConfig(true, "localhost:65001", null, null, null);
             try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                  RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
-                DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, StreamingDfdaemonDownloadClient::new);
+                DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
                 SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
                 FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, "tag", null));
 
@@ -312,7 +313,7 @@ class DragonflyGrpcP2PExecutorTest {
 
     /**
      * Skips test if dfdaemon is not available. For unix socket: skip when missing (single mode not running).
-     * For TCP: fail with clear message when unreachable.
+     * For TCP: skip when unreachable (local multi-node env not running).
      */
     private static void ensureDfdaemonAvailable(String dfdaemonAddr) {
         if (dfdaemonAddr == null || dfdaemonAddr.isBlank()) {
@@ -330,7 +331,9 @@ class DragonflyGrpcP2PExecutorTest {
                 try (Socket s = new Socket()) {
                     s.connect(new InetSocketAddress(host, port), 2000);
                 } catch (IOException e) {
-                    throw new AssertionError("dfdaemon gRPC not reachable at " + dfdaemonAddr, e);
+                    Assumptions.assumeTrue(false,
+                            () -> "dfdaemon gRPC not reachable at " + dfdaemonAddr
+                                    + " (start local multi-node Dragonfly env)");
                 }
             }
         }
@@ -341,12 +344,12 @@ class DragonflyGrpcP2PExecutorTest {
                     .redirectErrorStream(true)
                     .start();
             int code = process.waitFor();
-            assertTrue(code == 0, "dfget is not available");
+            Assumptions.assumeTrue(code == 0, () -> "dfget is not available at " + dfgetPath);
         } catch (IOException e) {
-            throw new AssertionError("dfget is not available", e);
+            Assumptions.assumeTrue(false, () -> "dfget is not available at " + dfgetPath + ": " + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new AssertionError("dfget is not available", e);
+            Assumptions.assumeTrue(false, "dfget availability check interrupted");
         }
     }
 

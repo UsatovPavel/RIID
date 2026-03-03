@@ -1,6 +1,7 @@
 package riid.p2p;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.EnumSet;
 import java.nio.file.Path;
 import java.util.Iterator;
@@ -9,9 +10,6 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import DragonflyDfdaemon.v2.DfdaemonDownloadGrpc;
-import DragonflyDfdaemon.v2.DownloadTaskRequest;
-import DragonflyDfdaemon.v2.DownloadTaskResponse;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -24,6 +22,9 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.netty.channel.unix.DomainSocketAddress;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDomainSocketChannel;
+import org.dragonflyoss.api.dfdaemon.v2.DfdaemonDownloadGrpc;
+import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskRequest;
+import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskResponse;
 
 /**
  * gRPC client for dfdaemon DfdaemonDownload.DownloadTask (v2 API). Sync/blocking.
@@ -31,17 +32,24 @@ import io.netty.channel.socket.nio.NioDomainSocketChannel;
  */
 public final class DfdaemonDownloadClient implements DfdaemonDownloader {
     private static final Logger LOGGER = LoggerFactory.getLogger(DfdaemonDownloadClient.class);
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(120);
+    private static final int DEFAULT_MAX_ATTEMPTS = 2;
 
     private final ManagedChannel channel;
     private final DfdaemonDownloadGrpc.DfdaemonDownloadBlockingStub stub;
+    private final long requestTimeoutMillis;
+    private final int maxAttempts;
 
     public DfdaemonDownloadClient(String dfdaemonAddress) throws IOException {
-        this.channel = buildChannel(dfdaemonAddress);
-        this.stub = DfdaemonDownloadGrpc.newBlockingStub(channel);
+        this(dfdaemonAddress, null, null);
     }
 
-    private static final int DEADLINE_SECONDS = 120;
-    private static final int MAX_RETRIES = 2;
+    public DfdaemonDownloadClient(String dfdaemonAddress, Duration requestTimeout, Integer maxRetries) throws IOException {
+        this.channel = buildChannel(dfdaemonAddress);
+        this.stub = DfdaemonDownloadGrpc.newBlockingStub(channel);
+        this.requestTimeoutMillis = normalizeTimeoutMillis(requestTimeout);
+        this.maxAttempts = normalizeMaxAttempts(maxRetries);
+    }
     private static final EnumSet<Status.Code> RETRYABLE_CODES = EnumSet.of(
             Status.Code.UNAVAILABLE,
             Status.Code.DEADLINE_EXCEEDED,
@@ -49,14 +57,17 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
 
     @Override
     public Path download(DownloadTaskRequest request, Path outputPath) throws IOException {
+        String url = request.getDownload().getUrl();
+        LOGGER.debug("DownloadTask start: url={}, output={}, timeoutMs={}, maxAttempts={}",
+                url, outputPath, requestTimeoutMillis, maxAttempts);
         IOException lastException = null;
-        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
             try {
                 if (attempt > 0) {
                     LOGGER.debug("Retrying DownloadTask (attempt {})", attempt + 1);
                 }
                 Iterator<DownloadTaskResponse> it = stub
-                        .withDeadline(Deadline.after(DEADLINE_SECONDS, TimeUnit.SECONDS))
+                        .withDeadline(Deadline.after(requestTimeoutMillis, TimeUnit.MILLISECONDS))
                         .downloadTask(request);
                 while (it.hasNext()) {
                     DownloadTaskResponse r = it.next();
@@ -67,12 +78,18 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                     }
                 }
                 if (!java.nio.file.Files.exists(outputPath)) {
+                    LOGGER.warn("DownloadTask completed but output file is missing: {}", outputPath);
                     throw new IOException("dfdaemon did not create output file: " + outputPath);
                 }
+                LOGGER.debug("DownloadTask success: output={}", outputPath);
                 return outputPath;
             } catch (StatusRuntimeException e) {
                 lastException = new IOException("dfdaemon DownloadTask failed: " + e.getStatus(), e);
-                if (isRetryable(e) && attempt < MAX_RETRIES - 1) {
+                boolean retryable = isRetryable(e);
+                boolean hasMoreAttempts = attempt < maxAttempts - 1;
+                LOGGER.warn("DownloadTask attempt {}/{} failed with status {} (retryable={}, willRetry={})",
+                        attempt + 1, maxAttempts, e.getStatus().getCode(), retryable, retryable && hasMoreAttempts);
+                if (retryable && hasMoreAttempts) {
                     try {
                         Thread.sleep(500L * (attempt + 1));
                     } catch (InterruptedException ie) {
@@ -148,6 +165,24 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
 
     private static boolean isRetryable(StatusRuntimeException e) {
         return RETRYABLE_CODES.contains(e.getStatus().getCode());
+    }
+
+    private static long normalizeTimeoutMillis(Duration requestTimeout) {
+        Duration effective = requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_TIMEOUT;
+        if (effective.isZero() || effective.isNegative()) {
+            throw new IllegalArgumentException("requestTimeout must be positive");
+        }
+        return effective.toMillis();
+    }
+
+    private static int normalizeMaxAttempts(Integer maxRetries) {
+        if (maxRetries == null) {
+            return DEFAULT_MAX_ATTEMPTS;
+        }
+        if (maxRetries < 0) {
+            throw new IllegalArgumentException("maxRetries must be >= 0");
+        }
+        return maxRetries + 1;
     }
 
 }
