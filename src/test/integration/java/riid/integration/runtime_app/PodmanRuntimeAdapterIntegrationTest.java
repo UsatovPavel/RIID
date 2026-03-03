@@ -17,9 +17,9 @@ import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 import riid.cache.oci.TempFileCacheAdapter;
-import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.core.config.TestConfigYaml;
+import riid.core.config.TestRegistryConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.runtime.PodmanRuntimeAdapter;
@@ -43,7 +43,7 @@ class PodmanRuntimeAdapterIntegrationTest {
         fs.writeString(configPath, TestConfigYaml.dockerHubConfigWithRuntimeTempDir(3, "build/test-fs"));
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
-        ImageId imageId = ImageId.fromRegistry("registry-1.docker.io", REPO, REF);
+        ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(), REPO, REF);
             loadedId = app.load(imageId, PODMAN);
         }
 
@@ -65,7 +65,7 @@ class PodmanRuntimeAdapterIntegrationTest {
     @Test
     void oneShotLoadAndRun() throws Exception {
         // Build app with podman runtime only; dispatcher falls back to registry
-        var endpoint = new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
+        var endpoint = TestRegistryConfig.endpoint();
         HostFilesystem fs = new NioHostFilesystem();
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
              riid.client.api.RegistryClientImpl client =

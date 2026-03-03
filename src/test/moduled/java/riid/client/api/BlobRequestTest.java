@@ -9,24 +9,27 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BlobRequestTest {
+    private static final String REPO = "repo";
+    private static final String DIGEST = "sha256:a";
+    private static final String MEDIA_TYPE = "application/octet-stream";
 
     @Test
     void rangeHeaderForBoundedRange() {
-        BlobRequest req = new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream",
+        BlobRequest req = new BlobRequest(REPO, DIGEST, 10L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(2L, 5L));
         assertEquals("bytes=2-5", req.rangeHeaderValue());
     }
 
     @Test
     void rangeHeaderForOpenEndedRange() {
-        BlobRequest req = new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream",
+        BlobRequest req = new BlobRequest(REPO, DIGEST, 10L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.From(2L));
         assertEquals("bytes=2-", req.rangeHeaderValue());
     }
 
     @Test
     void rangeHeaderForSuffixRange() {
-        BlobRequest req = new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream",
+        BlobRequest req = new BlobRequest(REPO, DIGEST, 10L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Suffix(10L));
         assertEquals("bytes=-10", req.rangeHeaderValue());
     }
@@ -34,10 +37,10 @@ class BlobRequestTest {
     @Test
     void rangeHeaderIsNullWhenRangeNotProvided() {
         BlobRequest req = new BlobRequest(
-                "repo",
-                "sha256:a",
+                REPO,
+                DIGEST,
                 10L,
-                "application/octet-stream",
+                MEDIA_TYPE,
                 new BlobRequest.RangeSpec.All());
         assertNull(req.rangeHeaderValue());
     }
@@ -46,7 +49,7 @@ class BlobRequestTest {
     void blobRequestRejectsNullRangeSpec() {
         var ex = assertThrows(
                 NullPointerException.class,
-                () -> new BlobRequest("repo", "sha256:a", 10L, "application/octet-stream", null));
+                () -> new BlobRequest(REPO, DIGEST, 10L, MEDIA_TYPE, null));
         assertNotNull(ex.getMessage());
     }
 
