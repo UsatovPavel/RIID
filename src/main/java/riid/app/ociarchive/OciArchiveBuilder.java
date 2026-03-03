@@ -6,12 +6,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import riid.app.ImageId;
 import riid.app.error.AppError;
 import riid.app.error.OciArchiveException;
+import riid.app.logging.AppLogErrorCode;
+import riid.app.logging.AppStructuredEvents;
 import riid.core.fs.HostFilesystem;
 import riid.cache.oci.ImageDigest;
 import riid.core.fs.PathSupport;
@@ -26,6 +32,7 @@ import riid.dispatcher.model.RepositoryName;
  */
 public final class OciArchiveBuilder {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final Logger LOGGER = LoggerFactory.getLogger(OciArchiveBuilder.class);
 
     private final RequestDispatcher dispatcher;
     private final HostFilesystem fs;
@@ -53,48 +60,66 @@ public final class OciArchiveBuilder {
             throws IOException, InterruptedException {
         Objects.requireNonNull(imageId, "imageId");
         Objects.requireNonNull(manifestResult, "manifestResult");
+        long started = System.nanoTime();
+        try {
+            Manifest manifest = manifestResult.manifest();
+            Path ociDir = PathSupport.tempDirPath(tempRoot, "oci-layout-");
+            fs.createDirectory(ociDir);
+            Path blobsDir = ociDir.resolve("blobs").resolve("sha256");
+            fs.createDirectory(blobsDir);
 
-        Manifest manifest = manifestResult.manifest();
-        Path ociDir = PathSupport.tempDirPath(tempRoot, "oci-layout-");
-        fs.createDirectory(ociDir);
-        Path blobsDir = ociDir.resolve("blobs").resolve("sha256");
-        fs.createDirectory(blobsDir);
-
-        // Config
-        var cfg = manifest.config();
-        pullLayer(imageId.name(),
-                ImageDigest.parse(cfg.digest()),
-                cfg.size(),
-                MediaType.from(cfg.mediaType()),
-                blobsDir);
-
-        // Layers
-        for (var layer : manifest.layers()) {
+            // Config
+            var cfg = manifest.config();
             pullLayer(imageId.name(),
-                    ImageDigest.parse(layer.digest()),
-                    layer.size(),
-                    MediaType.from(layer.mediaType()),
+                    ImageDigest.parse(cfg.digest()),
+                    cfg.size(),
+                    MediaType.from(cfg.mediaType()),
                     blobsDir);
+
+            // Layers
+            for (var layer : manifest.layers()) {
+                pullLayer(imageId.name(),
+                        ImageDigest.parse(layer.digest()),
+                        layer.size(),
+                        MediaType.from(layer.mediaType()),
+                        blobsDir);
+            }
+
+            // Manifest blob
+            byte[] manifestBytes = OBJECT_MAPPER.writeValueAsBytes(manifest);
+            String manifestDigest = manifestResult.digest().replace("sha256:", "");
+            fs.write(blobsDir.resolve(manifestDigest), manifestBytes);
+
+            // oci-layout
+            fs.writeString(ociDir.resolve("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}");
+
+            // index.json with ref name
+            String template = readResource("oci/index/json.tpl");
+            String index = String.format(Locale.ROOT, template, manifestBytes.length,
+                manifestDigest, imageId.referenceName());
+            fs.writeString(ociDir.resolve("index.json"), index);
+
+            Path archive = PathSupport.temporaryPath(tempRoot, "oci-archive-", ".tar");
+            fs.createFile(archive);
+            runTar(archive, ociDir);
+            AppStructuredEvents.archiveBuildSuccess(
+                    LOGGER,
+                    elapsedMs(started),
+                    imageId.name(),
+                    imageId.reference()
+            );
+            return new OciArchive(archive, ociDir, fs);
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            AppStructuredEvents.archiveBuildError(
+                    LOGGER,
+                    elapsedMs(started),
+                    imageId.name(),
+                    imageId.reference(),
+                    AppLogErrorCode.ARCHIVE_BUILD_FAILED,
+                    e.getClass().getSimpleName()
+            );
+            throw e;
         }
-
-        // Manifest blob
-        byte[] manifestBytes = OBJECT_MAPPER.writeValueAsBytes(manifest);
-        String manifestDigest = manifestResult.digest().replace("sha256:", "");
-        fs.write(blobsDir.resolve(manifestDigest), manifestBytes);
-
-        // oci-layout
-        fs.writeString(ociDir.resolve("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}");
-
-        // index.json with ref name
-        String template = readResource("oci/index/json.tpl");
-        String index = String.format(Locale.ROOT, template, manifestBytes.length, 
-            manifestDigest, imageId.referenceName());
-        fs.writeString(ociDir.resolve("index.json"), index);
-
-        Path archive = PathSupport.temporaryPath(tempRoot, "oci-archive-", ".tar");
-        fs.createFile(archive);
-        runTar(archive, ociDir);
-        return new OciArchive(archive, ociDir, fs);
     }
 
     @FunctionalInterface
@@ -139,6 +164,10 @@ public final class OciArchiveBuilder {
                     new AppError.OciError(AppError.OciErrorKind.RESOURCE_READ_FAILED, msg),
                     msg, e);
         }
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 }
 

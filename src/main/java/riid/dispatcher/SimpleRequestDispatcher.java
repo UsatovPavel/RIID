@@ -25,6 +25,7 @@ import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.core.model.manifest.MediaType;
+import riid.dispatcher.logging.DispatcherLogErrorCode;
 import riid.dispatcher.logging.DispatcherStructuredEvents;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
@@ -134,13 +135,20 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     return new FetchResult(digest, mediaType, resultPath);
                 }
                 DispatcherStructuredEvents.sourceFetchMiss(
-                        LOGGER, "p2p", elapsedMs(p2pStarted), "P2P_MISS", "not_found", repository, digest);
+                        LOGGER,
+                        "p2p",
+                        elapsedMs(p2pStarted),
+                        DispatcherLogErrorCode.P2P_MISS,
+                        "not_found",
+                        repository,
+                        digest
+                );
             } catch (IOException ex) {
                 DispatcherStructuredEvents.sourceFetchError(
                         LOGGER,
                         "p2p",
                         elapsedMs(p2pStarted),
-                        "P2P_FETCH_FAILED",
+                        DispatcherLogErrorCode.P2P_FETCH_FAILED,
                         ex.getClass().getSimpleName(),
                         repository,
                         digest
@@ -215,7 +223,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     LOGGER,
                     "registry",
                     elapsedMs(registryStarted),
-                    "REGISTRY_FETCH_FAILED",
+                    DispatcherLogErrorCode.REGISTRY_FETCH_FAILED,
                     ex.getClass().getSimpleName(),
                     repository,
                     digest

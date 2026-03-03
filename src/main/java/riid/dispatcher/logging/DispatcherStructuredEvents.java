@@ -76,7 +76,7 @@ public final class DispatcherStructuredEvents {
     public static void sourceFetchMiss(Logger logger,
                                        String source,
                                        long durationMs,
-                                       String errorCode,
+                                       DispatcherLogErrorCode errorCode,
                                        String errorKind,
                                        RepositoryName repository,
                                        ImageDigest digest) {
@@ -87,7 +87,7 @@ public final class DispatcherStructuredEvents {
                 OPERATION_FETCH_LAYER,
                 "miss",
                 durationMs,
-                errorCode,
+                errorCode.name(),
                 errorKind,
                 baseFields(source, repository, digest)
         );
@@ -96,7 +96,7 @@ public final class DispatcherStructuredEvents {
     public static void sourceFetchError(Logger logger,
                                         String source,
                                         long durationMs,
-                                        String errorCode,
+                                        DispatcherLogErrorCode errorCode,
                                         String errorKind,
                                         RepositoryName repository,
                                         ImageDigest digest) {
@@ -107,7 +107,7 @@ public final class DispatcherStructuredEvents {
                 OPERATION_FETCH_LAYER,
                 "error",
                 durationMs,
-                errorCode,
+                errorCode.name(),
                 errorKind,
                 baseFields(source, repository, digest)
         );

@@ -10,6 +10,7 @@ import riid.app.CliApplication;
 import riid.app.CliParser;
 import riid.app.ImageId;
 import riid.app.ImageLoadingFacade;
+import riid.app.logging.AppLogErrorCode;
 import riid.app.logging.AppStructuredEvents;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
@@ -71,7 +72,7 @@ public final class ConfigResolvingServiceProvider {
                     elapsedMs(started),
                     options.configProvidedByUser() ? "explicit_yaml" : "default_yaml",
                     options.configPath().toString(),
-                    "CONFIG_RESOLVE_FAILED",
+                    AppLogErrorCode.CONFIG_RESOLVE_FAILED,
                     e.getClass().getSimpleName()
             );
             throw e;

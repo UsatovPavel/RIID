@@ -12,10 +12,15 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import riid.runtime.logging.RuntimeErrorCode;
+import riid.runtime.logging.RuntimeErrorKind;
+import riid.runtime.logging.RuntimeStructuredEvents;
 
 /**
  * Helper to run external processes and capture output with limits.
@@ -46,22 +51,62 @@ public final class BoundedCommandExecution {
         }
         ExecutorService localExecutor = EXECUTOR_REF.get();
         return CompletableFuture.supplyAsync(() -> {
+            long started = System.nanoTime();
+            RuntimeStructuredEvents.commandStart(LOGGER, "strict", command);
             try {
                 Process process = new ProcessBuilder(command).start();
                 Future<String> stdout = localExecutor.submit(streamReaderStrict(process.getInputStream(),
-                        maxOutputBytes, "stdout"));
+                        maxOutputBytes, "stdout", command));
                 Future<String> stderr = localExecutor.submit(streamReaderStrict(process.getErrorStream(),
-                        maxOutputBytes, "stderr"));
+                        maxOutputBytes, "stderr", command));
                 int exitCode = process.waitFor();
-                return new ShellResult(exitCode, get(stdout), get(stderr));
+                ShellResult result = new ShellResult(exitCode, get(stdout), get(stderr));
+                if (result.exitCode() == 0) {
+                    RuntimeStructuredEvents.commandSuccess(
+                            LOGGER, "strict", command, elapsedMs(started), result.exitCode());
+                } else {
+                    RuntimeStructuredEvents.commandError(
+                            LOGGER,
+                            "strict",
+                            command,
+                            elapsedMs(started),
+                            RuntimeErrorCode.PROCESS_EXIT_NON_ZERO,
+                            RuntimeErrorKind.NON_ZERO_EXIT
+                    );
+                }
+                return result;
             } catch (OutputLimitExceededException e) {
-                LOGGER.warn("Process output exceeded maxOutputBytes={} for command {}",
-                        maxOutputBytes, command, e);
+                RuntimeStructuredEvents.outputLimitExceeded(
+                        LOGGER, "unknown", maxOutputBytes, "strict", command);
+                RuntimeStructuredEvents.commandError(
+                        LOGGER,
+                        "strict",
+                        command,
+                        elapsedMs(started),
+                        RuntimeErrorCode.OUTPUT_LIMIT_EXCEEDED,
+                        RuntimeErrorKind.OUTPUT_LIMIT
+                );
                 throw new RuntimeException(e);
             } catch (IOException e) {
+                RuntimeStructuredEvents.commandError(
+                        LOGGER,
+                        "strict",
+                        command,
+                        elapsedMs(started),
+                        RuntimeErrorCode.PROCESS_IO_ERROR,
+                        RuntimeErrorKind.IO
+                );
                 throw new RuntimeException(e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                RuntimeStructuredEvents.commandError(
+                        LOGGER,
+                        "strict",
+                        command,
+                        elapsedMs(started),
+                        RuntimeErrorCode.PROCESS_INTERRUPTED,
+                        RuntimeErrorKind.INTERRUPTED
+                );
                 throw new RuntimeException(e);
             }
         }, localExecutor);
@@ -74,24 +119,59 @@ public final class BoundedCommandExecution {
 
         ExecutorService localExecutor = EXECUTOR_REF.get();
         return CompletableFuture.supplyAsync(() -> {
+            long started = System.nanoTime();
+            RuntimeStructuredEvents.commandStart(LOGGER, "truncating", command);
             try {
                 Process process = new ProcessBuilder(command).start();
                 Future<String> stdout = localExecutor.submit(streamReaderTruncating(process.getInputStream(),
-                        outputConfig.maxStdoutBytes(), "stdout", outputConfig.captureStdout()));
+                        outputConfig.maxStdoutBytes(), "stdout", outputConfig.captureStdout(), command));
                 Future<String> stderr = localExecutor.submit(streamReaderTruncating(process.getErrorStream(),
-                        outputConfig.maxStderrBytes(), "stderr", outputConfig.captureStderr()));
+                        outputConfig.maxStderrBytes(), "stderr", outputConfig.captureStderr(), command));
                 int exitCode = process.waitFor();
-                return new ShellResult(exitCode, get(stdout), get(stderr));
+                ShellResult result = new ShellResult(exitCode, get(stdout), get(stderr));
+                if (result.exitCode() == 0) {
+                    RuntimeStructuredEvents.commandSuccess(
+                            LOGGER, "truncating", command, elapsedMs(started), result.exitCode());
+                } else {
+                    RuntimeStructuredEvents.commandError(
+                            LOGGER,
+                            "truncating",
+                            command,
+                            elapsedMs(started),
+                            RuntimeErrorCode.PROCESS_EXIT_NON_ZERO,
+                            RuntimeErrorKind.NON_ZERO_EXIT
+                    );
+                }
+                return result;
             } catch (IOException e) {
+                RuntimeStructuredEvents.commandError(
+                        LOGGER,
+                        "truncating",
+                        command,
+                        elapsedMs(started),
+                        RuntimeErrorCode.PROCESS_IO_ERROR,
+                        RuntimeErrorKind.IO
+                );
                 throw new RuntimeException(e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                RuntimeStructuredEvents.commandError(
+                        LOGGER,
+                        "truncating",
+                        command,
+                        elapsedMs(started),
+                        RuntimeErrorCode.PROCESS_INTERRUPTED,
+                        RuntimeErrorKind.INTERRUPTED
+                );
                 throw new RuntimeException(e);
             }
         }, localExecutor);
     }
 
-    private static Callable<String> streamReaderStrict(InputStream stream, int maxBytes, String name) {
+    private static Callable<String> streamReaderStrict(InputStream stream,
+                                                       int maxBytes,
+                                                       String name,
+                                                       List<String> command) {
         return () -> {
             try (InputStream in = stream) {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -101,7 +181,8 @@ public final class BoundedCommandExecution {
                 while (read != -1) {
                     total += read;
                     if (total > maxBytes) {
-                        LOGGER.warn("Process {} output exceeds maxOutputBytes={}", name, maxBytes);
+                        RuntimeStructuredEvents.outputLimitExceeded(
+                                LOGGER, name, maxBytes, "strict", command);
                         throw new OutputLimitExceededException(
                                 "Process " + name + " output exceeds maxOutputBytes=" + maxBytes);
                     }
@@ -116,7 +197,8 @@ public final class BoundedCommandExecution {
     private static Callable<String> streamReaderTruncating(InputStream stream,
                                                            Integer maxBytes,
                                                            String name,
-                                                           boolean capture) {
+                                                           boolean capture,
+                                                           List<String> command) {
         return () -> {
             try (InputStream in = stream) {
                 if (!capture) {
@@ -135,7 +217,8 @@ public final class BoundedCommandExecution {
                         if (allowed > 0) {
                             out.write(buffer, 0, allowed);
                         }
-                        LOGGER.warn("Process {} output exceeds maxOutputBytes={}, truncating", name, limit);
+                        RuntimeStructuredEvents.outputLimitExceeded(
+                                LOGGER, name, limit, "truncating", command);
                         drain(in);
                         break;
                     }
@@ -231,6 +314,10 @@ public final class BoundedCommandExecution {
         public OutputLimitExceededException(String message) {
             super(message);
         }
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 }
 

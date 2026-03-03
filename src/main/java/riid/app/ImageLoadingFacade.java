@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import riid.app.config.AppConfig;
 import riid.app.error.AppError;
 import riid.app.error.AppException;
+import riid.app.logging.AppLogErrorCode;
 import riid.app.logging.AppStructuredEvents;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
@@ -110,7 +111,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                     elapsedMs(manifestStarted),
                     imageId.name(),
                     imageId.reference(),
-                    "MANIFEST_FETCH_FAILED",
+                    AppLogErrorCode.MANIFEST_FETCH_FAILED,
                     e.getClass().getSimpleName()
             );
             throw e;
@@ -145,7 +146,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                             LOGGER,
                             elapsedMs(importStarted),
                             runtime.runtimeId(),
-                            "ENGINE_IMPORT_FAILED",
+                            AppLogErrorCode.ENGINE_IMPORT_FAILED,
                             e.getClass().getSimpleName()
                     );
                     throw e;

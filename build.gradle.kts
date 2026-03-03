@@ -69,6 +69,6 @@ idea {
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
     manifest {
-        attributes("Main-Class" to "riid.app.RiidCli")
+        attributes("Main-Class" to "riid.app.CliApplication")
     }
 }

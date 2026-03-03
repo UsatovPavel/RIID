@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import riid.app.config.ConfigResolvingServiceProvider;
+import riid.app.logging.AppLogErrorCode;
 import riid.app.logging.AppStructuredEvents;
 import riid.runtime.RuntimeAdapter;
 
@@ -80,7 +81,7 @@ public final class CliApplication {
 
         int exitCode = ExitCode.FAILURE.code();
         String finishResult = "error";
-        String finishErrorCode = "REQUEST_FAILED";
+        AppLogErrorCode finishErrorCode = AppLogErrorCode.REQUEST_FAILED;
         String finishErrorKind = "runtime";
         try {
             CliParser.ParseResult parseResult = CliParser.parse(args);
@@ -89,7 +90,7 @@ public final class CliApplication {
                 printUsage(err);
                 exitCode = ExitCode.USAGE.code();
                 finishResult = "error";
-                finishErrorCode = "USAGE_ERROR";
+                finishErrorCode = AppLogErrorCode.USAGE_ERROR;
                 finishErrorKind = "validation";
                 return exitCode;
             }
@@ -110,7 +111,7 @@ public final class CliApplication {
                 );
                 exitCode = ExitCode.RUNTIME_NOT_FOUND.code();
                 finishResult = "error";
-                finishErrorCode = "RUNTIME_NOT_FOUND";
+                finishErrorCode = AppLogErrorCode.RUNTIME_NOT_FOUND;
                 finishErrorKind = "validation";
                 return exitCode;
             }
@@ -134,7 +135,7 @@ public final class CliApplication {
             err.println("Failed to load image: " + e.getMessage());
             exitCode = ExitCode.FAILURE.code();
             finishResult = "error";
-            finishErrorCode = "REQUEST_FAILED";
+            finishErrorCode = AppLogErrorCode.REQUEST_FAILED;
             finishErrorKind = e.getClass().getSimpleName();
             return exitCode;
         } finally {

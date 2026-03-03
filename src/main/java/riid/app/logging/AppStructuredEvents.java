@@ -45,7 +45,7 @@ public final class AppStructuredEvents {
     public static void requestFinishError(Logger logger,
                                           long durationMs,
                                           int exitCode,
-                                          String errorCode,
+                                          AppLogErrorCode errorCode,
                                           String errorKind) {
         StructuredLog.error(
                 logger,
@@ -54,7 +54,7 @@ public final class AppStructuredEvents {
                 "cli.run",
                 "error",
                 durationMs,
-                errorCode,
+                errorCode.name(),
                 errorKind,
                 StructuredLog.fields("exit_code", exitCode)
         );
@@ -84,7 +84,7 @@ public final class AppStructuredEvents {
                                           long durationMs,
                                           String configSource,
                                           String configPath,
-                                          String errorCode,
+                                          AppLogErrorCode errorCode,
                                           String errorKind) {
         StructuredLog.error(
                 logger,
@@ -93,7 +93,7 @@ public final class AppStructuredEvents {
                 "serviceFactory",
                 "error",
                 durationMs,
-                errorCode,
+                errorCode.name(),
                 errorKind,
                 StructuredLog.fields(
                         "config_source", configSource,
@@ -126,7 +126,7 @@ public final class AppStructuredEvents {
                                           long durationMs,
                                           String repository,
                                           String reference,
-                                          String errorCode,
+                                          AppLogErrorCode errorCode,
                                           String errorKind) {
         StructuredLog.error(
                 logger,
@@ -135,7 +135,7 @@ public final class AppStructuredEvents {
                 "load",
                 "error",
                 durationMs,
-                errorCode,
+                errorCode.name(),
                 errorKind,
                 StructuredLog.fields(
                         "repository", repository,
@@ -167,7 +167,7 @@ public final class AppStructuredEvents {
     public static void engineImportError(Logger logger,
                                          long durationMs,
                                          String runtimeId,
-                                         String errorCode,
+                                         AppLogErrorCode errorCode,
                                          String errorKind) {
         StructuredLog.error(
                 logger,
@@ -176,9 +176,51 @@ public final class AppStructuredEvents {
                 "import",
                 "error",
                 durationMs,
-                errorCode,
+                errorCode.name(),
                 errorKind,
                 StructuredLog.fields("runtime_id", runtimeId)
+        );
+    }
+
+    public static void archiveBuildSuccess(Logger logger,
+                                           long durationMs,
+                                           String repository,
+                                           String reference) {
+        StructuredLog.info(
+                logger,
+                "archive.build",
+                COMPONENT_APP,
+                "oci.archive.build",
+                "success",
+                durationMs,
+                null,
+                null,
+                StructuredLog.fields(
+                        "repository", repository,
+                        "reference", reference
+                )
+        );
+    }
+
+    public static void archiveBuildError(Logger logger,
+                                         long durationMs,
+                                         String repository,
+                                         String reference,
+                                         AppLogErrorCode errorCode,
+                                         String errorKind) {
+        StructuredLog.error(
+                logger,
+                "archive.build",
+                COMPONENT_APP,
+                "oci.archive.build",
+                "error",
+                durationMs,
+                errorCode.name(),
+                errorKind,
+                StructuredLog.fields(
+                        "repository", repository,
+                        "reference", reference
+                )
         );
     }
 }
