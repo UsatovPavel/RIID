@@ -24,14 +24,16 @@ import riid.core.model.manifest.RegistryApi;
  */
 public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final RegistryEndpoint endpoint;
-    private final HostFilesystem fs;
     private final DragonflyConfig config;
     private final DfdaemonDownloaderFactory downloaderFactory;
+    private volatile DfdaemonDownloader sharedDownloader;
+    private final Object downloaderLock = new Object();
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
                                     HostFilesystem fs,
                                     DragonflyConfig config) {
-        this(endpoint, fs, config, DfdaemonDownloadClient::new);
+        this(endpoint, fs, config,
+                dfdaemonAddr -> new DfdaemonDownloadClient(dfdaemonAddr, config.requestTimeout(), config.maxRetries()));
     }
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
@@ -39,7 +41,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
                                     DragonflyConfig config,
                                     DfdaemonDownloaderFactory downloaderFactory) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
-        this.fs = Objects.requireNonNull(fs, "fs");
+        Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
         this.downloaderFactory = Objects.requireNonNull(downloaderFactory, "downloaderFactory");
     }
@@ -67,10 +69,9 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         }
         var request = DownloadTaskRequestBuilder.build(url, outputForRequest,
                 digest.toString(), Collections.emptyMap());
-        try (DfdaemonDownloader client = downloaderFactory.create(dfdaemonAddr)) {
-            Path result = client.download(request, outputPath);
-            return Optional.of(result);
-        }
+        DfdaemonDownloader client = getOrCreateDownloader(dfdaemonAddr);
+        Path result = client.download(request, outputPath);
+        return Optional.of(result);
     }
 
     /**
@@ -96,5 +97,18 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     @Override
     public void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType) {
         // Not supported
+    }
+
+    private DfdaemonDownloader getOrCreateDownloader(String dfdaemonAddr) throws IOException {
+        DfdaemonDownloader current = sharedDownloader;
+        if (current != null) {
+            return current;
+        }
+        synchronized (downloaderLock) {
+            if (sharedDownloader == null) {
+                sharedDownloader = downloaderFactory.create(dfdaemonAddr);
+            }
+            return sharedDownloader;
+        }
     }
 }

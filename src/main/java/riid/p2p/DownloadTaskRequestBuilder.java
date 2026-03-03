@@ -2,10 +2,10 @@ package riid.p2p;
 
 import java.util.Map;
 
-import DragonflyCommon.v2.Download;
-import DragonflyCommon.v2.Priority;
-import DragonflyCommon.v2.TaskType;
-import DragonflyDfdaemon.v2.DownloadTaskRequest;
+import org.dragonflyoss.api.common.v2.Download;
+import org.dragonflyoss.api.common.v2.Priority;
+import org.dragonflyoss.api.common.v2.TaskType;
+import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskRequest;
 
 /**
  * Builds DownloadTaskRequest for dfdaemon DfdaemonDownload.DownloadTask RPC (v2 API).

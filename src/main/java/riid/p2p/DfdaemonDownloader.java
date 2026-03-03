@@ -4,7 +4,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Path;
 
-import DragonflyDfdaemon.v2.DownloadTaskRequest;
+import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskRequest;
 
 /**
  * Abstraction for dfdaemon DfdaemonDownload.DownloadTask RPC client (v2 API).

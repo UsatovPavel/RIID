@@ -12,7 +12,7 @@ package dfdaemon.v2;
 import "google/protobuf/empty.proto";
 import "common_v2.proto";
 
-option java_package = "DragonflyDfdaemon.v2";
+option java_package = "org.dragonflyoss.api.dfdaemon.v2";
 option java_multiple_files = true;
 
 // DownloadTaskRequest represents request of DownloadTask.
