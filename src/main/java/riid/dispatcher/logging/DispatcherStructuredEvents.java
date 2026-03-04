@@ -14,6 +14,7 @@ import java.util.Map;
 public final class DispatcherStructuredEvents {
     private static final String COMPONENT = "dispatcher";
     private static final String OPERATION_FETCH_LAYER = "fetchLayer";
+    private static final String MILESTONE_TYPE_COMPARISON = "comparison";
 
     private DispatcherStructuredEvents() {
     }
@@ -47,6 +48,8 @@ public final class DispatcherStructuredEvents {
                 null,
                 null,
                 StructuredLog.fields(
+                        "milestone", true,
+                        "milestone_type", MILESTONE_TYPE_COMPARISON,
                         "source", source,
                         "reason", reason,
                         "digest", digest.toString(),
@@ -186,6 +189,8 @@ public final class DispatcherStructuredEvents {
                                                   RepositoryName repository,
                                                   ImageDigest digest) {
         return StructuredLog.fields(
+                "milestone", true,
+                "milestone_type", MILESTONE_TYPE_COMPARISON,
                 "source", source,
                 "digest", digest.toString(),
                 "repository", repository.value()

@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Assertions;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
+import riid.core.logging.LogRedactor;
+
 class BoundedCommandExecutionTest {
 
     @Test
@@ -88,6 +90,22 @@ class BoundedCommandExecutionTest {
         var future = BoundedCommandExecution.run(floodCommand(32, 0), 8);
         ExecutionException ex = assertThrows(ExecutionException.class, future::get);
         assertLimitExceeded(ex);
+    }
+
+    @Test
+    void redactCommandForLoggingHidesSecretsInArgs() {
+        List<String> raw = List.of(
+                "curl",
+                "-H",
+                "Authorization: Bearer very-secret-token",
+                "https://registry.local/v2/repo/blobs/sha256:123?token=sensitive"
+        );
+
+        List<String> redacted = raw.stream().map(LogRedactor::sanitizeText).toList();
+        String combined = String.join(" ", redacted);
+
+        Assertions.assertFalse(combined.contains("very-secret-token"));
+        Assertions.assertFalse(combined.contains("sensitive"));
     }
 
     private static Future<String> failedFuture(Throwable cause) {

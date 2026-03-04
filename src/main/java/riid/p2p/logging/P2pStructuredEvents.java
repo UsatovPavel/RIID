@@ -4,6 +4,7 @@ import java.nio.file.Path;
 
 import org.slf4j.Logger;
 
+import riid.core.logging.LogRedactor;
 import riid.core.logging.StructuredLog;
 
 /**
@@ -31,8 +32,8 @@ public final class P2pStructuredEvents {
                 null,
                 null,
                 StructuredLog.fields(
-                        "url", url,
-                        "output_path", String.valueOf(outputPath),
+                        "url", LogRedactor.sanitizeUrl(url),
+                        "output_path", LogRedactor.sanitizePath(outputPath),
                         "timeout_ms", timeoutMs,
                         "max_attempts", maxAttempts
                 )
@@ -68,7 +69,7 @@ public final class P2pStructuredEvents {
                 "io",
                 StructuredLog.fields(
                         "attempt", attempt,
-                        "output_path", String.valueOf(outputPath)
+                        "output_path", LogRedactor.sanitizePath(outputPath)
                 )
         );
     }
@@ -85,7 +86,7 @@ public final class P2pStructuredEvents {
                 null,
                 StructuredLog.fields(
                         "attempt", attempt,
-                        "output_path", String.valueOf(outputPath)
+                        "output_path", LogRedactor.sanitizePath(outputPath)
                 )
         );
     }

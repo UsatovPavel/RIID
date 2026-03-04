@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import riid.core.logging.LogRedactor;
 import riid.runtime.logging.RuntimeErrorCode;
 import riid.runtime.logging.RuntimeErrorKind;
 import riid.runtime.logging.RuntimeStructuredEvents;
@@ -52,23 +54,24 @@ public final class BoundedCommandExecution {
         ExecutorService localExecutor = EXECUTOR_REF.get();
         return CompletableFuture.supplyAsync(() -> {
             long started = System.nanoTime();
-            RuntimeStructuredEvents.commandStart(LOGGER, "strict", command);
+            List<String> redactedCommand = redactCommandForLogging(command);
+            RuntimeStructuredEvents.commandStart(LOGGER, "strict", redactedCommand);
             try {
                 Process process = new ProcessBuilder(command).start();
                 Future<String> stdout = localExecutor.submit(streamReaderStrict(process.getInputStream(),
-                        maxOutputBytes, "stdout", command));
+                        maxOutputBytes, "stdout", redactedCommand));
                 Future<String> stderr = localExecutor.submit(streamReaderStrict(process.getErrorStream(),
-                        maxOutputBytes, "stderr", command));
+                        maxOutputBytes, "stderr", redactedCommand));
                 int exitCode = process.waitFor();
                 ShellResult result = new ShellResult(exitCode, get(stdout), get(stderr));
                 if (result.exitCode() == 0) {
                     RuntimeStructuredEvents.commandSuccess(
-                            LOGGER, "strict", command, elapsedMs(started), result.exitCode());
+                            LOGGER, "strict", redactedCommand, elapsedMs(started), result.exitCode());
                 } else {
                     RuntimeStructuredEvents.commandError(
                             LOGGER,
                             "strict",
-                            command,
+                            redactedCommand,
                             elapsedMs(started),
                             RuntimeErrorCode.PROCESS_EXIT_NON_ZERO,
                             RuntimeErrorKind.NON_ZERO_EXIT
@@ -77,11 +80,11 @@ public final class BoundedCommandExecution {
                 return result;
             } catch (OutputLimitExceededException e) {
                 RuntimeStructuredEvents.outputLimitExceeded(
-                        LOGGER, "unknown", maxOutputBytes, "strict", command);
+                        LOGGER, "unknown", maxOutputBytes, "strict", redactedCommand);
                 RuntimeStructuredEvents.commandError(
                         LOGGER,
                         "strict",
-                        command,
+                        redactedCommand,
                         elapsedMs(started),
                         RuntimeErrorCode.OUTPUT_LIMIT_EXCEEDED,
                         RuntimeErrorKind.OUTPUT_LIMIT
@@ -91,7 +94,7 @@ public final class BoundedCommandExecution {
                 RuntimeStructuredEvents.commandError(
                         LOGGER,
                         "strict",
-                        command,
+                        redactedCommand,
                         elapsedMs(started),
                         RuntimeErrorCode.PROCESS_IO_ERROR,
                         RuntimeErrorKind.IO
@@ -102,7 +105,7 @@ public final class BoundedCommandExecution {
                 RuntimeStructuredEvents.commandError(
                         LOGGER,
                         "strict",
-                        command,
+                        redactedCommand,
                         elapsedMs(started),
                         RuntimeErrorCode.PROCESS_INTERRUPTED,
                         RuntimeErrorKind.INTERRUPTED
@@ -120,23 +123,24 @@ public final class BoundedCommandExecution {
         ExecutorService localExecutor = EXECUTOR_REF.get();
         return CompletableFuture.supplyAsync(() -> {
             long started = System.nanoTime();
-            RuntimeStructuredEvents.commandStart(LOGGER, "truncating", command);
+            List<String> redactedCommand = redactCommandForLogging(command);
+            RuntimeStructuredEvents.commandStart(LOGGER, "truncating", redactedCommand);
             try {
                 Process process = new ProcessBuilder(command).start();
                 Future<String> stdout = localExecutor.submit(streamReaderTruncating(process.getInputStream(),
-                        outputConfig.maxStdoutBytes(), "stdout", outputConfig.captureStdout(), command));
+                        outputConfig.maxStdoutBytes(), "stdout", outputConfig.captureStdout(), redactedCommand));
                 Future<String> stderr = localExecutor.submit(streamReaderTruncating(process.getErrorStream(),
-                        outputConfig.maxStderrBytes(), "stderr", outputConfig.captureStderr(), command));
+                        outputConfig.maxStderrBytes(), "stderr", outputConfig.captureStderr(), redactedCommand));
                 int exitCode = process.waitFor();
                 ShellResult result = new ShellResult(exitCode, get(stdout), get(stderr));
                 if (result.exitCode() == 0) {
                     RuntimeStructuredEvents.commandSuccess(
-                            LOGGER, "truncating", command, elapsedMs(started), result.exitCode());
+                            LOGGER, "truncating", redactedCommand, elapsedMs(started), result.exitCode());
                 } else {
                     RuntimeStructuredEvents.commandError(
                             LOGGER,
                             "truncating",
-                            command,
+                            redactedCommand,
                             elapsedMs(started),
                             RuntimeErrorCode.PROCESS_EXIT_NON_ZERO,
                             RuntimeErrorKind.NON_ZERO_EXIT
@@ -147,7 +151,7 @@ public final class BoundedCommandExecution {
                 RuntimeStructuredEvents.commandError(
                         LOGGER,
                         "truncating",
-                        command,
+                        redactedCommand,
                         elapsedMs(started),
                         RuntimeErrorCode.PROCESS_IO_ERROR,
                         RuntimeErrorKind.IO
@@ -158,7 +162,7 @@ public final class BoundedCommandExecution {
                 RuntimeStructuredEvents.commandError(
                         LOGGER,
                         "truncating",
-                        command,
+                        redactedCommand,
                         elapsedMs(started),
                         RuntimeErrorCode.PROCESS_INTERRUPTED,
                         RuntimeErrorKind.INTERRUPTED
@@ -273,6 +277,17 @@ public final class BoundedCommandExecution {
 
     static String getForTest(Future<String> future) throws IOException, InterruptedException {
         return get(future);
+    }
+
+    public static List<String> redactCommandForLogging(List<String> command) {
+        if (command == null || command.isEmpty()) {
+            return List.of();
+        }
+        List<String> redacted = new ArrayList<>(command.size());
+        for (String part : command) {
+            redacted.add(LogRedactor.sanitizeText(part));
+        }
+        return List.copyOf(redacted);
     }
 
     public static void setMaxOutputBytes(int value) {

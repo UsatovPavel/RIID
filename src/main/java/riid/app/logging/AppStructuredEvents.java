@@ -1,5 +1,8 @@
 package riid.app.logging;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.slf4j.Logger;
 
 import riid.core.logging.StructuredLog;
@@ -10,6 +13,7 @@ import riid.core.logging.StructuredLog;
 public final class AppStructuredEvents {
     private static final String COMPONENT_APP = "app";
     private static final String COMPONENT_RUNTIME = "runtime";
+    private static final String MILESTONE_TYPE_PERFORMANCE = "performance";
 
     private AppStructuredEvents() {
     }
@@ -24,7 +28,10 @@ public final class AppStructuredEvents {
                 0L,
                 null,
                 null,
-                StructuredLog.fields("args_count", argsCount)
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
+                        "args_count", argsCount
+                )
         );
     }
 
@@ -38,7 +45,10 @@ public final class AppStructuredEvents {
                 durationMs,
                 null,
                 null,
-                StructuredLog.fields("exit_code", exitCode)
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
+                        "exit_code", exitCode
+                )
         );
     }
 
@@ -56,7 +66,10 @@ public final class AppStructuredEvents {
                 durationMs,
                 errorCode.name(),
                 errorKind,
-                StructuredLog.fields("exit_code", exitCode)
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
+                        "exit_code", exitCode
+                )
         );
     }
 
@@ -73,7 +86,8 @@ public final class AppStructuredEvents {
                 durationMs,
                 null,
                 null,
-                StructuredLog.fields(
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
                         "config_source", configSource,
                         "config_path", configPath
                 )
@@ -95,7 +109,8 @@ public final class AppStructuredEvents {
                 durationMs,
                 errorCode.name(),
                 errorKind,
-                StructuredLog.fields(
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
                         "config_source", configSource,
                         "config_path", configPath
                 )
@@ -115,7 +130,8 @@ public final class AppStructuredEvents {
                 durationMs,
                 null,
                 null,
-                StructuredLog.fields(
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
                         "repository", repository,
                         "reference", reference
                 )
@@ -137,7 +153,8 @@ public final class AppStructuredEvents {
                 durationMs,
                 errorCode.name(),
                 errorKind,
-                StructuredLog.fields(
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
                         "repository", repository,
                         "reference", reference
                 )
@@ -157,7 +174,8 @@ public final class AppStructuredEvents {
                 durationMs,
                 null,
                 null,
-                StructuredLog.fields(
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
                         "runtime_id", runtimeId,
                         "archive_path", archivePath
                 )
@@ -178,7 +196,10 @@ public final class AppStructuredEvents {
                 durationMs,
                 errorCode.name(),
                 errorKind,
-                StructuredLog.fields("runtime_id", runtimeId)
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
+                        "runtime_id", runtimeId
+                )
         );
     }
 
@@ -195,7 +216,8 @@ public final class AppStructuredEvents {
                 durationMs,
                 null,
                 null,
-                StructuredLog.fields(
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
                         "repository", repository,
                         "reference", reference
                 )
@@ -217,10 +239,21 @@ public final class AppStructuredEvents {
                 durationMs,
                 errorCode.name(),
                 errorKind,
-                StructuredLog.fields(
+                milestoneFields(
+                        MILESTONE_TYPE_PERFORMANCE,
                         "repository", repository,
                         "reference", reference
                 )
         );
+    }
+
+    private static Map<String, Object> milestoneFields(String milestoneType, Object... extraFields) {
+        LinkedHashMap<String, Object> fields = new LinkedHashMap<>();
+        fields.put("milestone", true);
+        fields.put("milestone_type", milestoneType);
+        if (extraFields != null && extraFields.length > 0) {
+            fields.putAll(StructuredLog.fields(extraFields));
+        }
+        return Map.copyOf(fields);
     }
 }
