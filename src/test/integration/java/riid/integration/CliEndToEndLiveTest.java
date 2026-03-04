@@ -19,11 +19,23 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.LoggerFactory;
 
 /**
  * Full-flow smoke: CLI args -> ConfigLoader -> ImageLoadingFacade -> dispatcher -> registry -> runtime (stub).
@@ -33,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 @Tag("e2e")
 @Tag("live")
 class CliEndToEndLiveTest {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
     void cliDownloadsAndInvokesRuntimeStub() throws Exception {
@@ -72,12 +85,23 @@ class CliEndToEndLiveTest {
                 new PrintWriter(new OutputStreamWriter(errBuf, java.nio.charset.StandardCharsets.UTF_8), true)
         );
 
-        int code = cli.run(new String[]{
-                "--config", config.toString(),
-                "--repo", "library/busybox",
-                "--tag", "latest",
-                "--runtime", runtime.runtimeId()
-        });
+        LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+        Logger root = context.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        root.addAppender(appender);
+        int code;
+        try {
+            code = cli.run(new String[]{
+                    "--config", config.toString(),
+                    "--repo", "library/busybox",
+                    "--tag", "latest",
+                    "--runtime", runtime.runtimeId()
+            });
+        } finally {
+            root.detachAppender(appender);
+            appender.stop();
+        }
 
         if (code != 0) {
             fail("CLI exit code " + code + "\nSTDOUT:\n" + outBuf + "\nSTDERR:\n" + errBuf);
@@ -86,6 +110,38 @@ class CliEndToEndLiveTest {
         assertTrue(runtime.archiveExisted.get(), "archive must exist during import");
         assertTrue(runtime.archiveSize > 0, "archive must be non-empty");
         assertTrue(runtime.lastArchive != null, "archive path should be recorded");
+
+        List<JsonNode> events = parseStructuredEvents(appender.list);
+        JsonNode sourceFetch = findEvent(events, "source.fetch", "success");
+        JsonNode requestFinish = findEvent(events, "request.finish", "success");
+
+        assertTrue(sourceFetch.path("milestone").asBoolean(false), "source.fetch should be milestone");
+        assertTrue(requestFinish.path("milestone").asBoolean(false), "request.finish should be milestone");
+
+        String traceId = sourceFetch.path("trace_id").asText();
+        assertFalse(traceId == null || traceId.isBlank() || "none".equals(traceId),
+                "trace_id should be present for request");
+        assertEquals(traceId, requestFinish.path("trace_id").asText(), "trace_id should propagate to request.finish");
+    }
+
+    private static List<JsonNode> parseStructuredEvents(List<ILoggingEvent> rawLogs) throws Exception {
+        List<JsonNode> events = new ArrayList<>();
+        for (ILoggingEvent event : rawLogs) {
+            String message = event.getFormattedMessage();
+            if (message == null || message.isBlank() || !message.startsWith("{")) {
+                continue;
+            }
+            events.add(OBJECT_MAPPER.readTree(message));
+        }
+        return events;
+    }
+
+    private static JsonNode findEvent(List<JsonNode> events, String eventName, String result) {
+        return events.stream()
+                .filter(n -> eventName.equals(n.path("event").asText()))
+                .filter(n -> result.equals(n.path("result").asText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing structured event: " + eventName + "/" + result));
     }
 
     private static final class RecordingRuntimeAdapter implements RuntimeAdapter {

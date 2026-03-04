@@ -1,11 +1,11 @@
-# Structured Logs Policy (PR12)
+# Logs Policy (version: PR Structured Logs)
 
 This document defines structured logging rules for RIID in PR12 scope.
 
 ## Scope Boundaries
 - Included: structured logs format, `trace_id`, `event`/`step`, milestone markers, redaction policy.
 - Included: offline metric counting from logs.
-- Excluded: Prometheus/Grafana metrics export (planned for PR10b).
+- Excluded: Prometheus/Grafana metrics export (planned for PR Prometeus/Grafana).
 - Excluded: tracing backend/collector (only `trace_id` in logs for now).
 
 ## Required Event Fields

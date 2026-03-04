@@ -16,7 +16,13 @@ import org.eclipse.jetty.http.HttpStatus;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
@@ -136,12 +142,30 @@ class BlobServiceTest {
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest(REPO, "sha256:test", 3L, MEDIA_TYPE,
+        BlobRequest req = new BlobRequest(
+                REPO,
+                "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                3L,
+                MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
-        BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
-        assertEquals(data.length, result.size());
-        assertEquals(2, http.getCallCount());
+        Logger logger = (Logger) LoggerFactory.getLogger(BlobService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
+            assertEquals(data.length, result.size());
+            assertEquals(2, http.getCallCount());
+            boolean hasRangeRetryStructuredEvent = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .anyMatch(m -> m.contains("\"event\":\"blob.range\"")
+                            && m.contains("\"result\":\"retry_without_range\""));
+            assertTrue(hasRangeRetryStructuredEvent, "Expected structured retry event for 416 fallback");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     private static final class FakeHttp extends HttpExecutor {
