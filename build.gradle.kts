@@ -24,6 +24,15 @@ java {
 
 repositories {
     mavenCentral()
+    maven {
+        name = "GitHubPackagesDragonflyPuller"
+        val gprRepo = (findProperty("gpr.repo") as String?) ?: "UsatovPavel/java-dragonfly-image-puller"
+        url = uri("https://maven.pkg.github.com/$gprRepo")
+        credentials {
+            username = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
+            password = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_PACKAGES_TOKEN")
+        }
+    }
 }
 
 apply(from = "gradle/test-source-sets.gradle.kts")
