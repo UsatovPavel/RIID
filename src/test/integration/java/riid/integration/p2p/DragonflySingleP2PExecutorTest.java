@@ -24,7 +24,6 @@ import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
-import riid.p2p.DfdaemonDownloadClient;
 import riid.p2p.DragonflyConfig;
 import riid.p2p.DragonflyGrpcP2PExecutor;
 
@@ -34,7 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Assumptions;
 
 /**
- * Integration tests for Dragonfly P2P (unix socket or TCP, plaintext).
+ * Integration tests for RIID P2P adapter on top of external Dragonfly puller library.
+ * Verifies behavior contract: first fetch may go back-to-source, second fetch is served
+ * from dfdaemon local cache for the same digest.
  * Run: ./scripts/minikube-dragonfly.sh && make dragonfly-integration-test
  * Or: DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
  *     ./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
@@ -90,7 +91,7 @@ class DragonflySingleP2PExecutorTest {
         endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(), null);
         fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
-        p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
+        p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
     }
 
     @AfterAll
@@ -102,7 +103,7 @@ class DragonflySingleP2PExecutorTest {
 
     @Test
     @Order(1)
-    void fetchesBlobFromSource() throws IOException {
+    void firstFetchMayUseBackToSource() throws IOException {
         var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
         assertTrue(result.isPresent(), "first fetch should succeed");
@@ -115,7 +116,7 @@ class DragonflySingleP2PExecutorTest {
 
     @Test
     @Order(2)
-    void fetchesBlobFromCache() throws IOException {
+    void secondFetchUsesDfdaemonLocalCache() throws IOException {
         int requestsBefore = blobRequests.get();
 
         var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
