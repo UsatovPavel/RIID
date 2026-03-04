@@ -38,7 +38,6 @@ import riid.core.model.manifest.TagList;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
-import riid.p2p.DfdaemonDownloadClient;
 import riid.p2p.DragonflyConfig;
 import riid.p2p.DragonflyGrpcP2PExecutor;
 
@@ -74,7 +73,7 @@ class DragonflyGrpcP2PExecutorTest {
         HostFilesystem fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, dfdaemonAddr, null, null, null);
 
-        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
+        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
 
         var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
@@ -109,7 +108,7 @@ class DragonflyGrpcP2PExecutorTest {
             assertTrue(Files.size(seedPath) > 0, "seed file should not be empty");
 
             DragonflyConfig config = new DragonflyConfig(true, "localhost:65001", null, null, null);
-            DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
+            DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
             var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
             assertTrue(result.isPresent(), "gRPC result should be present");
@@ -152,7 +151,7 @@ class DragonflyGrpcP2PExecutorTest {
             DragonflyConfig config = new DragonflyConfig(true, "localhost:65001", null, null, null);
             try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                  RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
-                DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
+                DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
                 SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
                 FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, "tag", null));
 
