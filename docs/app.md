@@ -21,6 +21,19 @@ CLI and dependency wiring layer for loading container images: parse flags, valid
 - All filesystem operations outside `riid.app.fs` go through `HostFilesystem`.
 - `NioHostFilesystem` is the default implementation; it wraps `java.nio.file.Files`.
 
+## Logging (structured, milestones)
+- App critical-path events are structured and marked as milestones:
+  - `request.start`
+  - `config.resolve`
+  - `manifest.fetch`
+  - `archive.build`
+  - `engine.import`
+  - `request.finish`
+- App milestones use:
+  - `milestone=true`
+  - `milestone_type=performance`
+- `duration_ms` is required for step timing and end-to-end request timing.
+
 ## CLI flags
 Required:
 - `--repo` — repository (e.g., `library/busybox`)

@@ -25,7 +25,7 @@ import io.netty.channel.socket.nio.NioDomainSocketChannel;
 import org.dragonflyoss.api.dfdaemon.v2.DfdaemonDownloadGrpc;
 import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskRequest;
 import org.dragonflyoss.api.dfdaemon.v2.DownloadTaskResponse;
-import riid.core.logging.LogRedactor;
+import riid.core.logging.LogSecretsRemover;
 import riid.p2p.logging.P2pStructuredEvents;
 
 /**
@@ -62,8 +62,8 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
         String url = request.getDownload().getUrl();
         long downloadStarted = System.nanoTime();
         LOGGER.debug("DownloadTask start: url={}, output={}, timeoutMs={}, maxAttempts={}",
-                LogRedactor.sanitizeUrl(url),
-                LogRedactor.sanitizePath(outputPath),
+                LogSecretsRemover.sanitizeUrl(url),
+                LogSecretsRemover.sanitizePath(outputPath),
                 requestTimeoutMillis,
                 maxAttempts);
         P2pStructuredEvents.downloadStart(LOGGER, url, outputPath, requestTimeoutMillis, maxAttempts);
@@ -88,11 +88,11 @@ public final class DfdaemonDownloadClient implements DfdaemonDownloader {
                 }
                 if (!java.nio.file.Files.exists(outputPath)) {
                     LOGGER.warn("DownloadTask completed but output file is missing: {}",
-                            LogRedactor.sanitizePath(outputPath));
+                            LogSecretsRemover.sanitizePath(outputPath));
                     P2pStructuredEvents.outputMissing(LOGGER, outputPath, attempt + 1);
                     throw new IOException("dfdaemon did not create output file");
                 }
-                LOGGER.debug("DownloadTask success: output={}", LogRedactor.sanitizePath(outputPath));
+                LOGGER.debug("DownloadTask success: output={}", LogSecretsRemover.sanitizePath(outputPath));
                 P2pStructuredEvents.downloadSuccess(
                         LOGGER,
                         outputPath,

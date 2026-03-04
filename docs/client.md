@@ -48,4 +48,5 @@ var res = client.fetchBlob(new BlobRequest("library/busybox", layer.digest(), la
 - Security error format for runtime paths is unified and safe for logs:
   - `SECURITY:TLS:<kind>: <safe_message>`
   - `SECURITY:AUTH:<kind>: <safe_message>`
+- Structured log policy and offline counting rules are documented in `docs/structured-logs-policy.md`.
 

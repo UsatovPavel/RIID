@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import riid.core.logging.LogRedactor;
+import riid.core.logging.LogSecretsRemover;
 import riid.runtime.logging.RuntimeErrorCode;
 import riid.runtime.logging.RuntimeErrorKind;
 import riid.runtime.logging.RuntimeStructuredEvents;
@@ -285,7 +285,7 @@ public final class BoundedCommandExecution {
         }
         List<String> redacted = new ArrayList<>(command.size());
         for (String part : command) {
-            redacted.add(LogRedactor.sanitizeText(part));
+            redacted.add(LogSecretsRemover.sanitizeText(part));
         }
         return List.copyOf(redacted);
     }

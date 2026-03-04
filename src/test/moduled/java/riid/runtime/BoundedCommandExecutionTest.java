@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Assertions;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
-import riid.core.logging.LogRedactor;
+import riid.core.logging.LogSecretsRemover;
 
 class BoundedCommandExecutionTest {
 
@@ -101,7 +101,7 @@ class BoundedCommandExecutionTest {
                 "https://registry.local/v2/repo/blobs/sha256:123?token=sensitive"
         );
 
-        List<String> redacted = raw.stream().map(LogRedactor::sanitizeText).toList();
+        List<String> redacted = raw.stream().map(LogSecretsRemover::sanitizeText).toList();
         String combined = String.join(" ", redacted);
 
         Assertions.assertFalse(combined.contains("very-secret-token"));

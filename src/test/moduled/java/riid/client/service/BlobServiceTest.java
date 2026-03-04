@@ -80,7 +80,7 @@ class BlobServiceTest {
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
+        BlobRequest req = new BlobRequest(REPO, "sha256:test", 3L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         svc.fetchBlob(endpoint, req, sink, SCOPE);
@@ -136,7 +136,7 @@ class BlobServiceTest {
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
+        BlobRequest req = new BlobRequest(REPO, "sha256:test", 3L, MEDIA_TYPE,
                 new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);

@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 /**
  * Best-effort sanitizer for values that may contain credentials.
  */
-public final class LogRedactor {
+public final class LogSecretsRemover {
     private static final String NONE = "none";
     private static final String REDACTED = "[REDACTED]";
     private static final String REDACTION_ENABLED_PROPERTY = "riid.log.redaction.enabled";
@@ -17,7 +17,7 @@ public final class LogRedactor {
     private static final Pattern SECRET_PARAM = Pattern.compile(
             "(?i)(token|password|passwd|secret|authorization)(=|:)[^\\s&,;]+");
 
-    private LogRedactor() {
+    private LogSecretsRemover() {
     }
 
     public static String sanitizeText(String raw) {

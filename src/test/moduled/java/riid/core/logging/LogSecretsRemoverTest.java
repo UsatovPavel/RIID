@@ -3,13 +3,13 @@ package riid.core.logging;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-class LogRedactorTest {
+class LogSecretsRemoverTest {
     private static final String PROP = "riid.log.redaction.enabled";
 
     @Test
     void sanitizeTextRedactsBearerAndSecretPairs() {
         String raw = "Authorization: Bearer abc.def token=my-secret password=qwerty";
-        String sanitized = LogRedactor.sanitizeText(raw);
+        String sanitized = LogSecretsRemover.sanitizeText(raw);
 
         Assertions.assertFalse(sanitized.contains("abc.def"));
         Assertions.assertFalse(sanitized.contains("my-secret"));
@@ -20,7 +20,7 @@ class LogRedactorTest {
     @Test
     void sanitizeUrlDropsSensitiveQuery() {
         String raw = "https://registry.local/v2/repo/blobs/sha256:123?token=secret&x=1";
-        String sanitized = LogRedactor.sanitizeUrl(raw);
+        String sanitized = LogSecretsRemover.sanitizeUrl(raw);
 
         Assertions.assertEquals("https://registry.local/v2/repo/blobs/sha256:123", sanitized);
         Assertions.assertFalse(sanitized.contains("secret"));
@@ -32,7 +32,7 @@ class LogRedactorTest {
         System.setProperty(PROP, "false");
         try {
             String raw = "Authorization: Bearer abc.def token=my-secret";
-            String sanitized = LogRedactor.sanitizeText(raw);
+            String sanitized = LogSecretsRemover.sanitizeText(raw);
             Assertions.assertEquals(raw, sanitized);
         } finally {
             restoreProperty(previous);
