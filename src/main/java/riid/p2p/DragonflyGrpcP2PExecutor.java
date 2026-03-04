@@ -1,8 +1,13 @@
 package riid.p2p;
 
+import hse.ru.dragonfly.puller.DragonflyImagePuller;
+import hse.ru.dragonfly.puller.error.DragonflyPullException;
+import hse.ru.dragonfly.puller.model.PullRequest;
+import hse.ru.dragonfly.puller.model.PullResult;
+
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Collections;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,25 +30,25 @@ import riid.core.model.manifest.RegistryApi;
 public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final RegistryEndpoint endpoint;
     private final DragonflyConfig config;
-    private final DfdaemonDownloaderFactory downloaderFactory;
-    private volatile DfdaemonDownloader sharedDownloader;
-    private final Object downloaderLock = new Object();
+    private final PullerFactory pullerFactory;
+    private volatile Puller sharedPuller;
+    private final Object pullerLock = new Object();
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
                                     HostFilesystem fs,
                                     DragonflyConfig config) {
         this(endpoint, fs, config,
-                dfdaemonAddr -> new DfdaemonDownloadClient(dfdaemonAddr, config.requestTimeout(), config.maxRetries()));
+                cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
     }
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
                                     HostFilesystem fs,
                                     DragonflyConfig config,
-                                    DfdaemonDownloaderFactory downloaderFactory) {
+                                    PullerFactory pullerFactory) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
-        this.downloaderFactory = Objects.requireNonNull(downloaderFactory, "downloaderFactory");
+        this.pullerFactory = Objects.requireNonNull(pullerFactory, "pullerFactory");
     }
 
     @Override
@@ -67,11 +72,14 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
             outputPath = PathSupport.temporaryPath("p2p-", ".bin");
             outputForRequest = outputPath.toAbsolutePath().toString();
         }
-        var request = DownloadTaskRequestBuilder.build(url, outputForRequest,
-                digest.toString(), Collections.emptyMap());
-        DfdaemonDownloader client = getOrCreateDownloader(dfdaemonAddr);
-        Path result = client.download(request, outputPath);
-        return Optional.of(result);
+        PullRequest request = new PullRequest(url, digest.toString(), outputPath, java.util.Map.of());
+        Puller puller = getOrCreatePuller();
+        try {
+            PullResult result = puller.pull(request);
+            return Optional.of(result.path());
+        } catch (DragonflyPullException e) {
+            throw new IOException("dragonfly pull failed: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -99,16 +107,57 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         // Not supported
     }
 
-    private DfdaemonDownloader getOrCreateDownloader(String dfdaemonAddr) throws IOException {
-        DfdaemonDownloader current = sharedDownloader;
+    private Puller getOrCreatePuller() throws IOException {
+        Puller current = sharedPuller;
         if (current != null) {
             return current;
         }
-        synchronized (downloaderLock) {
-            if (sharedDownloader == null) {
-                sharedDownloader = downloaderFactory.create(dfdaemonAddr);
+        synchronized (pullerLock) {
+            if (sharedPuller == null) {
+                sharedPuller = pullerFactory.create(config);
             }
-            return sharedDownloader;
+            return sharedPuller;
+        }
+    }
+
+    private static DragonflyImagePuller createPuller(DragonflyConfig cfg) throws IOException {
+        Duration timeout = cfg.requestTimeout();
+        Integer retries = cfg.maxRetries();
+        try {
+            DragonflyImagePuller.Builder builder = DragonflyImagePuller.builder()
+                    .withAddress(cfg.dfdaemonAddr());
+            if (timeout != null) {
+                builder = builder.withRequestTimeout(timeout);
+            }
+            if (retries != null) {
+                builder = builder.withMaxRetries(retries);
+            }
+            return builder.build();
+        } catch (DragonflyPullException e) {
+            throw new IOException("failed to initialize DragonflyImagePuller: " + e.getMessage(), e);
+        }
+    }
+
+    @FunctionalInterface
+    public interface PullerFactory {
+        Puller create(DragonflyConfig config) throws IOException;
+    }
+
+    @FunctionalInterface
+    public interface Puller {
+        PullResult pull(PullRequest request) throws DragonflyPullException;
+    }
+
+    private static final class ExternalDragonflyPuller implements Puller {
+        private final DragonflyImagePuller delegate;
+
+        private ExternalDragonflyPuller(DragonflyImagePuller delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public PullResult pull(PullRequest request) throws DragonflyPullException {
+            return delegate.pull(request);
         }
     }
 }
