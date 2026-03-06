@@ -35,7 +35,7 @@ import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
-import riid.p2p.DragonflyGrpcP2PExecutor;
+import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
 import riid.runtime.DockerRuntimeAdapter;

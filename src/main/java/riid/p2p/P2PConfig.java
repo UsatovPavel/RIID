@@ -1,6 +1,7 @@
 package riid.p2p;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import riid.p2p.dragonfly.DragonflyConfig;
 
 /**
  * P2P module configuration.
