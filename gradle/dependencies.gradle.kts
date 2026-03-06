@@ -30,7 +30,7 @@ dependencies {
     add("implementation", "commons-io:commons-io:2.21.0")
     add("implementation", "com.github.ben-manes.caffeine:caffeine:3.1.8")
     add("implementation", "org.eclipse.jetty:jetty-client:12.1.5")
-    add("implementation", "hse.ru:java-dragonfly-image-puller:1.0.0")
+    add("implementation", "hse.ru:java-dragonfly-image-puller:1.1.1")
 
 }
 

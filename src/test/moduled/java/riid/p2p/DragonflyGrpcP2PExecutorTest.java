@@ -1,9 +1,11 @@
 package riid.p2p;
 
-import hse.ru.dragonfly.puller.error.DragonflyPullException;
-import hse.ru.dragonfly.puller.error.ErrorKind;
-import hse.ru.dragonfly.puller.model.PullRequest;
-import hse.ru.dragonfly.puller.model.PullResult;
+import riid.p2p.dragonfly.DragonflyConfig;
+import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
+import ru.hse.dragonfly.puller.blobpuller.PullResult;
+import ru.hse.dragonfly.puller.error.DragonflyPullErrorKind;
+import ru.hse.dragonfly.puller.error.DragonflyPullException;
+import ru.hse.dragonfly.puller.registry.RegistryPullRequest;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
+import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
@@ -33,10 +36,10 @@ class DragonflyGrpcP2PExecutorTest {
     void returnsEmptyWhenDisabled() throws IOException {
         RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry.example.com", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(false, DFDAEMON_ADDR, null, null, null);
+        riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(false, DFDAEMON_ADDR, null, null, null);
         RecordingPullerFactory factory = new RecordingPullerFactory();
 
-        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
 
         Optional<Path> result = executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
 
@@ -48,11 +51,11 @@ class DragonflyGrpcP2PExecutorTest {
     void returnsPathWhenDownloadSucceeds() throws IOException {
         RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry.example.com", 5000, null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
         Path expectedPath = Path.of("/tmp/p2p-result.bin");
         RecordingPullerFactory factory = new RecordingPullerFactory(expectedPath);
 
-        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
 
         Optional<Path> result = executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
 
@@ -60,21 +63,41 @@ class DragonflyGrpcP2PExecutorTest {
         assertEquals(expectedPath, result.get());
         assertTrue(factory.createCalled);
         assertEquals(1, factory.createCount);
-        String expectedUrl = "https://registry.example.com:5000/v2/" + REPO + "/blobs/" + DIGEST;
-        assertEquals(expectedUrl, factory.lastPuller.lastRequest.blobUrl());
+        assertEquals("https://registry.example.com:5000", factory.lastPuller.lastRequest.registry());
+        assertEquals(REPO, factory.lastPuller.lastRequest.repository());
+        assertEquals(DIGEST, factory.lastPuller.lastRequest.digest());
         assertTrue(factory.lastPuller.lastRequest.outputPath().toString().contains("p2p-"),
                 "output path should use p2p- prefix");
+    }
+
+    @Test
+    void mapsBasicCredentialsToRegistryAuth() throws IOException {
+        RegistryEndpoint endpoint = new RegistryEndpoint(
+                "https",
+                "registry.example.com",
+                -1,
+                Credentials.basic("u", "p")
+        );
+        HostFilesystem fs = new NioHostFilesystem();
+        riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        RecordingPullerFactory factory = new RecordingPullerFactory(Path.of("/tmp/p2p-result.bin"));
+
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
+        executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
+
+        assertEquals("u", factory.lastPuller.lastRequest.auth().basicAuthUsername());
+        assertEquals("p", factory.lastPuller.lastRequest.auth().basicAuthPassword());
     }
 
     @Test
     void propagatesIOExceptionFromDownload() {
         RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry.example.com", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
         RecordingPullerFactory factory = new RecordingPullerFactory(
-                new DragonflyPullException(ErrorKind.UNAVAILABLE, "dfdaemon unreachable"));
+                new DragonflyPullException(DragonflyPullErrorKind.UNAVAILABLE, "dfdaemon unreachable"));
 
-        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
 
         IOException thrown = assertThrows(IOException.class, () ->
                 executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER));
@@ -88,9 +111,9 @@ class DragonflyGrpcP2PExecutorTest {
     void reusesSinglePullerInstanceAcrossFetches() throws IOException {
         RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry.example.com", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
         RecordingPullerFactory factory = new RecordingPullerFactory(Path.of("/tmp/shared.bin"));
-        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
 
         executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
         executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
@@ -102,19 +125,19 @@ class DragonflyGrpcP2PExecutorTest {
     void publishIsNoOp() {
         RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry.example.com", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
 
-        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(endpoint, fs, config);
 
         executor.publish(ImageDigest.parse(DIGEST), Path.of("/tmp/x"), 100, CacheMediaType.OCI_LAYER);
     }
 
     @Test
     void rejectsNullRepository() {
-        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(
                 new RegistryEndpoint("https", "x", -1, null),
                 new NioHostFilesystem(),
-                new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null));
+                new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null));
 
         assertThrows(NullPointerException.class, () ->
                 executor.fetch(null, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER));
@@ -122,16 +145,16 @@ class DragonflyGrpcP2PExecutorTest {
 
     @Test
     void rejectsNullDigest() {
-        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(
                 new RegistryEndpoint("https", "x", -1, null),
                 new NioHostFilesystem(),
-                new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null));
+                new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null));
 
         assertThrows(NullPointerException.class, () ->
                 executor.fetch(REPO, null, SIZE, CacheMediaType.OCI_LAYER));
     }
 
-    private static final class RecordingPullerFactory implements DragonflyGrpcP2PExecutor.PullerFactory {
+    private static final class RecordingPullerFactory implements riid.p2p.dragonfly.DragonflyGrpcP2PExecutor.PullerFactory {
         final Path returnPath;
         final DragonflyPullException throwOnPull;
         boolean createCalled;
@@ -154,7 +177,7 @@ class DragonflyGrpcP2PExecutorTest {
         }
 
         @Override
-        public DragonflyGrpcP2PExecutor.Puller create(DragonflyConfig config) {
+        public riid.p2p.dragonfly.DragonflyGrpcP2PExecutor.Puller create(DragonflyConfig config) {
             createCalled = true;
             createCount++;
             lastPuller = new RecordingPuller(returnPath, throwOnPull);
@@ -165,7 +188,7 @@ class DragonflyGrpcP2PExecutorTest {
     private static final class RecordingPuller implements DragonflyGrpcP2PExecutor.Puller {
         final Path returnPath;
         final DragonflyPullException throwOnPull;
-        PullRequest lastRequest;
+        RegistryPullRequest lastRequest;
 
         RecordingPuller(Path returnPath, DragonflyPullException throwOnPull) {
             this.returnPath = returnPath;
@@ -173,7 +196,7 @@ class DragonflyGrpcP2PExecutorTest {
         }
 
         @Override
-        public PullResult pull(PullRequest request) throws DragonflyPullException {
+        public PullResult pull(RegistryPullRequest request) throws DragonflyPullException {
             lastRequest = request;
             if (throwOnPull != null) {
                 throw throwOnPull;

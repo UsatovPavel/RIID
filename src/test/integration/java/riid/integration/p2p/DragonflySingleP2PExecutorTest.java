@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterAll;
@@ -21,11 +22,12 @@ import com.sun.net.httpserver.HttpServer;
 
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
+import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
-import riid.p2p.DragonflyConfig;
-import riid.p2p.DragonflyGrpcP2PExecutor;
+import riid.p2p.dragonfly.DragonflyConfig;
+import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -53,6 +55,7 @@ class DragonflySingleP2PExecutorTest {
     private static byte[] payload;
     private static String digest;
     private static AtomicInteger blobRequests;
+    private static String expectedAuthHeader;
     private static RegistryEndpoint endpoint;
     private static HostFilesystem fs;
     private static DragonflyGrpcP2PExecutor p2p;
@@ -68,6 +71,8 @@ class DragonflySingleP2PExecutorTest {
         payload = "p2p-single-cache-test".getBytes(StandardCharsets.UTF_8);
         digest = "sha256:" + sha256(payload);
         blobRequests = new AtomicInteger();
+        expectedAuthHeader = "Basic " + Base64.getEncoder()
+                .encodeToString("riid-user:riid-secret".getBytes(StandardCharsets.UTF_8));
 
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v2/", exchange -> {
@@ -78,6 +83,8 @@ class DragonflySingleP2PExecutorTest {
         server.createContext("/v2/" + REPO + "/blobs/" + digest, exchange -> {
             try (exchange) {
                 blobRequests.incrementAndGet();
+                assertEquals(expectedAuthHeader, exchange.getRequestHeaders().getFirst("Authorization"),
+                        "dfdaemon should pass registry auth from RegistryPullRequest");
                 exchange.getResponseHeaders().add("Content-Type", CONTENT_TYPE);
                 exchange.getResponseHeaders().add("Content-Length", String.valueOf(payload.length));
                 exchange.sendResponseHeaders(200, payload.length);
@@ -88,7 +95,12 @@ class DragonflySingleP2PExecutorTest {
         });
         server.start();
 
-        endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(), null);
+        endpoint = new RegistryEndpoint(
+                "http",
+                "127.0.0.1",
+                server.getAddress().getPort(),
+                Credentials.basic("riid-user", "riid-secret")
+        );
         fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
         p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
