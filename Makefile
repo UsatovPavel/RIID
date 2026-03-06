@@ -237,3 +237,8 @@ dragonfly-integration-test-2nodes:
 		sleep 2; \
 		DFDAEMON_ADDR=127.0.0.1:65001 DFDAEMON_OUTPUT_DIR=/tmp/riid-output \
 		./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+
+
+moduled-execute-specific-test:
+	@test -n "$(TEST)" || (echo "Usage: make moduled-execute-specific-test TEST=riid.p2p.DragonflyGrpcP2PExecutorTest"; exit 1)
+	./gradlew moduledTest -PincludeLocal --tests "$(TEST)"
