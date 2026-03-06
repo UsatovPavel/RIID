@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.service;
 
 import java.nio.file.Path;
 
@@ -36,7 +36,7 @@ class ImageLoadingFacadeFactoryTest {
         Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
         fs.writeString(tmp, yaml);
 
-        try (ImageLoadingFacade svc = ImageLoadingFacade.createFromConfig(tmp)) {
+        try (riid.app.service.ImageLoadingFacade svc = ImageLoadingFacade.createFromConfig(tmp)) {
         assertNotNull(svc);
         }
     }

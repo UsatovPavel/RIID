@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.service;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -11,8 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import riid.app.error.AppError;
-import riid.app.error.AppException;
+import riid.app.core.model.ImageId;
+import riid.app.core.error.AppError;
+import riid.app.core.error.AppException;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.cache.oci.ImageDigest;
@@ -34,13 +35,13 @@ class ImageLoadingFacadeErrorTest {
 
     @Test
     void loadWrapsIOExceptionAsAppError() throws Exception {
-        ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
+        riid.app.core.model.ImageId imageId = riid.app.core.model.ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
-        try (ImageLoadingFacade facade = new ImageLoadingFacade(
+        try (riid.app.service.ImageLoadingFacade facade = new riid.app.service.ImageLoadingFacade(
                 new NoopDispatcher(),
-                new RuntimeRegistry(java.util.Map.of()),
+                new riid.app.service.RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(),
                 fs)) {
         AppException ex = assertThrows(AppException.class,
@@ -53,14 +54,14 @@ class ImageLoadingFacadeErrorTest {
     @Tag("filesystem")
     @Test
     void loadWrapsInterruptedExceptionAndInterruptsThread() throws Exception {
-        ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
+        riid.app.core.model.ImageId imageId = ImageId.fromRegistry("registry.example", "repo/app", "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new NioHostFilesystem();
         Path layer = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer", ".bin");
         fs.write(layer, new byte[] {1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
-        try (ImageLoadingFacade facade = new ImageLoadingFacade(
+        try (riid.app.service.ImageLoadingFacade facade = new ImageLoadingFacade(
                 dispatcher,
                 new RuntimeRegistry(java.util.Map.of()),
                 new NoopRegistryClient(),

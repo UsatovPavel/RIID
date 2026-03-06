@@ -1,10 +1,10 @@
-package riid.app.config;
+package riid.app.core.config;
 
 import java.nio.file.Files;
 
-import riid.app.CliApplication;
-import riid.app.ImageId;
-import riid.app.ImageLoadingFacade;
+import riid.app.cli.CliApplication;
+import riid.app.core.model.ImageId;
+import riid.app.service.ImageLoadingFacade;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;

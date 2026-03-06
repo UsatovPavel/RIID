@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.service;
 
 import java.util.Map;
 

@@ -224,7 +224,7 @@ dragonfly-integration-test:
 	@test -S /var/run/dragonfly/dfdaemon.sock || (echo "Run ./scripts/minikube-dragonfly.sh first"; exit 1)
 	@sudo mkdir -p /var/run/dragonfly/output && sudo chmod 777 /var/run/dragonfly/output
 	@DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
-		./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+		./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
 
 # Dragonfly integration test (2 nodes, port-forward к dfdaemon pod)
 # Requires: make -C scripts minikube-2nodes

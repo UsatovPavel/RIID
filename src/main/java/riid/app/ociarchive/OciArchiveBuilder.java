@@ -9,9 +9,9 @@ import java.util.Objects;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import riid.app.ImageId;
-import riid.app.error.AppError;
-import riid.app.error.OciArchiveException;
+import riid.app.core.model.ImageId;
+import riid.app.core.error.AppError;
+import riid.app.core.error.OciArchiveException;
 import riid.core.fs.HostFilesystem;
 import riid.cache.oci.ImageDigest;
 import riid.core.fs.PathSupport;

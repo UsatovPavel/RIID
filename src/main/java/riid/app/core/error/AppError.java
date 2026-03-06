@@ -1,4 +1,4 @@
-package riid.app.error;
+package riid.app.core.error;
 
 /**
  * Domain error hierarchy for the app module.

@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.service;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -12,9 +12,10 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import riid.app.config.AppConfig;
-import riid.app.error.AppError;
-import riid.app.error.AppException;
+import riid.app.core.config.AppConfig;
+import riid.app.core.model.ImageId;
+import riid.app.core.error.AppError;
+import riid.app.core.error.AppException;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.app.ociarchive.OciArchiveBuilder;

@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.cli;
 
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -10,8 +10,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
-import riid.app.config.ConfigResolvingLoaderProvider;
-import riid.app.error.AppException;
+import riid.app.core.config.ConfigResolvingLoaderProvider;
+import riid.app.core.error.AppException;
+import riid.app.service.ImageLoadingFacade;
 import riid.client.core.config.Credentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
