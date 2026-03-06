@@ -7,7 +7,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public record RuntimeConfig(
         @JsonProperty("output") OutputConfig output,
-        @JsonProperty("dockerCmd") String dockerCmd
+        @JsonProperty("dockerCmd") String dockerCmd,
+        @JsonProperty("maxTasksCommandExecutor") Integer maxTasksCommandExecutor
 ) {
     public static final String DEFAULT_DOCKER_BIN = "docker";
 
@@ -17,6 +18,10 @@ public record RuntimeConfig(
 
     public String dockerCmdOrDefault() {
         return dockerCmd == null || dockerCmd.isBlank() ? DEFAULT_DOCKER_BIN : dockerCmd;
+    }
+
+    public Integer maxTasksCommandExecutor() {
+        return maxTasksCommandExecutor;
     }
 }
 

@@ -100,7 +100,31 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                         CacheMediaType.from(mediaType.value()));
                 if (p2pPath.isPresent()) {
                     LOGGER.info("p2p hit for layer {}", digest);
-                    return new FetchResult(digest, mediaType, p2pPath.get());
+                    Path resultPath = p2pPath.get();
+                    if (cache != null) {
+                        try {
+                            long size = sizeBytes > 0 ? sizeBytes : fs.size(resultPath);
+                            CacheEntry entry = cache.put(digest,
+                                    FilesystemCachePayload.of(fs, resultPath, size),
+                                    CacheMediaType.from(mediaType.value()));
+                            Path resolvedPath = cache.resolve(entry.key()).orElse(null);
+                            if (resolvedPath != null) {
+                                resultPath = resolvedPath;
+                                try {
+                                    fs.deleteIfExists(p2pPath.get());
+                                } catch (Exception ex) {
+                                    LOGGER.warn("Failed to delete temp p2p file {}: {}", p2pPath.get(), ex.getMessage());
+                                }
+                            }
+                        } catch (ValidationException ve) {
+                            LOGGER.warn("Validation error for cache put ({}): {}", mediaType, ve.getMessage());
+                        } catch (IllegalArgumentException iae) {
+                            LOGGER.warn("Unsupported media type for cache put ({}): {}", mediaType, iae.getMessage());
+                        } catch (Exception ex) {
+                            LOGGER.warn("Failed to put P2P layer {} to cache: {}", digest, ex.getMessage());
+                        }
+                    }
+                    return new FetchResult(digest, mediaType, resultPath);
                 }
             } catch (IOException ex) {
                 LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());

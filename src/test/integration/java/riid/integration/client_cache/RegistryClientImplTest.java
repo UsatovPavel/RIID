@@ -22,7 +22,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
-import riid.cache.oci.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.RegistryClientImpl;
@@ -68,7 +67,7 @@ class RegistryClientImplTest {
         startServer(layer, layerDigest, manifestBytes, manifestDigest, 200, 200);
 
         RegistryEndpoint ep = new RegistryEndpoint(SCHEME_HTTP, HOST_LOCALHOST, server.getAddress().getPort(), null);
-        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig())) {
 
             var mf = client.fetchManifest(REPO, "latest");
             assertEquals(manifestDigest, mf.digest());
@@ -99,7 +98,7 @@ class RegistryClientImplTest {
     void listTagsErrorThrows() throws Exception {
         startServer(new byte[0], "sha256:dead", new byte[0], "sha256:dead", 500, 500);
         RegistryEndpoint ep = new RegistryEndpoint(SCHEME_HTTP, HOST_LOCALHOST, server.getAddress().getPort(), null);
-        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig())) {
             var ex = assertThrows(RuntimeException.class, () -> client.listTags(REPO, null, null));
             assertNotNull(ex.getMessage());
         }
@@ -110,7 +109,7 @@ class RegistryClientImplTest {
         // only HEAD returns 404
         startServerHeadOnly404();
         RegistryEndpoint ep = new RegistryEndpoint(SCHEME_HTTP, HOST_LOCALHOST, server.getAddress().getPort(), null);
-        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig())) {
             assertTrue(client.headBlob(REPO, SHA_PREFIX + "missing").isEmpty());
         }
     }

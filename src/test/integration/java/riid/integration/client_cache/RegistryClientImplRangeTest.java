@@ -22,7 +22,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
-import riid.cache.oci.CacheAdapter;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.RegistryClientImpl;
@@ -68,7 +67,7 @@ class RegistryClientImplRangeTest {
         startServerWithRange(layer, layerDigest, manifestBytes, manifestDigest);
 
         RegistryEndpoint ep = new RegistryEndpoint(SCHEME_HTTP, HOST_LOCALHOST, server.getAddress().getPort(), null);
-        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig())) {
             File tmp = File.createTempFile("blob-range-", ".bin");
             tmp.deleteOnExit();
             BlobRequest req = new BlobRequest(REPO, layerDigest, null, OCTET,
@@ -95,7 +94,7 @@ class RegistryClientImplRangeTest {
         startServerWithRange(layer, layerDigest, manifestBytes, manifestDigest);
 
         RegistryEndpoint ep = new RegistryEndpoint(SCHEME_HTTP, HOST_LOCALHOST, server.getAddress().getPort(), null);
-        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig(), (CacheAdapter) null)) {
+        try (RegistryClientImpl client = new RegistryClientImpl(ep, new HttpClientConfig())) {
             File tmp = File.createTempFile("blob-range-416-", ".bin");
             tmp.deleteOnExit();
             BlobRequest req = new BlobRequest(REPO, layerDigest, null, OCTET,

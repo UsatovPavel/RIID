@@ -30,7 +30,7 @@ public class BlobRetryLiveTest {
         RegistryEndpoint hub = TestRegistryConfig.endpoint();
         HttpClientConfig cfg = new HttpClientConfig();
         HostFilesystem fs = new NioHostFilesystem();
-        try (var client = new RegistryClientImpl(hub, cfg, null)) {
+        try (var client = new RegistryClientImpl(hub, cfg)) {
 
         String repo = "library/alpine";
         String ref = "edge";

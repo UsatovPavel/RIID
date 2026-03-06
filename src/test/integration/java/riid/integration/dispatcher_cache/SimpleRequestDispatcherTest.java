@@ -75,10 +75,12 @@ class SimpleRequestDispatcherTest {
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
             FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
 
-            assertEquals(Path.of("/tmp/p2p-layer"), result.path());
+            // Dispatcher puts P2P result into cache and returns cache path
+            assertEquals(Path.of("/tmp/cache/" + ImageDigest.parse(DIGEST).hex()), result.path());
             assertEquals(1, registry.manifestCalls);
             assertEquals(0, registry.blobCalls);
             assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
+            assertTrue(cache.putCalled, "cache should be populated after P2P fetch");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

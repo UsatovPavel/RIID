@@ -3,6 +3,7 @@ package riid.integration.p2p;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -36,12 +38,13 @@ import riid.core.model.manifest.TagList;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
+import riid.p2p.DfdaemonDownloadClient;
 import riid.p2p.DragonflyConfig;
-import riid.p2p.DragonflyP2PExecutor;
+import riid.p2p.DragonflyGrpcP2PExecutor;
 
 @Tag("local")
 @Tag("filesystem")
-class DragonflyP2PExecutorTest {
+class DragonflyGrpcP2PExecutorTest {
     private static final String REPO = "repo";
     private static final String CONTENT_TYPE = "application/octet-stream";
     private static final String MEDIA_LAYER = "application/vnd.oci.image.layer.v1.tar";
@@ -60,35 +63,33 @@ class DragonflyP2PExecutorTest {
 
     @Test
     void fetchesBlobViaDfgetAndCaches() throws Exception {
-        DfgetEnv dfgetEnv = dfgetEnv();
-        ensureDfgetAvailable(dfgetEnv.path());
+        String dfdaemonAddr = "unix:///var/run/dragonfly/dfdaemon.sock";
+        ensureDfdaemonAvailable(dfdaemonAddr);
 
         byte[] payload = "p2p-test-payload".getBytes(StandardCharsets.UTF_8);
         String digest = "sha256:" + sha256(payload);
         startServer(payload, digest);
 
-        RegistryEndpoint endpoint = new RegistryEndpoint("http", dfgetEnv.host(), server.getAddress().getPort(), null);
+        RegistryEndpoint endpoint = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(), null);
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, dfgetEnv.path(), null, null, null);
+        DragonflyConfig config = new DragonflyConfig(true, dfdaemonAddr, null, null, null);
 
-        try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs)) {
-            DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
+        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
 
-            var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
+        var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
-            assertTrue(result.isPresent(), "dfget result should be present");
-            Path path = result.get();
-            assertNotNull(path);
-            assertTrue(fs.exists(path), "downloaded file should exist");
-            assertEquals(payload.length, fs.size(path), "downloaded size should match");
-            assertTrue(cache.has(ImageDigest.parse(digest)), "cache should contain fetched layer");
-        }
+        assertTrue(result.isPresent(), "gRPC result should be present");
+        Path path = result.get();
+        assertNotNull(path);
+        assertTrue(fs.exists(path), "downloaded file should exist");
+        assertEquals(payload.length, fs.size(path), "downloaded size should match");
     }
 
     @Test
     void fetchesBlobViaMultiNodeP2P() throws Exception {
         DfgetEnv dfgetEnv = dfgetEnv();
         ensureDfgetAvailable(dfgetEnv.path());
+        ensureDfdaemonAvailable("localhost:65001");
 
         byte[] payload = "p2p-test-multi".getBytes(StandardCharsets.UTF_8);
         String digest = "sha256:" + sha256(payload);
@@ -107,17 +108,15 @@ class DragonflyP2PExecutorTest {
             assertTrue(Files.exists(seedPath), "seed file should exist");
             assertTrue(Files.size(seedPath) > 0, "seed file should not be empty");
 
-            DragonflyConfig config = new DragonflyConfig(true, createDfgetWrapper(dfgetEnv.path(), "dfdaemon2", true), null, null, null);
-            try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs)) {
-                DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
-                var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
+            DragonflyConfig config = new DragonflyConfig(true, "localhost:65001", null, null, null);
+            DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
+            var result = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
 
-                assertTrue(result.isPresent(), "dfget result should be present");
-                Path path = result.get();
-                assertNotNull(path);
-                assertTrue(fs.exists(path), "downloaded file should exist");
-                assertEquals(payload.length, fs.size(path), "downloaded size should match");
-            }
+            assertTrue(result.isPresent(), "gRPC result should be present");
+            Path path = result.get();
+            assertNotNull(path);
+            assertTrue(fs.exists(path), "downloaded file should exist");
+            assertEquals(payload.length, fs.size(path), "downloaded size should match");
         } finally {
             if (previousTmp != null) {
                 System.setProperty(JAVA_IO_TMPDIR, previousTmp);
@@ -129,6 +128,7 @@ class DragonflyP2PExecutorTest {
     void dispatcherUsesP2PWhenAvailable() throws Exception {
         DfgetEnv dfgetEnv = dfgetEnv();
         ensureDfgetAvailable(dfgetEnv.path());
+        ensureDfdaemonAvailable("localhost:65001");
 
         byte[] payload = "p2p-dispatcher".getBytes(StandardCharsets.UTF_8);
         String digest = "sha256:" + sha256(payload);
@@ -149,10 +149,10 @@ class DragonflyP2PExecutorTest {
             int seedRequests = blobRequests.get();
             assertTrue(seedRequests > 0, "seed should hit registry server");
 
-            DragonflyConfig config = new DragonflyConfig(true, createDfgetWrapper(dfgetEnv.path(), "dfdaemon2", true), null, null, null);
+            DragonflyConfig config = new DragonflyConfig(true, "localhost:65001", null, null, null);
             try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                  RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
-                DragonflyP2PExecutor p2p = new DragonflyP2PExecutor(endpoint, cache, fs, config);
+                DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config, DfdaemonDownloadClient::new);
                 SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
                 FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, "tag", null));
 
@@ -202,7 +202,7 @@ class DragonflyP2PExecutorTest {
         if (env != null && !env.isBlank()) {
             return new DfgetEnv(env, "localhost");
         }
-        var resource = DragonflyP2PExecutorTest.class.getResource("/dfget.sh");
+        var resource = DragonflyGrpcP2PExecutorTest.class.getResource("/dfget.sh");
         if (resource != null) {
             return new DfgetEnv(extractDfgetScript(), resolveDockerGateway());
         }
@@ -213,7 +213,7 @@ class DragonflyP2PExecutorTest {
     }
 
     private static String extractDfgetScript() {
-        try (var in = DragonflyP2PExecutorTest.class.getResourceAsStream("/dfget.sh")) {
+        try (var in = DragonflyGrpcP2PExecutorTest.class.getResourceAsStream("/dfget.sh")) {
             if (in == null) {
                 return "dfget";
             }
@@ -244,15 +244,17 @@ class DragonflyP2PExecutorTest {
         }
     }
 
+    /**
+     * Host that dfdaemon containers can use to reach the registry (HttpServer on host).
+     * Default: host.docker.internal (works with Docker Desktop on Windows/WSL/Mac).
+     * On native Linux set RIID_TEST_REGISTRY_HOST to the gateway (e.g. 172.17.0.1).
+     */
     private static String resolveDockerGateway() {
-        String gateway = inspectDockerNetworkGateway("dragonfly-net");
-        if (gateway != null) {
-            return gateway;
+        String host = System.getenv("RIID_TEST_REGISTRY_HOST");
+        if (host != null && !host.isBlank()) {
+            return host.trim();
         }
-        gateway = inspectContainerGateway("dfdaemon1");
-        if (gateway != null) {
-            return gateway;
-        }
+        // Prefer host.docker.internal — gateway IP often does not reach host on Docker Desktop/WSL
         return "host.docker.internal";
     }
 
@@ -309,18 +311,45 @@ class DragonflyP2PExecutorTest {
         return null;
     }
 
+    /**
+     * Skips test if dfdaemon is not available. For unix socket: skip when missing (single mode not running).
+     * For TCP: skip when unreachable (local multi-node env not running).
+     */
+    private static void ensureDfdaemonAvailable(String dfdaemonAddr) {
+        if (dfdaemonAddr == null || dfdaemonAddr.isBlank()) {
+            return;
+        }
+        if (dfdaemonAddr.startsWith("unix://")) {
+            String path = dfdaemonAddr.substring(7).trim();
+            Assumptions.assumeTrue(Files.exists(Path.of(path)),
+                    () -> "dfdaemon socket not found at " + path + " (run ./minikube-dragonfly.sh)");
+        } else {
+            int colon = dfdaemonAddr.lastIndexOf(':');
+            if (colon > 0) {
+                String host = dfdaemonAddr.substring(0, colon).trim();
+                int port = Integer.parseInt(dfdaemonAddr.substring(colon + 1).trim());
+                try (Socket s = new Socket()) {
+                    s.connect(new InetSocketAddress(host, port), 2000);
+                } catch (IOException e) {
+                    Assumptions.assumeTrue(false,
+                            () -> "dfdaemon gRPC not reachable at " + dfdaemonAddr
+                                    + " (start local multi-node Dragonfly env)");
+                }
+            }
+        }
+    }
     private static void ensureDfgetAvailable(String dfgetPath) {
         try {
             Process process = new ProcessBuilder(dfgetPath, "--help")
                     .redirectErrorStream(true)
                     .start();
             int code = process.waitFor();
-            assertTrue(code == 0, "dfget is not available");
+            Assumptions.assumeTrue(code == 0, () -> "dfget is not available at " + dfgetPath);
         } catch (IOException e) {
-            throw new AssertionError("dfget is not available", e);
+            Assumptions.assumeTrue(false, () -> "dfget is not available at " + dfgetPath + ": " + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new AssertionError("dfget is not available", e);
+            Assumptions.assumeTrue(false, "dfget availability check interrupted");
         }
     }
 

@@ -3,7 +3,6 @@ package riid.client.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.client.HttpClient;
 import riid.cache.auth.TokenCache;
-import riid.cache.oci.CacheAdapter;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.BlobPartialDownloadConfig;
 import riid.client.core.config.RegistryEndpoint;
@@ -45,29 +44,25 @@ public final class RegistryClientImpl implements RegistryClient {
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
-                              HttpClientConfig httpConfig,
-                              CacheAdapter cacheAdapter) {
-        this(endpoint, httpConfig, cacheAdapter, new AuthConfig(), null);
+                              HttpClientConfig httpConfig) {
+        this(endpoint, httpConfig, new AuthConfig(), null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
-                              CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds) {
-        this(endpoint, httpConfig, cacheAdapter, new AuthConfig(defaultTokenTtlSeconds, null, null, null), null);
+        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), null);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
-                              CacheAdapter cacheAdapter,
                               long defaultTokenTtlSeconds,
                               BlobPartialDownloadConfig rangeConfig) {
-        this(endpoint, httpConfig, cacheAdapter, new AuthConfig(defaultTokenTtlSeconds, null, null, null), rangeConfig);
+        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), rangeConfig);
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
-                              CacheAdapter cacheAdapter,
                               AuthConfig authConfig,
                               BlobPartialDownloadConfig rangeConfig) {
         this.endpoint = Objects.requireNonNull(endpoint);
@@ -81,7 +76,7 @@ public final class RegistryClientImpl implements RegistryClient {
                 new TokenCache(),
                 effectiveAuthConfig.defaultTokenTtlSeconds());
         this.manifestService = new ManifestService(http, authService, mapper);
-        this.blobService = new BlobService(http, authService, cacheAdapter, rangeConfig);
+        this.blobService = new BlobService(http, authService, rangeConfig);
     }
 
     @Override
