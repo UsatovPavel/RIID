@@ -1,5 +1,6 @@
 plugins {
     id("java")
+    id("com.google.protobuf") version "0.9.4"
     id("checkstyle")
     id("pmd")
     id("jacoco")
@@ -27,6 +28,24 @@ repositories {
 
 apply(from = "gradle/test-source-sets.gradle.kts")
 apply(from = "gradle/dependencies.gradle.kts")
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:4.27.2"
+    }
+    plugins {
+        create("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:1.79.0"
+        }
+    }
+    generateProtoTasks {
+        ofSourceSet("main").forEach {
+            it.plugins {
+                create("grpc")
+            }
+        }
+    }
+}
 apply(from = "gradle/tests-tasks.gradle.kts")
 apply(from = "gradle/docker.gradle.kts")
 

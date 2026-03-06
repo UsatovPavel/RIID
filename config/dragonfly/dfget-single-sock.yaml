@@ -1,0 +1,14 @@
+# Single mode with UNIX socket for RIID gRPC client (option B: default path).
+# Use with: -v /tmp/dragonfly-sock:/var/run
+# RIID connects to: unix:///tmp/dragonfly-sock/dfdaemon.sock
+download:
+  protocol: tcp
+  server:
+    socketPath: /var/run/dfdaemon.sock
+daemon:
+  dataDir: /var/lib/dragonfly
+  cacheDir: /var/cache/dragonfly
+scheduler:
+  netAddrs:
+    - "dfscheduler:65002"
+  enableBackToSource: true

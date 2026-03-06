@@ -41,8 +41,8 @@ class RegistryFallbackLiveTest {
 
     @Test
     void fallsBackWhenFirstRegistryUnavailable() throws Exception {
-        try (RegistryClient badClient = new RegistryClientImpl(BAD, CFG, null);
-             RegistryClient hubClient = new RegistryClientImpl(HUB, CFG, null)) {
+        try (RegistryClient badClient = new RegistryClientImpl(BAD, CFG);
+             RegistryClient hubClient = new RegistryClientImpl(HUB, CFG)) {
             RuntimeException ex = assertThrows(RuntimeException.class, () -> badClient.fetchManifest(REPO, REF));
             LOGGER.info("Fallback: first registry failed with {}: {}", ex.getClass().getSimpleName(), ex.getMessage());
             Throwable root = rootCause(ex);

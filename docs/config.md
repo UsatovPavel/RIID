@@ -32,7 +32,8 @@ app:
 ### Optional runtime settings
 ```yaml
 runtime:
-  dockerCmd: "/usr/bin/docker" # optional, default: "docker"
+  dockerCmd: "/usr/bin/docker" 
+  maxTasksCommandExecutor: 16  
   output:
     maxStdoutBytes: 32768
     maxStderrBytes: 32768
@@ -45,7 +46,7 @@ runtime:
 p2p:
   dragonfly:
     enabled: true
-    dfgetPath: "/opt/dragonfly/bin/dfget"
+    dfdaemonAddr: "unix:///var/run/dragonfly/dfdaemon.sock"
     schedulerAddr: "dfscheduler:65002"
     requestTimeout: PT30S
     maxRetries: 2
@@ -81,8 +82,9 @@ p2p:
   - be readable.
 - `app.tempDirectory`, if present, must not be blank; `app.allowedRegistries` entries must not be blank.
 - `runtime.dockerCmd`, if present, must not be blank.
+- `runtime.maxTasksCommandExecutor`, if present, must be > 0.
 - `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.
-- `p2p.dragonfly.dfgetPath` must not be blank when enabled; `schedulerAddr` must not be blank when set; `maxRetries` must be >= 0; `requestTimeout` must be positive when set.
+- `p2p.dragonfly.dfdaemonAddr` must not be blank when enabled; `schedulerAddr` must not be blank when set; `maxRetries` must be >= 0; `requestTimeout` must be positive when set.
 
 ### Known notes
 - Missing `registries` throws `ConfigValidationException`.

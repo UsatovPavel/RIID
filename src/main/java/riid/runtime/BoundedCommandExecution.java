@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,16 +23,16 @@ import org.slf4j.LoggerFactory;
 public final class BoundedCommandExecution {
     private static final Logger LOGGER = LoggerFactory.getLogger(BoundedCommandExecution.class);
     public static final int DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
+    public static final int DEFAULT_MAX_TASKS_COMMAND_EXECUTOR = 16;
     private static final int BUFFER_SIZE = 4096;
-    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(
-            16,
-            Thread.ofVirtual().name("cmd-io-", 0).factory());
+    private static final AtomicReference<ExecutorService> EXECUTOR_REF =
+            new AtomicReference<>(newExecutor(DEFAULT_MAX_TASKS_COMMAND_EXECUTOR));
     private static volatile OutputConfig DEFAULT_OUTPUT_CONFIG = OutputConfig.defaults();
 
     private BoundedCommandExecution() { }
 
     static {
-        Runtime.getRuntime().addShutdownHook(new Thread(EXECUTOR::shutdown));
+        Runtime.getRuntime().addShutdownHook(new Thread(BoundedCommandExecution::shutdownExecutor));
     }
 
     public static ShellResult run(List<String> command) throws IOException, InterruptedException {
@@ -43,12 +44,13 @@ public final class BoundedCommandExecution {
         if (maxOutputBytes <= 0) {
             throw new IllegalArgumentException("maxOutputBytes must be positive");
         }
+        ExecutorService localExecutor = EXECUTOR_REF.get();
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Process process = new ProcessBuilder(command).start();
-                Future<String> stdout = EXECUTOR.submit(streamReaderStrict(process.getInputStream(),
+                Future<String> stdout = localExecutor.submit(streamReaderStrict(process.getInputStream(),
                         maxOutputBytes, "stdout"));
-                Future<String> stderr = EXECUTOR.submit(streamReaderStrict(process.getErrorStream(),
+                Future<String> stderr = localExecutor.submit(streamReaderStrict(process.getErrorStream(),
                         maxOutputBytes, "stderr"));
                 int exitCode = process.waitFor();
                 return new ShellResult(exitCode, get(stdout), get(stderr));
@@ -62,7 +64,7 @@ public final class BoundedCommandExecution {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
             }
-        }, EXECUTOR);
+        }, localExecutor);
     }
 
     public static CompletableFuture<ShellResult> run(List<String> command, OutputConfig outputConfig) {
@@ -70,12 +72,13 @@ public final class BoundedCommandExecution {
         Objects.requireNonNull(outputConfig, "outputConfig");
         outputConfig.validate();
 
+        ExecutorService localExecutor = EXECUTOR_REF.get();
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Process process = new ProcessBuilder(command).start();
-                Future<String> stdout = EXECUTOR.submit(streamReaderTruncating(process.getInputStream(),
+                Future<String> stdout = localExecutor.submit(streamReaderTruncating(process.getInputStream(),
                         outputConfig.maxStdoutBytes(), "stdout", outputConfig.captureStdout()));
-                Future<String> stderr = EXECUTOR.submit(streamReaderTruncating(process.getErrorStream(),
+                Future<String> stderr = localExecutor.submit(streamReaderTruncating(process.getErrorStream(),
                         outputConfig.maxStderrBytes(), "stderr", outputConfig.captureStderr()));
                 int exitCode = process.waitFor();
                 return new ShellResult(exitCode, get(stdout), get(stderr));
@@ -85,7 +88,7 @@ public final class BoundedCommandExecution {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
             }
-        }, EXECUTOR);
+        }, localExecutor);
     }
 
     private static Callable<String> streamReaderStrict(InputStream stream, int maxBytes, String name) {
@@ -200,6 +203,24 @@ public final class BoundedCommandExecution {
         Objects.requireNonNull(outputConfig, "outputConfig");
         outputConfig.validate();
         DEFAULT_OUTPUT_CONFIG = outputConfig;
+    }
+
+    public static synchronized void setMaxTasksCommandExecutor(int value) {
+        if (value <= 0) {
+            throw new IllegalArgumentException("maxTasksCommandExecutor must be positive");
+        }
+        ExecutorService oldExecutor = EXECUTOR_REF.getAndSet(newExecutor(value));
+        oldExecutor.shutdown();
+    }
+
+    private static ExecutorService newExecutor(int maxTasks) {
+        return Executors.newFixedThreadPool(
+                maxTasks,
+                Thread.ofVirtual().name("cmd-io-", 0).factory());
+    }
+
+    private static void shutdownExecutor() {
+        EXECUTOR_REF.get().shutdown();
     }
 
     public record ShellResult(int exitCode, String stdout, String stderr) { }

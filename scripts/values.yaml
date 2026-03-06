@@ -1,0 +1,33 @@
+manager:
+  replicas: 1
+  image:
+    repository: dragonflyoss/manager
+    tag: latest
+  metrics:
+    enable: true
+scheduler:
+  replicas: 1
+  image:
+    repository: dragonflyoss/scheduler
+    tag: latest
+  metrics:
+    enable: true
+seedClient:
+  replicas: 1
+  image:
+    repository: dragonflyoss/client
+    tag: latest
+  metrics:
+    enable: true
+client:
+  image:
+    repository: dragonflyoss/client
+    tag: latest
+  metrics:
+    enable: true
+  dfinit:
+    enable: false
+  # hostPath /var/run/dragonfly уже в чарте по умолчанию — сокет на хосте при --driver=none
+redis:
+  replica:
+    replicaCount: 1

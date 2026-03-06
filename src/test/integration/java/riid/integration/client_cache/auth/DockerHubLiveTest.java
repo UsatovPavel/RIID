@@ -41,7 +41,7 @@ class DockerHubLiveTest {
                 .maxRetries(1)
                 .build();
 
-        try (RegistryClientImpl client = new RegistryClientImpl(endpoint, cfg, null)) {
+        try (RegistryClientImpl client = new RegistryClientImpl(endpoint, cfg)) {
             ManifestResult manifest = client.fetchManifest(repo, reference);
             Manifest mf = manifest.manifest();
             assertFalse(mf.layers().isEmpty(), "layers should not be empty");

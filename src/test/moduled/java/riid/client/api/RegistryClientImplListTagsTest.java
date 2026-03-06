@@ -50,8 +50,7 @@ class RegistryClientImplListTagsTest {
 
         try (RegistryClient client = new RegistryClientImpl(
                 new RegistryEndpoint("http", "localhost", port, null),
-                new HttpClientConfig(),
-                null)) {
+                new HttpClientConfig())) {
             TagList list = client.listTags(REPO, null, null);
             assertEquals(REPO, list.name());
             assertEquals(2, list.tags().size());
@@ -65,8 +64,7 @@ class RegistryClientImplListTagsTest {
 
         try (RegistryClient client = new RegistryClientImpl(
                 new RegistryEndpoint("http", "localhost", port, null),
-                new HttpClientConfig(),
-                null)) {
+                new HttpClientConfig())) {
             assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
         }
     }
@@ -78,8 +76,7 @@ class RegistryClientImplListTagsTest {
 
         try (RegistryClient client = new RegistryClientImpl(
                 new RegistryEndpoint("http", "localhost", port, null),
-                new HttpClientConfig(),
-                null)) {
+                new HttpClientConfig())) {
             assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
         }
     }

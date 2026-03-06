@@ -3,4 +3,10 @@ server:
   port: 65002
 manager:
   addr: dfmanager:65003
+database:
+  redis:
+    addrs:
+      - "dfredis:6379"
+    brokerDB: 1
+    backendDB: 2
 

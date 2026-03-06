@@ -1,0 +1,81 @@
+/*
+ *     Copyright 2022 The Dragonfly Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ */
+
+syntax = "proto3";
+
+package common.v2;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_package = "org.dragonflyoss.api.common.v2";
+option java_multiple_files = true;
+
+// TaskType represents type of task.
+enum TaskType {
+  STANDARD = 0;
+  PERSISTENT = 1;
+  PERSISTENT_CACHE = 2;
+  CACHE = 3;
+}
+
+// Priority represents priority of application.
+enum Priority {
+  LEVEL0 = 0;
+  LEVEL1 = 1;
+  LEVEL2 = 2;
+  LEVEL3 = 3;
+  LEVEL4 = 4;
+  LEVEL5 = 5;
+  LEVEL6 = 6;
+}
+
+// TrafficType represents type of traffic.
+enum TrafficType {
+  BACK_TO_SOURCE = 0;
+  REMOTE_PEER = 1;
+  LOCAL_PEER = 2;
+}
+
+// Range represents download range.
+message Range {
+  uint64 start = 1;
+  uint64 length = 2;
+}
+
+// Piece represents information of piece.
+message Piece {
+  uint32 number = 1;
+  optional string parent_id = 2;
+  uint64 offset = 3;
+  uint64 length = 4;
+  string digest = 5;
+  optional bytes content = 6;
+  optional TrafficType traffic_type = 7;
+  google.protobuf.Duration cost = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+// Download information.
+message Download {
+  string url = 1;
+  optional string digest = 2;
+  optional Range range = 3;
+  TaskType type = 4;
+  optional string tag = 5;
+  optional string application = 6;
+  Priority priority = 7;
+  repeated string filtered_query_params = 8;
+  map<string, string> request_header = 9;
+  optional uint64 piece_length = 10;
+  optional string output_path = 11;
+  optional google.protobuf.Duration timeout = 12;
+  bool disable_back_to_source = 13;
+  bool need_back_to_source = 14;
+  bool need_piece_content = 20;
+  bool enable_task_id_based_blob_digest = 30;
+}

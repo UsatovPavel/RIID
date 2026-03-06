@@ -16,12 +16,6 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import riid.cache.oci.CacheAdapter;
-import riid.cache.oci.CacheMediaType;
-import riid.cache.oci.FilesystemCachePayload;
-import riid.cache.oci.ImageDigest;
-import riid.cache.oci.ValidationException;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.BlobSink;
@@ -46,28 +40,19 @@ public class BlobService implements BlobServiceApi {
 
     private final HttpExecutor http;
     private final AuthService authService;
-    private final CacheAdapter cacheAdapter;
     private final BlobPartialDownloadConfig blobPartialDownloadConfig;
 
     public BlobService(HttpExecutor http, AuthService authService) {
-        this(http, authService, null, null);
+        this(http, authService, null);
     }
 
-    public BlobService(HttpExecutor http, AuthService authService, CacheAdapter cacheAdapter) {
-        this(http, authService, cacheAdapter, null);
-    }
-
-    @SuppressFBWarnings(value = "EI_EXPOSE_REP2",
-            justification = "CacheAdapter lifecycle is managed by caller; BlobService does not mutate it")
     public BlobService(HttpExecutor http,
                        AuthService authService,
-                       CacheAdapter cacheAdapter,
                        BlobPartialDownloadConfig blobPartialDownloadConfig) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
-        this.cacheAdapter = cacheAdapter;
-        this.blobPartialDownloadConfig = blobPartialDownloadConfig != null ?
-         blobPartialDownloadConfig : new BlobPartialDownloadConfig();
+        this.blobPartialDownloadConfig = blobPartialDownloadConfig != null
+                ? blobPartialDownloadConfig : new BlobPartialDownloadConfig();
     }
 
     @Override
@@ -204,31 +189,7 @@ public class BlobService implements BlobServiceApi {
             long actualSize = sinkPath != null ? sinkPath.toFile().length() : expectedSize;
             validateSize(actualSize, expectedSize);
             String mediaType = resp.firstHeader(HttpResult.HeaderName.CONTENT_TYPE).orElse(req.mediaType());
-            String locator = sink.locator();
-            if (cacheAdapter != null && sinkPath != null && shouldValidateDigest) {
-                try {
-                    var entry = cacheAdapter.put(
-                            ImageDigest.parse(digest),
-                            FilesystemCachePayload.of(sinkPath, actualSize),
-                            CacheMediaType.from(mediaType));
-                    if (entry != null && entry.key() != null && !entry.key().isBlank()) {
-                        locator = cacheAdapter.resolve(entry.key()).map(Path::toString).orElse(locator);
-                    }
-                } catch (ValidationException ve) {
-                    LOGGER.warn("Blob cache validation error for {}: {}", req.digest(), ve.getMessage(), ve);
-                    throw new ClientException(
-                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, ve.getMessage()),
-                            "Invalid blob media type: " + mediaType,
-                            ve);
-                } catch (IllegalArgumentException iae) {
-                    LOGGER.warn("Blob cache argument error for {}: {}", req.digest(), iae.getMessage(), iae);
-                    throw new ClientException(
-                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, iae.getMessage()),
-                            "Invalid blob media type: " + mediaType,
-                            iae);
-                }
-            }
-            return new BlobResult(digest, actualSize, mediaType, locator);
+            return new BlobResult(digest, actualSize, mediaType, sink.locator());
         } catch (IOException e) {
             LOGGER.warn("Blob stream error for {}/{}: {}", req.repository(), req.digest(), e.getMessage(), e);
             throw new ClientException(
