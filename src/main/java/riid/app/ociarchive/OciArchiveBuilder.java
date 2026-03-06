@@ -13,9 +13,9 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import riid.app.ImageId;
-import riid.app.error.AppError;
-import riid.app.error.OciArchiveException;
+import riid.app.core.model.ImageId;
+import riid.app.core.error.AppError;
+import riid.app.core.error.OciArchiveException;
 import riid.app.logging.AppLogErrorCode;
 import riid.app.logging.AppStructuredEvents;
 import riid.core.fs.HostFilesystem;

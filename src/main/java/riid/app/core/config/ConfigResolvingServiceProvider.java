@@ -1,4 +1,4 @@
-package riid.app.config;
+package riid.app.core.config;
 
 import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
@@ -6,10 +6,10 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import riid.app.CliApplication;
-import riid.app.CliParser;
-import riid.app.ImageId;
-import riid.app.ImageLoadingFacade;
+import riid.app.cli.CliApplication;
+import riid.app.cli.CliParser;
+import riid.app.core.model.ImageId;
+import riid.app.service.ImageLoadingFacade;
 import riid.app.logging.AppLogErrorCode;
 import riid.app.logging.AppStructuredEvents;
 import riid.client.core.config.Credentials;

@@ -1,7 +1,7 @@
 package riid.core.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import riid.app.config.AppConfig;
+import riid.app.core.config.AppConfig;
 import riid.client.core.config.ClientConfig;
 import riid.dispatcher.DispatcherConfig;
 import riid.runtime.RuntimeConfig;

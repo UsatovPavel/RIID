@@ -91,12 +91,16 @@ Porto runtime adapters are wired the same way via `--runtime porto`; ensure Port
   - `riid.test.registry.port` (default: `-1`)
 
 # Dragonfly
-Pull container images 
+For local Dragonfly environment use project scripts:
 ```bash
-docker pull dragonflyoss/dfdaemon:latest
-docker pull dragonflyoss/manager:latest
-docker pull dragonflyoss/scheduler:latest
+./scripts/ci-dragonfly-setup.sh
+./scripts/minikube-dragonfly.sh 1
+# or
+make -C scripts minikube-delete-and-start
 ```
+
+RIID P2P uses an external custom Java library `ru.hse:java-dragonfly-image-puller`
+for Dragonfly gRPC communication (`dfdaemon` DownloadTask, API v2).
 
 
 ## Supported runtimes
@@ -105,7 +109,8 @@ docker pull dragonflyoss/scheduler:latest
 If you need another inherit from runtime adapter in runtime module
 
 ## P2P (Dragonfly)
-Currently supported via `dfget` CLI. 
+Implemented via Dragonfly gRPC through the external `java-dragonfly-image-puller` library.
+`dfget` CLI is not used in RIID runtime flow.
 
 ## Module docs:
 For more info see docs/*.md

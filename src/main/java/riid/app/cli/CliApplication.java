@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.cli;
 
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -13,9 +13,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
-import riid.app.config.ConfigResolvingServiceProvider;
+import riid.app.core.config.ConfigResolvingServiceProvider;
 import riid.app.logging.AppLogErrorCode;
 import riid.app.logging.AppStructuredEvents;
+import riid.app.service.ImageLoadingFacade;
 import riid.runtime.RuntimeAdapter;
 
 /**

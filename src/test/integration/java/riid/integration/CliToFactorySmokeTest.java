@@ -2,8 +2,8 @@ package riid.integration;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import riid.app.CliApplication;
-import riid.app.ImageLoadingFacade;
+import riid.app.cli.CliApplication;
+import riid.app.service.ImageLoadingFacade;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.config.TestConfigYaml;
 import riid.runtime.RuntimeAdapter;
