@@ -1,6 +1,18 @@
 # RIID CLI quick start
 
 Minimal steps to run the client end-to-end from the Shadow JAR.
+## Requirements
+For pull libraries you need pass token in env, for example in  ~/.gradle/gradle.properties: 
+```
+gpr.user=YOUR_GITHUB_USERNAME
+gpr.key=GITHUB_PACKAGES_READ_TOKEN
+```
+### Stack:
+Java 23
+Gradlew 9.2 
+Dragonfly 2.2
+
+./gradlew
 
 ## Build
 ```bash

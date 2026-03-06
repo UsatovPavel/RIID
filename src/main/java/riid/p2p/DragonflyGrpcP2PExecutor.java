@@ -1,9 +1,9 @@
 package riid.p2p;
 
-import hse.ru.dragonfly.puller.DragonflyImagePuller;
-import hse.ru.dragonfly.puller.error.DragonflyPullException;
-import hse.ru.dragonfly.puller.model.PullRequest;
-import hse.ru.dragonfly.puller.model.PullResult;
+import ru.hse.dragonfly.puller.DragonflyImagePuller;
+import ru.hse.dragonfly.puller.blobpuller.PullResult;
+import ru.hse.dragonfly.puller.error.DragonflyPullException;
+import ru.hse.dragonfly.puller.registry.RegistryPullRequest;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -17,7 +17,6 @@ import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.PathSupport;
-import riid.core.model.manifest.RegistryApi;
 
 /**
  * P2P executor via gRPC to dfdaemon (v2 API). Fetch-only: returns path to downloaded file.
@@ -59,20 +58,16 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         if (!config.enabledOrDefault()) {
             return Optional.empty();
         }
-        String url = endpoint.uri(RegistryApi.blobPath(repository, digest.toString())).toString();
         String dfdaemonAddr = config.dfdaemonAddr();
         Path outputPath;
-        String outputForRequest;
         Path hostOutputDir = unixSocketHostOutputDir(dfdaemonAddr);
         if (hostOutputDir != null) {
             String filename = "p2p-" + UUID.randomUUID() + ".bin";
             outputPath = hostOutputDir.resolve(filename);
-            outputForRequest = hostOutputDir.resolve(filename).toString();
         } else {
             outputPath = PathSupport.temporaryPath("p2p-", ".bin");
-            outputForRequest = outputPath.toAbsolutePath().toString();
         }
-        PullRequest request = new PullRequest(url, digest.toString(), outputPath, java.util.Map.of());
+        RegistryPullRequest request = RegistryPullRequestMapper.map(endpoint, repository, digest, outputPath);
         Puller puller = getOrCreatePuller();
         try {
             PullResult result = puller.pull(request);
@@ -145,7 +140,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
 
     @FunctionalInterface
     public interface Puller {
-        PullResult pull(PullRequest request) throws DragonflyPullException;
+        PullResult pull(RegistryPullRequest request) throws DragonflyPullException;
     }
 
     private static final class ExternalDragonflyPuller implements Puller {
@@ -156,7 +151,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         }
 
         @Override
-        public PullResult pull(PullRequest request) throws DragonflyPullException {
+        public PullResult pull(RegistryPullRequest request) throws DragonflyPullException {
             return delegate.pull(request);
         }
     }
