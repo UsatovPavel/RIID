@@ -1,4 +1,4 @@
-package riid.app.error;
+package riid.app.core.error;
 
 /**
  * Checked exception for OCI archive assembly failures within the app module.

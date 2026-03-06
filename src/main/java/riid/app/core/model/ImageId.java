@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.core.model;
 
 /**
  * Full image identity: registry + name + tag + digest.

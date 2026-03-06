@@ -94,3 +94,9 @@ delete_all:
 
 	# Запустить Docker
 	sudo systemctl start docker
+
+logs-sql:
+	kubectl -n dragonfly-system describe pod dragonfly-mysql-0 > ../out.txt
+	kubectl -n dragonfly-system logs dragonfly-mysql-0 --all-containers=true >> ../out.txt
+	kubectl -n dragonfly-system logs dragonfly-mysql-0 --all-containers=true --previous >> ../out.txt
+	kubectl -n dragonfly-system get events --sort-by='.lastTimestamp' | tail -n 80 >> ../out.txt

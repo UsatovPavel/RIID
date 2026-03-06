@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.core.model;
 
 import org.junit.jupiter.api.Test;
 import riid.client.core.config.RegistryEndpoint;
@@ -19,7 +19,7 @@ class ImageIdTest {
 
     @Test
     void fromRegistryUsesDigestWhenReferenceIsSha256() {
-        ImageId id = ImageId.fromRegistry(REGISTRY, REPO, "sha256:abcd");
+        riid.app.core.model.ImageId id = riid.app.core.model.ImageId.fromRegistry(REGISTRY, REPO, "sha256:abcd");
 
         assertEquals(REGISTRY, id.registry());
         assertEquals(REPO, id.name());
@@ -29,7 +29,7 @@ class ImageIdTest {
 
     @Test
     void fromRegistryUsesTagWhenReferenceIsNotDigest() {
-        ImageId id = ImageId.fromRegistry(REGISTRY, REPO, "latest");
+        riid.app.core.model.ImageId id = riid.app.core.model.ImageId.fromRegistry(REGISTRY, REPO, "latest");
 
         assertEquals(REGISTRY, id.registry());
         assertEquals(REPO, id.name());
@@ -39,7 +39,7 @@ class ImageIdTest {
 
     @Test
     void withDigestReturnsSameInstanceWhenBlank() {
-        ImageId original = new ImageId(REGISTRY, REPO, "latest", null);
+        riid.app.core.model.ImageId original = new ImageId(REGISTRY, REPO, "latest", null);
         assertSame(original, original.withDigest(null));
         assertSame(original, original.withDigest(""));
         assertSame(original, original.withDigest("   "));
