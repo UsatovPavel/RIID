@@ -1,0 +1,21 @@
+name: Fuzzing CI
+
+on:
+  schedule:
+    - cron: "0 2 */2 * *"
+  workflow_dispatch:
+
+jobs:
+  fuzzing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 23
+          cache: gradle
+      - name: Fuzzing tests
+        run: ./gradlew testFuzz

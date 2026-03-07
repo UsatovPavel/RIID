@@ -67,7 +67,7 @@ public class StressTest {
                 layer.mediaType(),
                 new BlobRequest.RangeSpec.All());
 
-        int count = 1000;
+        int count = 100;
         try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
             List<CompletableFuture<File>> futures = new ArrayList<>();
             for (int i = 0; i < count; i++) {

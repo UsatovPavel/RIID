@@ -24,6 +24,13 @@ sourceSets.create("moduledTest") {
     runtimeClasspath += output + compileClasspath
 }
 
+sourceSets.create("fuzzingTest") {
+    java.srcDir("src/test/fuzzing/java")
+    resources.srcDir("src/test/fuzzing/resources")
+    compileClasspath += sourceSets["main"].output
+    runtimeClasspath += output + compileClasspath
+}
+
 sourceSets.named("test") {
     java.setSrcDirs(emptyList<String>())
     resources.setSrcDirs(emptyList<String>())
@@ -50,6 +57,13 @@ configurations.named("moduledTestRuntimeOnly") {
     extendsFrom(configurations.getByName("testRuntimeOnly"))
 }
 
+configurations.named("fuzzingTestImplementation") {
+    extendsFrom(configurations.getByName("testImplementation"))
+}
+configurations.named("fuzzingTestRuntimeOnly") {
+    extendsFrom(configurations.getByName("testRuntimeOnly"))
+}
+
 dependencies {
     add("integrationTestImplementation", testFixtures(project(":")))
     add("integrationTestRuntimeOnly", "org.junit.platform:junit-platform-launcher")
@@ -57,5 +71,7 @@ dependencies {
     add("performanceTestRuntimeOnly", "org.junit.platform:junit-platform-launcher")
     add("moduledTestImplementation", testFixtures(project(":")))
     add("moduledTestRuntimeOnly", "org.junit.platform:junit-platform-launcher")
+    add("fuzzingTestImplementation", testFixtures(project(":")))
+    add("fuzzingTestRuntimeOnly", "org.junit.platform:junit-platform-launcher")
 }
 

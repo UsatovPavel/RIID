@@ -55,12 +55,14 @@ idea {
             "src/test/integration/java",
             "src/test/performance/java",
             "src/test/moduled/java",
+            "src/test/fuzzing/java",
             "src/testFixtures/java",
         )
         testResources.from(
             "src/test/integration/resources",
             "src/test/performance/resources",
             "src/test/moduled/resources",
+            "src/test/fuzzing/resources",
             "src/testFixtures/resources",
         )
     }

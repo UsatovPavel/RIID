@@ -6,6 +6,8 @@ dependencies {
     add("implementation", "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     add("testImplementation", platform("org.junit:junit-bom:5.10.0"))
     add("testImplementation", "org.junit.jupiter:junit-jupiter")
+    add("testImplementation", "net.jqwik:jqwik:1.8.4")
+    add("testImplementation", "com.code-intelligence:jazzer-junit:0.29.1")
     add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
     add("testImplementation", "com.tngtech.archunit:archunit-junit5:1.3.0")
     add("testImplementation", platform("org.testcontainers:testcontainers-bom:1.21.4"))//idea say<=1.21 it vulnerable
