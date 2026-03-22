@@ -2,6 +2,7 @@ package riid.p2p;
 
 import riid.p2p.dragonfly.DragonflyConfig;
 import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
+import ru.hse.dragonfly.puller.registry.RegistryAuth;
 import ru.hse.dragonfly.puller.blobpuller.PullResult;
 import ru.hse.dragonfly.puller.error.DragonflyPullErrorKind;
 import ru.hse.dragonfly.puller.error.DragonflyPullException;
@@ -9,6 +10,7 @@ import ru.hse.dragonfly.puller.registry.RegistryPullRequest;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -22,6 +24,7 @@ import riid.core.fs.NioHostFilesystem;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,8 +88,9 @@ class DragonflyGrpcP2PExecutorTest {
         riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
         executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
 
-        assertEquals("u", factory.lastPuller.lastRequest.auth().basicAuthUsername());
-        assertEquals("p", factory.lastPuller.lastRequest.auth().basicAuthPassword());
+        RegistryAuth.Basic auth = assertInstanceOf(RegistryAuth.Basic.class, factory.lastPuller.lastRequest.auth());
+        assertEquals("u", auth.username());
+        assertEquals("p", auth.password());
     }
 
     @Test
@@ -196,12 +200,12 @@ class DragonflyGrpcP2PExecutorTest {
         }
 
         @Override
-        public PullResult pull(RegistryPullRequest request) throws DragonflyPullException {
+        public CompletableFuture<PullResult> pull(RegistryPullRequest request) {
             lastRequest = request;
             if (throwOnPull != null) {
-                throw throwOnPull;
+                return CompletableFuture.failedFuture(throwOnPull);
             }
-            return new PullResult(returnPath != null ? returnPath : request.outputPath());
+            return CompletableFuture.completedFuture(new PullResult(returnPath != null ? returnPath : request.outputPath()));
         }
     }
 }

@@ -1,4 +1,4 @@
-package riid.app;
+package riid.app.cli;
 
 import java.nio.file.Path;
 
