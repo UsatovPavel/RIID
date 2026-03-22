@@ -3,12 +3,15 @@ package riid.p2p.dragonfly;
 import riid.p2p.P2PExecutor;
 import ru.hse.dragonfly.puller.DragonflyImagePuller;
 import ru.hse.dragonfly.puller.blobpuller.PullResult;
+import ru.hse.dragonfly.puller.error.DragonflyPullErrorKind;
 import ru.hse.dragonfly.puller.error.DragonflyPullException;
 import ru.hse.dragonfly.puller.registry.RegistryPullRequest;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,7 +35,6 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final DragonflyConfig config;
     private final PullerFactory pullerFactory;
     private volatile Puller sharedPuller;
-    private final Object pullerLock = new Object();
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
                                     HostFilesystem fs,
@@ -71,8 +73,14 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         RegistryPullRequest request = RegistryPullRequestMapper.map(endpoint, repository, digest, outputPath);
         Puller puller = getOrCreatePuller();
         try {
-            PullResult result = puller.pull(request);
+            PullResult result = puller.pull(request).join();
             return Optional.of(result.path());
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof DragonflyPullException dragonflyPullException) {
+                throw new IOException("dragonfly pull failed: " + dragonflyPullException.getMessage(), dragonflyPullException);
+            }
+            throw new IOException("dragonfly pull failed: " + cause.getMessage(), cause);
         } catch (DragonflyPullException e) {
             throw new IOException("dragonfly pull failed: " + e.getMessage(), e);
         }
@@ -108,7 +116,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         if (current != null) {
             return current;
         }
-        synchronized (pullerLock) {
+        synchronized (this) {
             if (sharedPuller == null) {
                 sharedPuller = pullerFactory.create(config);
             }
@@ -141,7 +149,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
 
     @FunctionalInterface
     public interface Puller {
-        PullResult pull(RegistryPullRequest request) throws DragonflyPullException;
+        CompletableFuture<PullResult> pull(RegistryPullRequest request) throws DragonflyPullException;
     }
 
     private static final class ExternalDragonflyPuller implements Puller {
@@ -152,8 +160,35 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         }
 
         @Override
-        public PullResult pull(RegistryPullRequest request) throws DragonflyPullException {
-            return delegate.pull(request);
+        public CompletableFuture<PullResult> pull(RegistryPullRequest request) throws DragonflyPullException {
+            Object result = delegate.pull(request);
+            if (result instanceof CompletableFuture<?> futureResult) {
+                CompletableFuture<PullResult> converted = new CompletableFuture<>();
+                futureResult.whenComplete((value, error) -> {
+                    if (error != null) {
+                        converted.completeExceptionally(error);
+                        return;
+                    }
+                    if (value instanceof PullResult pullResult) {
+                        converted.complete(pullResult);
+                        return;
+                    }
+                    String valueType = value == null ? "null" : value.getClass().getName();
+                    converted.completeExceptionally(new DragonflyPullException(
+                            DragonflyPullErrorKind.INTERNAL,
+                            "unexpected future pull result type: " + valueType
+                    ));
+                });
+                return converted;
+            }
+            if (result instanceof PullResult pullResult) {
+                return CompletableFuture.completedFuture(pullResult);
+            }
+            String resultType = result == null ? "null" : result.getClass().getName();
+            throw new DragonflyPullException(
+                    DragonflyPullErrorKind.INTERNAL,
+                    "unexpected pull result type: " + resultType
+            );
         }
     }
 }

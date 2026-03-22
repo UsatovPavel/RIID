@@ -5,10 +5,12 @@ import riid.cache.oci.ImageDigest;
 import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 import riid.p2p.dragonfly.RegistryPullRequestMapper;
+import ru.hse.dragonfly.puller.registry.RegistryAuth;
 
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -42,9 +44,9 @@ class RegistryPullRequestMapperTest {
 
         var request = riid.p2p.dragonfly.RegistryPullRequestMapper.map(endpoint, REPO, ImageDigest.parse(DIGEST), Path.of("/tmp/p2p.bin"));
 
-        assertEquals("user", request.auth().basicAuthUsername());
-        assertEquals("secret", request.auth().basicAuthPassword());
-        assertNull(request.auth().jwtToken());
+        RegistryAuth.Basic auth = assertInstanceOf(RegistryAuth.Basic.class, request.auth());
+        assertEquals("user", auth.username());
+        assertEquals("secret", auth.password());
     }
 
     @Test
@@ -58,9 +60,8 @@ class RegistryPullRequestMapperTest {
 
         var request = riid.p2p.dragonfly.RegistryPullRequestMapper.map(endpoint, REPO, ImageDigest.parse(DIGEST), Path.of("/tmp/p2p.bin"));
 
-        assertEquals("jwt-token", request.auth().jwtToken());
-        assertNull(request.auth().basicAuthUsername());
-        assertNull(request.auth().basicAuthPassword());
+        RegistryAuth.Bearer auth = assertInstanceOf(RegistryAuth.Bearer.class, request.auth());
+        assertEquals("jwt-token", auth.token());
     }
 
     @Test
@@ -69,9 +70,7 @@ class RegistryPullRequestMapperTest {
 
         var request = riid.p2p.dragonfly.RegistryPullRequestMapper.map(endpoint, REPO, ImageDigest.parse(DIGEST), Path.of("/tmp/p2p.bin"));
 
-        assertNull(request.auth().jwtToken());
-        assertNull(request.auth().basicAuthUsername());
-        assertNull(request.auth().basicAuthPassword());
+        assertInstanceOf(RegistryAuth.None.class, request.auth());
     }
 
     @Test

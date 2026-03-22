@@ -49,10 +49,10 @@ public record Credentials(
      */
     public RegistryAuth toRegistryAuth() {
         if (identityToken != null && !identityToken.isBlank()) {
-            return new RegistryAuth(null, null, identityToken);
+            return RegistryAuth.bearer(identityToken);
         }
         if (username != null && password != null) {
-            return new RegistryAuth(username, password, null);
+            return RegistryAuth.basic(username, password);
         }
         return RegistryAuth.none();
     }

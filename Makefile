@@ -1,11 +1,13 @@
 SHELL := /bin/bash
 .PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop
-docker-build:
-	docker build -t riid-demo .
 
-docker-test:
-	docker build --target builder -t riid-test .
-	docker run --rm -v gradle-cache:/root/.gradle riid-test ./gradlew test -PdisableLocal
+# clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
+clean-dirs:
+	rm -rf bin  
+	rm -rf .dragonfly
+	rm -rf .cifuzz-corpus
+	rm -rf .vscode
+
 # prod configuration
 dragonfly-single:
 	docker rm -f dfdaemon >/dev/null 2>&1 || true
