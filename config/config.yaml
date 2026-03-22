@@ -30,8 +30,9 @@ dispatcher:
 
 app:
   daemon:
-    bindHost: "127.0.0.1"
-    bindPort: 8080
+    unixSocketPath: "/tmp/riid.sock"
+    metricsHost: "0.0.0.0"
+    metricsPort: 9090
     maxConcurrentPulls: 32
     requestTimeout: "PT30M"
     overloadPolicy: REJECT

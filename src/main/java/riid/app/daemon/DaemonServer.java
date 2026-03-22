@@ -1,48 +1,44 @@
 package riid.app.daemon;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.eclipse.jetty.http.HttpHeader;
-import org.eclipse.jetty.http.HttpMethod;
-import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.io.Content;
 import org.eclipse.jetty.server.Handler;
-import org.eclipse.jetty.server.Request;
-import org.eclipse.jetty.server.Response;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.util.BufferUtil;
-import org.eclipse.jetty.util.Callback;
+import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
 
 import riid.app.cli.CliApplication;
 import riid.app.core.config.AppConfig;
+import riid.app.daemon.guard.PullConcurrencyGuard;
+import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
 
 /**
  * Embedded Jetty daemon server for local IPC over HTTP.
  */
 public final class DaemonServer {
+    private static final String CONTROL_CONNECTOR_NAME = "control";
+    private static final String METRICS_CONNECTOR_NAME = "metrics";
     private final Server server;
     private final ExecutorService pullExecutor;
+    private final Path unixSocketPath;
 
-    public DaemonServer(String host,
-                        int port,
+    public DaemonServer(String unixSocketPath,
+                        String metricsHost,
+                        int metricsPort,
                         CliApplication.ImageLoader loader,
                         Set<String> availableRuntimes,
                         int maxConcurrentPulls,
                         Duration requestTimeout,
                         AppConfig.OverloadPolicy overloadPolicy) {
-        Objects.requireNonNull(host, "host");
+        Objects.requireNonNull(unixSocketPath, "unixSocketPath");
+        Objects.requireNonNull(metricsHost, "metricsHost");
         Objects.requireNonNull(loader, "loader");
         Objects.requireNonNull(availableRuntimes, "availableRuntimes");
         Objects.requireNonNull(requestTimeout, "requestTimeout");
@@ -53,22 +49,37 @@ public final class DaemonServer {
 
         this.server = new Server();
         this.pullExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        this.unixSocketPath = Path.of(unixSocketPath);
 
-        ServerConnector connector = new ServerConnector(server);
-        connector.setHost(host);
-        connector.setPort(port);
-        server.addConnector(connector);
-        server.setHandler(new PullHandler(
-                loader,
-                availableRuntimes,
-                new Semaphore(maxConcurrentPulls, true),
-                requestTimeout,
-                pullExecutor
+        UnixDomainServerConnector controlConnector = new UnixDomainServerConnector(server);
+        controlConnector.setName(CONTROL_CONNECTOR_NAME);
+        controlConnector.setUnixDomainPath(this.unixSocketPath);
+        server.addConnector(controlConnector);
+
+        ServerConnector metricsConnector = new ServerConnector(server);
+        metricsConnector.setName(METRICS_CONNECTOR_NAME);
+        metricsConnector.setHost(metricsHost);
+        metricsConnector.setPort(metricsPort);
+        server.addConnector(metricsConnector);
+
+        Handler.Sequence root = new Handler.Sequence();
+        PullConcurrencyGuard pullConcurrencyGuard =
+                new SemaphorePullConcurrencyGuard(new Semaphore(maxConcurrentPulls, true));
+        root.addHandler(new PullHttpHandler(
+            CONTROL_CONNECTOR_NAME,
+            loader,
+            availableRuntimes,
+            pullConcurrencyGuard,
+            requestTimeout,
+            pullExecutor
         ));
+        root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME));
+        server.setHandler(root);
     }
 
     public void startAndJoin() throws Exception {
         Runtime.getRuntime().addShutdownHook(new Thread(this::stopQuietly));
+        prepareSocketPath();
         server.start();
         server.join();
     }
@@ -79,125 +90,23 @@ public final class DaemonServer {
         } catch (Exception ignored) {
             // best effort on shutdown
         }
+        deleteSocketIfExists();
         pullExecutor.shutdown();
     }
 
-    private static final class PullHandler extends Handler.Abstract {
-        private final ObjectMapper mapper = new ObjectMapper();
-        private final CliApplication.ImageLoader loader;
-        private final Set<String> availableRuntimes;
-        private final Semaphore semaphore;
-        private final Duration requestTimeout;
-        private final ExecutorService pullExecutor;
-
-        private PullHandler(CliApplication.ImageLoader loader,
-                            Set<String> availableRuntimes,
-                            Semaphore semaphore,
-                            Duration requestTimeout,
-                            ExecutorService pullExecutor) {
-            this.loader = loader;
-            this.availableRuntimes = availableRuntimes;
-            this.semaphore = semaphore;
-            this.requestTimeout = requestTimeout;
-            this.pullExecutor = pullExecutor;
+    private void prepareSocketPath() throws IOException {
+        Path parent = unixSocketPath.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
-
-        @Override
-        public boolean handle(Request request, Response response, Callback callback) throws Exception {
-            if (!"/pull".equals(request.getHttpURI().getPath())) {
-                return false;
-            }
-            if (!HttpMethod.POST.is(request.getMethod())) {
-                Response.writeError(request, response, callback, HttpStatus.METHOD_NOT_ALLOWED_405);
-                return true;
-            }
-
-            DaemonPullRequest pullRequest;
-            try {
-                String body = Content.Source.asString(request);
-                pullRequest = mapper.readValue(body, DaemonPullRequest.class);
-            } catch (Exception e) {
-                writeJson(
-                        response,
-                        callback,
-                        HttpStatus.BAD_REQUEST_400,
-                        new ErrorResponse("invalid_request", safeMessage(e))
-                );
-                return true;
-            }
-
-            if (pullRequest.repository() == null || pullRequest.repository().isBlank()
-                    || pullRequest.reference() == null || pullRequest.reference().isBlank()
-                    || pullRequest.runtimeId() == null || pullRequest.runtimeId().isBlank()) {
-                writeJson(response, callback, HttpStatus.BAD_REQUEST_400, new ErrorResponse(
-                        "invalid_request",
-                        "repository, reference and runtimeId are required"
-                ));
-                return true;
-            }
-            if (!availableRuntimes.contains(pullRequest.runtimeId())) {
-                writeJson(response, callback, HttpStatus.UNPROCESSABLE_ENTITY_422, new ErrorResponse("unknown_runtime",
-                        "Unknown runtime: " + pullRequest.runtimeId()));
-                return true;
-            }
-
-            boolean acquired = false;
-            if (!semaphore.tryAcquire()) {
-                writeJson(response, callback, HttpStatus.TOO_MANY_REQUESTS_429, new ErrorResponse("overloaded",
-                        "Too many concurrent pull requests"));
-                return true;
-            }
-            acquired = true;
-
-            Future<String> future = null;
-            try {
-                future = pullExecutor.submit(() ->
-                        loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId()));
-                String loadedPath = future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
-                writeJson(response, callback, HttpStatus.OK_200, new DaemonPullResponse("success", loadedPath, null));
-            } catch (TimeoutException e) {
-                if (future != null) {
-                    future.cancel(true);
-                }
-                writeJson(response, callback, HttpStatus.GATEWAY_TIMEOUT_504, new ErrorResponse(
-                        "timeout",
-                        "Pull request timed out"
-                ));
-            } catch (Exception e) {
-                writeJson(response, callback, HttpStatus.INTERNAL_SERVER_ERROR_500,
-                        new ErrorResponse("pull_failed", safeMessage(e)));
-            } finally {
-                if (acquired) {
-                    semaphore.release();
-                }
-            }
-            return true;
-        }
-
-        private void writeJson(Response response, Callback callback, int status, Object payload)
-                throws IOException {
-            byte[] json = mapper.writeValueAsBytes(payload);
-            response.setStatus(status);
-            response.getHeaders().put(HttpHeader.CONTENT_TYPE, "application/json");
-            ByteBuffer buffer = BufferUtil.toBuffer(json);
-            response.write(true, buffer, callback);
-        }
-
-        private String safeMessage(Exception e) {
-            String message = e.getMessage();
-            if (message == null || message.isBlank()) {
-                return e.getClass().getSimpleName();
-            }
-            return message;
-        }
+        Files.deleteIfExists(unixSocketPath);
     }
 
-    public record DaemonPullRequest(String repository, String reference, String runtimeId) {
-    }
-
-    public record DaemonPullResponse(String status, String imagePath, String error) {
-    }
-
-    public record ErrorResponse(String code, String message) {
+    private void deleteSocketIfExists() {
+        try {
+            Files.deleteIfExists(unixSocketPath);
+        } catch (IOException ignored) {
+            // best effort on shutdown
+        }
     }
 }
