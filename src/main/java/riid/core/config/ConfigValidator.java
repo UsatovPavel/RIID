@@ -132,6 +132,30 @@ public final class ConfigValidator {
                 throw new ConfigValidationException(ConfigValidationException.App.ALLOWED_REGISTRIES_BLANK.message());
             }
         }
+        AppConfig.DaemonConfig daemon = app.daemon();
+        if (daemon == null) {
+            return;
+        }
+        String bindHost = daemon.bindHost();
+        if (bindHost != null && bindHost.isBlank()) {
+            throw new ConfigValidationException("app.daemon.bindHost must not be blank");
+        }
+        Integer bindPort = daemon.bindPort();
+        if (bindPort != null && (bindPort < 1 || bindPort > 65535)) {
+            throw new ConfigValidationException("app.daemon.bindPort must be in range 1..65535");
+        }
+        Integer maxConcurrentPulls = daemon.maxConcurrentPulls();
+        if (maxConcurrentPulls != null && maxConcurrentPulls <= 0) {
+            throw new ConfigValidationException("app.daemon.maxConcurrentPulls must be positive");
+        }
+        Duration requestTimeout = daemon.requestTimeout();
+        if (requestTimeout != null && (requestTimeout.isZero() || requestTimeout.isNegative())) {
+            throw new ConfigValidationException("app.daemon.requestTimeout must be positive");
+        }
+        AppConfig.OverloadPolicy overloadPolicy = daemon.overloadPolicy();
+        if (overloadPolicy != null && overloadPolicy != AppConfig.OverloadPolicy.REJECT) {
+            throw new ConfigValidationException("app.daemon.overloadPolicy supports only REJECT");
+        }
     }
 
     private static void validateRuntime(RuntimeConfig runtime) {

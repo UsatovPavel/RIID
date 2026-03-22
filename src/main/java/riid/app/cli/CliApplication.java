@@ -4,16 +4,17 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import riid.app.core.config.AppConfig;
 import riid.app.core.config.ConfigResolvingLoaderProvider;
+import riid.app.core.config.DaemonSettingsResolver;
 import riid.app.core.error.AppException;
+import riid.app.daemon.DaemonServer;
 import riid.app.service.ImageLoadingFacade;
-import riid.client.core.config.Credentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.core.logging.MdcContext;
@@ -25,7 +26,7 @@ import riid.runtime.RuntimeAdapter;
  */
 public final class CliApplication {
     private static final Logger LOGGER = LoggerFactory.getLogger(CliApplication.class);
-    private static final Path DEFAULT_CONFIG_PATH = Paths.get("config", "config.yaml");
+    private static final Path DEFAULT_CONFIG_PATH = CliParser.DEFAULT_CONFIG_PATH;
 
     enum ExitCode {
         OK(0),
@@ -48,15 +49,37 @@ public final class CliApplication {
     private final PrintWriter out;
     private final PrintWriter err;
     private final Set<String> availableRuntimes;
+    private final DaemonRunner daemonRunner;
 
     public CliApplication(ServiceFactory serviceFactory,
                           Map<String, RuntimeAdapter> runtimes,
                           PrintWriter out,
                           PrintWriter err) {
+        this(serviceFactory, runtimes, out, err, (options, loader, available) -> {
+            AppConfig.DaemonConfig daemonConfig = DaemonSettingsResolver.resolve(options);
+            DaemonServer server = new DaemonServer(
+                    daemonConfig.bindHostOrDefault(),
+                    daemonConfig.bindPortOrDefault(),
+                    loader,
+                    available,
+                    daemonConfig.maxConcurrentPullsOrDefault(),
+                    daemonConfig.requestTimeoutOrDefault(),
+                    daemonConfig.overloadPolicyOrDefault()
+            );
+            server.startAndJoin();
+        });
+    }
+
+    public CliApplication(ServiceFactory serviceFactory,
+                          Map<String, RuntimeAdapter> runtimes,
+                          PrintWriter out,
+                          PrintWriter err,
+                          DaemonRunner daemonRunner) {
         this.serviceFactory = Objects.requireNonNull(serviceFactory, "serviceFactory");
         this.availableRuntimes = Set.copyOf(Objects.requireNonNull(runtimes, "runtimes").keySet());
         this.out = Objects.requireNonNull(out, "out");
         this.err = Objects.requireNonNull(err, "err");
+        this.daemonRunner = Objects.requireNonNull(daemonRunner, "daemonRunner");
     }
 
     public static CliApplication createDefault() {
@@ -88,9 +111,9 @@ public final class CliApplication {
                 .addDurationMs(0L)
                 .log("Request started");
         try {
-            ParseResult result = CliParser.parse(args);
-            if (result.errorMessage != null) {
-                err.println("Error: " + result.errorMessage);
+            CliParser.ParseResult result = CliParser.parse(args);
+            if (result.errorMessage() != null) {
+                err.println("Error: " + result.errorMessage());
                 printUsage(err);
                 MilestoneEventLogger.warn(LOGGER)
                         .addEvent("request.finish")
@@ -101,7 +124,7 @@ public final class CliApplication {
                         .log("Request failed with usage error");
                 return ExitCode.USAGE.code();
             }
-            if (result.showHelp) {
+            if (result.showHelp()) {
                 printUsage(out);
                 MilestoneEventLogger.info(LOGGER)
                         .addEvent("request.finish")
@@ -110,7 +133,17 @@ public final class CliApplication {
                         .log("Request finished (help)");
                 return ExitCode.OK.code();
             }
-            CliOptions options = result.options;
+            CliParser.CliOptions options = result.options();
+            if (options.daemonMode()) {
+                ImageLoader loader = serviceFactory.create(options);
+                daemonRunner.run(options, loader, availableRuntimes);
+                MilestoneEventLogger.info(LOGGER)
+                        .addEvent("request.finish")
+                        .addResult("success")
+                        .addDurationFrom(requestStartedNs)
+                        .log("Request finished (daemon)");
+                return ExitCode.OK.code();
+            }
             if (!availableRuntimes.contains(options.runtimeId())) {
                 err.printf(
                         "Unknown runtime '%s'. Available: %s%n",
@@ -159,6 +192,7 @@ public final class CliApplication {
     private void printUsage(PrintWriter writer) {
         String usage = String.join("%n",
                 "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
+                "   or: riid --daemon",
                 "       [--config <path>] [--username <user>",
                 "        (--password <pwd>|--password-env <VAR>|--password-file <path>)]",
                 "       [--cert-path <path>] [--key-path <path>] [--ca-path <path>] [--help]",
@@ -167,6 +201,7 @@ public final class CliApplication {
                 "  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided",
                 "  --digest         Digest to pull (format: sha256:...)",
                 "  --runtime        Runtime id (available: %s)".formatted(String.join(", ", availableRuntimes)),
+                "  --daemon         Run in daemon mode (Jetty HTTP IPC server)",
                 "  --config         Path to YAML config (default path: %s)".formatted(DEFAULT_CONFIG_PATH),
                 "                   If omitted and default file is missing, built-in defaults are used",
                 "  --username       Registry username for basic auth",
@@ -185,6 +220,7 @@ public final class CliApplication {
 
     public record CliOptions(Path configPath,
                              boolean configProvidedByUser,
+                             boolean daemonMode,
                              String repository,
                              String reference,
                              String runtimeId,
@@ -209,5 +245,9 @@ public final class CliApplication {
     public interface ImageLoader {
         String load(String repository, String reference, String runtimeId);
     }
-}
 
+    @FunctionalInterface
+    public interface DaemonRunner {
+        void run(CliParser.CliOptions options, ImageLoader loader, Set<String> availableRuntimes) throws Exception;
+    }
+}

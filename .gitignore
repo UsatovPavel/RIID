@@ -45,7 +45,6 @@ bin/
 *.txt
 
 ###Internal artifacts###
-internalDocs/*
 План*
 Презентация.md
 Исправления*
