@@ -58,8 +58,9 @@ public final class CliApplication {
         this(serviceFactory, runtimes, out, err, (options, loader, available) -> {
             AppConfig.DaemonConfig daemonConfig = DaemonSettingsResolver.resolve(options);
             DaemonServer server = new DaemonServer(
-                    daemonConfig.bindHostOrDefault(),
-                    daemonConfig.bindPortOrDefault(),
+                    daemonConfig.unixSocketPathOrDefault(),
+                    daemonConfig.metricsHostOrDefault(),
+                    daemonConfig.metricsPortOrDefault(),
                     loader,
                     available,
                     daemonConfig.maxConcurrentPullsOrDefault(),
@@ -218,27 +219,9 @@ public final class CliApplication {
         writer.flush();
     }
 
-    public record CliOptions(Path configPath,
-                             boolean configProvidedByUser,
-                             boolean daemonMode,
-                             String repository,
-                             String reference,
-                             String runtimeId,
-                             Credentials credentials,
-                             Path certPath,
-                             Path keyPath,
-                             Path caPath) {
-        boolean hasCerts() {
-            return certPath != null || keyPath != null || caPath != null;
-        }
-    }
-
-    record ParseResult(CliOptions options, boolean showHelp, String errorMessage) {
-    }
-
     @FunctionalInterface
     public interface ServiceFactory {
-        ImageLoader create(CliOptions options) throws Exception;
+        ImageLoader create(CliParser.CliOptions options) throws Exception;
     }
 
     @FunctionalInterface

@@ -46,7 +46,7 @@ public record AppConfig(
     }
 
     public DaemonConfig daemonOrDefault() {
-        return daemon == null ? new DaemonConfig(null, null, null, null, null) : daemon;
+        return daemon == null ? new DaemonConfig(null, null, null, null, null, null) : daemon;
     }
 
     public enum OverloadPolicy {
@@ -54,30 +54,39 @@ public record AppConfig(
     }
 
     public record DaemonConfig(
-            @JsonProperty("bindHost") String bindHost,
-            @JsonProperty("bindPort") Integer bindPort,
+            @JsonProperty("unixSocketPath") String unixSocketPath,
+            @JsonProperty("metricsHost") String metricsHost,
+            @JsonProperty("metricsPort") Integer metricsPort,
             @JsonProperty("maxConcurrentPulls") Integer maxConcurrentPulls,
             @JsonProperty("requestTimeout") Duration requestTimeout,
             @JsonProperty("overloadPolicy") OverloadPolicy overloadPolicy
     ) {
-        private static final String DEFAULT_BIND_HOST = "127.0.0.1";
-        private static final int DEFAULT_BIND_PORT = 8080;
+        private static final String DEFAULT_UNIX_SOCKET_PATH = "/tmp/riid.sock";
+        private static final String DEFAULT_METRICS_HOST = "0.0.0.0";
+        private static final int DEFAULT_METRICS_PORT = 9090;
         private static final int DEFAULT_MAX_CONCURRENT_PULLS = 32;
         private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
         private static final OverloadPolicy DEFAULT_OVERLOAD_POLICY = OverloadPolicy.REJECT;
 
-        public String bindHostOrDefault() {
-            if (bindHost == null || bindHost.isBlank()) {
-                return DEFAULT_BIND_HOST;
+        public String unixSocketPathOrDefault() {
+            if (unixSocketPath == null || unixSocketPath.isBlank()) {
+                return DEFAULT_UNIX_SOCKET_PATH;
             }
-            return bindHost;
+            return unixSocketPath;
         }
 
-        public int bindPortOrDefault() {
-            if (bindPort == null || bindPort <= 0) {
-                return DEFAULT_BIND_PORT;
+        public String metricsHostOrDefault() {
+            if (metricsHost == null || metricsHost.isBlank()) {
+                return DEFAULT_METRICS_HOST;
             }
-            return bindPort;
+            return metricsHost;
+        }
+
+        public int metricsPortOrDefault() {
+            if (metricsPort == null || metricsPort <= 0) {
+                return DEFAULT_METRICS_PORT;
+            }
+            return metricsPort;
         }
 
         public int maxConcurrentPullsOrDefault() {
