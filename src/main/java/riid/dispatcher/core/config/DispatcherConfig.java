@@ -1,4 +1,4 @@
-package riid.dispatcher;
+package riid.dispatcher.core.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

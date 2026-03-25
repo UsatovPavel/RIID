@@ -7,7 +7,7 @@ import riid.client.core.config.AuthConfig;
 import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
-import riid.dispatcher.DispatcherConfig;
+import riid.dispatcher.core.config.DispatcherConfig;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;

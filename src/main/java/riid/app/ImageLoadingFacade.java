@@ -32,6 +32,8 @@ import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
+import riid.core.logging.MdcContext;
+import riid.core.logging.MilestoneEventLogger;
 import riid.p2p.DragonflyGrpcP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
@@ -96,7 +98,30 @@ public final class ImageLoadingFacade implements AutoCloseable {
     public ImageId load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
-        ManifestResult manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
+        String previousOperation = MdcContext.getOperation();
+        MdcContext.putOperation("manifest.fetch");
+        long manifestStartedNs = System.nanoTime();
+        ManifestResult manifestResult;
+        try {
+            manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
+            MilestoneEventLogger.info(LOGGER)
+                    .addEvent("manifest.fetch")
+                    .addResult("success")
+                    .addDurationMs(durationMs(manifestStartedNs))
+                    .log("Manifest fetched");
+        } catch (Exception e) {
+            MilestoneEventLogger.error(LOGGER)
+                    .addCause(e)
+                    .addEvent("manifest.fetch")
+                    .addResult("error")
+                    .addDurationMs(durationMs(manifestStartedNs))
+                    .addErrorKind("NETWORK")
+                    .addErrorCode("MANIFEST_FETCH_FAILED")
+                    .log("Manifest fetch failed");
+            throw e;
+        } finally {
+            MdcContext.restoreOperation(previousOperation);
+        }
         RuntimeAdapter runtime = runtimeRegistry.get(runtimeId);
         ImageId resolved = imageId.withDigest(manifestResult.digest());
         return load(manifestResult, runtime, resolved);
@@ -111,27 +136,59 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Objects.requireNonNull(manifestResult, "manifestResult");
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(imageId, "imageId");
+        String previousOperation = MdcContext.getOperation();
+        MdcContext.putOperation("engine.import");
+        long engineStartedNs = System.nanoTime();
         try {
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
                 runtime.importImage(archivePath);
-                LOGGER.info("Loaded {} into runtime {} at {}", imageId, runtime.runtimeId(), archivePath);
+                MilestoneEventLogger.info(LOGGER)
+                        .addEvent("engine.import")
+                        .addResult("success")
+                        .addDurationMs(durationMs(engineStartedNs))
+                        .log("Loaded " + imageId + " into runtime " + runtime.runtimeId() + " at " + archivePath);
                 return imageId;
             });
         } catch (AppException e) {
-            LOGGER.error("App error while loading {} into runtime {}: {}",
-                    imageId, runtime.runtimeId(), e.getMessage(), e);
+            MilestoneEventLogger.error(LOGGER)
+                    .addCause(e)
+                    .addEvent("engine.import")
+                    .addResult("error")
+                    .addDurationMs(durationMs(engineStartedNs))
+                    .addErrorKind("RUNTIME")
+                    .addErrorCode("APP_RUNTIME_ERROR")
+                    .log("App error while loading " + imageId + " into runtime " + runtime.runtimeId()
+                            + ": " + e.getMessage());
             throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             String msg = AppError.RuntimeErrorKind.LOAD_FAILED.format(runtime.runtimeId());
+            MilestoneEventLogger.error(LOGGER)
+                    .addCause(e)
+                    .addEvent("engine.import")
+                    .addResult("error")
+                    .addDurationMs(durationMs(engineStartedNs))
+                    .addErrorKind("RUNTIME")
+                    .addErrorCode("ENGINE_IMPORT_INTERRUPTED")
+                    .log("Runtime import interrupted");
             throw new AppException(
                     new AppError.RuntimeError(AppError.RuntimeErrorKind.LOAD_FAILED, msg),
                     msg, e);
         } catch (IOException e) {
             String msg = AppError.RuntimeErrorKind.LOAD_FAILED.format(runtime.runtimeId());
+            MilestoneEventLogger.error(LOGGER)
+                    .addCause(e)
+                    .addEvent("engine.import")
+                    .addResult("error")
+                    .addDurationMs(durationMs(engineStartedNs))
+                    .addErrorKind("RUNTIME")
+                    .addErrorCode("ENGINE_IMPORT_IO_ERROR")
+                    .log("Runtime import I/O error");
             throw new AppException(
                     new AppError.RuntimeError(AppError.RuntimeErrorKind.LOAD_FAILED, msg),
                     msg, e);
+        } finally {
+            MdcContext.restoreOperation(previousOperation);
         }
     }
 
@@ -268,6 +325,11 @@ public final class ImageLoadingFacade implements AutoCloseable {
     public interface CacheCleaner {
         void close() throws Exception;
     }
+
+    private static long durationMs(long startedNs) {
+        return (System.nanoTime() - startedNs) / 1_000_000L;
+    }
+
 }
 
 
