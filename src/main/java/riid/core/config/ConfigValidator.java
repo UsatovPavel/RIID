@@ -6,7 +6,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
-import riid.app.AppConfig;
+import riid.app.config.AppConfig;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;

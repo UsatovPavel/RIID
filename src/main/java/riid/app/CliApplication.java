@@ -1,41 +1,23 @@
 package riid.app;
 
-import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.MissingArgumentException;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.UnrecognizedOptionException;
-
-import riid.core.fs.NioHostFilesystem;
+import riid.app.config.ConfigResolvingLoaderProvider;
 import riid.client.core.config.Credentials;
-import riid.client.core.config.RegistryEndpoint;
-import riid.core.config.ConfigLoader;
-import riid.core.config.GlobalConfig;
-import riid.p2p.P2PExecutor;
 import riid.runtime.RuntimeAdapter;
 
 /**
  * Minimal CLI parser/runner for ImageLoadingFacade.
  */
 public final class CliApplication {
-    private static final String OPTION_CONFIG = "config";
     private static final Path DEFAULT_CONFIG_PATH = Paths.get("config", "config.yaml");
-    private static final RegistryEndpoint DEFAULT_REGISTRY_ENDPOINT =
-            new RegistryEndpoint("https", "registry-1.docker.io", -1, null);
 
     enum ExitCode {
         OK(0),
@@ -71,7 +53,7 @@ public final class CliApplication {
 
     public static CliApplication createDefault() {
         return new CliApplication(
-                CliApplication::defaultServiceFactory,
+                ConfigResolvingLoaderProvider::create,
                 ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true)
@@ -125,62 +107,6 @@ public final class CliApplication {
         }
     }
 
-    private static ImageLoader defaultServiceFactory(CliOptions options) throws Exception {
-        if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
-            RegistryEndpoint endpoint = applyCredentials(DEFAULT_REGISTRY_ENDPOINT, options.credentials());
-            return defaultLoaderWithBuiltInConfig(endpoint);
-        }
-        GlobalConfig config = ConfigLoader.load(options.configPath());
-        RegistryEndpoint endpoint = config.client().registries().getFirst();
-        endpoint = applyCredentials(endpoint, options.credentials());
-        String registry = endpoint.registryName();
-        return (repository, reference, runtimeId) -> {
-            try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(
-                    options.configPath(),
-                    options.credentials()
-            )) {
-                return facade.load(
-                        ImageId.fromRegistry(registry, repository, reference),
-                        runtimeId
-                ).toString();
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to load image", e);
-            }
-        };
-    }
-
-    private static RegistryEndpoint applyCredentials(RegistryEndpoint endpoint, Credentials credentials) {
-        if (credentials == null) {
-            return endpoint;
-        }
-        return new RegistryEndpoint(
-                endpoint.scheme(),
-                endpoint.host(),
-                endpoint.port(),
-                credentials
-        );
-    }
-
-    private static ImageLoader defaultLoaderWithBuiltInConfig(RegistryEndpoint endpoint) {
-        return (repository, reference, runtimeId) -> {
-            var fs = new NioHostFilesystem();
-            try (ImageLoadingFacade facade = ImageLoadingFacade.createDefault(
-                    endpoint,
-                    null,
-                    new P2PExecutor.NoOp(),
-                    ImageLoadingFacade.defaultRuntimes(),
-                    fs
-            )) {
-                return facade.load(
-                        ImageId.fromRegistry(endpoint.registryName(), repository, reference),
-                        runtimeId
-                ).toString();
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to load image", e);
-            }
-        };
-    }
-    
     private void printUsage(PrintWriter writer) {
         String usage = String.join("%n",
                 "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
@@ -223,169 +149,6 @@ public final class CliApplication {
     }
 
     record ParseResult(CliOptions options, boolean showHelp, String errorMessage) {
-    }
-
-    /**
-     * Parses CLI arguments and performs basic validation.
-     */
-    static final class CliParser {
-        private static final String ARG_PATH = "path";
-        private static final int MAX_PASSWORD_SOURCES = 1;
-
-        private CliParser() {
-        }
-
-        static ParseResult parse(String[] args) {
-            if (args == null || args.length == 0) {
-                return new ParseResult(null, false, "No arguments provided");
-            }
-            Options parsedOptions = new Options();
-            parsedOptions.addOption(Option.builder("h")
-                    .longOpt("help")
-                    .desc("Show help")
-                    .build());
-            addOption(parsedOptions, OPTION_CONFIG, ARG_PATH);
-            addOption(parsedOptions, "repo", "name");
-            addOption(parsedOptions, "tag", "tag");
-            addOption(parsedOptions, "ref", "ref");
-            addOption(parsedOptions, "digest", "digest");
-            addOption(parsedOptions, "runtime", "id");
-            addOption(parsedOptions, "username", "user");
-            addOption(parsedOptions, "password", "pwd");
-            addOption(parsedOptions, "password-env", "var");
-            addOption(parsedOptions, "password-file", ARG_PATH);
-            addOption(parsedOptions, "cert-path", ARG_PATH);
-            addOption(parsedOptions, "key-path", ARG_PATH);
-            addOption(parsedOptions, "ca-path", ARG_PATH);
-
-            CommandLine cmd;
-            CommandLineParser parser = new DefaultParser();
-            try {
-                cmd = parser.parse(parsedOptions, args);
-            } catch (UnrecognizedOptionException e) {
-                return new ParseResult(null, false, "Unknown option: " + e.getOption());
-            } catch (MissingArgumentException e) {
-                return new ParseResult(null, false,
-                        "Missing value for " + formatOption(e.getOption()));
-            } catch (ParseException e) {
-                return new ParseResult(null, false, e.getMessage());
-            }
-
-            if (!cmd.getArgList().isEmpty()) {
-                return new ParseResult(null, false, "Unexpected argument: " + cmd.getArgList().getFirst());
-            }
-            if (cmd.hasOption("help")) {
-                return new ParseResult(null, true, null);
-            }
-
-            boolean configProvidedByUser = cmd.hasOption(OPTION_CONFIG);
-            Path configPath = Paths.get(cmd.getOptionValue(OPTION_CONFIG, DEFAULT_CONFIG_PATH.toString()));
-            String repo = cmd.getOptionValue("repo");
-            String tag = cmd.getOptionValue("tag");
-            String ref = cmd.getOptionValue("ref");
-            String digest = cmd.getOptionValue("digest");
-            String runtimeId = cmd.getOptionValue("runtime");
-            String username = cmd.getOptionValue("username");
-            String password = cmd.getOptionValue("password");
-            String passwordEnv = cmd.getOptionValue("password-env");
-            Path passwordFile = cmd.hasOption("password-file")
-                    ? Paths.get(cmd.getOptionValue("password-file"))
-                    : null;
-            Path certPath = cmd.hasOption("cert-path") ? Paths.get(cmd.getOptionValue("cert-path")) : null;
-            Path keyPath = cmd.hasOption("key-path") ? Paths.get(cmd.getOptionValue("key-path")) : null;
-            Path caPath = cmd.hasOption("ca-path") ? Paths.get(cmd.getOptionValue("ca-path")) : null;
-            if (repo == null || repo.isBlank()) {
-                return new ParseResult(null, false, "Repository is required (--repo)");
-            }
-            if (runtimeId == null || runtimeId.isBlank()) {
-                return new ParseResult(null, false, "Runtime id is required (--runtime)");
-            }
-
-            if (countNonNull(password, passwordEnv, passwordFile) > MAX_PASSWORD_SOURCES) {
-                return new ParseResult(null, false, "Use only one of --password, --password-env or --password-file");
-            }
-            String resolvedPassword = password;
-            if (passwordEnv != null) {
-                resolvedPassword = System.getenv(passwordEnv);
-                if (resolvedPassword == null || resolvedPassword.isBlank()) {
-                    return new ParseResult(null, false, "Env var " + passwordEnv + " is not set or empty");
-                }
-            } else if (passwordFile != null) {
-                try {
-                    resolvedPassword = Files.readString(passwordFile).trim();
-                } catch (IOException e) {
-                    return new ParseResult(null, false, "Unable to read password file: " + e.getMessage());
-                }
-                if (resolvedPassword.isBlank()) {
-                    return new ParseResult(null, false, "Password file is empty: " + passwordFile);
-                }
-            }
-            if (username != null && resolvedPassword == null) {
-                return new ParseResult(null, false, "Password is required when username is provided");
-            }
-            if (resolvedPassword != null && username == null) {
-                return new ParseResult(null, false, "Username is required when password is provided");
-            }
-            Credentials credentials = null;
-            if (username != null) {
-                credentials = Credentials.basic(username, resolvedPassword);
-            }
-
-            if (certPath != null && !Files.exists(certPath)) {
-                return new ParseResult(null, false, "cert-path does not exist: " + certPath);
-            }
-            if (keyPath != null && !Files.exists(keyPath)) {
-                return new ParseResult(null, false, "key-path does not exist: " + keyPath);
-            }
-            if (caPath != null && !Files.exists(caPath)) {
-                return new ParseResult(null, false, "ca-path does not exist: " + caPath);
-            }
-            String reference = digest != null
-                    ? digest
-                    : (tag != null ? tag : (ref != null ? ref : "latest"));
-
-            CliOptions cliOptions = new CliOptions(
-                    configPath,
-                    configProvidedByUser,
-                    repo,
-                    reference,
-                    runtimeId,
-                    credentials,
-                    certPath,
-                    keyPath,
-                    caPath
-            );
-            return new ParseResult(cliOptions, false, null);
-        }
-
-        @SafeVarargs
-        private static int countNonNull(Object... items) {
-            int count = 0;
-            for (Object item : items) {
-                if (item != null) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        private static void addOption(Options options, String longOpt, String argName) {
-            options.addOption(Option.builder()
-                    .longOpt(longOpt)
-                    .hasArg()
-                    .argName(argName)
-                    .build());
-        }
-
-        private static String formatOption(Option option) {
-            if (option == null) {
-                return "option";
-            }
-            if (option.getLongOpt() != null) {
-                return "--" + option.getLongOpt();
-            }
-            return "-" + option.getOpt();
-        }
     }
 
     @FunctionalInterface
