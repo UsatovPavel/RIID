@@ -8,15 +8,21 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 import riid.app.config.ConfigResolvingLoaderProvider;
 import riid.client.core.config.Credentials;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import riid.core.logging.MdcContext;
+import riid.core.logging.MilestoneEventLogger;
 import riid.runtime.RuntimeAdapter;
 
 /**
  * Minimal CLI parser/runner for ImageLoadingFacade.
  */
 public final class CliApplication {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CliApplication.class);
     private static final Path DEFAULT_CONFIG_PATH = Paths.get("config", "config.yaml");
 
     enum ExitCode {
@@ -69,26 +75,55 @@ public final class CliApplication {
     }
 
     public int run(String[] args) {
-        ParseResult result = CliParser.parse(args);
-        if (result.errorMessage != null) {
-            err.println("Error: " + result.errorMessage);
-            printUsage(err);
-            return ExitCode.USAGE.code();
-        }
-        if (result.showHelp) {
-            printUsage(out);
-            return ExitCode.OK.code();
-        }
-        CliOptions options = result.options;
-        if (!availableRuntimes.contains(options.runtimeId())) {
-            err.printf(
-                    "Unknown runtime '%s'. Available: %s%n",
-                    options.runtimeId(),
-                    String.join(", ", availableRuntimes)
-            );
-            return ExitCode.RUNTIME_NOT_FOUND.code();
-        }
+        long requestStartedNs = System.nanoTime();
+        String traceId = UUID.randomUUID().toString();
+        MdcContext.putTraceId(traceId);
+        MdcContext.putComponent("app");
+        MdcContext.putOperation("request");
+        MilestoneEventLogger.info(LOGGER)
+                .addEvent("request.start")
+                .addResult("success")
+                .addDurationMs(0L)
+                .log("Request started");
         try {
+            ParseResult result = CliParser.parse(args);
+            if (result.errorMessage != null) {
+                err.println("Error: " + result.errorMessage);
+                printUsage(err);
+                MilestoneEventLogger.warn(LOGGER)
+                        .addEvent("request.finish")
+                        .addResult("error")
+                        .addDurationFrom(requestStartedNs)
+                        .addErrorKind("VALIDATION")
+                        .addErrorCode("CLI_USAGE_ERROR")
+                        .log("Request failed with usage error");
+                return ExitCode.USAGE.code();
+            }
+            if (result.showHelp) {
+                printUsage(out);
+                MilestoneEventLogger.info(LOGGER)
+                        .addEvent("request.finish")
+                        .addResult("success")
+                        .addDurationFrom(requestStartedNs)
+                        .log("Request finished (help)");
+                return ExitCode.OK.code();
+            }
+            CliOptions options = result.options;
+            if (!availableRuntimes.contains(options.runtimeId())) {
+                err.printf(
+                        "Unknown runtime '%s'. Available: %s%n",
+                        options.runtimeId(),
+                        String.join(", ", availableRuntimes)
+                );
+                MilestoneEventLogger.warn(LOGGER)
+                        .addEvent("request.finish")
+                        .addResult("error")
+                        .addDurationFrom(requestStartedNs)
+                        .addErrorKind("VALIDATION")
+                        .addErrorCode("RUNTIME_NOT_FOUND")
+                        .log("Request failed: unknown runtime");
+                return ExitCode.RUNTIME_NOT_FOUND.code();
+            }
             ImageLoader loader = serviceFactory.create(options);
             loader.load(options.repository(), options.reference(), options.runtimeId());
             out.printf(
@@ -100,10 +135,25 @@ public final class CliApplication {
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
             }
+            MilestoneEventLogger.info(LOGGER)
+                    .addEvent("request.finish")
+                    .addResult("success")
+                    .addDurationFrom(requestStartedNs)
+                    .log("Request finished");
             return ExitCode.OK.code();
         } catch (Exception e) {
             err.println("Failed to load image: " + e.getMessage());
+            MilestoneEventLogger.error(LOGGER)
+                    .addCause(e)
+                    .addEvent("request.finish")
+                    .addResult("error")
+                    .addDurationFrom(requestStartedNs)
+                    .addErrorKind("INTERNAL")
+                    .addErrorCode("REQUEST_EXECUTION_FAILED")
+                    .log("Request failed");
             return ExitCode.FAILURE.code();
+        } finally {
+            MdcContext.clearRequestContext();
         }
     }
 

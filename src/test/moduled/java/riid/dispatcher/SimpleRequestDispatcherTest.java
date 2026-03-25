@@ -28,6 +28,7 @@ import riid.client.api.RegistryClient;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.TagList;
+import riid.dispatcher.core.config.DispatcherConfig;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.p2p.P2PExecutor;
@@ -92,7 +93,7 @@ class SimpleRequestDispatcherTest {
             RecordingP2PExecutor p2p = new RecordingP2PExecutor();
 
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
-                    registry, cache, p2p, new DispatcherConfig(1), fs);
+                    registry, cache, p2p, new riid.dispatcher.core.config.DispatcherConfig(1), fs);
             FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
 
             assertEquals(cachedPath, result.path());
