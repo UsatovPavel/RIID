@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <version>[ignore]</version>
+            </fieldNames>
+
+            <!-- MVP: always propagate correlation context from MDC -->
+            <includeMdcKeyName>trace_id</includeMdcKeyName>
+            <includeMdcKeyName>component</includeMdcKeyName>
+            <includeMdcKeyName>operation</includeMdcKeyName>
+
+            <!-- Keep step-level fields when passed via SLF4J key-values -->
+            <includeKeyValueKeyName>event</includeKeyValueKeyName>
+            <includeKeyValueKeyName>result</includeKeyValueKeyName>
+            <includeKeyValueKeyName>duration_ms</includeKeyValueKeyName>
+            <includeKeyValueKeyName>error_kind</includeKeyValueKeyName>
+            <includeKeyValueKeyName>error_code</includeKeyValueKeyName>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT_JSON"/>
+    </root>
+</configuration>
