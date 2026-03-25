@@ -21,7 +21,7 @@ public final class ConfigResolvingLoaderProvider {
     private ConfigResolvingLoaderProvider() {
     }
 
-    static CliApplication.ImageLoader create(CliApplication.CliOptions options) throws Exception {
+    public static CliApplication.ImageLoader create(CliApplication.CliOptions options) throws Exception {
         if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
             RegistryEndpoint endpoint = options.credentials() == null
                     ? DEFAULT_REGISTRY_ENDPOINT
