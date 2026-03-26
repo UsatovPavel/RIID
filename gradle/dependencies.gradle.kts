@@ -1,4 +1,6 @@
 dependencies {
+    add("testFixturesImplementation", "org.slf4j:slf4j-api:2.0.13")
+
     // HTTP/Auth parsing (Apache HttpClient 5 + core)
     add("implementation", "org.apache.httpcomponents.client5:httpclient5:5.3.1")
     add("implementation", "org.apache.httpcomponents.core5:httpcore5:5.2.4")
@@ -6,6 +8,8 @@ dependencies {
     add("implementation", "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     add("testImplementation", platform("org.junit:junit-bom:5.10.0"))
     add("testImplementation", "org.junit.jupiter:junit-jupiter")
+    add("testImplementation", "ch.qos.logback:logback-classic:1.5.32")
+    add("testImplementation", "net.logstash.logback:logstash-logback-encoder:9.0")
     add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
     add("testImplementation", "com.tngtech.archunit:archunit-junit5:1.3.0")
     add("testImplementation", platform("org.testcontainers:testcontainers-bom:1.21.4"))//idea say<=1.21 it vulnerable
