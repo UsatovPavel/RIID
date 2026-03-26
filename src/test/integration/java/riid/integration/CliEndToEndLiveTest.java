@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.lang.ReflectiveOperationException;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
@@ -28,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -95,36 +97,77 @@ class CliEndToEndLiveTest {
             assertTrue(runtime.archiveSize > 0, "archive must be non-empty");
             assertTrue(runtime.lastArchive != null, "archive path should be recorded");
 
-            List<Object> stepEvents = logs.events().stream()
-                    .filter(event -> TestRootLoggerEvents.keyValue(event, "event") != null)
-                    .toList();
+            String traceId = assertMilestoneStepLogging(logs);
+            assertNonMilestoneRiidTraceMatches(logs, traceId);
+        }
+    }
 
-            Set<String> seenEvents = new HashSet<>();
-            Set<String> traceIds = new HashSet<>();
-            for (Object event : stepEvents) {
-                String eventName = TestRootLoggerEvents.keyValue(event, "event");
-                if (eventName == null) {
-                    continue;
-                }
-                seenEvents.add(eventName);
-                String result = TestRootLoggerEvents.keyValue(event, "result");
-                assertNotNull(result, "result must be present for event=" + eventName);
-                String duration = TestRootLoggerEvents.keyValue(event, "duration_ms");
-                assertNotNull(duration, "duration_ms must be present for event=" + eventName);
-                Map<String, String> mdc = TestRootLoggerEvents.mdcPropertyMap(event);
-                String traceId = mdc.get("trace_id");
-                assertNotNull(traceId, "trace_id must be present for event=" + eventName);
-                traceIds.add(traceId);
-            }
+    private static String assertMilestoneStepLogging(TestRootLoggerEvents logs)
+            throws ReflectiveOperationException {
+        List<Object> stepEvents = logs.events().stream()
+                .filter(event -> TestRootLoggerEvents.keyValue(event, "event") != null)
+                .toList();
 
-            assertTrue(seenEvents.contains("request.start"));
-            assertTrue(seenEvents.contains("manifest.fetch"));
-            assertTrue(seenEvents.contains("source.select"));
-            assertTrue(seenEvents.contains("source.fetch"));
-            assertTrue(seenEvents.contains("archive.build"));
-            assertTrue(seenEvents.contains("engine.import"));
-            assertTrue(seenEvents.contains("request.finish"));
-            assertEquals(1, traceIds.size(), "all key step events must share one trace_id");
+        Set<String> seenEvents = new HashSet<>();
+        Set<String> traceIds = new HashSet<>();
+        for (Object event : stepEvents) {
+            String eventName = TestRootLoggerEvents.keyValue(event, "event");
+            seenEvents.add(eventName);
+            String result = TestRootLoggerEvents.keyValue(event, "result");
+            assertNotNull(result, "result must be present for event=" + eventName);
+            String duration = TestRootLoggerEvents.keyValue(event, "duration_ms");
+            assertNotNull(duration, "duration_ms must be present for event=" + eventName);
+            Map<String, String> mdc = TestRootLoggerEvents.mdcPropertyMap(event);
+            String id = mdc.get("trace_id");
+            assertNotNull(id, "trace_id must be present for event=" + eventName);
+            traceIds.add(id);
+        }
+
+        assertTrue(seenEvents.contains("request.start"));
+        assertTrue(seenEvents.contains("manifest.fetch"));
+        assertTrue(seenEvents.contains("source.select"));
+        assertTrue(seenEvents.contains("source.fetch"));
+        assertTrue(seenEvents.contains("archive.build"));
+        assertTrue(seenEvents.contains("engine.import"));
+        assertTrue(seenEvents.contains("request.finish"));
+        assertEquals(1, traceIds.size(), "all key step events must share one trace_id");
+        return traceIds.iterator().next();
+    }
+
+    private static void assertNonMilestoneRiidTraceMatches(TestRootLoggerEvents logs, String expectedTraceId)
+            throws ReflectiveOperationException {
+        List<Object> nonMilestoneRiid = logs.events().stream()
+                .filter(event -> TestRootLoggerEvents.keyValue(event, "event") == null)
+                .filter(CliEndToEndLiveTest::isRiidLogger)
+                .toList();
+        assertFalse(nonMilestoneRiid.isEmpty(), "expected at least one non-milestone log from riid.*");
+        for (Object event : nonMilestoneRiid) {
+            Map<String, String> mdc = TestRootLoggerEvents.mdcPropertyMap(event);
+            assertNotNull(mdc, "MDC map expected for non-milestone riid log");
+            String traceId = mdc.get("trace_id");
+            assertNotNull(traceId,
+                    "trace_id must be present on non-milestone riid logs (logger="
+                            + loggerNameSafe(event) + ")");
+            assertEquals(expectedTraceId, traceId,
+                    "non-milestone log must use same trace_id as milestones (logger="
+                            + loggerNameSafe(event) + ")");
+        }
+    }
+
+    private static boolean isRiidLogger(Object event) {
+        try {
+            String name = TestRootLoggerEvents.loggerName(event);
+            return name != null && name.startsWith("riid.");
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static String loggerNameSafe(Object event) {
+        try {
+            return TestRootLoggerEvents.loggerName(event);
+        } catch (ReflectiveOperationException e) {
+            return "?";
         }
     }
 

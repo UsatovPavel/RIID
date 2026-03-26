@@ -83,6 +83,10 @@ public final class TestRootLoggerEvents implements AutoCloseable {
         return (Map<String, String>) invoke(event, "getMDCPropertyMap");
     }
 
+    public static String loggerName(Object event) throws ReflectiveOperationException {
+        return (String) invoke(event, "getLoggerName");
+    }
+
     private static Object invoke(Object target, String methodName, Object... args) throws ReflectiveOperationException {
         Class<?>[] argTypes = new Class<?>[args.length];
         for (int i = 0; i < args.length; i++) {
