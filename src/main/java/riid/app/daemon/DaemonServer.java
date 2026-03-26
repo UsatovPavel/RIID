@@ -13,6 +13,7 @@ import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
+import org.eclipse.jetty.util.thread.VirtualThreadPool;
 
 import riid.app.cli.CliApplication;
 import riid.app.core.config.AppConfig;
@@ -47,7 +48,7 @@ public final class DaemonServer {
             throw new IllegalArgumentException("Only REJECT overload policy is supported");
         }
 
-        this.server = new Server();
+        this.server = new Server(new VirtualThreadPool());
         this.pullExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.unixSocketPath = Path.of(unixSocketPath);
 

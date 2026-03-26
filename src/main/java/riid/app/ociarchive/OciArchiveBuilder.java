@@ -4,8 +4,15 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -85,21 +92,35 @@ public final class OciArchiveBuilder {
         Path blobsDir = ociDir.resolve("blobs").resolve("sha256");
         fs.createDirectory(blobsDir);
 
-        // Config
+        String repository = imageId.name();
         var cfg = manifest.config();
-        pullLayer(imageId.name(),
-                ImageDigest.parse(cfg.digest()),
-                cfg.size(),
-                MediaType.from(cfg.mediaType()),
-                blobsDir);
-
-        // Layers
-        for (var layer : manifest.layers()) {
-            pullLayer(imageId.name(),
-                    ImageDigest.parse(layer.digest()),
-                    layer.size(),
-                    MediaType.from(layer.mediaType()),
+        //1 is task for config blob
+        List<Callable<Void>> pullTasks = new ArrayList<>(1 + manifest.layers().size());
+        pullTasks.add(() -> {
+            pullLayer(repository,
+                    ImageDigest.parse(cfg.digest()),
+                    cfg.size(),
+                    MediaType.from(cfg.mediaType()),
                     blobsDir);
+            return null;
+        });
+        for (var layer : manifest.layers()) {
+            final var layerRef = layer;
+            pullTasks.add(() -> {
+                pullLayer(repository,
+                        ImageDigest.parse(layerRef.digest()),
+                        layerRef.size(),
+                        MediaType.from(layerRef.mediaType()),
+                        blobsDir);
+                return null;
+            });
+        }
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Void>> futures = executor.invokeAll(pullTasks);
+            for (Future<Void> future : futures) {
+                awaitPull(future);
+            }
         }
 
         // Manifest blob
@@ -168,6 +189,27 @@ public final class OciArchiveBuilder {
 
     private static long durationMs(long startedNs) {
         return (System.nanoTime() - startedNs) / 1_000_000L;
+    }
+
+    private static void awaitPull(Future<Void> future) throws IOException, InterruptedException {
+        try {
+            future.get();
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            if (cause instanceof InterruptedException ie) {
+                throw ie;
+            }
+            if (cause instanceof Error err) {
+                throw err;
+            }
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IOException(cause);
+        }
     }
 }
 
