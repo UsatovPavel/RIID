@@ -1,4 +1,4 @@
-package riid.app.daemon;
+package riid.app.daemon.handler;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -25,7 +26,7 @@ import org.eclipse.jetty.util.Callback;
 import riid.app.cli.CliApplication;
 import riid.app.daemon.guard.PullConcurrencyGuard;
 
-final class PullHttpHandler extends Handler.Abstract {
+public final class PullHttpHandler extends Handler.Abstract {
     private static final String PULL_PATH = "/pull";
 
     private final String controlConnectorName;
@@ -36,7 +37,7 @@ final class PullHttpHandler extends Handler.Abstract {
     private final Duration requestTimeout;
     private final ExecutorService pullExecutor;
 
-    PullHttpHandler(String controlConnectorName,
+    public PullHttpHandler(String controlConnectorName,
                     CliApplication.ImageLoader loader,
                     Set<String> availableRuntimes,
                     PullConcurrencyGuard concurrencyGuard,
@@ -112,10 +113,24 @@ final class PullHttpHandler extends Handler.Abstract {
             ));
             return true;
         } catch (Exception e) {
-            writeJson(response, callback, HttpStatus.INTERNAL_SERVER_ERROR_500,
-                    new ErrorResponse("pull_failed", safeMessage(e)));
+            Optional<DaemonPullErrorMapper.MappedHttpError> mapped = DaemonPullErrorMapper.map(e);
+            if (mapped.isPresent()) {
+                DaemonPullErrorMapper.MappedHttpError m = mapped.get();
+                writeJson(response, callback, m.httpStatus(), new ErrorResponse(m.code(), m.message()));
+            } else {
+                writeJson(response, callback, HttpStatus.INTERNAL_SERVER_ERROR_500,
+                        new ErrorResponse("pull_failed", safeMessage(unwrapExecution(e))));
+            }
         }
         return true;
+    }
+
+    private static Throwable unwrapExecution(Throwable e) {
+        Throwable u = e;
+        while (u instanceof ExecutionException && u.getCause() != null) {
+            u = u.getCause();
+        }
+        return u;
     }
 
     private String executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
@@ -138,7 +153,7 @@ final class PullHttpHandler extends Handler.Abstract {
         response.write(true, buffer, callback);
     }
 
-    private String safeMessage(Exception e) {
+    private static String safeMessage(Throwable e) {
         String message = e.getMessage();
         if (message == null || message.isBlank()) {
             return e.getClass().getSimpleName();

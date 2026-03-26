@@ -1,4 +1,4 @@
-package riid.app.daemon;
+package riid.app.daemon.handler;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
@@ -12,14 +12,14 @@ import org.eclipse.jetty.server.Response;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 
-final class MetricsHttpHandler extends Handler.Abstract {
+public final class MetricsHttpHandler extends Handler.Abstract {
     private static final String METRICS_PATH = "/metrics";
     private static final byte[] PLACEHOLDER_METRICS = "# metrics placeholder\n"
             .getBytes(StandardCharsets.UTF_8);
 
     private final String metricsConnectorName;
 
-    MetricsHttpHandler(String metricsConnectorName) {
+    public MetricsHttpHandler(String metricsConnectorName) {
         this.metricsConnectorName = Objects.requireNonNull(metricsConnectorName, "metricsConnectorName");
     }
 

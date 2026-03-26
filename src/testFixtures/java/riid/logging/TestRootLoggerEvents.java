@@ -47,7 +47,10 @@ public final class TestRootLoggerEvents implements AutoCloseable {
     public void detach() throws ReflectiveOperationException {
         Object context = LoggerFactory.getILoggerFactory();
         Object rootLogger = invoke(context, "getLogger", org.slf4j.Logger.ROOT_LOGGER_NAME);
-        invoke(rootLogger, "detachAppender", appender);
+        Class<?> appenderIfc = Class.forName("ch.qos.logback.core.Appender");
+        Method detach = rootLogger.getClass().getMethod("detachAppender", appenderIfc);
+        detach.setAccessible(true);
+        detach.invoke(rootLogger, appender);
         invoke(appender, "stop");
     }
 
