@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import riid.app.config.ConfigResolvingLoaderProvider;
+import riid.app.error.AppException;
 import riid.client.core.config.Credentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,13 +144,16 @@ public final class CliApplication {
             return ExitCode.OK.code();
         } catch (Exception e) {
             err.println("Failed to load image: " + e.getMessage());
+            String errorCode = e instanceof AppException appException
+                    ? appException.errorCode()
+                    : "REQUEST_EXECUTION_FAILED";
             MilestoneEventLogger.error(LOGGER)
                     .addCause(e)
                     .addEvent("request.finish")
                     .addResult("error")
                     .addDurationFrom(requestStartedNs)
                     .addErrorKind("INTERNAL")
-                    .addErrorCode("REQUEST_EXECUTION_FAILED")
+                    .addErrorCode(errorCode)
                     .log("Request failed");
             return ExitCode.FAILURE.code();
         } finally {

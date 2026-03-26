@@ -156,36 +156,38 @@ public final class ImageLoadingFacade implements AutoCloseable {
                     .addResult("error")
                     .addDurationMs(durationMs(engineStartedNs))
                     .addErrorKind("RUNTIME")
-                    .addErrorCode("APP_RUNTIME_ERROR")
+                    .addErrorCode(e.errorCode())
                     .log("App error while loading " + imageId + " into runtime " + runtime.runtimeId()
                             + ": " + e.getMessage());
             throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            String msg = AppError.RuntimeErrorKind.LOAD_FAILED.format(runtime.runtimeId());
+            AppError.RuntimeErrorKind errorKind = AppError.RuntimeErrorKind.LOAD_FAILED;
+            String msg = errorKind.format(runtime.runtimeId());
             MilestoneEventLogger.error(LOGGER)
                     .addCause(e)
                     .addEvent("engine.import")
                     .addResult("error")
                     .addDurationMs(durationMs(engineStartedNs))
                     .addErrorKind("RUNTIME")
-                    .addErrorCode("ENGINE_IMPORT_INTERRUPTED")
+                    .addErrorCode(errorKind.name())
                     .log("Runtime import interrupted");
             throw new AppException(
-                    new AppError.RuntimeError(AppError.RuntimeErrorKind.LOAD_FAILED, msg),
+                    new AppError.RuntimeError(errorKind, msg),
                     msg, e);
         } catch (IOException e) {
-            String msg = AppError.RuntimeErrorKind.LOAD_FAILED.format(runtime.runtimeId());
+            AppError.RuntimeErrorKind errorKind = AppError.RuntimeErrorKind.LOAD_FAILED;
+            String msg = errorKind.format(runtime.runtimeId());
             MilestoneEventLogger.error(LOGGER)
                     .addCause(e)
                     .addEvent("engine.import")
                     .addResult("error")
                     .addDurationMs(durationMs(engineStartedNs))
                     .addErrorKind("RUNTIME")
-                    .addErrorCode("ENGINE_IMPORT_IO_ERROR")
+                    .addErrorCode(errorKind.name())
                     .log("Runtime import I/O error");
             throw new AppException(
-                    new AppError.RuntimeError(AppError.RuntimeErrorKind.LOAD_FAILED, msg),
+                    new AppError.RuntimeError(errorKind, msg),
                     msg, e);
         } finally {
             MdcContext.restoreOperation(previousOperation);
