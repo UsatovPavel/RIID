@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <appender name="STDOUT_JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <include resource="logback-encoder-masking.xml"/>
-    </appender>
-
+    <include resource="logback-encoder-masking.xml"/>
     <root level="INFO">
         <appender-ref ref="STDOUT_JSON"/>
     </root>

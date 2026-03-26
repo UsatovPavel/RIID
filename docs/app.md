@@ -4,8 +4,7 @@
 CLI and dependency wiring layer for loading container images: parse flags, validate user input, invoke `ImageLoadService`, and return exit codes.
 
 ## Architecture
-- `RiidCli` (JAR entrypoint): minimal `main`, calls CLI, returns exit code only.
-- `CliApplication`: parses args, prints help/usage, validates options (repo/runtime/auth/cert/key/CA), handles exit codes and stdout/stderr.
+- `CliApplication` (JAR `Main-Class`): `main`, parses args, prints help/usage, validates options (repo/runtime/auth/cert/key/CA), exit codes and stdout/stderr.
 - `CliParser` (inside `CliApplication`): pure argument parser → DTO `CliOptions`.
 - `ImageLoadServiceFactory`: reads YAML (`config/config.yaml`), assembles dependencies (RegistryClient, Dispatcher, P2P stub, RuntimeRegistry).
 - `ImageLoadService`: façade that downloads, assembles OCI, and imports into runtime; no CLI logic.

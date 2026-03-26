@@ -19,15 +19,17 @@ class LogbackMaskingRulesTest {
     @Test
     void logbackConfigContainsMaskingDecoratorAndPaths() throws IOException {
         String root = Files.readString(Path.of("src", "main", "resources", "logback.xml"));
-        assertTrue(root.contains("include resource=\"logback-encoder-masking.xml\""),
-                "logback.xml must include shared encoder/masking fragment");
+        assertTrue(root.contains("include resource=\"logback-encoder-masking.xml\""));
+        assertTrue(root.contains("appender-ref ref=\"STDOUT_JSON\""));
 
-        String encoder = Files.readString(Path.of("src", "main", "resources", "logback-encoder-masking.xml"));
-        assertTrue(encoder.contains("MaskingJsonGeneratorDecorator"));
-        assertTrue(encoder.contains("<path>authorization</path>"));
-        assertTrue(encoder.contains("<path>password</path>"));
-        assertTrue(encoder.contains("<path>token</path>"));
-        assertTrue(encoder.contains("<path>identityToken</path>"));
+        String fragment = Files.readString(Path.of("src", "main", "resources", "logback-encoder-masking.xml"));
+        assertTrue(fragment.contains("ConsoleAppender"));
+        assertTrue(fragment.contains("LogstashEncoder"));
+        assertTrue(fragment.contains("MaskingJsonGeneratorDecorator"));
+        assertTrue(fragment.contains("<path>authorization</path>"));
+        assertTrue(fragment.contains("<path>password</path>"));
+        assertTrue(fragment.contains("<path>token</path>"));
+        assertTrue(fragment.contains("<path>identityToken</path>"));
     }
 
     @Test

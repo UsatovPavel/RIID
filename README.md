@@ -7,7 +7,7 @@ Minimal steps to run the client end-to-end from the Shadow JAR.
 ./gradlew clean shadowJar
 ```
 
-The JAR will be at `build/libs/riid.jar` (manifest points to `riid.app.RiidCli`).
+The JAR will be at `build/libs/riid.jar` (manifest points to `riid.app.CliApplication`).
 
 ## Run (E2E smoke)
 Pull BusyBox into Podman runtime using the default config:

@@ -127,12 +127,6 @@ public final class CliApplication {
             }
             ImageLoader loader = serviceFactory.create(options);
             loader.load(options.repository(), options.reference(), options.runtimeId());
-            out.printf(
-                    "Loaded %s (%s) into runtime %s%n",
-                    options.repository(),
-                    options.reference(),
-                    options.runtimeId()
-            );
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
             }

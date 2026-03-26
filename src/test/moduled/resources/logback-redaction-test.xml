@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Minimal config for LogRedactionTest: FileAppender + masked JSON; keys must be listed for LogstashEncoder. -->
+<configuration>
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${redaction.log.path}</file>
+        <append>false</append>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <version>[ignore]</version>
+            </fieldNames>
+            <decorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <defaultMask>[REDACTED]</defaultMask>
+                <path>authorization</path>
+                <path>password</path>
+                <path>token</path>
+                <path>identityToken</path>
+            </decorator>
+            <includeKeyValueKeyName>password</includeKeyValueKeyName>
+            <includeKeyValueKeyName>token</includeKeyValueKeyName>
+            <includeKeyValueKeyName>authorization</includeKeyValueKeyName>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
