@@ -49,3 +49,7 @@ var res = client.fetchBlob(new BlobRequest("library/busybox", layer.digest(), la
   - `SECURITY:TLS:<kind>: <safe_message>`
   - `SECURITY:AUTH:<kind>: <safe_message>`
 
+### Logging
+
+Registry/client log lines participate in the same JSON pipeline as the rest of the CLI: MDC (`trace_id`, `component`, `operation`) and Logstash JSON output. Do not log secrets; encoder masking covers `token` / `password` / `authorization` fields in JSON. See [logs-policy.md](logs-policy.md).
+

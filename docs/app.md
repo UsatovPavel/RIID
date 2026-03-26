@@ -49,6 +49,10 @@ TLS (wired to HTTP client):
 Other:
 - `--help` — show usage
 
+## Logging
+
+Structured **JSON logs** (stdout/stderr) with `trace_id`, step `event`s, and masking: see [logs-policy.md](logs-policy.md). Entry point sets request MDC and emits `request.start` / `request.finish`; `ImageLoadingFacade` and `OciArchiveBuilder` emit manifest/archive/import milestones.
+
 ## Exit codes
 - `0` — success
 - `64` — usage errors (missing/unknown flags, required options not provided)
