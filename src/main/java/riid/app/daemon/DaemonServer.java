@@ -19,6 +19,8 @@ import riid.app.cli.CliApplication;
 import riid.app.core.config.AppConfig;
 import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
+import riid.app.daemon.handler.MetricsHttpHandler;
+import riid.app.daemon.handler.PullHttpHandler;
 
 /**
  * Embedded Jetty daemon server for local IPC over HTTP.

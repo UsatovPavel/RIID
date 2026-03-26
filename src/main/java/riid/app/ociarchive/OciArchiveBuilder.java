@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -31,6 +32,7 @@ import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.RepositoryName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 /**
  * Builds an OCI archive from a manifest, pulling blobs via RequestDispatcher.
@@ -94,26 +96,25 @@ public final class OciArchiveBuilder {
 
         String repository = imageId.name();
         var cfg = manifest.config();
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
         //1 is task for config blob
         List<Callable<Void>> pullTasks = new ArrayList<>(1 + manifest.layers().size());
-        pullTasks.add(() -> {
+        pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
             pullLayer(repository,
                     ImageDigest.parse(cfg.digest()),
                     cfg.size(),
                     MediaType.from(cfg.mediaType()),
                     blobsDir);
-            return null;
-        });
+        }));
         for (var layer : manifest.layers()) {
             final var layerRef = layer;
-            pullTasks.add(() -> {
+            pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
                 pullLayer(repository,
                         ImageDigest.parse(layerRef.digest()),
                         layerRef.size(),
                         MediaType.from(layerRef.mediaType()),
                         blobsDir);
-                return null;
-            });
+            }));
         }
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -146,6 +147,33 @@ public final class OciArchiveBuilder {
     @FunctionalInterface
     public interface ArchiveUser<T> {
         T use(Path archivePath) throws IOException, InterruptedException;
+    }
+
+    /**
+     * Virtual threads do not inherit SLF4J MDC; copy the caller map so dispatcher milestones keep trace_id.
+     */
+    private static Void runPullWithInheritedMdc(Map<String, String> snapshot, PullTask task) throws Exception {
+        Map<String, String> previous = MDC.getCopyOfContextMap();
+        if (snapshot != null) {
+            MDC.setContextMap(snapshot);
+        } else {
+            MDC.clear();
+        }
+        try {
+            task.run();
+            return null;
+        } finally {
+            if (previous != null) {
+                MDC.setContextMap(previous);
+            } else {
+                MDC.clear();
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface PullTask {
+        void run() throws IOException;
     }
 
     private void pullLayer(String repository,
