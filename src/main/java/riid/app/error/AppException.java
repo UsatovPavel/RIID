@@ -23,5 +23,15 @@ public class AppException extends RuntimeException {
     public AppError error() {
         return appError;
     }
+
+    public String errorCode() {
+        if (appError instanceof AppError.RuntimeError runtimeError) {
+            return runtimeError.kind().name();
+        }
+        if (appError instanceof AppError.OciError ociError) {
+            return ociError.kind().name();
+        }
+        return "APP_ERROR";
+    }
 }
 

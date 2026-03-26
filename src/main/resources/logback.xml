@@ -7,6 +7,27 @@
                 <version>[ignore]</version>
             </fieldNames>
 
+            <!-- Masking policy: path-first, value regex as fallback -->
+            <decorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <defaultMask>[REDACTED]</defaultMask>
+
+                <!-- Path-based masking (primary) -->
+                <path>authorization</path>
+                <path>password</path>
+                <path>token</path>
+                <path>identityToken</path>
+
+                <!-- Value-based masking (minimal fallback for string payloads) -->
+                <valueMask>
+                    <value>(?i)(bearer\\s+)[A-Za-z0-9._~+\\-/]+=*</value>
+                    <mask>$1[REDACTED]</mask>
+                </valueMask>
+                <valueMask>
+                    <value>(?i)(authorization|password|token|identityToken)=([^\\s&amp;]+)</value>
+                    <mask>$1=[REDACTED]</mask>
+                </valueMask>
+            </decorator>
+
             <!-- MVP: always propagate correlation context from MDC -->
             <includeMdcKeyName>trace_id</includeMdcKeyName>
             <includeMdcKeyName>component</includeMdcKeyName>
