@@ -1,45 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <appender name="STDOUT_JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <fieldNames>
-                <timestamp>timestamp</timestamp>
-                <version>[ignore]</version>
-            </fieldNames>
-
-            <!-- Masking policy: path-first, value regex as fallback -->
-            <decorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
-                <defaultMask>[REDACTED]</defaultMask>
-
-                <!-- Path-based masking (primary) -->
-                <path>authorization</path>
-                <path>password</path>
-                <path>token</path>
-                <path>identityToken</path>
-
-                <!-- Value-based masking (minimal fallback for string payloads) -->
-                <valueMask>
-                    <value>(?i)(bearer\\s+)[A-Za-z0-9._~+\\-/]+=*</value>
-                    <mask>$1[REDACTED]</mask>
-                </valueMask>
-                <valueMask>
-                    <value>(?i)(authorization|password|token|identityToken)=([^\\s&amp;]+)</value>
-                    <mask>$1=[REDACTED]</mask>
-                </valueMask>
-            </decorator>
-
-            <!-- MVP: always propagate correlation context from MDC -->
-            <includeMdcKeyName>trace_id</includeMdcKeyName>
-            <includeMdcKeyName>component</includeMdcKeyName>
-            <includeMdcKeyName>operation</includeMdcKeyName>
-
-            <!-- Keep step-level fields when passed via SLF4J key-values -->
-            <includeKeyValueKeyName>event</includeKeyValueKeyName>
-            <includeKeyValueKeyName>result</includeKeyValueKeyName>
-            <includeKeyValueKeyName>duration_ms</includeKeyValueKeyName>
-            <includeKeyValueKeyName>error_kind</includeKeyValueKeyName>
-            <includeKeyValueKeyName>error_code</includeKeyValueKeyName>
-        </encoder>
+        <include resource="logback-encoder-masking.xml"/>
     </appender>
 
     <root level="INFO">
