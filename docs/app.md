@@ -49,6 +49,44 @@ TLS (wired to HTTP client):
 Other:
 - `--help` — show usage
 
+## Daemon mode (`--daemon`)
+Long-lived process: embedded **Jetty** serves **HTTP over a Unix domain socket** (control plane) and **TCP** for metrics.
+
+- **CLI:** `java -jar riid.jar --daemon [--config <path>]` — same auth/TLS flags as one-shot mode when you pass `--config`. In daemon mode **`--repo` / `--runtime` are not required** (pulls are driven by HTTP clients).
+- **Config:** optional `app.daemon` in YAML (socket path, metrics bind, concurrency, timeouts). See **Optional `app.daemon`** in [config.md](config.md).
+- **Control plane (UDS):** `POST /pull` with JSON body `{ "repository", "reference", "runtimeId" }` — success `200` with `status`, `imagePath`; errors use JSON `code` / `message` and HTTP status (4xx/5xx) per handler policy.
+- **Metrics (TCP):** `GET /metrics` on `metricsHost:metricsPort` (placeholder body until Prometheus wiring).
+
+### Example: `curl` over the Unix socket
+Host in the URL is ignored by libcurl; use a dummy host:
+
+```bash
+SOCKET=/run/riid/riid.sock   # must match app.daemon.unixSocketPath (or default)
+
+curl --unix-socket "$SOCKET" -sS -X POST "http://localhost/pull" \
+  -H 'Content-Type: application/json' \
+  -d '{"repository":"library/busybox","reference":"latest","runtimeId":"podman"}'
+```
+
+### Example: `systemd` unit
+Ensure the socket parent directory exists (or use `RuntimeDirectory=` and a path under `/run/...`). Example:
+
+```ini
+[Unit]
+Description=RIID image pull daemon
+After=network-online.target
+
+[Service]
+Type=simple
+RuntimeDirectory=riid
+ExecStart=/usr/bin/java -jar /opt/riid/riid.jar --daemon --config /etc/riid/config.yaml
+Restart=on-failure
+# If unixSocketPath is /run/riid/riid.sock, RuntimeDirectory=riid provides /run/riid
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## Logging
 
 Structured **JSON logs** (stdout/stderr) with `trace_id`, step `event`s, and masking: see [logs-policy.md](logs-policy.md). Entry point sets request MDC and emits `request.start` / `request.finish`; `ImageLoadingFacade` and `OciArchiveBuilder` emit manifest/archive/import milestones.
@@ -71,11 +109,16 @@ java -jar riid.jar --repo library/busybox --digest sha256:abc... --runtime porto
 
 # Custom config
 java -jar riid.jar --config ./config/config.yaml --repo registry.example.com/app --tag v1 --runtime podman
+
+# Daemon (see "Daemon mode" above)
+java -jar riid.jar --daemon --config /etc/riid/config.yaml
 ```
 
 ## Tests
 ```bash
 ./gradlew testApp
+# Linux: real UDS + curl smoke for daemon IPC
+./gradlew moduledTest --tests riid.app.daemon.DaemonPullUnixSocketTest
 ```
 Coverage includes:
 - `CliApplicationTest` for negative cases (no args, unknown runtime) and happy-path argument propagation.
