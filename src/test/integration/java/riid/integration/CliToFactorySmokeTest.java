@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import riid.core.fs.TestPaths;
 /**
  * Smoke: CLI arg parsing -> ConfigLoader -> ImageLoadingFacade (no network).
  */
@@ -30,13 +30,13 @@ class CliToFactorySmokeTest {
     @Test
     void reachesFactoryFromCli() throws Exception {
         var fs = new NioHostFilesystem();
-        Path config = riid.core.fs.TestPaths.tempFile(fs, riid.core.fs.TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
+        Path config = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
         fs.writeString(config, TestConfigYaml.minimalDockerHubConfigWithEmptyAuth(2));
 
         AtomicBoolean factoryCalled = new AtomicBoolean(false);
 
         CliApplication cli = new CliApplication(
-                opts -> {
+                (opts, meterRegistry) -> {
                     factoryCalled.set(true);
                     try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(opts.configPath())) {
                         Objects.requireNonNull(facade);

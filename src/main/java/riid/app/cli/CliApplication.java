@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 
@@ -58,9 +59,8 @@ public final class CliApplication {
                           Map<String, RuntimeAdapter> runtimes,
                           PrintWriter out,
                           PrintWriter err) {
-        this(serviceFactory, runtimes, out, err, (options, loader, available) -> {
+        this(serviceFactory, runtimes, out, err, (options, loader, available, prometheusRegistry) -> {
             AppConfig.DaemonConfig daemonConfig = DaemonSettingsResolver.resolve(options);
-            PrometheusMeterRegistry prometheusRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
             DaemonServer server = new DaemonServer(
                     daemonConfig.unixSocketPathOrDefault(),
                     daemonConfig.metricsHostOrDefault(),
@@ -141,8 +141,9 @@ public final class CliApplication {
             }
             CliParser.CliOptions options = result.options();
             if (options.daemonMode()) {
-                ImageLoader loader = serviceFactory.create(options);
-                daemonRunner.run(options, loader, availableRuntimes);
+                PrometheusMeterRegistry prometheusRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+                ImageLoader loader = serviceFactory.create(options, prometheusRegistry);
+                daemonRunner.run(options, loader, availableRuntimes, prometheusRegistry);
                 MilestoneEventLogger.info(LOGGER)
                         .addEvent("request.finish")
                         .addResult("success")
@@ -165,7 +166,7 @@ public final class CliApplication {
                         .log("Request failed: unknown runtime");
                 return ExitCode.RUNTIME_NOT_FOUND.code();
             }
-            ImageLoader loader = serviceFactory.create(options);
+            ImageLoader loader = serviceFactory.create(options, null);
             loader.load(options.repository(), options.reference(), options.runtimeId());
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
@@ -226,7 +227,10 @@ public final class CliApplication {
 
     @FunctionalInterface
     public interface ServiceFactory {
-        ImageLoader create(CliParser.CliOptions options) throws Exception;
+        /**
+         * @param meterRegistry optional; when non-null (e.g. daemon mode), wired into {@link ImageLoadingFacade}
+         */
+        ImageLoader create(CliParser.CliOptions options, MeterRegistry meterRegistry) throws Exception;
     }
 
     @FunctionalInterface
@@ -236,6 +240,9 @@ public final class CliApplication {
 
     @FunctionalInterface
     public interface DaemonRunner {
-        void run(CliParser.CliOptions options, ImageLoader loader, Set<String> availableRuntimes) throws Exception;
+        void run(CliParser.CliOptions options,
+                 ImageLoader loader,
+                 Set<String> availableRuntimes,
+                 PrometheusMeterRegistry prometheusRegistry) throws Exception;
     }
 }

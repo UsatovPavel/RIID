@@ -26,6 +26,7 @@ import riid.client.api.RegistryClient;
 import riid.core.model.manifest.MediaType;
 import riid.dispatcher.core.config.DispatcherConfig;
 import riid.dispatcher.core.logging.DispatcherMilestoneLogger;
+import riid.dispatcher.metrics.DispatcherLayerSourceMetrics;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
@@ -44,12 +45,13 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     private final HostFilesystem fs;
     private final Optional<Semaphore> registryLimiter; // limits concurrent downloads from registry
     private final DispatcherMilestoneLogger stepLogger;
+    private final DispatcherLayerSourceMetrics layerSourceMetrics;
 
     public SimpleRequestDispatcher(RegistryClient client,
                                    CacheAdapter cache,
                                    P2PExecutor p2p,
                                    HostFilesystem fs) {
-        this(client, cache, p2p, new DispatcherConfig(), fs);
+        this(client, cache, p2p, new DispatcherConfig(), fs, DispatcherLayerSourceMetrics.NOOP);
     }
 
     public SimpleRequestDispatcher(RegistryClient client,
@@ -57,6 +59,15 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                                    P2PExecutor p2p,
                                    DispatcherConfig config,
                                    HostFilesystem fs) {
+        this(client, cache, p2p, config, fs, DispatcherLayerSourceMetrics.NOOP);
+    }
+
+    public SimpleRequestDispatcher(RegistryClient client,
+                                   CacheAdapter cache,
+                                   P2PExecutor p2p,
+                                   DispatcherConfig config,
+                                   HostFilesystem fs,
+                                   DispatcherLayerSourceMetrics layerSourceMetrics) {
         this.client = Objects.requireNonNull(client);
         this.cache = cache;
         this.p2p = p2p;
@@ -64,6 +75,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         int maxConc = config != null ? config.maxConcurrentRegistry() : 0;
         this.registryLimiter = maxConc > 0 ? Optional.of(new Semaphore(maxConc)) : Optional.empty();
         this.stepLogger = new DispatcherMilestoneLogger(LOGGER);
+        this.layerSourceMetrics = Objects.requireNonNull(layerSourceMetrics, "layerSourceMetrics");
     }
 
     @Override
@@ -95,6 +107,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             long fetchStartedNs = System.nanoTime();
             LOGGER.info("cache hit for layer {}", digest);
             stepLogger.sourceFetchFromCache(fetchStartedNs);
+            layerSourceMetrics.recordLayerFetch("cache");
             return new FetchResult(digest, mediaType, cachedPath);
         }
 
@@ -135,6 +148,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     }
                     stepLogger.sourceSelectFromP2p(selectStartedNs);
                     stepLogger.sourceFetchFromP2p(fetchStartedNs);
+                    layerSourceMetrics.recordLayerFetch("p2p");
                     return new FetchResult(digest, mediaType, resultPath);
                 }
             } catch (IOException ex) {
@@ -201,6 +215,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             }
 
             fetchSucceeded = true;
+            layerSourceMetrics.recordLayerFetch("registry");
             return new FetchResult(ImageDigest.parse(blob.digest()),
                     MediaType.from(blob.mediaType()),
                     resultPath);

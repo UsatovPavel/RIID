@@ -23,6 +23,8 @@ import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
 import riid.app.daemon.handler.MetricsHttpHandler;
 import riid.app.daemon.handler.PullHttpHandler;
+import riid.app.daemon.metrics.DaemonPullHttpMetrics;
+import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 
 /**
  * Embedded Jetty daemon server for local IPC over HTTP.
@@ -78,7 +80,9 @@ public final class DaemonServer {
             availableRuntimes,
             pullConcurrencyGuard,
             requestTimeout,
-            pullExecutor
+            pullExecutor,
+            new DaemonPullHttpMetrics(prometheusRegistry),
+            new ImageLoadPipelineMetrics(prometheusRegistry)
         ));
         root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME, prometheusRegistry));
         server.setHandler(root);
