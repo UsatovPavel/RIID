@@ -29,6 +29,25 @@ app:
     - registry.example.com
 ```
 
+### Optional `app.daemon` (long-lived daemon / IPC)
+Used when the process is started with `--daemon` (see [app.md](app.md)). All fields are optional; unset values use defaults below.
+
+```yaml
+app:
+  daemon:
+    unixSocketPath: "/run/riid/riid.sock"   # HTTP control plane: POST /pull over Unix domain socket
+    metricsHost: "0.0.0.0"                 # TCP: GET /metrics (Prometheus-style placeholder)
+    metricsPort: 9090
+    maxConcurrentPulls: 32                  # global semaphore before each pull
+    requestTimeout: PT30M                   # per-request ceiling for loader work
+    overloadPolicy: REJECT                  # only value supported today
+```
+
+- Omit `app.daemon` entirely — defaults below apply.
+- Provide `app.daemon` with only some keys — missing keys use the same defaults.
+- `unixSocketPath` (when set) must be **&lt; 108 bytes** (AF_UNIX path limit).
+- `overloadPolicy` must be `REJECT` if specified.
+
 ### Optional runtime settings
 ```yaml
 runtime:
@@ -69,6 +88,9 @@ p2p:
 - client.auth.defaultTokenTtlSeconds = 300
 - client.auth.certPath / keyPath / caPath = null
 - client.registries.size = 1
+- `app.daemon` runtime defaults when the block or a field is omitted:  
+  `unixSocketPath` → `/tmp/riid.sock`, `metricsHost` → `0.0.0.0`, `metricsPort` → `9090`,  
+  `maxConcurrentPulls` → `32`, `requestTimeout` → `PT30M`, `overloadPolicy` → `REJECT`
 
 ### Validation rules (ConfigValidator)
 - `client`, `dispatcher`, `registries` required; at least one registry with `scheme` and `host`.
@@ -81,6 +103,7 @@ p2p:
   - point to regular files,
   - be readable.
 - `app.tempDirectory`, if present, must not be blank; `app.allowedRegistries` entries must not be blank.
+- `app.daemon`: if present, `unixSocketPath` (if set) non-blank and &lt; 108 bytes; `metricsHost` (if set) non-blank; `metricsPort` (if set) in 1..65535; `maxConcurrentPulls` (if set) &gt; 0; `requestTimeout` (if set) positive; `overloadPolicy` (if set) only `REJECT`.
 - `runtime.dockerCmd`, if present, must not be blank.
 - `runtime.maxTasksCommandExecutor`, if present, must be > 0.
 - `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.

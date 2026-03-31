@@ -3,6 +3,7 @@ package riid.app.daemon.handler;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
@@ -14,13 +15,13 @@ import org.eclipse.jetty.util.Callback;
 
 public final class MetricsHttpHandler extends Handler.Abstract {
     private static final String METRICS_PATH = "/metrics";
-    private static final byte[] PLACEHOLDER_METRICS = "# metrics placeholder\n"
-            .getBytes(StandardCharsets.UTF_8);
 
     private final String metricsConnectorName;
+    private final PrometheusMeterRegistry prometheusRegistry;
 
-    public MetricsHttpHandler(String metricsConnectorName) {
+    public MetricsHttpHandler(String metricsConnectorName, PrometheusMeterRegistry prometheusRegistry) {
         this.metricsConnectorName = Objects.requireNonNull(metricsConnectorName, "metricsConnectorName");
+        this.prometheusRegistry = Objects.requireNonNull(prometheusRegistry, "prometheusRegistry");
     }
 
     @Override
@@ -37,8 +38,9 @@ public final class MetricsHttpHandler extends Handler.Abstract {
         }
 
         response.setStatus(HttpStatus.OK_200);
-        response.getHeaders().put(HttpHeader.CONTENT_TYPE, "text/plain; charset=utf-8");
-        response.write(true, BufferUtil.toBuffer(PLACEHOLDER_METRICS), callback);
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8");
+        byte[] body = prometheusRegistry.scrape().getBytes(StandardCharsets.UTF_8);
+        response.write(true, BufferUtil.toBuffer(body), callback);
         return true;
     }
 }

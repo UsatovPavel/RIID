@@ -9,6 +9,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+
 import riid.app.core.config.AppConfig;
 import riid.app.core.config.ConfigResolvingLoaderProvider;
 import riid.app.core.config.DaemonSettingsResolver;
@@ -57,6 +60,7 @@ public final class CliApplication {
                           PrintWriter err) {
         this(serviceFactory, runtimes, out, err, (options, loader, available) -> {
             AppConfig.DaemonConfig daemonConfig = DaemonSettingsResolver.resolve(options);
+            PrometheusMeterRegistry prometheusRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
             DaemonServer server = new DaemonServer(
                     daemonConfig.unixSocketPathOrDefault(),
                     daemonConfig.metricsHostOrDefault(),
@@ -65,7 +69,8 @@ public final class CliApplication {
                     available,
                     daemonConfig.maxConcurrentPullsOrDefault(),
                     daemonConfig.requestTimeoutOrDefault(),
-                    daemonConfig.overloadPolicyOrDefault()
+                    daemonConfig.overloadPolicyOrDefault(),
+                    prometheusRegistry
             );
             server.startAndJoin();
         });

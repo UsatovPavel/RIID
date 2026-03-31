@@ -15,6 +15,8 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
 import org.eclipse.jetty.util.thread.VirtualThreadPool;
 
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+
 import riid.app.cli.CliApplication;
 import riid.app.core.config.AppConfig;
 import riid.app.daemon.guard.PullConcurrencyGuard;
@@ -39,13 +41,15 @@ public final class DaemonServer {
                         Set<String> availableRuntimes,
                         int maxConcurrentPulls,
                         Duration requestTimeout,
-                        AppConfig.OverloadPolicy overloadPolicy) {
+                        AppConfig.OverloadPolicy overloadPolicy,
+                        PrometheusMeterRegistry prometheusRegistry) {
         Objects.requireNonNull(unixSocketPath, "unixSocketPath");
         Objects.requireNonNull(metricsHost, "metricsHost");
         Objects.requireNonNull(loader, "loader");
         Objects.requireNonNull(availableRuntimes, "availableRuntimes");
         Objects.requireNonNull(requestTimeout, "requestTimeout");
         Objects.requireNonNull(overloadPolicy, "overloadPolicy");
+        Objects.requireNonNull(prometheusRegistry, "prometheusRegistry");
         if (overloadPolicy != AppConfig.OverloadPolicy.REJECT) {
             throw new IllegalArgumentException("Only REJECT overload policy is supported");
         }
@@ -76,8 +80,20 @@ public final class DaemonServer {
             requestTimeout,
             pullExecutor
         ));
-        root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME));
+        root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME, prometheusRegistry));
         server.setHandler(root);
+    }
+
+    /**
+     * TCP listen port for the metrics connector (after {@link #start()}). {@code -1} if not bound.
+     */
+    public int getMetricsListenPort() {
+        for (var connector : server.getConnectors()) {
+            if (METRICS_CONNECTOR_NAME.equals(connector.getName()) && connector instanceof ServerConnector sc) {
+                return sc.getLocalPort();
+            }
+        }
+        return -1;
     }
 
     /**

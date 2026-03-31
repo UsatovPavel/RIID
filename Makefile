@@ -54,6 +54,6 @@ moduled-execute-specific-test:
 	@test -n "$(TEST)" || (echo "Usage: make moduled-execute-specific-test TEST=riid.p2p.DragonflyGrpcP2PExecutorTest"; exit 1)
 	./gradlew moduledTest -PincludeLocal --tests "$(TEST)"
 
-# Локальная отладка тестов
+# When need to build and fix some spectific test docs
 testing_prompt:
 	cat internalDocs/prompts/riid-gradle-testing.md > out.txt

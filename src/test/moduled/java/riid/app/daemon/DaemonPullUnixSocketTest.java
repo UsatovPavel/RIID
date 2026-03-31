@@ -14,6 +14,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+
 import riid.app.core.config.AppConfig;
 import riid.core.fs.TestFilesystemSupport;
 
@@ -48,7 +51,8 @@ class DaemonPullUnixSocketTest {
                 Set.of("podman"),
                 4,
                 Duration.ofSeconds(30),
-                AppConfig.OverloadPolicy.REJECT);
+                AppConfig.OverloadPolicy.REJECT,
+                new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         try {
             daemon.start();
