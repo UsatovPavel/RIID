@@ -116,7 +116,8 @@ public final class PullHttpHandler extends Handler.Abstract {
             Optional<DaemonPullErrorMapper.MappedHttpError> mapped = DaemonPullErrorMapper.map(e);
             if (mapped.isPresent()) {
                 DaemonPullErrorMapper.MappedHttpError m = mapped.get();
-                writeJson(response, callback, m.httpStatus(), new ErrorResponse(m.code(), m.message()));
+                writeJson(response, callback, m.httpStatus(),
+                        new ErrorResponse(m.code().jsonValue(), m.message()));
             } else {
                 writeJson(response, callback, HttpStatus.INTERNAL_SERVER_ERROR_500,
                         new ErrorResponse("pull_failed", safeMessage(unwrapExecution(e))));

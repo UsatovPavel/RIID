@@ -80,21 +80,36 @@ public final class DaemonServer {
         server.setHandler(root);
     }
 
-    public void startAndJoin() throws Exception {
-        Runtime.getRuntime().addShutdownHook(new Thread(this::stopQuietly));
+    /**
+     * Starts the server (UDS + metrics TCP). Does not block; pair with {@link #stop()} in tests or embedders.
+     */
+    public void start() throws Exception {
         prepareSocketPath();
         server.start();
-        server.join();
     }
 
-    private void stopQuietly() {
+    /**
+     * Stops Jetty and releases the pull executor; deletes the Unix socket file if present.
+     */
+    public void stop() throws Exception {
         try {
             server.stop();
-        } catch (Exception ignored) {
-            // best effort on shutdown
+        } finally {
+            deleteSocketIfExists();
+            pullExecutor.shutdown();
         }
-        deleteSocketIfExists();
-        pullExecutor.shutdown();
+    }
+
+    public void startAndJoin() throws Exception {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                stop();
+            } catch (Exception ignored) {
+                // best effort on shutdown
+            }
+        }));
+        start();
+        server.join();
     }
 
     private void prepareSocketPath() throws IOException {
