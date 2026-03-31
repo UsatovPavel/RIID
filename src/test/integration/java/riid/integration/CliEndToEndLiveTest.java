@@ -55,7 +55,7 @@ class CliEndToEndLiveTest {
             ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
 
             CliApplication cli = new CliApplication(
-                    opts -> {
+                    (opts, meterRegistry) -> {
                         var cfg = ConfigLoader.load(opts.configPath());
                         RegistryEndpoint endpoint = cfg.client().registries().getFirst();
                         return (repo, ref, runtimeId) -> {

@@ -30,7 +30,7 @@ class CliApplicationTest {
     void failsWithUsageWhenNoArgs() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication appWithErr = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8)),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -47,7 +47,7 @@ class CliApplicationTest {
     void failsWhenRepoMissing() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -63,7 +63,7 @@ class CliApplicationTest {
     void failsWhenRuntimeMissing() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -79,7 +79,7 @@ class CliApplicationTest {
     void failsOnUnknownRuntime() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> {
+                (options, meterRegistry) -> {
                     throw new AssertionError("Service factory must not be invoked on invalid runtime");
                 },
                 Map.of(RUNTIME_PODMAN, new PodmanRuntimeAdapter()),
@@ -101,7 +101,7 @@ class CliApplicationTest {
         AtomicReference<String> runtimeSeen = new AtomicReference<>();
 
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> {
+                (options, meterRegistry) -> {
                     configSeen.set(options.configPath());
                     return (repo, ref, runtime) -> {
                         repoSeen.set(repo);
@@ -133,7 +133,7 @@ class CliApplicationTest {
     void showsHelpAndExitsOk() {
         ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(outBuf, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
@@ -172,7 +172,7 @@ class CliApplicationTest {
     void digestOverridesTag() {
         AtomicReference<String> refSeen = new AtomicReference<>();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> {
+                (options, meterRegistry) -> (repo, ref, runtime) -> {
                     refSeen.set(ref);
                     return "ok";
                 },
@@ -196,7 +196,7 @@ class CliApplicationTest {
     void rejectsMultiplePasswordSources() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -218,7 +218,7 @@ class CliApplicationTest {
     void requiresPasswordWhenUsernameProvided() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -238,7 +238,7 @@ class CliApplicationTest {
     void requiresUsernameWhenPasswordProvided() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -258,7 +258,7 @@ class CliApplicationTest {
     void failsWhenEnvPasswordMissing() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -285,7 +285,7 @@ class CliApplicationTest {
         fs.writeString(emptyFile, "");
 
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -310,7 +310,7 @@ class CliApplicationTest {
         fs.writeString(passwordFile, "secret-from-file");
 
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ok",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ok",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
@@ -332,7 +332,7 @@ class CliApplicationTest {
         Path missing = Path.of("does-not-exist.crt");
 
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
@@ -352,7 +352,7 @@ class CliApplicationTest {
     void failsOnUnknownOption() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                options -> (repo, ref, runtime) -> "ignored",
+                (options, meterRegistry) -> (repo, ref, runtime) -> "ignored",
                 ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)

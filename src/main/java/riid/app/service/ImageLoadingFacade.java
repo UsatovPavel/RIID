@@ -31,8 +31,12 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
+import riid.dispatcher.metrics.DispatcherLayerSourceMetrics;
+import riid.dispatcher.metrics.MicrometerDispatcherLayerSourceMetrics;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
 import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
@@ -211,12 +215,19 @@ public final class ImageLoadingFacade implements AutoCloseable {
      * Build ImageLoadingFacade from YAML config.
      */
     public static ImageLoadingFacade createFromConfig(Path configPath) throws Exception {
-        return createFromConfig(configPath, null);
+        return createFromConfig(configPath, null, null);
     }
 
     public static ImageLoadingFacade createFromConfig(
             Path configPath,
             Credentials credentialsOverride) throws Exception {
+        return createFromConfig(configPath, credentialsOverride, null);
+    }
+
+    public static ImageLoadingFacade createFromConfig(
+            Path configPath,
+            Credentials credentialsOverride,
+            MeterRegistry meterRegistry) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         GlobalConfig config = ConfigLoader.load(configPath);
 
@@ -268,8 +279,11 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 && config.p2p().dragonfly().enabledOrDefault()) {
             p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config.p2p().dragonfly());
         }
+        DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
+                ? DispatcherLayerSourceMetrics.NOOP
+                : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
         return new ImageLoadingFacade(
-                new SimpleRequestDispatcher(client, cache, p2p, fs),
+                new SimpleRequestDispatcher(client, cache, p2p, config.dispatcher(), fs, layerMetrics),
                 new RuntimeRegistry(runtimes),
                 client,
                 fs,

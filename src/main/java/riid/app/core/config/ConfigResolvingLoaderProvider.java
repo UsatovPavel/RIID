@@ -2,6 +2,8 @@ package riid.app.core.config;
 
 import java.nio.file.Files;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 import riid.app.cli.CliApplication;
 import riid.app.cli.CliParser;
 import riid.app.core.model.ImageId;
@@ -23,6 +25,10 @@ public final class ConfigResolvingLoaderProvider {
     }
 
     public static CliApplication.ImageLoader create(CliParser.CliOptions options) throws Exception {
+        return create(options, null);
+    }
+
+    public static CliApplication.ImageLoader create(CliParser.CliOptions options, MeterRegistry meterRegistry) throws Exception {
         if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
             RegistryEndpoint endpoint = options.credentials() == null
                     ? DEFAULT_REGISTRY_ENDPOINT
@@ -46,7 +52,8 @@ public final class ConfigResolvingLoaderProvider {
         return (repository, reference, runtimeId) -> {
             try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(
                     options.configPath(),
-                    options.credentials()
+                    options.credentials(),
+                    meterRegistry
             )) {
                 return facade.load(
                         ImageId.fromRegistry(registry, repository, reference),

@@ -12,14 +12,19 @@ import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.LocalConnector;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import riid.app.cli.CliApplication;
+import riid.app.daemon.metrics.DaemonPullHttpMetrics;
+import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 import riid.app.core.error.AppError;
 import riid.app.core.error.AppException;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
@@ -46,6 +51,20 @@ class PullHttpHandlerHttpStatusTest {
     private LocalConnector connectorB;
     private LocalConnector connectorC;
     private ExecutorService pullExecutor;
+    private PrometheusMeterRegistry meterRegistry;
+
+    @BeforeEach
+    void newMeterRegistry() {
+        meterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+    }
+
+    private DaemonPullHttpMetrics pullMetrics() {
+        return new DaemonPullHttpMetrics(meterRegistry);
+    }
+
+    private ImageLoadPipelineMetrics pipelineLoadMetrics() {
+        return new ImageLoadPipelineMetrics(meterRegistry);
+    }
 
     @AfterEach
     void tearDown() throws Exception {
@@ -67,7 +86,9 @@ class PullHttpHandlerHttpStatusTest {
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 LONG_TIMEOUT,
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = postPull("{\"repository\":\"library/busybox\",\"reference\":\"latest\","
                 + "\"runtimeId\":\"podman\"}");
@@ -86,7 +107,9 @@ class PullHttpHandlerHttpStatusTest {
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 LONG_TIMEOUT,
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = request("GET /pull HTTP/1.1\r\nHost: local\r\n\r\n");
 
@@ -142,7 +165,9 @@ class PullHttpHandlerHttpStatusTest {
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(0, true)),
                 LONG_TIMEOUT,
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = postPull(
                 "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}");
@@ -175,7 +200,9 @@ class PullHttpHandlerHttpStatusTest {
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(2, true)),
                 LONG_TIMEOUT,
-                pullExecutor),
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()),
                 2);
 
         String body = "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}";
@@ -215,7 +242,9 @@ class PullHttpHandlerHttpStatusTest {
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 Duration.ofMillis(120),
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = postPull(
                 "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}");
@@ -325,14 +354,16 @@ class PullHttpHandlerHttpStatusTest {
         assertEquals(DaemonPullErrorMapper.REGISTRY_NOT_FOUND_MESSAGE, r.json().path("message").asText());
     }
 
-    private static PullHttpHandler newPullHandler(CliApplication.ImageLoader loader, ExecutorService exec) {
+    private PullHttpHandler newPullHandler(CliApplication.ImageLoader loader, ExecutorService exec) {
         return new PullHttpHandler(
                 CONTROL,
                 loader,
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 LONG_TIMEOUT,
-                exec);
+                exec,
+                pullMetrics(),
+                pipelineLoadMetrics());
     }
 
     private void startServer(Handler handler) throws Exception {
