@@ -28,25 +28,35 @@ public final class DaemonPullErrorMapper {
     /** Same message for true registry miss and for other registry 4xx that are mapped to HTTP 404. */
     public static final String REGISTRY_NOT_FOUND_MESSAGE = "Image, tag or digest not found in registry";
 
-    /** JSON code when the registry returned HTTP 404 (manifest or blob). */
-    public static final String JSON_REGISTRY_NOT_FOUND = "registry_not_found";
+    /**
+     * JSON "code" values for mapped POST /pull errors. Nested here so the wire contract stays next to the mapper.
+     */
+    public enum PullErrorCode {
 
-    /** JSON code when pull is blocked by allowedRegistries (HTTP 403). */
-    public static final String JSON_CONFIG_REGISTRY_NOT_ALLOWED = "registry_not_allowed";
+        REGISTRY_NOT_FOUND("registry_not_found"),
 
-    /** JSON code when no runtime adapter exists (HTTP 422). */
-    public static final String JSON_ADAPTER_NOT_FOUND = "adapter_not_found";
+        REGISTRY_NOT_ALLOWED("registry_not_allowed"),
 
-    /** JSON code when the registry returned 401; outer HTTP status is still 404. */
-    public static final String JSON_REGISTRY_RESPONSE_UNAUTHORIZED = "registry_response_unauthorized";
+        ADAPTER_NOT_FOUND("adapter_not_found"),
 
-    /** JSON code when the registry returned 403 (not the config-only registry_not_allowed case). */
-    public static final String JSON_REGISTRY_RESPONSE_FORBIDDEN = "registry_response_forbidden";
+        REGISTRY_RESPONSE_UNAUTHORIZED("registry_response_unauthorized"),
 
-    /** JSON code for other registry 4xx (e.g. 409); outer HTTP status is 404. */
-    public static final String JSON_REGISTRY_RESPONSE_OTHER = "registry_response_other";
+        REGISTRY_RESPONSE_FORBIDDEN("registry_response_forbidden"),
 
-    public record MappedHttpError(int httpStatus, String code, String message) {
+        REGISTRY_RESPONSE_OTHER("registry_response_other");
+
+        private final String jsonValue;
+
+        PullErrorCode(String jsonValue) {
+            this.jsonValue = jsonValue;
+        }
+
+        public String jsonValue() {
+            return jsonValue;
+        }
+    }
+
+    public record MappedHttpError(int httpStatus, PullErrorCode code, String message) {
     }
 
     private DaemonPullErrorMapper() {
@@ -84,11 +94,11 @@ public final class DaemonPullErrorMapper {
         return switch (runtimeError.kind()) {
             case REGISTRY_NOT_ALLOWED -> Optional.of(new MappedHttpError(
                     HttpStatus.FORBIDDEN_403,
-                    JSON_CONFIG_REGISTRY_NOT_ALLOWED,
+                    PullErrorCode.REGISTRY_NOT_ALLOWED,
                     safeMessage(e)));
             case ADAPTER_NOT_FOUND -> Optional.of(new MappedHttpError(
                     HttpStatus.UNPROCESSABLE_ENTITY_422,
-                    JSON_ADAPTER_NOT_FOUND,
+                    PullErrorCode.ADAPTER_NOT_FOUND,
                     safeMessage(e)));
             case LOAD_FAILED -> Optional.empty();
         };
@@ -102,25 +112,25 @@ public final class DaemonPullErrorMapper {
         if (st == HttpStatus.NOT_FOUND_404) {
             return Optional.of(new MappedHttpError(
                     HttpStatus.NOT_FOUND_404,
-                    JSON_REGISTRY_NOT_FOUND,
+                    PullErrorCode.REGISTRY_NOT_FOUND,
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         if (st == HttpStatus.UNAUTHORIZED_401) {
             return Optional.of(new MappedHttpError(
                     HttpStatus.NOT_FOUND_404,
-                    JSON_REGISTRY_RESPONSE_UNAUTHORIZED,
+                    PullErrorCode.REGISTRY_RESPONSE_UNAUTHORIZED,
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         if (st == HttpStatus.FORBIDDEN_403) {
             return Optional.of(new MappedHttpError(
                     HttpStatus.NOT_FOUND_404,
-                    JSON_REGISTRY_RESPONSE_FORBIDDEN,
+                    PullErrorCode.REGISTRY_RESPONSE_FORBIDDEN,
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         if (st >= 400 && st < 500) {
             return Optional.of(new MappedHttpError(
                     HttpStatus.NOT_FOUND_404,
-                    JSON_REGISTRY_RESPONSE_OTHER,
+                    PullErrorCode.REGISTRY_RESPONSE_OTHER,
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         return Optional.empty();
