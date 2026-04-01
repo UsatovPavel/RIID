@@ -23,6 +23,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import riid.app.cli.CliApplication;
+import riid.app.core.model.ImageId;
+import riid.app.service.LoadOutcome;
 import riid.app.daemon.metrics.DaemonPullHttpMetrics;
 import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 import riid.app.core.error.AppError;
@@ -39,6 +41,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * HTTP status mapping for {@code POST /pull} (daemon IPC). Uses in-memory {@link LocalConnector}.
  */
 class PullHttpHandlerHttpStatusTest {
+
+    private static LoadOutcome okLoad(String repo, String ref, long tarBytes) {
+        return new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), tarBytes);
+    }
 
     private static final String CONTROL = "control";
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -82,7 +88,7 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         startServer(new PullHttpHandler(
                 CONTROL,
-                (repo, ref, rt) -> "/var/tmp/test-image.tar",
+                (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 LONG_TIMEOUT,
@@ -95,7 +101,7 @@ class PullHttpHandlerHttpStatusTest {
 
         assertEquals(HttpStatus.OK_200, r.status());
         assertEquals("success", r.json().path("status").asText());
-        assertEquals("/var/tmp/test-image.tar", r.json().path("imagePath").asText());
+        assertEquals("registry-1.docker.io/library/busybox:latest", r.json().path("imagePath").asText());
     }
 
     @Test
@@ -103,7 +109,7 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         startServer(new PullHttpHandler(
                 CONTROL,
-                (repo, ref, rt) -> "ignored",
+                (repo, ref, rt) -> okLoad("x", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 LONG_TIMEOUT,
@@ -119,7 +125,7 @@ class PullHttpHandlerHttpStatusTest {
     @Test
     void invalidJsonReturns400() throws Exception {
         pullExecutor = newPullExecutor();
-        startServer(newPullHandler((repo, ref, rt) -> "ignored", pullExecutor));
+        startServer(newPullHandler((repo, ref, rt) -> okLoad("x", "latest", -1), pullExecutor));
 
         ParsedResponse r = request(
                 "POST /pull HTTP/1.1\r\n"
@@ -136,7 +142,7 @@ class PullHttpHandlerHttpStatusTest {
     @Test
     void missingRequiredFieldsReturns400() throws Exception {
         pullExecutor = newPullExecutor();
-        startServer(newPullHandler((repo, ref, rt) -> "ignored", pullExecutor));
+        startServer(newPullHandler((repo, ref, rt) -> okLoad("x", "latest", -1), pullExecutor));
 
         ParsedResponse r = postPull("{\"repository\":\"x\",\"reference\":\"\"}");
 
@@ -147,7 +153,7 @@ class PullHttpHandlerHttpStatusTest {
     @Test
     void unknownRuntimeReturns422() throws Exception {
         pullExecutor = newPullExecutor();
-        startServer(newPullHandler((repo, ref, rt) -> "ignored", pullExecutor));
+        startServer(newPullHandler((repo, ref, rt) -> okLoad("x", "latest", -1), pullExecutor));
 
         ParsedResponse r = postPull(
                 "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"unknown\"}");
@@ -161,7 +167,7 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         startServer(new PullHttpHandler(
                 CONTROL,
-                (repo, ref, rt) -> "/ok",
+                (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(0, true)),
                 LONG_TIMEOUT,
@@ -195,7 +201,7 @@ class PullHttpHandlerHttpStatusTest {
                         Thread.currentThread().interrupt();
                         throw new RuntimeException(e);
                     }
-                    return "/ok";
+                    return okLoad("library/busybox", "latest", -1);
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(2, true)),
@@ -237,7 +243,7 @@ class PullHttpHandlerHttpStatusTest {
                         Thread.currentThread().interrupt();
                         throw new RuntimeException(e);
                     }
-                    return "never";
+                    return okLoad("library/busybox", "latest", -1);
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),

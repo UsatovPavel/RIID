@@ -24,6 +24,7 @@ import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 
 import riid.app.cli.CliApplication;
+import riid.app.service.LoadOutcome;
 import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.metrics.DaemonPullHttpMetrics;
 import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
@@ -109,8 +110,8 @@ public final class PullHttpHandler extends Handler.Abstract {
         }
 
         try {
-            Optional<String> loadedPath = concurrencyGuard.tryExecute(() -> executePullWithTimeout(pullRequest));
-            if (loadedPath.isEmpty()) {
+            Optional<LoadOutcome> loaded = concurrencyGuard.tryExecute(() -> executePullWithTimeout(pullRequest));
+            if (loaded.isEmpty()) {
                 pullMetrics.record(t0, HttpStatus.TOO_MANY_REQUESTS_429, "overloaded");
                 writeJson(response, callback, HttpStatus.TOO_MANY_REQUESTS_429, new ErrorResponse(
                         "overloaded",
@@ -120,7 +121,7 @@ public final class PullHttpHandler extends Handler.Abstract {
             }
             pullMetrics.record(t0, HttpStatus.OK_200, "success");
             writeJson(response, callback, HttpStatus.OK_200,
-                    new DaemonPullResponse("success", loadedPath.orElse(null), null));
+                    new DaemonPullResponse("success", loaded.get().imageRef(), null));
         } catch (PullTimeoutException e) {
             pullMetrics.record(t0, HttpStatus.GATEWAY_TIMEOUT_504, "timeout");
             writeJson(response, callback, HttpStatus.GATEWAY_TIMEOUT_504, new ErrorResponse(
@@ -152,13 +153,13 @@ public final class PullHttpHandler extends Handler.Abstract {
         return u;
     }
 
-    private String executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
+    private LoadOutcome executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
         long start = System.nanoTime();
-        Future<String> future = pullExecutor.submit(() ->
+        Future<LoadOutcome> future = pullExecutor.submit(() ->
                 loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId()));
         try {
-            String result = future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
-            pipelineMetrics.recordSuccess(start);
+            LoadOutcome result = future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            pipelineMetrics.recordSuccess(start, result.tarBytes());
             return result;
         } catch (TimeoutException e) {
             future.cancel(true);
