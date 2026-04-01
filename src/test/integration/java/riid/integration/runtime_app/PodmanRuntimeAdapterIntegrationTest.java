@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import riid.app.core.model.ImageId;
 import riid.app.service.ImageLoadingFacade;
+import riid.app.service.LoadOutcome;
 import riid.app.service.RuntimeRegistry;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
@@ -44,7 +45,8 @@ class PodmanRuntimeAdapterIntegrationTest {
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
         ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(), REPO, REF);
-            loadedId = app.load(imageId, PODMAN);
+            LoadOutcome outcome = app.load(imageId, PODMAN);
+            loadedId = outcome.imageId();
         }
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
@@ -81,7 +83,7 @@ class PodmanRuntimeAdapterIntegrationTest {
                     TestPaths.DEFAULT_BASE_DIR,
                     java.util.List.of())) {
             ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
-            ImageId loadedId = app.load(imageId, "podman");
+            ImageId loadedId = app.load(imageId, "podman").imageId();
             // Verify the image can run a trivial command
             run(List.of(PODMAN, "run", "--rm", loadedId.toString(), "true"));
             }

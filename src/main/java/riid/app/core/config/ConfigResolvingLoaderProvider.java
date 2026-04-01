@@ -58,7 +58,7 @@ public final class ConfigResolvingLoaderProvider {
                 return facade.load(
                         ImageId.fromRegistry(registry, repository, reference),
                         runtimeId
-                ).toString();
+                );
             } catch (Exception e) {
                 throw new RuntimeException("Failed to load image", e);
             }
@@ -78,7 +78,7 @@ public final class ConfigResolvingLoaderProvider {
                 return facade.load(
                         ImageId.fromRegistry(endpoint.registryName(), repository, reference),
                         runtimeId
-                ).toString();
+                );
             } catch (Exception e) {
                 throw new RuntimeException("Failed to load image", e);
             }

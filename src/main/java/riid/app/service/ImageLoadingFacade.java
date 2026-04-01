@@ -1,6 +1,7 @@
 package riid.app.service;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -98,9 +99,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
     /**
      * High-level load: download/validate, assemble OCI, import into runtime.
      *
-     * @return resolved ImageId used for runtime
+     * @return resolved image and tar size (bytes) passed to the runtime
      */
-    public ImageId load(ImageId imageId, String runtimeId) {
+    public LoadOutcome load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
         String previousOperation = MdcContext.getOperation();
@@ -135,9 +136,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
     /**
      * Load using prepared manifest result and runtime.
      *
-     * @return resolved ImageId used for runtime
+     * @return resolved image and tar size (bytes) passed to the runtime
      */
-    public ImageId load(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId) {
+    public LoadOutcome load(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId) {
         Objects.requireNonNull(manifestResult, "manifestResult");
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(imageId, "imageId");
@@ -146,13 +147,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
         long engineStartedNs = System.nanoTime();
         try {
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
+                long tarBytes = Files.size(archivePath);
                 runtime.importImage(archivePath);
                 MilestoneEventLogger.info(LOGGER)
                         .addEvent("engine.import")
                         .addResult("success")
                         .addDurationMs(durationMs(engineStartedNs))
                         .log("Loaded " + imageId + " into runtime " + runtime.runtimeId() + " at " + archivePath);
-                return imageId;
+                return new LoadOutcome(imageId, tarBytes);
             });
         } catch (AppException e) {
             MilestoneEventLogger.error(LOGGER)

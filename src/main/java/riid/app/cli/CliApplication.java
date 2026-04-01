@@ -10,6 +10,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 
@@ -19,6 +22,7 @@ import riid.app.core.config.DaemonSettingsResolver;
 import riid.app.core.error.AppException;
 import riid.app.daemon.DaemonServer;
 import riid.app.service.ImageLoadingFacade;
+import riid.app.service.LoadOutcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.core.logging.MdcContext;
@@ -142,6 +146,9 @@ public final class CliApplication {
             CliParser.CliOptions options = result.options();
             if (options.daemonMode()) {
                 PrometheusMeterRegistry prometheusRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+                new JvmMemoryMetrics().bindTo(prometheusRegistry);
+                new JvmGcMetrics().bindTo(prometheusRegistry);
+                new ProcessorMetrics().bindTo(prometheusRegistry);
                 ImageLoader loader = serviceFactory.create(options, prometheusRegistry);
                 daemonRunner.run(options, loader, availableRuntimes, prometheusRegistry);
                 MilestoneEventLogger.info(LOGGER)
@@ -167,7 +174,8 @@ public final class CliApplication {
                 return ExitCode.RUNTIME_NOT_FOUND.code();
             }
             ImageLoader loader = serviceFactory.create(options, null);
-            loader.load(options.repository(), options.reference(), options.runtimeId());
+            LoadOutcome loadOutcome = loader.load(options.repository(), options.reference(), options.runtimeId());
+            Objects.requireNonNull(loadOutcome);
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
             }
@@ -235,7 +243,7 @@ public final class CliApplication {
 
     @FunctionalInterface
     public interface ImageLoader {
-        String load(String repository, String reference, String runtimeId);
+        LoadOutcome load(String repository, String reference, String runtimeId);
     }
 
     @FunctionalInterface

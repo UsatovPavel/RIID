@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import riid.app.core.model.ImageId;
 import riid.app.service.ImageLoadingFacade;
+import riid.app.service.LoadOutcome;
 import riid.app.service.RuntimeRegistry;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
@@ -44,7 +45,8 @@ class DockerRuntimeAdapterIntegrationTest {
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
             ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(), REPO, REF);
-            loadedId = app.load(imageId, DOCKER);
+            LoadOutcome outcome = app.load(imageId, DOCKER);
+            loadedId = outcome.imageId();
         }
 
         Process p = new ProcessBuilder(DOCKER, "images", "--format", "{{.Repository}}:{{.Tag}}")
@@ -77,7 +79,7 @@ class DockerRuntimeAdapterIntegrationTest {
                     TestPaths.DEFAULT_BASE_DIR,
                     java.util.List.of())) {
                 ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
-                ImageId loadedId = app.load(imageId, DOCKER);
+                ImageId loadedId = app.load(imageId, DOCKER).imageId();
                 run(List.of(DOCKER, "run", "--rm", loadedId.toString(), "true"));
             }
         }

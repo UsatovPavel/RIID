@@ -71,7 +71,7 @@ class CliEndToEndLiveTest {
                                 return svc.load(
                                         ImageId.fromRegistry(registry, repo, ref),
                                         runtimeId
-                                ).toString();
+                                );
                             } catch (IOException e) {
                                 throw new RuntimeException("Failed to load image", e);
                             }
