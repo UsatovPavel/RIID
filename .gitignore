@@ -44,6 +44,9 @@ bin/
 #TODO at end of dev all make builded files
 *.txt
 
+### Local Docker Hub token ###
+config/.env
+
 ###Internal artifacts###
 План*
 Презентация.md
