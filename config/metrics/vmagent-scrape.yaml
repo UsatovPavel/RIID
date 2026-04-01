@@ -4,7 +4,10 @@
 # Scrapes RIID daemon metrics (TCP GET /metrics). Bind is app.daemon.metricsHost / metricsPort
 # in the RIID YAML (see docs/config.md); defaults 0.0.0.0:9090.
 #
-# Replace the target with your host:port (per node or Service address in Kubernetes).
+# Target: host where RIID daemon listens (defaults 0.0.0.0:9090).
+# Use host.docker.internal when vmagent runs in Docker on WSL2 / Docker Desktop:
+# 127.0.0.1 inside the container is NOT the WSL host where java runs.
+# For vmagent on bare metal with --network host, use 127.0.0.1:9090 instead.
 
 global:
   scrape_interval: 15s
@@ -16,4 +19,4 @@ scrape_configs:
     scheme: http
     static_configs:
       - targets:
-          - "127.0.0.1:9090"
+          - "host.docker.internal:9090"

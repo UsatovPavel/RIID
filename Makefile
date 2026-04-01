@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent grafana
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-up metrics-stack-down stack-up download_to_daemon download_to_daemon_10MB download_to_daemon_50MB download_to_daemon_150MB
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -58,8 +58,18 @@ moduled-execute-specific-test:
 testing_prompt:
 	cat internalDocs/prompts/riid-gradle-testing.md > out.txt
 
+# Optional: config/.env with DOCKERHUB_USER + DOCKERHUB_TOKEN (PAT) — same idea as podman login; not committed — .gitignore
+# RIID does not read env for registry auth by itself; we pass CLI flags when both vars are set after sourcing .env.
+# -Driid.dev.dirtyRegistryLogs=true: full PAT/tokens in logs (local dev only).
+DEV_REGISTRY_LOGS := -Driid.dev.dirtyRegistryLogs=true
 daemon:
-	java -jar build/libs/riid.jar --daemon --config ./config/config.yaml
+	set -a; [ -f config/.env ] && . ./config/.env; set +a; \
+	if [ -n "$$DOCKERHUB_USER" ] && [ -n "$$DOCKERHUB_TOKEN" ]; then \
+	  java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml \
+	    --username "$$DOCKERHUB_USER" --password-env DOCKERHUB_TOKEN; \
+	else \
+	  java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml; \
+	fi
 # Single-node VictoriaMetrics (Docker). Prometheus remote_write + query API: http://127.0.0.1:8428. In medium cluster one in claster.
 # Run before: make vmagent (same host). Stop: make victoriametrics-stop
 victoria-metrics:
@@ -68,13 +78,23 @@ victoria-metrics:
 victoria-metrics_stop:
 	docker rm -f victoria-metrics 2>/dev/null || true
 
-# Requires: vmagent binary on PATH; VictoriaMetrics on 127.0.0.1:8428 (make victoriametrics)
-vmagent:
-	docker run --rm -it --network host \
-	-v "$(CURDIR)/config/metrics:/etc/vmagent:ro" \
- 	victoriametrics/vmagent:latest \
-  	-promscrape.config=/etc/vmagent/vmagent-scrape.yaml \
-  	-remoteWrite.url=http://127.0.0.1:8428/api/v1/write
+# Same as vmagent but detached (for metrics-stack-up). Stop/remove: docker rm -f vmagent
+# host.docker.internal + host-gateway: reach RIID and VictoriaMetrics on the WSL/host
+# (--network host would scrape Docker VM loopback, not the daemon on WSL).
+vmagent-d:
+	docker run -d --name vmagent \
+		--add-host=host.docker.internal:host-gateway \
+		-v "$(CURDIR)/config/metrics:/etc/vmagent:ro" \
+		victoriametrics/vmagent:latest \
+		-promscrape.config=/etc/vmagent/vmagent-scrape.yaml \
+		-remoteWrite.url=http://host.docker.internal:8428/api/v1/write
+
+# VictoriaMetrics + Grafana + vmagent (background). Then run RIID: `make daemon` in another terminal.
+# If docker run fails (name already in use): `make metrics-stack-down` and retry.
+metrics-stack-up: metrics-stack-down victoria-metrics grafana vmagent-d
+
+metrics-stack-down:
+	docker rm -f vmagent grafana victoria-metrics 2>/dev/null || true
 
 # Grafana: VictoriaMetrics on host — datasource uses host.docker.internal:8428; --add-host gives Linux Docker the same hostname (Docker Desktop already resolves it).
 # Default home dashboard: JSON mount + GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH (see config/metrics/grafana/home/riid-home.json).
@@ -87,7 +107,23 @@ grafana:
 		-v "$(CURDIR)/config/metrics/grafana/home:/etc/grafana/home-dashboard:ro" \
 		grafana/grafana-oss:latest
 
-download_to_daemon:
+download_to_daemon_1MB:
 	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/busybox","reference":"latest","runtimeId":"podman"}'
+
+# Official library/jobber (~layers incl. ~10 MiB);
+download_to_daemon_10MB:
+	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+  	-H 'Content-Type: application/json' \
+  	-d '{"repository":"library/jobber","reference":"latest","runtimeId":"podman"}'
+
+download_to_daemon_50MB:
+	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+  	-H 'Content-Type: application/json' \
+  	-d '{"repository":"nginx/unit","reference":"latest","runtimeId":"podman"}'
+
+download_to_daemon_150MB:
+	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+  	-H 'Content-Type: application/json' \
+  	-d '{"repository":"library/postgres","reference":"latest","runtimeId":"podman"}'
