@@ -18,6 +18,8 @@ import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 
 import riid.app.core.config.AppConfig;
+import riid.app.core.model.ImageId;
+import riid.app.service.LoadOutcome;
 import riid.core.fs.TestFilesystemSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,7 +49,8 @@ class DaemonPullUnixSocketTest {
                 socketPath.toString(),
                 "127.0.0.1",
                 0,
-                (repo, ref, rt) -> "/var/tmp/riid-test.tar",
+                (repo, ref, rt) ->
+                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
                 Set.of("podman"),
                 4,
                 Duration.ofSeconds(30),
@@ -85,7 +88,7 @@ class DaemonPullUnixSocketTest {
 
             JsonNode node = MAPPER.readTree(Files.readString(bodyFile));
             assertEquals("success", node.path("status").asText());
-            assertEquals("/var/tmp/riid-test.tar", node.path("imagePath").asText());
+            assertEquals("registry-1.docker.io/library/busybox:latest", node.path("imagePath").asText());
         } finally {
             daemon.stop();
             TestFilesystemSupport.deleteRecursive(dir);

@@ -1,0 +1,13 @@
+# Dashboard file provider: JSON dashboards from ../dashboards (mounted at /etc/grafana/dashboards).
+
+apiVersion: 1
+
+providers:
+  - name: riid
+    orgId: 1
+    folder: RIID
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/dashboards

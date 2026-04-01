@@ -3,7 +3,9 @@ package riid.integration;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import riid.app.cli.CliApplication;
+import riid.app.core.model.ImageId;
 import riid.app.service.ImageLoadingFacade;
+import riid.app.service.LoadOutcome;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.config.TestConfigYaml;
 import riid.runtime.RuntimeAdapter;
@@ -41,7 +43,8 @@ class CliToFactorySmokeTest {
                     try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(opts.configPath())) {
                         Objects.requireNonNull(facade);
                     }
-                    return (repo, ref, runtime) -> "ok";
+                    return (repo, ref, runtime) ->
+                            new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L);
                 },
                 Map.of("stub", new NoopRuntimeAdapter()),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),

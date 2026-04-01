@@ -57,3 +57,37 @@ moduled-execute-specific-test:
 # When need to build and fix some spectific test docs
 testing_prompt:
 	cat internalDocs/prompts/riid-gradle-testing.md > out.txt
+
+daemon:
+	java -jar build/libs/riid.jar --daemon --config ./config/config.yaml
+# Single-node VictoriaMetrics (Docker). Prometheus remote_write + query API: http://127.0.0.1:8428. In medium cluster one in claster.
+# Run before: make vmagent (same host). Stop: make victoriametrics-stop
+victoria-metrics:
+	docker run -d --name victoria-metrics -p 8428:8428 victoriametrics/victoria-metrics:latest
+
+victoria-metrics_stop:
+	docker rm -f victoria-metrics 2>/dev/null || true
+
+# Requires: vmagent binary on PATH; VictoriaMetrics on 127.0.0.1:8428 (make victoriametrics)
+vmagent:
+	docker run --rm -it --network host \
+	-v "$(CURDIR)/config/metrics:/etc/vmagent:ro" \
+ 	victoriametrics/vmagent:latest \
+  	-promscrape.config=/etc/vmagent/vmagent-scrape.yaml \
+  	-remoteWrite.url=http://127.0.0.1:8428/api/v1/write
+
+# Grafana: VictoriaMetrics on host — datasource uses host.docker.internal:8428; --add-host gives Linux Docker the same hostname (Docker Desktop already resolves it).
+# Default home dashboard: JSON mount + GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH (see config/metrics/grafana/home/riid-home.json).
+grafana:
+	docker run -d --name grafana -p 3000:3000 \
+		--add-host=host.docker.internal:host-gateway \
+		-e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/home-dashboard/riid-home.json \
+		-v "$(CURDIR)/config/metrics/grafana/provisioning:/etc/grafana/provisioning:ro" \
+		-v "$(CURDIR)/config/metrics/grafana/dashboards:/etc/grafana/dashboards:ro" \
+		-v "$(CURDIR)/config/metrics/grafana/home:/etc/grafana/home-dashboard:ro" \
+		grafana/grafana-oss:latest
+
+download_to_daemon:
+	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+  	-H 'Content-Type: application/json' \
+  	-d '{"repository":"library/busybox","reference":"latest","runtimeId":"podman"}'
