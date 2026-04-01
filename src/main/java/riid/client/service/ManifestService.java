@@ -52,10 +52,20 @@ public final class ManifestService implements ManifestServiceApi {
     public ManifestResult fetchManifest(
             RegistryEndpoint endpoint, String repository, String reference, String scope) {
         URI uri = endpoint.uri(RegistryApi.manifestPath(repository, reference));
+        LOGGER.info(
+                "[manifest] target uri={} repo={} ref={} scope={}",
+                uri,
+                repository,
+                reference,
+                scope);
         Map<String, String> headers = defaultHeaders();
         authService.getAuthHeader(endpoint, repository, scope)
                 .ifPresent(v -> headers.put("Authorization", v));
+        boolean hasAuth = headers.containsKey("Authorization");
+        LOGGER.info("[manifest] authorization header present={} (value not logged)", hasAuth);
+        LOGGER.info("[manifest] issuing HTTP GET (requestTimeout applies to this call)");
         HttpResult<java.io.InputStream> resp = http.get(uri, headers);
+        LOGGER.info("[manifest] GET response status={} uri={}", resp.statusCode(), uri);
         if (resp.statusCode() != HttpStatus.OK_200) {
             throw new ClientException(
                     new ClientError.Http(ClientError.HttpKind.BAD_STATUS, resp.statusCode(), "Manifest fetch failed"),
@@ -64,6 +74,10 @@ public final class ManifestService implements ManifestServiceApi {
         try (var body = resp.body()) {
             byte[] bytes = body.readAllBytes();
             String contentType = resp.firstHeader(HttpResult.HeaderName.CONTENT_TYPE).orElse(null);
+            LOGGER.info(
+                    "[manifest] body bytes={} contentType={}",
+                    bytes.length,
+                    contentType);
             // Detect manifest list / index
             boolean isIndex = isIndexMediaType(contentType) || looksLikeIndex(bytes);
             if (isIndex) {
@@ -74,6 +88,9 @@ public final class ManifestService implements ManifestServiceApi {
                             new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Empty manifest list"),
                             "Empty manifest list");
                 }
+                LOGGER.info(
+                        "[manifest] manifest list/index: following digest {} (platform-resolved)",
+                        selected.digest());
                 // Recursively fetch the referenced manifest by digest
                 return fetchManifest(endpoint, repository, selected.digest(), scope);
             }
@@ -84,6 +101,11 @@ public final class ManifestService implements ManifestServiceApi {
                     .orElse(manifest.mediaType());
             long len = bytes.length;
             validateDigestHeader(resp.headers(), computedDigest);
+            LOGGER.info(
+                    "[manifest] single manifest ready digest={} mediaType={} bytes={}",
+                    computedDigest,
+                    mediaType,
+                    len);
             return new ManifestResult(computedDigest, mediaType, len, manifest);
         } catch (IOException e) {
             throw new ClientException(
