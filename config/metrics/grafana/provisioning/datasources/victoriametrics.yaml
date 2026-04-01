@@ -1,0 +1,19 @@
+# Grafana datasource provisioning (VictoriaMetrics via Prometheus-compatible API).
+# Mount this tree under /etc/grafana/provisioning (see config/metrics/README.md).
+#
+# url: use host.docker.internal when Grafana runs via `make grafana` (standalone container).
+# In Docker Compose / K8s, set url to the VictoriaMetrics service (e.g. http://victoriametrics:8428).
+
+apiVersion: 1
+
+datasources:
+  - name: VictoriaMetrics
+    uid: victoriametrics
+    type: prometheus
+    access: proxy
+    url: http://host.docker.internal:8428
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST
