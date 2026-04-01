@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-up metrics-stack-down stack-up download_to_daemon download_to_daemon_10MB download_to_daemon_50MB download_to_daemon_150MB
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-up metrics-stack-down stack-up download_to_daemon download_to_daemon_10MB download_to_daemon_50MB download_to_daemon_150MB grafana_demo_load
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -118,12 +118,33 @@ download_to_daemon_10MB:
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/jobber","reference":"latest","runtimeId":"podman"}'
 
+# Official https://hub.docker.com/_/irssi (~50 of MiB; size label approximate)
 download_to_daemon_50MB:
 	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
   	-H 'Content-Type: application/json' \
-  	-d '{"repository":"nginx/unit","reference":"latest","runtimeId":"podman"}'
+  	-d '{"repository":"library/irssi","reference":"latest","runtimeId":"podman"}'
 
 download_to_daemon_150MB:
 	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/postgres","reference":"latest","runtimeId":"podman"}'
+
+# Grafana demo: each round = library/jobber -> sleep 15s -> library/busybox -> sleep 30s (10 rounds). Needs `make daemon` + metrics stack.
+grafana_demo_load:
+	@set -e; \
+	echo "=== grafana_demo_load: 10 rounds: jobber, 15s, busybox, 30s ==="; \
+	for i in $$(seq 1 10); do \
+	  echo "[round] $$i/10 $$(date -Iseconds) jobber"; \
+	  curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+	    -H 'Content-Type: application/json' \
+	    -d '{"repository":"library/jobber","reference":"latest","runtimeId":"podman"}' \
+	    | (command -v jq >/dev/null 2>&1 && jq -c . || cat); echo; \
+	  sleep 15; \
+	  echo "[round] $$i/10 $$(date -Iseconds) busybox"; \
+	  curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+	    -H 'Content-Type: application/json' \
+	    -d '{"repository":"library/busybox","reference":"latest","runtimeId":"podman"}' \
+	    | (command -v jq >/dev/null 2>&1 && jq -c . || cat); echo; \
+	  [ $$i -lt 10 ] && sleep 30; \
+	done; \
+	echo "=== grafana_demo_load done $$(date -Iseconds) ==="
