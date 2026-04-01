@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "manifests": [
     {
-      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "mediaType": "%s",
       "size": %d,
       "digest": "sha256:%s",
       "annotations": {

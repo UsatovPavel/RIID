@@ -42,6 +42,9 @@ jobs:
   linux-integration-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -51,6 +54,22 @@ jobs:
           cache: gradle
       - name: Make gradlew executable
         run: chmod +x gradlew
+      # Runner image already ships Docker (Moby); apt docker.io conflicts with containerd.io — do not install it.
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+          podman --version
+      - name: Ensure Docker CLI and socket
+        run: |
+          docker --version
+          sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
+          sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+      - name: Podman and Docker runtime integration tests (Hub pull + load)
+        run: |
+          ./gradlew --no-daemon integrationTest \
+            --tests 'riid.integration.runtime_app.PodmanRuntimeAdapterIntegrationTest' \
+            --tests 'riid.integration.runtime_app.DockerRuntimeAdapterIntegrationTest'
       - name: Setup minikube (driver=none)
         run: |
           chmod +x scripts/ci-dragonfly-setup.sh

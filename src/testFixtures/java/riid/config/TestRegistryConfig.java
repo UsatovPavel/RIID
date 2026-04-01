@@ -1,5 +1,8 @@
 package riid.core.config;
 
+import java.util.Optional;
+
+import riid.client.core.config.Credentials;
 import riid.client.core.config.RegistryEndpoint;
 
 /**
@@ -36,6 +39,15 @@ public final class TestRegistryConfig {
 
     public static RegistryEndpoint endpoint() {
         return new RegistryEndpoint(scheme(), host(), port(), null);
+    }
+
+    /**
+     * Same as {@link #endpoint()} but attaches {@link TestConfigYaml#dockerHubCredentialsFromEnv()} when set.
+     */
+    public static RegistryEndpoint endpointWithOptionalEnvCredentials() {
+        Optional<Credentials> creds = TestConfigYaml.dockerHubCredentialsFromEnv();
+        return creds.map(c -> new RegistryEndpoint(scheme(), host(), port(), c))
+                .orElseGet(TestRegistryConfig::endpoint);
     }
 
     public static String registryName() {
