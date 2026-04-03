@@ -108,6 +108,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             LOGGER.info("cache hit for layer {}", digest);
             stepLogger.sourceFetchFromCache(fetchStartedNs);
             layerSourceMetrics.recordLayerFetch("cache");
+            recordLayerBytes("cache", sizeBytes, cachedPath);
             return new FetchResult(digest, mediaType, cachedPath);
         }
 
@@ -149,6 +150,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     stepLogger.sourceSelectFromP2p(selectStartedNs);
                     stepLogger.sourceFetchFromP2p(fetchStartedNs);
                     layerSourceMetrics.recordLayerFetch("p2p");
+                    recordLayerBytes("p2p", sizeBytes, resultPath);
                     return new FetchResult(digest, mediaType, resultPath);
                 }
             } catch (IOException ex) {
@@ -216,6 +218,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
             fetchSucceeded = true;
             layerSourceMetrics.recordLayerFetch("registry");
+            long registryBytes = blob.size() > 0 ? blob.size() : tmp.length();
+            layerSourceMetrics.recordLayerFetchedBytes("registry", registryBytes);
             return new FetchResult(ImageDigest.parse(blob.digest()),
                     MediaType.from(blob.mediaType()),
                     resultPath);
@@ -230,6 +234,25 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 stepLogger.sourceFetchFromRegistry(fetchStartedNs);
             }
             releaseRegistry();
+        }
+    }
+
+    private void recordLayerBytes(String source, long declaredSize, Path path) {
+        layerSourceMetrics.recordLayerFetchedBytes(source, layerPayloadBytes(declaredSize, path));
+    }
+
+    private long layerPayloadBytes(long declaredSize, Path path) {
+        if (declaredSize > 0) {
+            return declaredSize;
+        }
+        if (path == null) {
+            return 0;
+        }
+        try {
+            return fs.size(path);
+        } catch (Exception e) {
+            LOGGER.debug("Could not stat layer path {}: {}", path, e.getMessage());
+            return 0;
         }
     }
 

@@ -10,7 +10,8 @@ import io.micrometer.core.instrument.MeterRegistry;
  */
 public final class MicrometerDispatcherLayerSourceMetrics implements DispatcherLayerSourceMetrics {
 
-    private static final String METRIC = "riid.dispatcher.layer.fetches";
+    private static final String FETCHES = "riid.dispatcher.layer.fetches";
+    private static final String BYTES = "riid.dispatcher.layer.bytes";
 
     private final MeterRegistry registry;
 
@@ -20,10 +21,23 @@ public final class MicrometerDispatcherLayerSourceMetrics implements DispatcherL
 
     @Override
     public void recordLayerFetch(String source) {
-        Counter.builder(METRIC)
+        Counter.builder(FETCHES)
                 .description("Layers served from cache, P2P, or registry")
                 .tag("source", source)
                 .register(registry)
                 .increment();
+    }
+
+    @Override
+    public void recordLayerFetchedBytes(String source, long bytes) {
+        if (bytes <= 0) {
+            return;
+        }
+        Counter.builder(BYTES)
+                .description("Layer payload bytes served from cache, P2P, or registry")
+                .baseUnit("bytes")
+                .tag("source", source)
+                .register(registry)
+                .increment(bytes);
     }
 }

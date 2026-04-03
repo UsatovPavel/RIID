@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-up metrics-stack-down stack-up download_to_daemon download_to_daemon_10MB download_to_daemon_50MB download_to_daemon_150MB grafana_demo_load
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new download_to_daemon download_to_daemon_1MB download_to_daemon_10MB download_to_daemon_50MB download_to_daemon_150MB grafana_demo_load
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -62,6 +62,10 @@ testing_prompt:
 # RIID does not read env for registry auth by itself; we pass CLI flags when both vars are set after sourcing .env.
 # -Driid.dev.dirtyRegistryLogs=true: full PAT/tokens in logs (local dev only).
 DEV_REGISTRY_LOGS := -Driid.dev.dirtyRegistryLogs=true
+daemon-new:
+	./gradlew clean shadowJar
+	$(MAKE) daemon
+
 daemon:
 	set -a; [ -f config/.env ] && . ./config/.env; set +a; \
 	if [ -n "$$DOCKERHUB_USER" ] && [ -n "$$DOCKERHUB_TOKEN" ]; then \
@@ -78,7 +82,7 @@ victoria-metrics:
 victoria-metrics_stop:
 	docker rm -f victoria-metrics 2>/dev/null || true
 
-# Same as vmagent but detached (for metrics-stack-up). Stop/remove: docker rm -f vmagent
+# Same as vmagent but detached (for metrics-stack-create). Stop/remove: docker rm -f vmagent
 # host.docker.internal + host-gateway: reach RIID and VictoriaMetrics on the WSL/host
 # (--network host would scrape Docker VM loopback, not the daemon on WSL).
 vmagent-d:
