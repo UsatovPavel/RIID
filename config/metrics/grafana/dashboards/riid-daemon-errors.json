@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Daemon POST /pull HTTP traffic by class, timeout and loader errors, JVM memory and process CPU (Micrometer binders from daemon mode).",
+  "description": "Daemon POST /pull HTTP traffic by class, timeout and loader errors, dispatcher layer fetches (cache / P2P / registry), JVM memory and process CPU (Micrometer binders from daemon mode).",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
