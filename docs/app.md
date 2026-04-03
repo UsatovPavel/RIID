@@ -55,7 +55,17 @@ Long-lived process: embedded **Jetty** serves **HTTP over a Unix domain socket**
 - **CLI:** `java -jar riid.jar --daemon [--config <path>]` — same auth/TLS flags as one-shot mode when you pass `--config`. In daemon mode **`--repo` / `--runtime` are not required** (pulls are driven by HTTP clients).
 - **Config:** optional `app.daemon` in YAML (socket path, metrics bind, concurrency, timeouts). See **Optional `app.daemon`** in [config.md](config.md).
 - **Control plane (UDS):** `POST /pull` with JSON body `{ "repository", "reference", "runtimeId" }` — success `200` with `status`, `imagePath`; errors use JSON `code` / `message` and HTTP status (4xx/5xx) per handler policy.
-- **Metrics (TCP):** `GET /metrics` on `metricsHost:metricsPort` (placeholder body until Prometheus wiring).
+- **Metrics (TCP):** `GET /metrics` on `metricsHost:metricsPort` serves **Prometheus text exposition** (`text/plain; version=0.0.4`) from a **Micrometer `PrometheusMeterRegistry`**. After pulls, scrapers (e.g. VictoriaMetrics vmagent, Prometheus) poll this URL. Main exported name prefixes include:
+  - **`riid_daemon_pull_*` (HTTP handler timer)** — one observation per finished `POST /pull`, from handler entry through loader completion. Micrometer name `riid.daemon.pull` becomes Prometheus families such as `riid_daemon_pull_seconds_bucket` / `_count` / `_sum` with percentile buckets enabled. **Tags (low cardinality):** `status` (numeric HTTP code, e.g. `200`, `504`), `status_class` (`2xx` … `5xx`, `other`), `code` — same idea as JSON `code` / `success` for 200 (`success`, `timeout`, `overloaded`, `unknown_runtime`, etc.). Use this series for request-rate and error breakdown **by HTTP layer**; latency here includes JSON/body handling, not just registry work.
+  - **`riid_image_load_*` (loader pipeline timer)** — time inside `ImageLoader.load` only (download / cache / import), independent of HTTP framing. Name `riid.image.load` → `riid_image_load_seconds_*`. **Tags:** `result` is `success`, `error`, or `timeout`. **`category`** on the timer is the tar **size bucket** on success when tar size is known (binary MiB bands: `0_5_mib`, `5_10_mib`, … `gt_5120_mib`), or `unknown` when the loader reports success but tar size is not set (`-1`), or `n_a` for failures/timeouts. Dashboards often aggregate histograms with PromQL `histogram_quantile` on `riid_image_load_seconds_bucket`.
+  - **Tar size / throughput (success path with known tar size only)** — separate from the timer histograms, for counts and SLO-style throughput:
+    - `riid_image_load_tar_size_category_total` — **Counter** per `category` (bucket label as above); increments once per successful load with a known tar byte size.
+    - `riid_image_load_tar_size_by_category_*` — **DistributionSummary** (`_count` / `_sum` per `category`) recording raw tar bytes per bucket (useful for mean tar size per cohort).
+    - `riid_image_load_tar_size_bytes_*` — global summary of tar sizes (all successful loads with known size).
+    - `riid_image_load_throughput_bps_*` — effective bytes/sec (tar size ÷ pipeline duration); histogram-style buckets when exported.
+    - `riid_image_load_throughput_slo_bps_*` — same, but only when tar size ≥ **10 MiB** (SLO cohort in code).  
+    Grafana JSON for these names lives under `config/metrics/grafana/dashboards/`; a runnable VM + vmagent + Grafana layout is described in `config/metrics/README.md`.
+- **Bind / firewall:** `metricsHost` controls the listen address (default `0.0.0.0` = all interfaces). Use `127.0.0.1` if the scrape agent runs on the same host and you want no remote access. Open the chosen **TCP port** in the host firewall for whatever runs the scraper; if the scraper is remote, it must reach `metricsHost:metricsPort` on the network path you configure in `vmagent-scrape.yaml` (or equivalent).
 
 ### Example: `curl` over the Unix socket
 Host in the URL is ignored by libcurl; use a dummy host:
@@ -117,8 +127,9 @@ java -jar riid.jar --daemon --config /etc/riid/config.yaml
 ## Tests
 ```bash
 ./gradlew testApp
-# Linux: real UDS + curl smoke for daemon IPC
-./gradlew moduledTest --tests riid.app.daemon.DaemonPullUnixSocketTest
+# Linux: real UDS + curl smoke for daemon IPC; mocked pull + GET /metrics scrape checks
+./gradlew moduledTest -PincludeLocal --tests riid.app.daemon.DaemonPullUnixSocketTest
+./gradlew moduledTest -PincludeLocal --tests riid.app.daemon.DaemonPullMetricsEndpointTest
 ```
 Coverage includes:
 - `CliApplicationTest` for negative cases (no args, unknown runtime) and happy-path argument propagation.

@@ -36,13 +36,14 @@ Used when the process is started with `--daemon` (see [app.md](app.md)). All fie
 app:
   daemon:
     unixSocketPath: "/run/riid/riid.sock"   # HTTP control plane: POST /pull over Unix domain socket
-    metricsHost: "0.0.0.0"                 # TCP: GET /metrics (Prometheus-style placeholder)
+    metricsHost: "0.0.0.0"                 # TCP bind for GET /metrics (Prometheus scrape)
     metricsPort: 9090
     maxConcurrentPulls: 32                  # global semaphore before each pull
     requestTimeout: PT30M                   # per-request ceiling for loader work
     overloadPolicy: REJECT                  # only value supported today
 ```
 
+- **`metricsHost` / `metricsPort`:** Jetty listens here for `GET /metrics` only (separate connector from the UDS control plane). Default `0.0.0.0` exposes the port on all interfaces — restrict with `127.0.0.1` for loopback-only or ensure **host/network firewall** matches who may scrape (local vmagent vs remote collector). Scraper config must target this host:port (see `config/metrics/vmagent-scrape.yaml` for a repository example).
 - Omit `app.daemon` entirely — defaults below apply.
 - Provide `app.daemon` with only some keys — missing keys use the same defaults.
 - `unixSocketPath` (when set) must be **&lt; 108 bytes** (AF_UNIX path limit).

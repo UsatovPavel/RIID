@@ -54,6 +54,12 @@ TLS/mTLS options (wired to HTTP client):
 ./gradlew testApp
 ```
 
+## Daemon mode and Grafana
+
+**Daemon** (`--daemon`): a long-lived process with **Jetty** — **Unix socket** control plane (`POST /pull` with JSON) and a **TCP** **Prometheus scrape** endpoint (`GET /metrics` on `metricsHost:metricsPort`). Options and defaults: [`docs/config.md`](docs/config.md) (`app.daemon`); endpoints, metric names, bind/firewall notes: [`docs/app.md`](docs/app.md) (Daemon mode).
+
+**Grafana / VictoriaMetrics (local example):** configs live under [`config/metrics/`](config/metrics/README.md). With Docker and Make from the repo root: `make metrics-stack-up` (Grafana typically on port **3000**, VM on **8428**). Dashboards are provisioned from [`config/metrics/grafana/dashboards/`](config/metrics/grafana/dashboards/).
+
 ## Local registry + integration smoke
 
 ### Start local registry (docker/podman)
