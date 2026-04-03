@@ -79,6 +79,10 @@ public final class CliParser {
         boolean configProvidedByUser = cmd.hasOption(OPTION_CONFIG);
         Path configPath = Paths.get(cmd.getOptionValue(OPTION_CONFIG, DEFAULT_CONFIG_PATH.toString()));
         boolean daemonMode = cmd.hasOption(OPTION_DAEMON);
+        boolean daemonDevInternalErrorProbe = cmd.hasOption("daemon-dev-internal-error-probe");
+        if (daemonDevInternalErrorProbe && !daemonMode) {
+            return new ParseResult(null, false, "--daemon-dev-internal-error-probe requires --daemon");
+        }
         String repo = cmd.getOptionValue("repo");
         String tag = cmd.getOptionValue("tag");
         String ref = cmd.getOptionValue("ref");

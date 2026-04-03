@@ -1,0 +1,174 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Distribution of successful image loads by OCI tar size bucket: counts in the selected time range, and mean tar bytes vs mean pipeline duration per bucket (`category` label).",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "description": "Successful loads with known tar size only: increase of `riid_image_load_tar_size_category_total` over the dashboard time range, grouped by `category` (MiB buckets 0–5 … >5120, plus labels from code).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "decimals": 0,
+          "mappings": [],
+          "max": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "text": {}
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(increase(riid_image_load_tar_size_category_total[$__range])) by (category)",
+          "instant": true,
+          "legendFormat": "{{category}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Loads per tar size bucket (count in range)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "description": "One point per `category`: X = mean tar bytes (summary sum/count), Y = mean end-to-end load duration for successful pulls (timer sum/count). Excludes `unknown` and `n_a`.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "fillOpacity": 50,
+            "lineStyle": { "fill": "solid" },
+            "lineWidth": 1,
+            "pointShape": "circle",
+            "pointSize": { "fixed": 10 },
+            "pointStrokeWidth": 1,
+            "show": "points"
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "mean_tar_bytes" },
+            "properties": [{ "id": "unit", "value": "decbytes" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "mean_duration_s" },
+            "properties": [{ "id": "unit", "value": "s" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 11 },
+      "id": 2,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "mapping": "manual",
+        "series": [
+          {
+            "name": { "fixed": "Buckets" },
+            "x": { "matcher": { "id": "byName", "options": "mean_tar_bytes" } },
+            "y": { "matcher": { "id": "byName", "options": "mean_duration_s" } }
+          }
+        ],
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(rate(riid_image_load_tar_size_by_category_sum[5m])) by (category) / sum(rate(riid_image_load_tar_size_by_category_count[5m])) by (category)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(rate(riid_image_load_seconds_sum{result=\"success\",category!~\"unknown|n_a\"}[5m])) by (category) / sum(rate(riid_image_load_seconds_count{result=\"success\",category!~\"unknown|n_a\"}[5m])) by (category)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "Mean tar size vs mean load duration (by bucket)",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": { "byField": "category", "mode": "outer" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Time 1": true },
+            "indexByName": {},
+            "renameByName": {
+              "Value #A": "mean_tar_bytes",
+              "Value #B": "mean_duration_s"
+            }
+          }
+        }
+      ],
+      "type": "xychart"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["riid", "sizes"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "RIID image sizes",
+  "uid": "riid-image-sizes",
+  "version": 0,
+  "weekStart": ""
+}

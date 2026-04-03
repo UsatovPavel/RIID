@@ -32,6 +32,15 @@ import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 public final class PullHttpHandler extends Handler.Abstract {
     private static final String PULL_PATH = "/pull";
 
+    /**
+     * Reserved repository name: if {@value #ENV_INTERNAL_ERROR_PROBE} is set (non-blank), POST /pull returns HTTP 500
+     * without loading (local metrics / Makefile smoke). Unset = normal behaviour.
+     */
+    public static final String INTERNAL_ERROR_PROBE_REPOSITORY = "__riid_daemon_internal_error_probe__";
+
+    /** When non-blank, enables {@link #INTERNAL_ERROR_PROBE_REPOSITORY} → HTTP 500. */
+    public static final String ENV_INTERNAL_ERROR_PROBE = "RIID_DAEMON_INTERNAL_ERROR_PROBE";
+
     private final String controlConnectorName;
     private final ObjectMapper mapper = new ObjectMapper();
     private final CliApplication.ImageLoader loader;
@@ -110,6 +119,11 @@ public final class PullHttpHandler extends Handler.Abstract {
         }
 
         try {
+            String probeEnv = System.getenv(ENV_INTERNAL_ERROR_PROBE);
+            if (probeEnv != null && !probeEnv.isBlank()
+                    && INTERNAL_ERROR_PROBE_REPOSITORY.equals(pullRequest.repository())) {
+                throw new IllegalStateException("daemon internal-error probe (intentional HTTP 500)");
+            }
             Optional<LoadOutcome> loaded = concurrencyGuard.tryExecute(() -> executePullWithTimeout(pullRequest));
             if (loaded.isEmpty()) {
                 pullMetrics.record(t0, HttpStatus.TOO_MANY_REQUESTS_429, "overloaded");

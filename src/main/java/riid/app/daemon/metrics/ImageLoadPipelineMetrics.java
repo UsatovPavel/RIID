@@ -15,15 +15,28 @@ import io.micrometer.core.instrument.Timer;
  */
 public final class ImageLoadPipelineMetrics {
 
-    private static final String METRIC = "riid.image.load";
-
-    /** Aligns with PR 14 SLO: throughput for pulls with tar &gt;= 10 MiB. */
+    /** SLO cohort: throughput for pulls with tar &gt;= 10 MiB. */
     private static final long MIN_SLO_TAR_BYTES = 10L * 1024 * 1024;
 
-    private static final String SIZE_CATEGORY_METRIC = "riid.image.load.tar.size.category";
-    private static final String TAR_BYTES_METRIC = "riid.image.load.tar.size.bytes";
-    private static final String THROUGHPUT_METRIC = "riid.image.load.throughput.bps";
-    private static final String THROUGHPUT_SLO_METRIC = "riid.image.load.throughput.slo.bps";
+    private enum MetricName {
+        LOAD("riid.image.load"),
+        TAR_SIZE_CATEGORY("riid.image.load.tar.size.category"),
+        /** Per-bucket tar samples (PromQL mean: sum/count on this name). */
+        TAR_SIZE_BY_CATEGORY("riid.image.load.tar.size.by.category"),
+        TAR_SIZE_BYTES("riid.image.load.tar.size.bytes"),
+        THROUGHPUT_BPS("riid.image.load.throughput.bps"),
+        THROUGHPUT_SLO_BPS("riid.image.load.throughput.slo.bps");
+
+        private final String value;
+
+        MetricName(String value) {
+            this.value = value;
+        }
+
+        String value() {
+            return value;
+        }
+    }
 
     private final MeterRegistry registry;
     private final DistributionSummary tarSizeBytes;
@@ -32,14 +45,14 @@ public final class ImageLoadPipelineMetrics {
 
     public ImageLoadPipelineMetrics(MeterRegistry registry) {
         this.registry = Objects.requireNonNull(registry, "registry");
-        this.tarSizeBytes = DistributionSummary.builder(TAR_BYTES_METRIC)
+        this.tarSizeBytes = DistributionSummary.builder(MetricName.TAR_SIZE_BYTES.value())
                 .description("Size in bytes of the OCI tar passed to the runtime")
                 .register(registry);
-        this.throughputBps = DistributionSummary.builder(THROUGHPUT_METRIC)
+        this.throughputBps = DistributionSummary.builder(MetricName.THROUGHPUT_BPS.value())
                 .description("Effective throughput: tar bytes / full pipeline duration (bytes per second)")
                 .publishPercentileHistogram()
                 .register(registry);
-        this.throughputSloBps = DistributionSummary.builder(THROUGHPUT_SLO_METRIC)
+        this.throughputSloBps = DistributionSummary.builder(MetricName.THROUGHPUT_SLO_BPS.value())
                 .description("Same as throughput, recorded only when tar size >= 10 MiB (SLO cohort)")
                 .publishPercentileHistogram()
                 .register(registry);
@@ -53,25 +66,28 @@ public final class ImageLoadPipelineMetrics {
      * @param tarBytes size of the OCI tar in bytes, or {@code -1} to skip tar-derived metrics
      */
     public void recordSuccess(long startNanos, long tarBytes) {
-        record(startNanos, "success");
         if (tarBytes >= 0) {
+            record(startNanos, "success", ImageSizeBucket.fromTarBytes(tarBytes));
             recordTarDerived(startNanos, tarBytes);
+        } else {
+            record(startNanos, "success", ImageSizeBucket.UNKNOWN);
         }
     }
 
     public void recordFailure(long startNanos) {
-        record(startNanos, "error");
+        record(startNanos, "error", ImageSizeBucket.NA);
     }
 
     public void recordTimeout(long startNanos) {
-        record(startNanos, "timeout");
+        record(startNanos, "timeout", ImageSizeBucket.NA);
     }
 
-    private void record(long startNanos, String result) {
+    private void record(long startNanos, String result, ImageSizeBucket sizeBucket) {
         long elapsedNanos = System.nanoTime() - startNanos;
-        Timer.builder(METRIC)
+        Timer.builder(MetricName.LOAD.value())
                 .description("End-to-end image load in daemon (loader pipeline)")
                 .tag("result", result)
+                .tag("category", sizeBucket.metricLabel())
                 .publishPercentileHistogram()
                 .register(registry)
                 .record(elapsedNanos, TimeUnit.NANOSECONDS);
@@ -85,49 +101,20 @@ public final class ImageLoadPipelineMetrics {
         tarSizeBytes.record(tarBytes);
         throughputBps.record(bps);
 
-        Counter.builder(SIZE_CATEGORY_METRIC)
+        DistributionSummary.builder(MetricName.TAR_SIZE_BY_CATEGORY.value())
+                .description("Tar size in bytes per size bucket (for mean size vs latency dashboards)")
+                .tag("category", ImageSizeBucket.fromTarBytes(tarBytes).metricLabel())
+                .register(registry)
+                .record(tarBytes);
+
+        Counter.builder(MetricName.TAR_SIZE_CATEGORY.value())
                 .description("Count of successful loads by tar size category (MiB buckets)")
-                .tag("category", sizeCategory(tarBytes))
+                .tag("category", ImageSizeBucket.fromTarBytes(tarBytes).metricLabel())
                 .register(registry)
                 .increment();
 
         if (tarBytes >= MIN_SLO_TAR_BYTES) {
             throughputSloBps.record(bps);
         }
-    }
-
-    /**
-     * Plan PR 14 bucket labels (tar size in bytes). Boundaries in MiB: 0-5, 5-10, 10-50, ...
-     */
-    static String sizeCategory(long tarBytes) {
-        long mib = tarBytes / (1024 * 1024);
-        if (mib < 5) {
-            return "0_5_mib";
-        }
-        if (mib < 10) {
-            return "5_10_mib";
-        }
-        if (mib < 50) {
-            return "10_50_mib";
-        }
-        if (mib < 100) {
-            return "50_100_mib";
-        }
-        if (mib < 250) {
-            return "100_250_mib";
-        }
-        if (mib < 500) {
-            return "250_500_mib";
-        }
-        if (mib < 800) {
-            return "500_800_mib";
-        }
-        if (mib < 2048) {
-            return "800_2048_mib";
-        }
-        if (mib < 5120) {
-            return "2048_5120_mib";
-        }
-        return "gt_5120_mib";
     }
 }
