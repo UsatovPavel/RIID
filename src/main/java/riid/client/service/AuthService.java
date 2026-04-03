@@ -32,12 +32,8 @@ import static java.util.Base64.getEncoder;
 
 /**
  * Handles ping + Bearer token fetching with caching.
- *
- * <p>Optional stderr logging of secrets was disabled (see commented blocks in {@code fetchToken} / {@code getAuthHeader}).
  */
 public class AuthService {
-    public static final String DIRTY_REGISTRY_LOGS = "riid.dev.dirtyRegistryLogs";
-
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthService.class);
     private static final String AUTH_PREFIX = "SECURITY:AUTH:";
 
@@ -66,13 +62,6 @@ public class AuthService {
         String cacheKey = cacheKey(endpoint, scope);
         Optional<String> cached = cache.get(cacheKey);
         if (cached.isPresent()) {
-            LOGGER.info(
-                    "[registry auth] using cached bearer token for host={} scope={}",
-                    endpoint.host(),
-                    scope);
-            // if (dirtyRegistryLogs()) {
-            //     cached.ifPresent(t -> dirtyStderr("[registry auth][DIRTY] cached registry bearer token=" + t));
-            // }
             return cached.map(t -> "Bearer " + t);
         }
 
@@ -82,11 +71,8 @@ public class AuthService {
                 endpoint.host(),
                 endpoint.port(),
                 RegistryApi.V2_PING);
-        LOGGER.info("[registry auth] HEAD {} (ping /v2/)", pingUri);
         HttpResult<Void> pingResp = http.head(pingUri, Map.of());
-        LOGGER.info("[registry auth] ping status={}", pingResp.statusCode());
         if (pingResp.statusCode() == HttpStatus.OK_200) {
-            LOGGER.info("[registry auth] registry allows anonymous pull for this host (no bearer)");
             return Optional.empty(); // no auth needed
         }
         if (pingResp.statusCode() != HttpStatus.UNAUTHORIZED_401) {
@@ -114,17 +100,7 @@ public class AuthService {
                     message);
         }
         AuthChallenge c = ch.get();
-        LOGGER.info(
-                "[registry auth] challenge realm={} service={} scope={}",
-                c.realm(),
-                c.service(),
-                scope);
         String token = fetchToken(c, endpoint.credentialsOpt().orElse(null), scope);
-        // if (dirtyRegistryLogs()) {
-        //     dirtyStderr("[registry auth][DIRTY] registry bearer token from OAuth=" + token);
-        // } else {
-        LOGGER.info("[registry auth] bearer token obtained (set -D{}=true to log token)", DIRTY_REGISTRY_LOGS);
-        // }
         var ttlOpt = ttlFrom(pingResp.headers());
         long ttl = ttlOpt.orElse(defaultTokenTtlSeconds);
         if (ttlOpt.isEmpty()) {
@@ -159,38 +135,19 @@ public class AuthService {
             }
             var headers = new HashMap<String, String>();
             if (creds != null) {
-                creds.identityTokenOpt().ifPresent(id -> {
-                    headers.put("Authorization", "Bearer " + id);
-                    // if (dirtyRegistryLogs()) {
-                    //     dirtyStderr("[registry auth][DIRTY] identity token for token endpoint=" + id);
-                    // }
-                });
+                creds.identityTokenOpt().ifPresent(id -> headers.put("Authorization", "Bearer " + id));
                 if (headers.isEmpty()) {
                     boolean hasUser = creds.usernameOpt().filter(s -> !s.isBlank()).isPresent();
                     boolean hasPass = creds.passwordOpt().filter(s -> !s.isBlank()).isPresent();
                     if (hasUser && hasPass) {
-                        String user = creds.usernameOpt().orElse("");
-                        String pass = creds.passwordOpt().orElse("");
-                        // if (dirtyRegistryLogs()) {
-                        //     dirtyStderr("[registry auth][DIRTY] user=" + user + " password/PAT=" + pass);
-                        // }
-                        String basic = user + ":" + pass;
+                        String basic = creds.usernameOpt().orElse("") + ":" + creds.passwordOpt().orElse("");
                         String enc = getEncoder()
                                 .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
                         headers.put("Authorization", "Basic " + enc);
-                        // if (dirtyRegistryLogs()) {
-                        //     dirtyStderr("[registry auth][DIRTY] Authorization: Basic " + enc);
-                        // }
                     }
                 }
             }
-            boolean authToTokenEndpoint = !headers.isEmpty();
-            LOGGER.info(
-                    "[registry auth] GET token endpoint (credentialsPresent={}) url={}",
-                    authToTokenEndpoint,
-                    url);
             HttpResult<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
-            LOGGER.info("[registry auth] token endpoint HTTP status={}", resp.statusCode());
             if (resp.statusCode() != HttpStatus.OK_200) {
                 String message = authMessage(
                         "TOKEN_ENDPOINT_FAILED",
