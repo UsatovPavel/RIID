@@ -109,11 +109,6 @@ public final class ImageLoadingFacade implements AutoCloseable {
         long manifestStartedNs = System.nanoTime();
         ManifestResult manifestResult;
         try {
-            MilestoneEventLogger.info(LOGGER)
-                    .addEvent("manifest.fetch")
-                    .addResult("start")
-                    .addDurationMs(0L)
-                    .log("Fetching manifest for " + imageId);
             manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
             MilestoneEventLogger.info(LOGGER)
                     .addEvent("manifest.fetch")

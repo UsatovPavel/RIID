@@ -28,14 +28,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * Default RegistryClient implementation through jetty. Throw exception on close.
  */
 public final class RegistryClientImpl implements RegistryClient {
-    private static final Logger LOGGER = LoggerFactory.getLogger(RegistryClientImpl.class);
     private static final String PULL_SCOPE_TEMPLATE = "repository:%s:pull";
 
     private final RegistryEndpoint endpoint;
@@ -86,11 +82,6 @@ public final class RegistryClientImpl implements RegistryClient {
     @Override
     public ManifestResult fetchManifest(String repository, String reference) {
         String scope = pullScope(repository);
-        LOGGER.info(
-                "[registry client] fetchManifest host={} repository={} reference={}",
-                endpoint.host(),
-                repository,
-                reference);
         return manifestService.fetchManifest(endpoint, repository, reference, scope);
     }
 
