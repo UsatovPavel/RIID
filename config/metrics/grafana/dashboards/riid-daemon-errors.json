@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Unsuccess rate, pipeline latency p50/p95, throughput SLO (tar ≥ 10 MiB). Size-bucket views live on dashboard `riid-image-sizes`.",
+  "description": "Daemon POST /pull HTTP traffic by class, timeout and loader errors, JVM memory and process CPU (Micrometer binders from daemon mode).",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -22,7 +22,7 @@
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "Share of daemon POST /pull completions where JSON code is not `success` (all HTTP outcomes).",
+      "description": "Request rate of `riid_daemon_pull` timer observations grouped by `status_class` (2xx–5xx). Each POST /pull completion increments `_count` once.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -34,69 +34,8 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 15,
+            "fillOpacity": 12,
             "gradientMode": "opacity",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "line+area" }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.05 },
-              { "color": "red", "value": 0.1 }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
-      "id": 1,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "editorMode": "code",
-          "expr": "sum(rate(riid_daemon_pull_seconds_count{code!=\"success\"}[5m])) / clamp_min(sum(rate(riid_daemon_pull_seconds_count[5m])), 1e-9)",
-          "legendFormat": "unsuccess_rate",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Unsuccess rate (daemon POST /pull)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "End-to-end pipeline duration for successful loads only (`result=success`).",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "smooth",
@@ -109,16 +48,13 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "s"
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "ops"
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
-      "id": 2,
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
@@ -127,26 +63,18 @@
         {
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(riid_image_load_seconds_bucket{result=\"success\"}[5m])) by (le))",
-          "legendFormat": "p50",
+          "expr": "sum(rate(riid_daemon_pull_seconds_count[5m])) by (status_class)",
+          "legendFormat": "{{status_class}}",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(riid_image_load_seconds_bucket{result=\"success\"}[5m])) by (le))",
-          "legendFormat": "p95",
-          "range": true,
-          "refId": "B"
         }
       ],
-      "title": "Pipeline latency p50 / p95 (successful loads)",
+      "title": "POST /pull rate by HTTP class (2xx–5xx)",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "Effective throughput (tar bytes / pipeline duration) for pulls with tar ≥ 10 MiB only. Tune SLO threshold in panel or alerting.",
+      "description": "HTTP 504 (`code=timeout`) vs loader failures (`riid_image_load` with `result=error`). Pipeline `result=timeout` aligns with HTTP timeout; `error` is the main non-timeout failure path.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -158,8 +86,8 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "smooth",
@@ -169,22 +97,77 @@
             "showPoints": "never",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "line" }
+            "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 5242880 },
-              { "color": "green", "value": 10485760 }
-            ]
-          },
-          "unit": "Bps"
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "ops"
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
+      "id": 2,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "expr": "sum(rate(riid_daemon_pull_seconds_count{code=\"timeout\"}[5m]))",
+          "legendFormat": "HTTP timeout (504)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "expr": "sum(rate(riid_image_load_seconds_count{result=\"error\"}[5m]))",
+          "legendFormat": "Pipeline load error",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Timeout vs pipeline error (rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "description": "Micrometer `ProcessorMetrics`: recent CPU usage of the JVM process (0–1).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
       "id": 3,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
@@ -194,26 +177,78 @@
         {
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(riid_image_load_throughput_slo_bps_bucket[5m])) by (le))",
-          "legendFormat": "p95 throughput (tar ≥ 10 MiB)",
+          "expr": "process_cpu_usage",
+          "legendFormat": "process CPU",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Throughput p95 — SLO cohort (tar ≥ 10 MiB)",
+      "title": "Process CPU usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "description": "Micrometer `JvmMemoryMetrics`: total JVM memory reported as used (`jvm_memory_used_bytes` summed over series).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "id": 4,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "expr": "sum(jvm_memory_used_bytes)",
+          "legendFormat": "JVM memory used (sum)",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "JVM memory used",
       "type": "timeseries"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": ["riid", "slo"],
+  "tags": ["riid", "daemon", "http"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "RIID main (load SLO)",
-  "uid": "riid-main",
+  "title": "RIID daemon (HTTP & resources)",
+  "uid": "riid-daemon-errors",
   "version": 0,
   "weekStart": ""
 }

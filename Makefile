@@ -129,6 +129,19 @@ download_to_daemon_150MB:
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/postgres","reference":"latest","runtimeId":"podman"}'
 
+# Deliberate 4xx for metrics/tests: 422 unknown_runtime (not in daemon --runtime list).
+download_to_daemon_error:
+	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+		-H 'Content-Type: application/json' \
+		-d '{"repository":"library/busybox","reference":"latest","runtimeId":"__no_such_runtime__"}'
+
+# Deliberate 5xx (HTTP 500 pull_failed): start daemon with RIID_DAEMON_INTERNAL_ERROR_PROBE=1 in the environment,
+# then POST with repository __riid_daemon_internal_error_probe__ (see PullHttpHandler).
+download_to_daemon_5xx_probe:
+	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+		-H 'Content-Type: application/json' \
+		-d '{"repository":"__riid_daemon_internal_error_probe__","reference":"latest","runtimeId":"podman"}'
+
 # Grafana demo: each round = library/jobber -> sleep 15s -> library/busybox -> sleep 30s (10 rounds). Needs `make daemon` + metrics stack.
 grafana_demo_load:
 	@set -e; \
