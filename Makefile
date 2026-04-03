@@ -91,7 +91,12 @@ vmagent-d:
 
 # VictoriaMetrics + Grafana + vmagent (background). Then run RIID: `make daemon` in another terminal.
 # If docker run fails (name already in use): `make metrics-stack-down` and retry.
-metrics-stack-up: metrics-stack-down victoria-metrics grafana vmagent-d
+metrics-stack-create: metrics-stack-down victoria-metrics grafana vmagent-d
+	@echo "Grafana: host port 3000 — http://127.0.0.1:3000 (default login admin/admin on first setup)"
+
+# те же метрики, но json подставить новые
+metrics-stack-update:
+	docker restart grafana
 
 metrics-stack-down:
 	docker rm -f vmagent grafana victoria-metrics 2>/dev/null || true
