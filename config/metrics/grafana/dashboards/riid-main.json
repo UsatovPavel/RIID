@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Unsuccess rate, pipeline latency p50/p95, throughput SLO (tar ≥ 10 MiB), dispatcher layer fetch mix (cache / P2P / registry). Size-bucket views live on dashboard `riid-image-sizes`.",
+  "description": "Unsuccess rate, pipeline latency p50/p95, throughput SLO (tar ≥ 10 MiB). Layer byte volume over time: `increase(riid_dispatcher_layer_bytes_total[6h])` by `source` (time series).",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -205,7 +205,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "`riid_dispatcher_layer_fetches_total` by `source` (`cache`, `p2p`, `registry`) — rate of layer blobs served per path.",
+      "description": "`sum(increase(riid_dispatcher_layer_bytes_total[6h])) by (source)` — **bytes transferred in the trailing 6h** at each point from cache vs P2P vs registry (layer payload counters). Aligns with default dashboard range `now-6h`; widen the range in the picker if you need a longer lookback.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -217,7 +217,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 12,
+            "fillOpacity": 14,
             "gradientMode": "opacity",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
@@ -231,8 +231,9 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
+          "min": 0,
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "ops"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -246,13 +247,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
-          "expr": "sum(rate(riid_dispatcher_layer_fetches_total[5m])) by (source)",
+          "expr": "sum(increase(riid_dispatcher_layer_bytes_total[6h])) by (source)",
           "legendFormat": "{{source}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Layer fetches by source (rate)",
+      "title": "Layer bytes by source (trailing 6h)",
       "type": "timeseries"
     }
   ],
