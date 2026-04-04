@@ -89,9 +89,14 @@ tasks.register("performanceTest", Test::class) {
     description = "Runs performance tests."
     group = "verification"
     val performance = sourceSets.getByName("performanceTest")
+    dependsOn(performance.classesTaskName)
     testClassesDirs = performance.output.classesDirs
     classpath = performance.runtimeClasspath
     useJUnitPlatform()
+    testLogging {
+        showStandardStreams = true
+        events("failed", "skipped", "passed", "standardOut", "standardError")
+    }
 }
 
 tasks.register("moduledTest", Test::class) {
