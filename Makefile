@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new download_to_daemon download_to_daemon_1MB download_to_daemon_10MB download_to_daemon_50MB download_to_daemon_150MB grafana_demo_load
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB download_to_daemon_7MiB download_to_daemon_11MiB download_to_daemon_15MiB download_to_daemon_17MiB download_to_podman_7MiB download_to_podman_11MiB download_to_podman_15MiB download_to_podman_17MiB download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -129,9 +129,78 @@ download_to_daemon_10MB:
 
 # Official https://hub.docker.com/_/irssi (~50 of MiB; size label approximate)
 download_to_daemon_50MB:
-	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+	time curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/irssi","reference":"latest","runtimeId":"podman"}'
+
+# Четыре последовательных pull в отдельном store (PopularDockerImagesSizes.txt ~7–17 MiB).
+# Перед rm — podman system reset, иначе overlay от root и Permission denied на rm -rf.
+bench_podman_4_pulls_seq:
+	@echo "=== Podman (дефолтный store): все контейнеры и образы ==="
+	-podman rm -af 2>/dev/null || true
+	-imgs=$$(podman images -aq); if [ -n "$$imgs" ]; then podman rmi -af $$imgs || true; fi
+	@if [ -d /tmp/riid-podman-bench/root ]; then \
+		podman --root /tmp/riid-podman-bench/root --runroot /tmp/riid-podman-bench/runroot system reset -f || true; \
+	fi
+	rm -rf /tmp/riid-podman-bench || podman unshare rm -rf /tmp/riid-podman-bench
+	mkdir -p /tmp/riid-podman-bench/root /tmp/riid-podman-bench/runroot
+	R="--root /tmp/riid-podman-bench/root --runroot /tmp/riid-podman-bench/runroot"; \
+	time podman $$R pull docker.io/library/cirros:latest && \
+	time podman $$R pull docker.io/library/jobber:latest && \
+	time podman $$R pull docker.io/library/photon:latest && \
+	time podman $$R pull docker.io/library/api-firewall:latest
+
+# Те же 4 образа через RIID daemon: холодный TempFileCacheAdapter (pkill + rm riid-cache-tmp-*),
+# подъём daemon в фоне, затем 4× POST /pull с паузой 10 с (нужен собранный build/libs/riid.jar).
+RIID_SOCK_BENCH ?= /tmp/riid.sock
+bench_riid_4_pulls_seq:
+	podman rmi -a
+	@echo "=== Остановка riid daemon, очистка кэша /tmp/riid-cache-tmp-*, удаление образов в podman ==="
+	-pkill -f '[r]iid.jar.*--daemon' || true
+	@sleep 2
+	rm -rf /tmp/riid-cache-tmp-* 2>/dev/null || true
+	@test -f build/libs/riid.jar || (echo "Сначала: ./gradlew shadowJar"; exit 1)
+	@echo "=== Запуск daemon в фоне (лог: /tmp/riid-daemon-bench.log) ==="
+	@(set -a; [ -f config/.env ] && . ./config/.env; set +a; \
+	if [ -n "$$DOCKERHUB_USER" ] && [ -n "$$DOCKERHUB_TOKEN" ]; then \
+	  nohup java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml \
+	    --username "$$DOCKERHUB_USER" --password-env DOCKERHUB_TOKEN \
+	    >> /tmp/riid-daemon-bench.log 2>&1 & \
+	else \
+	  nohup java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml \
+	    >> /tmp/riid-daemon-bench.log 2>&1 & \
+	fi; \
+	echo $$! > /tmp/riid-daemon-bench.pid)
+	@echo "=== Ожидание UDS $(RIID_SOCK_BENCH) (до 45 с) ==="
+	@ok=0; for i in $$(seq 1 45); do [ -S $(RIID_SOCK_BENCH) ] && ok=1 && break; sleep 1; done; \
+	if [ "$$ok" != 1 ]; then echo "Таймаут. См. /tmp/riid-daemon-bench.log"; exit 1; fi
+	@SC="$(RIID_SOCK_BENCH)"; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/cirros","reference":"latest","runtimeId":"podman"}'; \
+	echo; sleep 10; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/jobber","reference":"latest","runtimeId":"podman"}'; \
+	echo; sleep 10; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/photon","reference":"latest","runtimeId":"podman"}'; \
+	echo; sleep 10; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/api-firewall","reference":"latest","runtimeId":"podman"}'; \
+	echo
+
+# PID первого процесса java … riid.jar --daemon; затем CPU 60 с → ASPROF_OUT (в другом терминале — нагрузка).
+ASPROF_OUT ?= /tmp/riid-cpu.html
+daemon-profile_30s:
+	@pid=$$(pgrep -f '[r]iid\.jar.*--daemon' | head -n1); \
+	if [ -z "$$pid" ]; then echo "Нет процесса: riid.jar --daemon"; exit 1; fi; \
+	echo "PID=$$pid"; \
+	pgrep -af 'riid.jar.*--daemon' || true; \
+	asprof -e cpu -d 30 -f $(ASPROF_OUT) $$pid; \
+	echo "Готово: $(ASPROF_OUT)"
 
 download_to_daemon_150MB:
 	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
