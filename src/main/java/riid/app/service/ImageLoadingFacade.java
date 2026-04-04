@@ -146,6 +146,19 @@ public final class ImageLoadingFacade implements AutoCloseable {
         MdcContext.putOperation("engine.import");
         long engineStartedNs = System.nanoTime();
         try {
+            if (runtime.prefersOciLayoutStreamImport()) {
+                return archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
+                    long approxBytes = archiveBuilder.estimateLayoutFileBytes(ociDir);
+                    runtime.importOciLayoutDirectory(ociDir);
+                    MilestoneEventLogger.info(LOGGER)
+                            .addEvent("engine.import")
+                            .addResult("success")
+                            .addDurationMs(durationMs(engineStartedNs))
+                            .log("Loaded " + imageId + " into runtime " + runtime.runtimeId()
+                                    + " via OCI layout stream (~" + approxBytes + " B files under layout)");
+                    return new LoadOutcome(imageId, approxBytes);
+                });
+            }
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
                 long tarBytes = Files.size(archivePath);
                 runtime.importImage(archivePath);

@@ -247,6 +247,11 @@ class RuntimeAdaptersTest {
         }
 
         @Override
+        public boolean prefersOciLayoutStreamImport() {
+            return false;
+        }
+
+        @Override
         protected BoundedCommandExecution.ShellResult runCommand(List<String> command) {
             return new BoundedCommandExecution.ShellResult(exitCode, stdout, stderr);
         }
