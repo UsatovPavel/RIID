@@ -7,30 +7,44 @@ import java.util.Objects;
 import riid.core.fs.HostFilesystem;
 
 /**
- * OCI archive with cleanup support.
+ * OCI layout workspace with optional tar file; {@link #close()} deletes the tar (if any) and the layout tree.
  */
 final class OciArchive implements AutoCloseable {
     private final Path archiveFile;
     private final Path ociDirPath;
     private final HostFilesystem fs;
 
-    OciArchive(Path archivePath, Path ociDir, HostFilesystem fs) {
-        this.archiveFile = Objects.requireNonNull(archivePath, "archivePath");
+    static OciArchive withTar(Path archivePath, Path ociDir, HostFilesystem fs) {
+        return new OciArchive(Objects.requireNonNull(archivePath, "archivePath"), ociDir, fs);
+    }
+
+    /** Layout only (tar is streamed to the runtime, not materialized as a file). */
+    static OciArchive layoutOnly(Path ociDir, HostFilesystem fs) {
+        return new OciArchive(null, ociDir, fs);
+    }
+
+    private OciArchive(Path archivePath, Path ociDir, HostFilesystem fs) {
+        this.archiveFile = archivePath;
         this.ociDirPath = Objects.requireNonNull(ociDir, "ociDir");
         this.fs = Objects.requireNonNull(fs, "fs");
     }
 
-    public Path archivePath() {
+    Path archivePath() {
+        if (archiveFile == null) {
+            throw new IllegalStateException("layout-only workspace has no tar path");
+        }
         return archiveFile;
     }
 
-    public Path ociDir() {
+    Path ociDir() {
         return ociDirPath;
     }
 
     @Override
     public void close() throws IOException {
-        fs.deleteIfExists(archiveFile);
+        if (archiveFile != null) {
+            fs.deleteIfExists(archiveFile);
+        }
         fs.deleteRecursively(ociDirPath);
     }
 }

@@ -3,9 +3,11 @@ package riid.app.ociarchive;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -84,7 +86,71 @@ public final class OciArchiveBuilder {
         }
     }
 
+    /**
+     * Build OCI layout on disk, then consume it without creating an oci-archive tar file (for streaming import).
+     */
+    public <T> T withOciLayout(ImageId imageId,
+                                ManifestResult manifestResult,
+                                LayoutUser<T> user) throws IOException, InterruptedException {
+        String previousOperation = MdcContext.getOperation();
+        MdcContext.putOperation("archive.build");
+        long startedNs = System.nanoTime();
+        try (OciArchive workspace = buildLayoutWorkspace(imageId, manifestResult)) {
+            MilestoneEventLogger.info(LOGGER)
+                    .addEvent("archive.build")
+                    .addResult("success")
+                    .addDurationMs(durationMs(startedNs))
+                    .log("OCI layout build completed (stream import, no tar file)");
+            return user.use(workspace.ociDir());
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            MilestoneEventLogger.error(LOGGER)
+                    .addCause(e)
+                    .addEvent("archive.build")
+                    .addResult("error")
+                    .addDurationMs(durationMs(startedNs))
+                    .addErrorKind("INTERNAL")
+                    .addErrorCode("ARCHIVE_BUILD_FAILED")
+                    .log("OCI layout build failed");
+            throw e;
+        } finally {
+            MdcContext.restoreOperation(previousOperation);
+        }
+    }
+
+    /**
+     * Sum of regular-file sizes under the layout (approximate payload; tar stream is slightly larger).
+     */
+    public long estimateLayoutFileBytes(Path ociLayoutRoot) throws IOException {
+        try (Stream<Path> paths = fs.walk(ociLayoutRoot)) {
+            return paths
+                    .filter(fs::isRegularFile)
+                    .mapToLong(p -> {
+                        try {
+                            return fs.size(p);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    })
+                    .sum();
+        }
+    }
+
     private OciArchive build(ImageId imageId, ManifestResult manifestResult)
+            throws IOException, InterruptedException {
+        Path ociDir = buildOciDirectory(imageId, manifestResult);
+        Path archive = PathSupport.temporaryPath(tempRoot, "oci-archive-", ".tar");
+        fs.createFile(archive);
+        runTar(archive, ociDir);
+        return OciArchive.withTar(archive, ociDir, fs);
+    }
+
+    private OciArchive buildLayoutWorkspace(ImageId imageId, ManifestResult manifestResult)
+            throws IOException, InterruptedException {
+        Path ociDir = buildOciDirectory(imageId, manifestResult);
+        return OciArchive.layoutOnly(ociDir, fs);
+    }
+
+    private Path buildOciDirectory(ImageId imageId, ManifestResult manifestResult)
             throws IOException, InterruptedException {
         Objects.requireNonNull(imageId, "imageId");
         Objects.requireNonNull(manifestResult, "manifestResult");
@@ -140,15 +206,17 @@ public final class OciArchiveBuilder {
                 manifestDigest, imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
-        Path archive = PathSupport.temporaryPath(tempRoot, "oci-archive-", ".tar");
-        fs.createFile(archive);
-        runTar(archive, ociDir);
-        return new OciArchive(archive, ociDir, fs);
+        return ociDir;
     }
 
     @FunctionalInterface
     public interface ArchiveUser<T> {
         T use(Path archivePath) throws IOException, InterruptedException;
+    }
+
+    @FunctionalInterface
+    public interface LayoutUser<T> {
+        T use(Path ociLayoutRoot) throws IOException, InterruptedException;
     }
 
     /**
