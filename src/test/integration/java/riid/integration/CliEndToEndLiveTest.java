@@ -14,7 +14,7 @@ import riid.core.config.ConfigLoader;
 import riid.core.config.TestConfigYaml;
 import riid.logging.TestRootLoggerEvents;
 import riid.p2p.P2PExecutor;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

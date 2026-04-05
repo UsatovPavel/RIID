@@ -27,7 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 /**
  * Minimal CLI parser/runner for ImageLoadingFacade.

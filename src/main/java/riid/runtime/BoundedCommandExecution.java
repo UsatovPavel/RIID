@@ -3,7 +3,6 @@ package riid.runtime;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
@@ -28,6 +27,8 @@ public final class BoundedCommandExecution {
     private static final int BUFFER_SIZE = 4096;
     private static final AtomicReference<ExecutorService> EXECUTOR_REF =
             new AtomicReference<>(newExecutor(DEFAULT_MAX_TASKS_COMMAND_EXECUTOR));
+    private static final BoundedPipedCommandExecutor PIPED_EXECUTOR = new BoundedPipedCommandExecutor(
+            DEFAULT_MAX_OUTPUT_BYTES);
     private static volatile OutputConfig DEFAULT_OUTPUT_CONFIG = OutputConfig.defaults();
 
     private BoundedCommandExecution() { }
@@ -40,52 +41,12 @@ public final class BoundedCommandExecution {
         return get(run(command, DEFAULT_OUTPUT_CONFIG));
     }
 
-    /**
-     * Runs {@code producer} and {@code consumer} with producer stdout connected to consumer stdin.
-     * Both stderr streams are read up to {@code maxStderrBytes} each (truncated after the limit).
-     * Uses the shared executor for stream I/O (same as {@link #run(List, OutputConfig)}).
-     *
-     * @param maxStderrBytes per-process stderr cap; if {@code <= 0}, {@link #DEFAULT_MAX_OUTPUT_BYTES} is used
-     */
     public static PipedShellResult runWithStdoutPipedToStdin(
             List<String> producerCommand,
             List<String> consumerCommand,
             int maxStderrBytes,
             ProcessStarter starter) throws IOException, InterruptedException {
-        Objects.requireNonNull(producerCommand, "producerCommand");
-        Objects.requireNonNull(consumerCommand, "consumerCommand");
-        Objects.requireNonNull(starter, "starter");
-        int stderrLimit = maxStderrBytes > 0 ? maxStderrBytes : DEFAULT_MAX_OUTPUT_BYTES;
-        Process producer = starter.start(producerCommand);
-        Process consumer = starter.start(consumerCommand);
-        ExecutorService exec = EXECUTOR_REF.get();
-        try {
-            Future<String> producerStderr = exec.submit(
-                    streamReaderTruncating(producer.getErrorStream(), stderrLimit, "piped-producer-stderr", true));
-            Future<String> consumerStderr = exec.submit(
-                    streamReaderTruncating(consumer.getErrorStream(), stderrLimit, "piped-consumer-stderr", true));
-            Future<Void> pipeTransfer = exec.submit(() -> {
-                try (InputStream in = producer.getInputStream(); OutputStream out = consumer.getOutputStream()) {
-                    in.transferTo(out);
-                }
-                return null;
-            });
-            try {
-                pipeTransfer.get();
-            } catch (ExecutionException e) {
-                rethrowPipeTransferFailure(e);
-            }
-            int producerExit = producer.waitFor();
-            int consumerExit = consumer.waitFor();
-            return new PipedShellResult(producerExit, consumerExit, get(producerStderr), get(consumerStderr));
-        } finally {
-            if (producer.isAlive()) {
-                producer.destroyForcibly();
-            }
-            if (consumer.isAlive()) {
-                consumer.destroyForcibly();
-            }
-        }
+        return PIPED_EXECUTOR.runWithStdoutPipedToStdin(producerCommand, consumerCommand, maxStderrBytes, starter);
     }
 
     /**
@@ -98,24 +59,6 @@ public final class BoundedCommandExecution {
             int maxStderrBytes) throws IOException, InterruptedException {
         return runWithStdoutPipedToStdin(
                 producerCommand, consumerCommand, maxStderrBytes, cmd -> new ProcessBuilder(cmd).start());
-    }
-
-    private static void rethrowPipeTransferFailure(ExecutionException e) throws IOException, InterruptedException {
-        Throwable c = e.getCause();
-        if (c instanceof InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw ie;
-        }
-        if (c instanceof IOException io) {
-            throw io;
-        }
-        if (c instanceof Error err) {
-            throw err;
-        }
-        if (c instanceof RuntimeException re) {
-            throw re;
-        }
-        throw new IOException(c);
     }
 
     public static CompletableFuture<ShellResult> run(List<String> command, int maxOutputBytes) {
@@ -300,6 +243,7 @@ public final class BoundedCommandExecution {
 
     private static void shutdownExecutor() {
         EXECUTOR_REF.get().shutdown();
+        PIPED_EXECUTOR.shutdown();
     }
 
     public record ShellResult(int exitCode, String stdout, String stderr) { }

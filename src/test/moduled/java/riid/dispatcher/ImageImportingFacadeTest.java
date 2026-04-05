@@ -16,7 +16,7 @@ import riid.core.model.manifest.MediaType;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 class ImageImportingFacadeTest {
 

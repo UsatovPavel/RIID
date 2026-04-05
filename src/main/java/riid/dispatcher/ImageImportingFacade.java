@@ -11,7 +11,7 @@ import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 /**
  * Connects RequestDispatcher (download/validate) with a RuntimeAdapter (import).

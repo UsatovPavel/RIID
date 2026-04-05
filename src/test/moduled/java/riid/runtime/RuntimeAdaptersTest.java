@@ -10,6 +10,9 @@ import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.runtime.adapter.DockerRuntimeAdapter;
+import riid.runtime.adapter.PodmanRuntimeAdapter;
+import riid.runtime.adapter.PortoRuntimeAdapter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

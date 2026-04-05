@@ -43,10 +43,10 @@ import riid.core.logging.MilestoneEventLogger;
 import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
-import riid.runtime.DockerRuntimeAdapter;
-import riid.runtime.PodmanRuntimeAdapter;
-import riid.runtime.PortoRuntimeAdapter;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.DockerRuntimeAdapter;
+import riid.runtime.adapter.PodmanRuntimeAdapter;
+import riid.runtime.adapter.PortoRuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 import riid.runtime.RuntimeConfig;
 
 /**

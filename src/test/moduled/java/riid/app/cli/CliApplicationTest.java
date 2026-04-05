@@ -21,7 +21,7 @@ import riid.app.service.LoadOutcome;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
-import riid.runtime.PodmanRuntimeAdapter;
+import riid.runtime.adapter.PodmanRuntimeAdapter;
 
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class CliApplicationTest {
