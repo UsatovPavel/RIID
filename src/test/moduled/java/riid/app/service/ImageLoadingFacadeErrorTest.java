@@ -26,7 +26,7 @@ import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
 import riid.dispatcher.RequestDispatcher;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 class ImageLoadingFacadeErrorTest {
     private static final String DIGEST = "sha256:" + "a".repeat(64);

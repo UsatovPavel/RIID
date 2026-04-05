@@ -24,7 +24,7 @@ import riid.core.config.TestConfigYaml;
 import riid.core.config.TestRegistryConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
-import riid.runtime.DockerRuntimeAdapter;
+import riid.runtime.adapter.DockerRuntimeAdapter;
 
 @Tag("filesystem")
 @Tag("local")

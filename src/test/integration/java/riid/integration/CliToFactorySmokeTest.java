@@ -8,7 +8,7 @@ import riid.app.service.ImageLoadingFacade;
 import riid.app.service.LoadOutcome;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.config.TestConfigYaml;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;

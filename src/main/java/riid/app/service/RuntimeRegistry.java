@@ -2,7 +2,7 @@ package riid.app.service;
 
 import riid.app.core.error.AppError;
 import riid.app.core.error.AppException;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 import java.util.Map;
 import java.util.Objects;

@@ -1,4 +1,4 @@
-package riid.runtime;
+package riid.runtime.adapter;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.PathSupport;
+import riid.runtime.BoundedCommandExecution;
 
 /**
  * Docker adapter: accepts OCI archive, rewrites to docker-save format, feeds to `docker load`.
