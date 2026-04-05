@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB download_to_daemon_7MiB download_to_daemon_11MiB download_to_daemon_15MiB download_to_daemon_17MiB download_to_podman_7MiB download_to_podman_11MiB download_to_podman_15MiB download_to_podman_17MiB download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq shapki shapki_unpack
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile daemon-jfr download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB  download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq shapki shapki_unpack
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -74,6 +74,9 @@ daemon:
 	else \
 	  java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml; \
 	fi
+
+daemon-kill:
+	pkill -f '[r]iid.jar.*--daemon'
 # Single-node VictoriaMetrics (Docker). Prometheus remote_write + query API: http://127.0.0.1:8428. In medium cluster one in claster.
 # Run before: make vmagent (same host). Stop: make victoriametrics-stop
 victoria-metrics:
@@ -209,6 +212,17 @@ daemon-profile_40s:
 	pgrep -af 'riid.jar.*--daemon' || true; \
 	asprof -e wall -d 40 -f $(ASPROF_OUT) $$pid; \
 	echo "Готово: $(ASPROF_OUT)"
+
+# JFR на daemon: jcmd из того же JDK; пока sleep — нагрузка; .jfr открыть в JMC.
+JFR_OUT ?= $(CURDIR)/mem/riid.jfr
+JFR_SEC ?= 60
+daemon-jfr:
+	@pid=$$(pgrep -f '[r]iid\.jar.*--daemon' | head -n1); \
+	test -n "$$pid" || { echo "Нет riid.jar --daemon"; exit 1; }; \
+	f='$(abspath $(JFR_OUT))'; mkdir -p "$$(dirname "$$f")"; \
+	jcmd $$pid JFR.start name=riid_$$(date +%s) settings=profile duration=$(JFR_SEC)s filename="$$f"; \
+	sleep $(JFR_SEC); \
+	ls -la "$$f"
 
 download_to_daemon_150MB:
 	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
