@@ -1,4 +1,4 @@
-package riid.integration.client_cache;
+package riid.performance.stress;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
