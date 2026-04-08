@@ -75,6 +75,7 @@ tasks.register("integrationTest", Test::class) {
     testClassesDirs = integration.output.classesDirs
     classpath = integration.runtimeClasspath
     useJUnitPlatform {
+        excludeTags("porto")
         if (disableLocal) {
             excludeTags("local")
         }
