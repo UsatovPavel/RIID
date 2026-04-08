@@ -1,4 +1,4 @@
-package riid.performance.daemon;
+package riid.performance.parrallel;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
 @Tag("filesystem")
-class DaemonPopularImagesPhasedPullTest {
+class Daemon9ImagesPhasedPullTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String REF = "latest";
