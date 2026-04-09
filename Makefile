@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile daemon-jfr download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB  download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq perf_scenario_a shapki shapki_unpack
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d vmalert-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile daemon-jfr download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB  download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq perf_scenario_a shapki shapki_unpack
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -96,9 +96,19 @@ vmagent-d:
 		-promscrape.config=/etc/vmagent/vmagent-scrape.yaml \
 		-remoteWrite.url=http://host.docker.internal:8428/api/v1/write
 
-# VictoriaMetrics + Grafana + vmagent (background). Then run RIID: `make daemon` in another terminal.
+# Recording rules (e.g. riid:image_load:tar_category_sortidx for Grafana bucket order). Stop/remove: docker rm -f vmalert
+vmalert-d:
+	docker run -d --name vmalert \
+		--add-host=host.docker.internal:host-gateway \
+		-v "$(CURDIR)/config/metrics/prometheus-rules:/rules:ro" \
+		victoriametrics/vmalert:latest \
+		-datasource.url=http://host.docker.internal:8428 \
+		-remoteWrite.url=http://host.docker.internal:8428/api/v1/write \
+		-rule=/rules/riid-recording-rules.yaml
+
+# VictoriaMetrics + Grafana + vmagent + vmalert (background). Then run RIID: `make daemon` in another terminal.
 # If docker run fails (name already in use): `make metrics-stack-down` and retry.
-metrics-stack-create: metrics-stack-down victoria-metrics grafana vmagent-d
+metrics-stack-create: metrics-stack-down victoria-metrics grafana vmagent-d vmalert-d
 	@echo "Grafana: host port 3000 — http://127.0.0.1:3000 (default login admin/admin on first setup)"
 
 # те же метрики, но json подставить новые
@@ -106,7 +116,7 @@ metrics-stack-update:
 	docker restart grafana
 
 metrics-stack-down:
-	docker rm -f vmagent grafana victoria-metrics 2>/dev/null || true
+	docker rm -f vmalert vmagent grafana victoria-metrics 2>/dev/null || true
 
 # Grafana: VictoriaMetrics on host — datasource uses host.docker.internal:8428; --add-host gives Linux Docker the same hostname (Docker Desktop already resolves it).
 # Default home dashboard: JSON mount + GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH (see config/metrics/grafana/home/riid-home.json).
