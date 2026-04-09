@@ -47,6 +47,7 @@ public final class HttpClientFactory {
         try {
             HttpClient client = createClient(authConfig);
             client.setConnectTimeout(config.connectTimeout().toMillis());
+            client.setIdleTimeout(config.requestTimeout().toMillis());
             client.setFollowRedirects(config.followRedirects());
             client.setMaxRedirects(config.maxRedirects());
             client.start();

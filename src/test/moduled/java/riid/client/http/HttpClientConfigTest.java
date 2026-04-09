@@ -13,7 +13,7 @@ class HttpClientConfigTest {
     void defaultsFillNulls() {
         HttpClientConfig cfg = HttpClientConfig.builder().build();
         assertEquals(Duration.ofSeconds(5), cfg.connectTimeout());
-        assertEquals(Duration.ofSeconds(30), cfg.requestTimeout());
+        assertEquals(Duration.ofMinutes(30), cfg.requestTimeout());
         assertEquals(2, cfg.maxRetries());
         assertEquals(Duration.ofMillis(200), cfg.initialBackoff());
         assertEquals(Duration.ofSeconds(2), cfg.maxBackoff());

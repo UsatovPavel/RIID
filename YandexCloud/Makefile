@@ -1,5 +1,8 @@
 SHELL := /bin/bash
 
+YANDEX_CLOUD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ENV_FILE := $(YANDEX_CLOUD_DIR).env
+
 # С хоста (yc compute ssh). Переопределение: make bootstrap-on-server YC_INSTANCE_ID=...
 YC_INSTANCE_ID ?= fv4jo9irtdjgr0n048es
 YC_IDENTITY ?= $(HOME)/.ssh/ssh-key-1775683235717
@@ -8,13 +11,19 @@ YC_LOGIN ?= user
 YC_REMOTE_HOME ?= /home/$(YC_LOGIN)
 # Каталог клона Riid на ВМ.
 YC_RIID_DIR ?= $(YC_REMOTE_HOME)/RIID
+# Лог демона на ВМ (см. make daemon &> daemonLogs.txt в клоне).
+YC_DAEMON_LOG_REMOTE ?= $(YC_RIID_DIR)/daemonLogs.txt
+# Куда сохранить на хосте при fetch-daemon-logs (переопределение: make fetch-daemon-logs DAEMON_LOG_LOCAL=./x.txt).
+DAEMON_LOG_LOCAL ?= $(YANDEX_CLOUD_DIR)daemonLogs.txt
 
-YANDEX_CLOUD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-ENV_FILE := $(YANDEX_CLOUD_DIR).env
+# SSH local forward: порт на машине, где запущен make → Grafana на ВМ (см. help).
+GRAFANA_LOCAL_PORT ?= 3000
+GRAFANA_REMOTE_BIND ?= 127.0.0.1
+GRAFANA_REMOTE_PORT ?= 3000
 
 YC_SSH = yc compute ssh --id $(YC_INSTANCE_ID) --identity-file $(YC_IDENTITY) --login $(YC_LOGIN)
 
-.PHONY: connect help bootstrap-on-server push-secrets-on-server install-on-server minikube-start-on-server test-sequential-30 test-concurrent-30-b2 test-scenario-a
+.PHONY: connect help bootstrap-on-server push-secrets-on-server install-on-server minikube-start-on-server test-sequential-30 test-concurrent-30-b2 test-scenario-a fetch-daemon-logs grafana-tunnel
 
 help:
 	@echo "connect                  — с хоста: SSH на ВМ"
@@ -25,6 +34,8 @@ help:
 	@echo "test-sequential-30      — с хоста: PR15 b1 (30 образов последовательно) на ВМ"
 	@echo "test-concurrent-30-b2  — с хоста: PR15 b2 (30× POST /pull одномоментно) на ВМ"
 	@echo "test-scenario-a         — с хоста: PR15 (a) median за 5, library/irssi на ВМ"
+	@echo "fetch-daemon-logs      — с хоста: cat ВМ:$(YC_DAEMON_LOG_REMOTE) → $(DAEMON_LOG_LOCAL)"
+	@echo "grafana-tunnel         — SSH -L: localhost:$(GRAFANA_LOCAL_PORT) → ВМ $(GRAFANA_REMOTE_BIND):$(GRAFANA_REMOTE_PORT) (-N, держать терминал)"
 	@echo "Grafana: на ВМ в корне клона Riid: make metrics-stack-create"
 
 connect:
@@ -32,6 +43,14 @@ connect:
 	--id $(YC_INSTANCE_ID) \
 	--identity-file $(YC_IDENTITY) \
 	--login $(YC_LOGIN)
+
+# Флаг -N у ssh: только туннель, без удалённого shell. Браузер: http://127.0.0.1:$(GRAFANA_LOCAL_PORT) (занят 3000 → GRAFANA_LOCAL_PORT=3001).
+grafana-tunnel:
+	yc compute ssh \
+		--id $(YC_INSTANCE_ID) \
+		--identity-file $(YC_IDENTITY) \
+		--login $(YC_LOGIN) \
+		-- -N -L $(GRAFANA_LOCAL_PORT):$(GRAFANA_REMOTE_BIND):$(GRAFANA_REMOTE_PORT)
 
 # Только установка пакетов на ВМ; не читает .env и не трогает ключи.
 bootstrap-on-server:
@@ -68,6 +87,12 @@ install-on-server: bootstrap-on-server push-secrets-on-server
 minikube-start-on-server:
 	cat "$(YANDEX_CLOUD_DIR)bootstrap-server.sh" | $(YC_SSH) -- bash -s minikube-start
 
+# С хоста: вытянуть файл лога демона с ВМ (на ВМ: make daemon &> ~/RIID/daemonLogs.txt или свой путь через YC_DAEMON_LOG_REMOTE=).
+fetch-daemon-logs:
+	@set -euo pipefail; \
+	mkdir -p "$$(dirname '$(DAEMON_LOG_LOCAL)')"; \
+	$(YC_SSH) -- cat '$(YC_DAEMON_LOG_REMOTE)' > '$(DAEMON_LOG_LOCAL)'; \
+	echo "Wrote $(DAEMON_LOG_LOCAL) (from VM:$(YC_DAEMON_LOG_REMOTE))"
 
 # С хоста: Daemon30ImagesSequentialPullTest на ВМ (демон, podman, curl на ВМ; при необходимости YC_RIID_DIR=…).
 test-sequential-30:
