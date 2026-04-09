@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RIID — image pull time comparison</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1219;
+      --card: #171c28;
+      --text: #e8eaef;
+      --muted: #8b92a8;
+      --riid: #5eead4;
+      --podman: #f472b6;
+      --accent: #818cf8;
+      --line: #2a3142;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2rem 1.5rem 3rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    h1 {
+      font-weight: 700;
+      font-size: 1.65rem;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      color: var(--muted);
+      max-width: 52rem;
+      margin-bottom: 2rem;
+    }
+    .sub code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; color: var(--accent); }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.25rem 1.25rem 1.5rem;
+      margin-bottom: 1.75rem;
+      max-width: 56rem;
+    }
+    section h2 {
+      margin: 0 0 0.25rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .note {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin: 0 0 1rem;
+    }
+    .chart-wrap {
+      position: relative;
+      height: 320px;
+    }
+    .chart-wrap.tall { height: 920px; }
+    .chart-wrap.wide-timeline { height: 380px; }
+  </style>
+</head>
+<body>
+  <h1>RIID — benchmark scenarios: image pull and import time</h1>
+  <p class="sub">
+    Four independent tests: cold cache on one image, thirty images in sequence, warmup before a concurrent load,
+    and how long each parallel import took.
+    Values are embedded in this page. <strong>RIID</strong> is measured via the daemon API; <strong>Podman</strong> uses the native CLI on the same machine where applicable.
+    Image names come from a public set of popular Docker Hub repositories. Hardware, network, and registry conditions affect absolute numbers; the charts are meant for relative comparison between approaches.
+  </p>
+
+  <section>
+    <h2>Scenario A — five cold-cache runs, one small image</h2>
+    <p class="note">
+      The cache is cleared before each measurement; only the download time of the same image is timed, five runs in a row.
+      Bars show the <strong>sum</strong> of those five readings (lower is faster overall).
+      RIID (daemon request) vs direct <code>podman pull</code> on a <strong>local</strong> machine and in <strong>Yandex Cloud</strong> (separate run).
+    </p>
+    <div class="chart-wrap">
+      <canvas id="chartPhaseA"></canvas>
+    </div>
+  </section>
+
+  <section>
+    <h2>Scenario B1 — thirty images, strictly sequential</h2>
+    <p class="note">
+      One run: first each of 30 images is pulled through RIID with timing, then a separate phase times <code>podman pull</code> over the same list (Podman caches are reset once for its phase per the test harness).
+      Horizontal axis: milliseconds for one image; two series side by side.
+      For some images the saved log has no Podman measurement—the chart shows missing Podman bars (RIID only).
+    </p>
+    <div class="chart-wrap tall">
+      <canvas id="chartB1"></canvas>
+    </div>
+  </section>
+
+  <section>
+    <h2>Scenario C — warmup: fifteen smallest images by published size</h2>
+    <p class="note">
+      Step before a concurrent-load test: for fifteen images in ascending order of published size, one RIID pull is timed.
+      Horizontal axis: image size in bytes (log scale: sub‑kilobyte to tens of MiB do not fit on a linear axis).
+      Vertical axis: pull time in milliseconds for that warmup run.
+    </p>
+    <div class="chart-wrap">
+      <canvas id="chartWarmupSize"></canvas>
+    </div>
+  </section>
+
+  <section>
+    <h2>Scenario B2 — parallel pulls: when import finished and how long it ran</h2>
+    <p class="note">
+      Several images are fetched and imported concurrently; each point is one finished engine import step (<code>engine.import</code>).
+      Horizontal axis: seconds after the first such event in the saved excerpt (not absolute test start time).
+      Vertical axis: how many minutes that import took for that image. Tooltips also show milliseconds from the trace.
+    </p>
+    <div class="chart-wrap wide-timeline">
+      <canvas id="chartB2Timeline"></canvas>
+    </div>
+  </section>
+
+  <script>
+    const RIID = "#5eead4";
+    const PODMAN = "#f472b6";
+    const MUTED = "#8b92a8";
+
+    Chart.defaults.color = MUTED;
+    Chart.defaults.borderColor = "#2a3142";
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+
+    // --- Scenario A ---
+    const phaseA = {
+      local: { riid_sum: 64540, podman_sum: 54636 },
+      yandex: { riid_sum: 68692, podman_sum: 39117 },
+    };
+
+    new Chart(document.getElementById("chartPhaseA"), {
+      type: "bar",
+      data: {
+        labels: ["Local: RIID", "Local: Podman", "Yandex Cloud: RIID", "Yandex Cloud: Podman"],
+        datasets: [
+          {
+            label: "Sum of five pull timings (ms)",
+            data: [
+              phaseA.local.riid_sum,
+              phaseA.local.podman_sum,
+              phaseA.yandex.riid_sum,
+              phaseA.yandex.podman_sum,
+            ],
+            backgroundColor: [RIID, PODMAN, RIID, PODMAN],
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: { mode: "index", intersect: false },
+        },
+        scales: {
+          x: { stacked: false, grid: { display: false } },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: "Milliseconds" },
+          },
+        },
+      },
+    });
+
+    // --- B1: first 30 repos (short names) ---
+    const repos30 = [
+      "hello-seattle", "hola-mundo", "cirros", "jobber", "photon", "api-firewall", "eggdrop", "hitch",
+      "spiped", "express-gateway", "thrift", "alt", "hylang", "irssi", "unit", "euleros", "clefos",
+      "krakend", "neurodebian", "almalinux", "clearlinux", "sl", "fluentd", "celery", "rapidoid",
+      "satosa", "swipl", "mageia", "emqx", "liquibase",
+    ];
+    const b1Riid = [
+      2058, 1998, 4147, 3393, 3917, 7782, 9831, 8406, 14902, 21661, 11412, 29514, 22040, 11358, 12943,
+      35258, 16272, 24615, 32325, 28679, 50161, 43816, 41950, 51797, 48101, 53284, 25080, 46685, 52891, 34172,
+    ];
+    const b1Podman = [];
+    for (let i = 0; i < 30; i++) b1Podman.push(null);
+    const podmanKnown = [
+      [0, 3049], [1, 3044], [2, 3749], [3, 3850], [4, 3647], [5, 4351], [6, 4653], [7, 4751],
+      [8, 7157], [9, 24022], [10, 12383], [11, 7660], [12, 16592], [13, 19308], [14, 16903], [15, 9669],
+    ];
+    podmanKnown.forEach(([idx, ms]) => {
+      b1Podman[idx] = ms;
+    });
+
+    new Chart(document.getElementById("chartB1"), {
+      type: "bar",
+      data: {
+        labels: repos30,
+        datasets: [
+          {
+            label: "RIID (POST /pull), ms",
+            data: b1Riid,
+            backgroundColor: RIID,
+            borderWidth: 0,
+          },
+          {
+            label: "Podman (pull), ms",
+            data: b1Podman,
+            backgroundColor: PODMAN,
+            borderWidth: 0,
+            spanGaps: false,
+          },
+        ],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const v = ctx.raw;
+                if (v == null) return ctx.dataset.label + ": n/a";
+                return ctx.dataset.label + ": " + v + " ms";
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            title: { display: true, text: "Milliseconds per image" },
+          },
+          y: {
+            ticks: { autoSkip: false, font: { size: 10 } },
+          },
+        },
+      },
+    });
+
+    // --- Warmup: size_bytes + human-readable size (reference doc), pull_ms from run log ---
+    const sizeRows15 = [
+      { repo: "hello-seattle", bytes: 999, human: "999 B", pull: 2374 },
+      { repo: "hola-mundo", bytes: 1004, human: "1004 B", pull: 1812 },
+      { repo: "cirros", bytes: 7415413, human: "7.1 MiB", pull: 2049 },
+      { repo: "jobber", bytes: 11764688, human: "11.2 MiB", pull: 2444 },
+      { repo: "photon", bytes: 16254702, human: "15.5 MiB", pull: 3149 },
+      { repo: "api-firewall", bytes: 17401569, human: "16.6 MiB", pull: 3162 },
+      { repo: "eggdrop", bytes: 17470125, human: "16.7 MiB", pull: 3097 },
+      { repo: "hitch", bytes: 32259497, human: "30.8 MiB", pull: 5205 },
+      { repo: "spiped", bytes: 36825645, human: "35.1 MiB", pull: 5931 },
+      { repo: "express-gateway", bytes: 40232823, human: "38.4 MiB", pull: 6368 },
+      { repo: "thrift", bytes: 43741968, human: "41.7 MiB", pull: 6693 },
+      { repo: "alt", bytes: 46187749, human: "44.0 MiB", pull: 7262 },
+      { repo: "hylang", bytes: 48828183, human: "46.6 MiB", pull: 7619 },
+      { repo: "irssi", bytes: 53868443, human: "51.4 MiB", pull: 8254 },
+      { repo: "unit", bytes: 54938868, human: "52.4 MiB", pull: 8241 },
+    ];
+
+    function formatSizeBytesTick(v) {
+      if (v >= 1048576) return (v / 1048576).toFixed(0) + " MiB";
+      if (v >= 1024) return (v / 1024).toFixed(1) + " KiB";
+      return String(v) + " B";
+    }
+
+    new Chart(document.getElementById("chartWarmupSize"), {
+      type: "line",
+      data: {
+        datasets: [
+          {
+            label: "Warmup pull time (ms)",
+            data: sizeRows15.map((r) => ({ x: r.bytes, y: r.pull })),
+            borderColor: RIID,
+            backgroundColor: "rgba(94, 234, 212, 0.15)",
+            fill: true,
+            tension: 0.25,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title(items) {
+                const i = items[0].dataIndex;
+                const r = sizeRows15[i];
+                return r.repo + " — " + r.human + " (" + r.bytes.toLocaleString("en-US") + " B)";
+              },
+              label(ctx) {
+                return "Pull time: " + ctx.parsed.y + " ms";
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: "logarithmic",
+            title: {
+              display: true,
+              text: "Image size, bytes (log scale)",
+            },
+            ticks: {
+              callback: (v) => formatSizeBytesTick(v),
+            },
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: "Pull time (ms)" },
+          },
+        },
+      },
+    });
+
+    // --- B2: timestamp + duration_ms + short image name ---
+    const b2Events = [
+      { t: "2026-04-09T18:15:24.287229158Z", ms: 34375, img: "hello-seattle" },
+      { t: "2026-04-09T18:19:35.632467478Z", ms: 285481, img: "hola-mundo" },
+      { t: "2026-04-09T18:20:32.4278252Z", ms: 342524, img: "photon" },
+      { t: "2026-04-09T18:20:32.622423012Z", ms: 342732, img: "unit" },
+      { t: "2026-04-09T18:20:32.915286979Z", ms: 343039, img: "cirros" },
+      { t: "2026-04-09T18:21:10.531221176Z", ms: 380659, img: "jobber" },
+      { t: "2026-04-09T18:21:15.321553052Z", ms: 385377, img: "eggdrop" },
+      { t: "2026-04-09T18:21:15.763161961Z", ms: 385659, img: "thrift" },
+      { t: "2026-04-09T18:21:26.07299817Z", ms: 396152, img: "express-gateway" },
+      { t: "2026-04-09T18:22:26.459724861Z", ms: 456253, img: "hitch" },
+      { t: "2026-04-09T18:22:30.12780406Z", ms: 460222, img: "api-firewall" },
+      { t: "2026-04-09T18:22:51.633826771Z", ms: 481548, img: "satosa" },
+      { t: "2026-04-09T18:22:51.98198378Z", ms: 482029, img: "spiped" },
+      { t: "2026-04-09T18:23:37.200238442Z", ms: 527312, img: "fluentd" },
+      { t: "2026-04-09T18:23:54.022627739Z", ms: 544127, img: "irssi" },
+      { t: "2026-04-09T18:24:17.297582459Z", ms: 567397, img: "hylang" },
+      { t: "2026-04-09T18:25:12.727181033Z", ms: 622813, img: "alt" },
+      { t: "2026-04-09T18:25:12.873281648Z", ms: 622680, img: "rapidoid" },
+      { t: "2026-04-09T18:25:17.111930831Z", ms: 626971, img: "neurodebian" },
+      { t: "2026-04-09T18:26:06.199620092Z", ms: 675998, img: "swipl" },
+      { t: "2026-04-09T18:26:10.113317937Z", ms: 680326, img: "celery" },
+      { t: "2026-04-09T18:26:10.188707716Z", ms: 680292, img: "almalinux" },
+      { t: "2026-04-09T18:27:06.628507974Z", ms: 736732, img: "euleros" },
+      { t: "2026-04-09T18:27:51.129371171Z", ms: 781225, img: "sl" },
+      { t: "2026-04-09T18:28:05.957642669Z", ms: 796015, img: "clearlinux" },
+      { t: "2026-04-09T18:28:25.56809746Z", ms: 815661, img: "krakend" },
+      { t: "2026-04-09T18:28:38.167824933Z", ms: 828016, img: "emqx" },
+      { t: "2026-04-09T18:28:41.978183734Z", ms: 831824, img: "mageia" },
+      { t: "2026-04-09T18:28:53.01601518Z", ms: 843144, img: "liquibase" },
+    ];
+
+    const t0 = new Date(b2Events[0].t).getTime();
+    const b2X = b2Events.map((e) => (new Date(e.t).getTime() - t0) / 1000);
+    const MS_PER_MIN = 60_000;
+
+    new Chart(document.getElementById("chartB2Timeline"), {
+      type: "scatter",
+      data: {
+        datasets: [
+          {
+            label: "Import duration (min)",
+            data: b2Events.map((e, i) => ({
+              x: b2X[i],
+              y: e.ms / MS_PER_MIN,
+            })),
+            backgroundColor: "rgba(129, 140, 248, 0.75)",
+            borderColor: "#818cf8",
+            pointRadius: 6,
+            pointHoverRadius: 9,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const i = ctx.dataIndex;
+                const e = b2Events[i];
+                const min = (e.ms / MS_PER_MIN).toFixed(2);
+                return e.img + ": " + min + " min (" + e.ms.toLocaleString("en-US") + " ms) @ +" + ctx.parsed.x.toFixed(0) + " s";
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: { display: true, text: "Seconds after first import completion in excerpt" },
+          },
+          y: {
+            title: { display: true, text: "Import duration (min)" },
+            beginAtZero: true,
+            ticks: {
+              callback: (v) => {
+                const n = Number(v);
+                const s = Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+                return s + " min";
+              },
+            },
+          },
+        },
+      },
+    });
+  </script>
+</body>
+</html>
