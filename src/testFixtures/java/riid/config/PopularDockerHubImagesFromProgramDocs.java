@@ -1,6 +1,7 @@
 package riid.config;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * First 30 repository names (tag {@code latest} everywhere) from
@@ -45,6 +46,19 @@ public final class PopularDockerHubImagesFromProgramDocs {
             "library/mageia",
             "library/emqx",
             "library/liquibase");
+
+    /**
+     * PR15 scenario (c) warm-cache runs: same order as {@link #FIRST_30_REPOSITORIES} minus repositories
+     * that routinely fail on typical amd64 Linux (wrong architecture in the Hub manifest).
+     * Currently excludes {@code library/clefos}.
+     */
+    public static final List<String> SCENARIO_C_WARM_REPOSITORIES = FIRST_30_REPOSITORIES.stream()
+            .filter(PopularDockerHubImagesFromProgramDocs::includedInScenarioCWarm)
+            .toList();
+
+    private static boolean includedInScenarioCWarm(String repo) {
+        return !Objects.equals(repo, "library/clefos");
+    }
 
     private PopularDockerHubImagesFromProgramDocs() { }
 }

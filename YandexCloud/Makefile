@@ -23,7 +23,7 @@ GRAFANA_REMOTE_PORT ?= 3000
 
 YC_SSH = yc compute ssh --id $(YC_INSTANCE_ID) --identity-file $(YC_IDENTITY) --login $(YC_LOGIN)
 
-.PHONY: connect help bootstrap-on-server push-secrets-on-server install-on-server minikube-start-on-server test-sequential-30 test-concurrent-30-b2 test-scenario-a fetch-daemon-logs grafana-tunnel
+.PHONY: connect help bootstrap-on-server push-secrets-on-server install-on-server minikube-start-on-server test-sequential-30 test-concurrent-30-b2 test-scenario-a test-scenario-c fetch-daemon-logs grafana-tunnel
 
 help:
 	@echo "connect                  — с хоста: SSH на ВМ"
@@ -34,6 +34,7 @@ help:
 	@echo "test-sequential-30      — с хоста: PR15 b1 (30 образов последовательно) на ВМ"
 	@echo "test-concurrent-30-b2  — с хоста: PR15 b2 (30× POST /pull одномоментно) на ВМ"
 	@echo "test-scenario-a         — с хоста: PR15 (a) median за 5, library/irssi на ВМ"
+	@echo "test-scenario-c         — с хоста: PR15 (c) warm RIID → podman prune → 29× concurrent /pull (без library/clefos)"
 	@echo "fetch-daemon-logs      — с хоста: cat ВМ:$(YC_DAEMON_LOG_REMOTE) → $(DAEMON_LOG_LOCAL)"
 	@echo "grafana-tunnel         — SSH -f -N -L: localhost:$(GRAFANA_LOCAL_PORT) → ВМ $(GRAFANA_REMOTE_BIND):$(GRAFANA_REMOTE_PORT) (в фоне после auth)"
 	@echo "grafana-tunnel-fg      — то же, foreground (терминал занят, как раньше)"
@@ -120,4 +121,14 @@ test-scenario-a:
 		'cd "$(YC_RIID_DIR)"' \
 		'set -a; [ -f config/.env ] && . config/.env; set +a' \
 		'./gradlew performanceTest --tests riid.performance.sequentially.oneimage.DaemonBenchmarkColdCachePullsTest' \
+		| $(YC_SSH) -- bash -s
+
+# С хоста: PR15 (c) — 29× последовательный POST /pull (прогрев; без library/clefos), prune, 29× parallel /pull.
+# Один запрос ограничен curl --max-time и app.daemon.requestTimeout (оба 30m); зависание без вывода из-за «тихого» read нет.
+test-scenario-c:
+	printf '%s\n' \
+		'set -euo pipefail' \
+		'cd "$(YC_RIID_DIR)"' \
+		'set -a; [ -f config/.env ] && . config/.env; set +a' \
+		'./gradlew performanceTest --tests riid.performance.parrallel.cache.Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest' \
 		| $(YC_SSH) -- bash -s
