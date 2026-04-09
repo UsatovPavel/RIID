@@ -117,6 +117,12 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     private void importRootfsTar(Path tar, String layerName) throws IOException, InterruptedException {
+        long bytes = Files.size(tar);
+        LOGGER.info(
+                "portoctl layer import starting: layer={} tar={} (~{} MiB)",
+                layerName,
+                tar.toAbsolutePath(),
+                bytes / (1024 * 1024));
         List<String> cmd = List.of(
                 PORTOCTL_BIN,
                 "layer",
@@ -124,6 +130,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 layerName,
                 tar.toAbsolutePath().toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
+        LOGGER.info("portoctl layer import finished: layer={} exit={}", layerName, shellResult.exitCode());
         if (shellResult.exitCode() != 0) {
             throw new IOException("portoctl layer import failed (exit " + shellResult.exitCode() + EXIT_SUFFIX
                     + shellResult.stdout() + shellResult.stderr());
