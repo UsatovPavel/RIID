@@ -88,10 +88,7 @@ class PortoRuntimeAdapterIntegrationTest {
     @Tag("local")
     void exportsRootfsAndLoadsViaPortoctl() throws Exception {
         String image = System.getenv().getOrDefault("PODMAN_IMAGE", "alpine:latest");
-        if (!imageExists(image)) {
-            throw new IllegalStateException("Podman image not found locally: " + image
-                    + " (pre-pull or set PODMAN_IMAGE)");
-        }
+        ensurePodmanImage(image);
 
         HostFilesystem fs = new NioHostFilesystem();
         Path tar = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "rootfs-", ".tar");
@@ -123,6 +120,13 @@ class PortoRuntimeAdapterIntegrationTest {
                 .map(String::trim)
                 .filter(line -> !line.isBlank())
                 .toList();
+    }
+
+    private static void ensurePodmanImage(String image) throws Exception {
+        if (imageExists(image)) {
+            return;
+        }
+        run(List.of(PODMAN, "pull", image));
     }
 
     private static boolean imageExists(String image) throws Exception {

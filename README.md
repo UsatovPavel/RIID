@@ -86,13 +86,11 @@ java -jar build/libs/riid.jar \
   --runtime podman
 ```
 
-### Porto runtime note
-Porto runtime adapters are wired the same way via `--runtime porto`; ensure Porto is installed and accessible on the host. The CLI flow is identical; only the runtime id changes.
 
 ### Integration / manual checks
 - `./gradlew test` (unit + integration). Live/e2e tests that hit public registries may require network; disable/skip if offline.
 - For Podman integration end-to-end: run local registry as above, then `./gradlew test --tests "riid.integration.runtime_app.CliPodmanIntegrationTest"` (requires podman and network for base images).
-- For Porto: use analogous CLI invocation with `--runtime porto` after ensuring runtime availability.
+- For Porto integration tests locally: `./gradlew integrationTest --tests 'riid.integration.runtime_app.PortoRuntimeAdapterIntegrationTest'` (requires Porto + permissions as above).
 - Registry endpoint for live tests is configurable via system properties:
   - `riid.test.registry.scheme` (default: `https`)
   - `riid.test.registry.host` (default: `registry-1.docker.io`)
@@ -112,9 +110,14 @@ for Dragonfly gRPC communication (`dfdaemon` DownloadTask, API v2).
 
 
 ## Supported runtimes
-- podman
-- docker
+- **podman**
+- **docker**
+- **porto** (`portoctl` / portod; see Porto runtime note above)
+
 If you need another inherit from runtime adapter in runtime module
+
+### Porto runtime note
+Porto is wired the same way via `--runtime porto`. You need **`portoctl`** and a running **portod** on the host. Imports use `portoctl layer -I`; the OS user that runs RIID must be allowed by Porto to create layers (often root or a dedicated service account — see Porto docs for ACLs). 
 
 ## P2P (Dragonfly)
 Implemented via Dragonfly gRPC through the external `java-dragonfly-image-puller` library.

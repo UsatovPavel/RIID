@@ -11,7 +11,6 @@ tasks.named<Test>("test") {
         if (!project.hasProperty("includeStress")) {
             excludeTags("stress")
         }
-        excludeTags("porto")
         if (disableLocal) {
             excludeTags("local")
         }
@@ -75,7 +74,6 @@ tasks.register("integrationTest", Test::class) {
     testClassesDirs = integration.output.classesDirs
     classpath = integration.runtimeClasspath
     useJUnitPlatform {
-        excludeTags("porto")
         if (disableLocal) {
             excludeTags("local")
         }
