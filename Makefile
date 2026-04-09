@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile daemon-jfr download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB  download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq shapki shapki_unpack
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile daemon-jfr download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB  download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq perf_scenario_a shapki shapki_unpack
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -135,6 +135,12 @@ download_to_daemon_50MB:
 	time curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/irssi","reference":"latest","runtimeId":"podman"}'
+
+# PR15 scenario (a): library/irssi, 5× холодный кэш (RIID + podman), в stdout — списки ms и riid_median_pull_ms / podman_median_pull_ms.
+# Нужны: демон на UDS из config, curl, podman; опционально config/.env и RIID_PERF_CACHE_DIR (см. DaemonBenchmarkColdCachePullsTest).
+perf_scenario_a:
+	set -a; [ -f config/.env ] && . ./config/.env; set +a; \
+	./gradlew performanceTest --tests riid.performance.sequentially.oneimage.DaemonBenchmarkColdCachePullsTest
 
 # Четыре последовательных pull в отдельном store (PopularDockerImagesSizes.txt ~7–17 MiB).
 # Перед rm — podman system reset, иначе overlay от root и Permission denied на rm -rf.

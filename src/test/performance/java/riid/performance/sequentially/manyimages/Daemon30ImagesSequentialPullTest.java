@@ -29,7 +29,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * (2) then native {@code podman pull} for each, after a single {@code podman system prune -af}
  * at the start of the Podman phase.
  *
- * <p>Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()}.
+ * <p>{@link #podmanPhaseOnly()} — только шаг (2), без демона.
+ *
+ * <p>Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()} для полного сценария.
  *
  * <p>Prints per-phase pull duration lists, sums, and wall times.
  */
@@ -42,7 +44,7 @@ class Daemon30ImagesSequentialPullTest {
     private static final int N = PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES.size();
 
     @Test
-    void sequentialPullsFirst30PopularRepositories() throws Exception {
+    void daemonThenPodman() throws Exception {
         assumeTrue(TestFilesystemSupport.curlAvailable(), "curl must be on PATH for HTTP over UDS");
 
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
@@ -81,20 +83,8 @@ class Daemon30ImagesSequentialPullTest {
         assumeTrue(commandAvailable("podman"), "podman must be on PATH");
         runOrFail("podman", "system", "prune", "-af");
 
-        List<Long> podmanPullMsList = new ArrayList<>(N);
         long podmanPhaseStart = System.nanoTime();
-        int index = 0;
-        String ref = PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE;
-        for (String repo : PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES) {
-            index++;
-            String podmanRef = podmanImageReference(repo, ref);
-            long t0 = System.nanoTime();
-            runOrFail("podman", "pull", podmanRef);
-            long ms = (System.nanoTime() - t0) / 1_000_000L;
-            podmanPullMsList.add(ms);
-            System.out.println("[Daemon30ImagesSequentialPullTest] podman i=" + index + '/' + N
-                    + " repo=" + repo + " pull_ms=" + ms + " ref=" + podmanRef);
-        }
+        List<Long> podmanPullMsList = measuredPodmanPulls();
         long podmanPhaseWallMs = (System.nanoTime() - podmanPhaseStart) / 1_000_000L;
         long podmanSumPullMs = sum(podmanPullMsList);
         System.out.println("[Daemon30ImagesSequentialPullTest] podman_pull_ms_list=" + podmanPullMsList);
@@ -106,6 +96,42 @@ class Daemon30ImagesSequentialPullTest {
                 + " finished OK count=" + N + " (riid + podman)");
         assertEquals(N, riidPullMsList.size());
         assertEquals(N, podmanPullMsList.size());
+    }
+
+    /** Только {@code podman system prune -af} + 30× {@code podman pull} (как фаза b1); UDS/демон не нужны. */
+    @Test
+    void podmanPhaseOnly() throws Exception {
+        assumeTrue(commandAvailable("podman"), "podman must be on PATH");
+        long testStartNs = System.nanoTime();
+        runOrFail("podman", "system", "prune", "-af");
+        long podmanPhaseStart = System.nanoTime();
+        List<Long> podmanPullMsList = measuredPodmanPulls();
+        long podmanPhaseWallMs = (System.nanoTime() - podmanPhaseStart) / 1_000_000L;
+        long podmanSumPullMs = sum(podmanPullMsList);
+        System.out.println("[Daemon30ImagesSequentialPullTest] podman_pull_ms_list=" + podmanPullMsList);
+        System.out.println("[Daemon30ImagesSequentialPullTest] podman_sum_pull_ms=" + podmanSumPullMs
+                + " podman_phase_wall_ms=" + podmanPhaseWallMs);
+        long totalWallMs = (System.nanoTime() - testStartNs) / 1_000_000L;
+        System.out.println("[Daemon30ImagesSequentialPullTest] podman_only_total_wall_ms=" + totalWallMs);
+        assertEquals(N, podmanPullMsList.size());
+    }
+
+    /** После {@code podman system prune -af} снаружи — измеренные длительности 30 подряд {@code podman pull}. */
+    private static List<Long> measuredPodmanPulls() throws Exception {
+        List<Long> podmanPullMsList = new ArrayList<>(N);
+        String ref = PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE;
+        int index = 0;
+        for (String repo : PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES) {
+            index++;
+            String podmanRef = podmanImageReference(repo, ref);
+            long t0 = System.nanoTime();
+            runOrFail("podman", "pull", podmanRef);
+            long ms = (System.nanoTime() - t0) / 1_000_000L;
+            podmanPullMsList.add(ms);
+            System.out.println("[Daemon30ImagesSequentialPullTest] podman i=" + index + '/' + N
+                    + " repo=" + repo + " pull_ms=" + ms + " ref=" + podmanRef);
+        }
+        return podmanPullMsList;
     }
 
     private static long sum(List<Long> values) {
