@@ -5,6 +5,7 @@ import org.eclipse.jetty.client.HttpClient;
 import riid.cache.auth.TokenCache;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.BlobPartialDownloadConfig;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.core.error.ClientError;
@@ -45,26 +46,29 @@ public final class RegistryClientImpl implements RegistryClient {
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig) {
-        this(endpoint, httpConfig, new AuthConfig(), null);
+        this(endpoint, httpConfig, new AuthConfig(), null, ClientPlatformConfig.fromHost());
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               long defaultTokenTtlSeconds) {
-        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), null);
+        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), null,
+                ClientPlatformConfig.fromHost());
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               long defaultTokenTtlSeconds,
                               BlobPartialDownloadConfig rangeConfig) {
-        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), rangeConfig);
+        this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), rangeConfig,
+                ClientPlatformConfig.fromHost());
     }
 
     public RegistryClientImpl(RegistryEndpoint endpoint,
                               HttpClientConfig httpConfig,
                               AuthConfig authConfig,
-                              BlobPartialDownloadConfig rangeConfig) {
+                              BlobPartialDownloadConfig rangeConfig,
+                              ClientPlatformConfig manifestPlatform) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
         AuthConfig effectiveAuthConfig = authConfig != null ? authConfig : new AuthConfig();
@@ -75,7 +79,8 @@ public final class RegistryClientImpl implements RegistryClient {
                 mapper,
                 new TokenCache(),
                 effectiveAuthConfig.defaultTokenTtlSeconds());
-        this.manifestService = new ManifestService(http, authService, mapper);
+        ClientPlatformConfig platform = manifestPlatform != null ? manifestPlatform : ClientPlatformConfig.fromHost();
+        this.manifestService = new ManifestService(http, authService, mapper, platform);
         this.blobService = new BlobService(http, authService, rangeConfig);
     }
 
