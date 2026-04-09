@@ -34,4 +34,4 @@ environment:
 
 Default `url` is `http://host.docker.internal:8428` for VictoriaMetrics on the **host** (see `make grafana`). In Compose/Kubernetes, change `url` to your service (e.g. `http://victoriametrics:8428`).
 
-**Makefile (repo root):** `make metrics-stack-create` — tear down old stack if needed, then start VM + Grafana + vmagent; `make metrics-stack-update` — `docker restart grafana` after editing JSON under `grafana/dashboards/`; `make metrics-stack-down` — remove the three containers.
+**Makefile (repo root):** `make metrics-stack-create` — tear down old stack if needed, then start VM + Grafana + vmagent + vmalert (recording rules); `make metrics-stack-update` — `docker restart grafana` after editing JSON under `grafana/dashboards/`; `make metrics-stack-down` — remove all stack containers.
