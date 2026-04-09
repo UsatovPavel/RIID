@@ -10,7 +10,7 @@ Each log line is a single JSON object. Typical fields:
 | `message` | Logger | Human-readable text |
 | `logger_name` | Logback | Java logger name |
 | `thread_name` | Logback | Thread |
-| `trace_id` | MDC | Request correlation; set for the whole CLI request |
+| `trace_id` | MDC | Request correlation; set for the whole CLI pull **and** for each daemon `POST /pull` |
 | `component` | MDC | e.g. `app` |
 | `operation` | MDC | Current phase (`request`, `manifest.fetch`, `source.select`, …) |
 | `event` | Key-value | Present on **step / milestone** events |
@@ -56,10 +56,19 @@ jq -c 'select(.event != null) | {t: .timestamp, e: .event, r: .result, ms: .dura
 
 Strip leading non-JSON text before piping to `jq` if your capture includes status lines.
 
+## Daemon (`POST /pull`)
+
+Each successful pull path (after JSON validates: `repository` / `reference` / `runtimeId`) sets **`trace_id`** before work is submitted to the pull executor:
+
+- Default: new random UUID (same style as `CliApplication.run`).
+- Optional: client may send **`X-Trace-Id`** or **`X-Request-Id`** (trimmed; up to 128 chars; letters, digits, `-`, `_`, `.`, `:` only). Invalid or missing → new UUID.
+
+MDC is installed on the Jetty thread, **copied** onto the virtual-thread worker that runs `ImageLoader.load` (so milestones and nested layer pulls see the same `trace_id`), then **`MdcContext.clearRequestContext()`** runs in `finally` on the Jetty thread so the connector thread does not leak context between requests.
+
 ## Modules
 
-**App:** sets MDC; request / manifest / archive / import milestones. **Dispatcher:** `source.select` / `source.fetch`. **Client / P2P / runtime:** avoid secrets and unsafe paths in log text.
+**App:** sets MDC; request / manifest / archive / import milestones. **Daemon:** `PullHttpHandler` sets `trace_id` per pull and propagates MDC into the pull executor. **Dispatcher:** `source.select` / `source.fetch`. **Client / P2P / runtime:** avoid secrets and unsafe paths in log text.
 
 ## Code & tests
 
-`MilestoneEventLogger`, `MdcContext`, `LogContextKeys`, `DispatcherMilestoneLogger`. Integration: `CliEndToEndLiveTest` (milestones + `trace_id` on non-milestone `riid.*` logs).
+`MilestoneEventLogger`, `MdcContext`, `LogContextKeys`, `DispatcherMilestoneLogger`. Integration: `CliEndToEndLiveTest` (milestones + `trace_id` on non-milestone `riid.*` logs); `DaemonPullUnixSocketTest` / `PullHttpHandlerCorrelationTest` (daemon pull + `trace_id` on the loader thread).
