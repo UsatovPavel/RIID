@@ -6,6 +6,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.client.api.ManifestResult;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
@@ -41,11 +42,17 @@ public final class ManifestService implements ManifestServiceApi {
     private final HttpExecutor http;
     private final AuthService authService;
     private final ObjectMapper mapper;
+    private final ClientPlatformConfig manifestPlatform;
 
-    public ManifestService(HttpExecutor http, AuthService authService, ObjectMapper mapper) {
+    public ManifestService(
+            HttpExecutor http,
+            AuthService authService,
+            ObjectMapper mapper,
+            ClientPlatformConfig manifestPlatform) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
-        this.mapper = Objects.requireNonNull(mapper).copy(); //M V EI2  may expose internal 
+        this.mapper = Objects.requireNonNull(mapper).copy(); //M V EI2  may expose internal
+        this.manifestPlatform = Objects.requireNonNull(manifestPlatform, "manifestPlatform");
     }
 
     @Override
@@ -163,10 +170,16 @@ public final class ManifestService implements ManifestServiceApi {
         }
         return index.manifests().stream()
                 .filter(m -> m.platform() != null
-                        && "linux".equalsIgnoreCase(m.platform().os())
-                        && "amd64".equalsIgnoreCase(m.platform().architecture()))
+                        && manifestPlatform.os().equalsIgnoreCase(m.platform().os())
+                        && manifestPlatform.architecture().equalsIgnoreCase(m.platform().architecture()))
                 .findFirst()
-                .orElse(index.manifests().getFirst());
+                .orElseThrow(() -> new ClientException(
+                        new ClientError.Parse(
+                                ClientError.ParseKind.MANIFEST,
+                                "No manifest list entry for platform "
+                                        + manifestPlatform.os() + "/" + manifestPlatform.architecture()),
+                        "No manifest list entry for platform "
+                                + manifestPlatform.os() + "/" + manifestPlatform.architecture()));
     }
 }
 

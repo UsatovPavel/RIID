@@ -268,7 +268,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 endpoint,
                 httpConfig,
                 authConfig,
-                blobPartialDownloadConfig);
+                blobPartialDownloadConfig,
+                config.client().platformOrHostDefault());
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());

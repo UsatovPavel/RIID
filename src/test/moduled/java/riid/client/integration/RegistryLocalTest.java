@@ -23,6 +23,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.BlockSize;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.http.HttpClientConfig;
@@ -67,7 +68,8 @@ public class RegistryLocalTest {
         HTTP_CLIENT = HttpClientFactory.create(httpConfig);
         HTTP = new HttpExecutor(HTTP_CLIENT, httpConfig);
         AUTH_SERVICE = new AuthService(HTTP, new ObjectMapper(), new TokenCache());
-        MANIFEST_SERVICE = new ManifestService(HTTP, AUTH_SERVICE, new ObjectMapper());
+        MANIFEST_SERVICE = new ManifestService(HTTP, AUTH_SERVICE, new ObjectMapper(),
+                ClientPlatformConfig.fromHost());
         BLOB_SERVICE = new BlobService(HTTP, AUTH_SERVICE);
 
         // Seed registry with alpine using host docker
