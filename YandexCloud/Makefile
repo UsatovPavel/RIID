@@ -35,7 +35,8 @@ help:
 	@echo "test-concurrent-30-b2  — с хоста: PR15 b2 (30× POST /pull одномоментно) на ВМ"
 	@echo "test-scenario-a         — с хоста: PR15 (a) median за 5, library/irssi на ВМ"
 	@echo "fetch-daemon-logs      — с хоста: cat ВМ:$(YC_DAEMON_LOG_REMOTE) → $(DAEMON_LOG_LOCAL)"
-	@echo "grafana-tunnel         — SSH -L: localhost:$(GRAFANA_LOCAL_PORT) → ВМ $(GRAFANA_REMOTE_BIND):$(GRAFANA_REMOTE_PORT) (-N, держать терминал)"
+	@echo "grafana-tunnel         — SSH -f -N -L: localhost:$(GRAFANA_LOCAL_PORT) → ВМ $(GRAFANA_REMOTE_BIND):$(GRAFANA_REMOTE_PORT) (в фоне после auth)"
+	@echo "grafana-tunnel-fg      — то же, foreground (терминал занят, как раньше)"
 	@echo "Grafana: на ВМ в корне клона Riid: make metrics-stack-create"
 
 connect:
@@ -44,13 +45,13 @@ connect:
 	--identity-file $(YC_IDENTITY) \
 	--login $(YC_LOGIN)
 
-# Флаг -N у ssh: только туннель, без удалённого shell. Браузер: http://127.0.0.1:$(GRAFANA_LOCAL_PORT) (занят 3000 → GRAFANA_LOCAL_PORT=3001).
+# -f: ssh в фон после аутентификации; -N: без удалённого shell. Браузер: http://127.0.0.1:$(GRAFANA_LOCAL_PORT) (занят 3000 → GRAFANA_LOCAL_PORT=3001). Остановить: найти в ps процесс ssh/yc с этим -L и kill.
 grafana-tunnel:
 	yc compute ssh \
 		--id $(YC_INSTANCE_ID) \
 		--identity-file $(YC_IDENTITY) \
 		--login $(YC_LOGIN) \
-		-- -N -L $(GRAFANA_LOCAL_PORT):$(GRAFANA_REMOTE_BIND):$(GRAFANA_REMOTE_PORT)
+		-- -f -N -L $(GRAFANA_LOCAL_PORT):$(GRAFANA_REMOTE_BIND):$(GRAFANA_REMOTE_PORT)
 
 # Только установка пакетов на ВМ; не читает .env и не трогает ключи.
 bootstrap-on-server:

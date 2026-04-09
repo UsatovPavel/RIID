@@ -1,10 +1,12 @@
 package riid.performance;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,10 +37,15 @@ public final class DaemonUnixSocketPullSupport {
         Path bodyFile = workDir.resolve("body-" + repository.replace('/', '-') + ".json");
         String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + reference
                 + "\",\"runtimeId\":\"" + runtimeId + "\"}";
+        int maxSec = requestTimeoutSeconds();
         ProcessBuilder pb = new ProcessBuilder(
                 "curl",
                 "-sS",
                 "--fail-with-body",
+                "--connect-timeout",
+                Integer.toString(Math.min(120, maxSec)),
+                "--max-time",
+                Integer.toString(maxSec),
                 "--unix-socket",
                 socketPath.toString(),
                 "-o",
@@ -54,9 +61,20 @@ public final class DaemonUnixSocketPullSupport {
                 json);
         pb.redirectError(ProcessBuilder.Redirect.PIPE);
         Process proc = pb.start();
+        AtomicReference<String> errRef = new AtomicReference<>("");
+        Thread stderrDrainer = new Thread(() -> {
+            try {
+                errRef.set(new String(proc.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                errRef.set(e.toString());
+            }
+        }, "curl-stderr-" + repository.replace('/', '-'));
+        stderrDrainer.setDaemon(true);
+        stderrDrainer.start();
         String httpCode = new String(proc.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-        String err = new String(proc.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-        boolean finished = proc.waitFor(requestTimeoutSeconds(), TimeUnit.SECONDS);
+        stderrDrainer.join(TimeUnit.SECONDS.toMillis(maxSec + 60L));
+        String err = errRef.get();
+        boolean finished = proc.waitFor(2L, TimeUnit.MINUTES);
         assertTrue(finished, "curl did not finish for " + repository + ": " + err);
         assertEquals(0, proc.exitValue(), "curl stderr for " + repository + ": " + err);
         assertEquals("200", httpCode, "HTTP for " + repository);

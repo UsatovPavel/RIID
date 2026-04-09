@@ -1,5 +1,6 @@
 package riid.app.daemon.metrics;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -12,6 +13,9 @@ import io.micrometer.core.instrument.Timer;
 public final class DaemonPullHttpMetrics {
 
     private static final String METRIC = "riid.daemon.pull";
+
+    /** Histogram upper bound: long {@code POST /pull} can run up to daemon request timeout (~30 min). */
+    private static final Duration PULL_HISTOGRAM_MAX = Duration.ofMinutes(30);
 
     private final MeterRegistry registry;
 
@@ -35,6 +39,7 @@ public final class DaemonPullHttpMetrics {
                 .tag("status_class", statusClass)
                 .tag("code", code)
                 .publishPercentileHistogram()
+                .maximumExpectedValue(PULL_HISTOGRAM_MAX)
                 .register(registry)
                 .record(elapsedNanos, TimeUnit.NANOSECONDS);
     }
