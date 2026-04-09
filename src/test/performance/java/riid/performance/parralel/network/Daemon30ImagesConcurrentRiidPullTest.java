@@ -18,6 +18,7 @@ import riid.config.PopularDockerHubImagesFromProgramDocs;
 import riid.core.config.TestConfigYaml;
 import riid.core.fs.TestFilesystemSupport;
 import riid.performance.DaemonUnixSocketPullSupport;
+import riid.performance.PerformanceColdCacheHelper;
 
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -44,6 +45,9 @@ class Daemon30ImagesConcurrentRiidPullTest {
 
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
+
+        assumeTrue(PerformanceColdCacheHelper.podmanAvailable(), "podman must be on PATH");
+        PerformanceColdCacheHelper.clearAllCache();
 
         Path workDir = Files.createTempDirectory("riid-perf-b2-concurrent");
         try {

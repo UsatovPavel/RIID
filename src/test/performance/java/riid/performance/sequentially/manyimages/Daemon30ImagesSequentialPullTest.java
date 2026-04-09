@@ -17,6 +17,7 @@ import riid.config.PopularDockerHubImagesFromProgramDocs;
 import riid.core.config.TestConfigYaml;
 import riid.core.config.TestRegistryConfig;
 import riid.performance.DaemonUnixSocketPullSupport;
+import riid.performance.PerformanceColdCacheHelper;
 import riid.core.fs.TestFilesystemSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,10 +25,12 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * PR15 scenario b1 (moderate): same first 30 repositories as
- * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES}, sequential pulls,
+ * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES}, sequential pulls.
+ * Перед фазой (1) один вызов {@link PerformanceColdCacheHelper#clearAllCache()} (Podman + опционально RIID).
+ * Далее:
  * (1) via an already running RIID daemon ({@code POST /pull}, {@code runtimeId: podman}),
- * (2) then native {@code podman pull} for each, after a single {@code podman system prune -af}
- * at the start of the Podman phase.
+ * (2) then native {@code podman pull} for each, after {@code podman system prune -af} immediately
+ * before that Podman phase ({@link #coldPodmanCacheThenMeasuredPulls()}).
  *
  * <p>{@link #podmanPhaseOnly()} — только шаг (2), без демона.
  *
@@ -50,6 +53,9 @@ class Daemon30ImagesSequentialPullTest {
 
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
+
+        assumeTrue(commandAvailable("podman"), "podman must be on PATH");
+        PerformanceColdCacheHelper.clearAllCache();
 
         long testStartNs = System.nanoTime();
 
@@ -87,11 +93,8 @@ class Daemon30ImagesSequentialPullTest {
         System.out.println("[Daemon30ImagesSequentialPullTest] riid_sum_pull_ms=" + riidSumPullMs
                 + " riid_phase_wall_ms=" + riidPhaseWallMs);
 
-        assumeTrue(commandAvailable("podman"), "podman must be on PATH");
-        runOrFail("podman", "system", "prune", "-af");
-
         long podmanPhaseStart = System.nanoTime();
-        List<Long> podmanPullMsList = measuredPodmanPulls();
+        List<Long> podmanPullMsList = coldPodmanCacheThenMeasuredPulls();
         long podmanPhaseWallMs = (System.nanoTime() - podmanPhaseStart) / 1_000_000L;
         long podmanSumPullMs = sum(podmanPullMsList);
         System.out.println("[Daemon30ImagesSequentialPullTest] podman_pull_ms_list=" + podmanPullMsList);
@@ -104,14 +107,18 @@ class Daemon30ImagesSequentialPullTest {
                 + " podman_ok=" + podmanPullMsList.size() + '/' + N);
     }
 
-    /** Только {@code podman system prune -af} + 30× {@code podman pull} (как фаза b1); UDS/демон не нужны. */
+    /**
+     * Только шаг (2) b1: такой же старт, как у полного сценария —
+     * {@link PerformanceColdCacheHelper#clearAllCache()}, затем {@link #coldPodmanCacheThenMeasuredPulls()}.
+     * UDS/демон не нужны.
+     */
     @Test
     void podmanPhaseOnly() throws Exception {
         assumeTrue(commandAvailable("podman"), "podman must be on PATH");
         long testStartNs = System.nanoTime();
-        runOrFail("podman", "system", "prune", "-af");
+        PerformanceColdCacheHelper.clearAllCache();
         long podmanPhaseStart = System.nanoTime();
-        List<Long> podmanPullMsList = measuredPodmanPulls();
+        List<Long> podmanPullMsList = coldPodmanCacheThenMeasuredPulls();
         long podmanPhaseWallMs = (System.nanoTime() - podmanPhaseStart) / 1_000_000L;
         long podmanSumPullMs = sum(podmanPullMsList);
         System.out.println("[Daemon30ImagesSequentialPullTest] podman_pull_ms_list=" + podmanPullMsList);
@@ -122,7 +129,13 @@ class Daemon30ImagesSequentialPullTest {
                 + " podman_ok=" + podmanPullMsList.size() + '/' + N);
     }
 
-    /** После {@code podman system prune -af} снаружи — измеренные длительности 30 подряд {@code podman pull}. */
+    /** {@code podman system prune -af}, затем 30× измеренный {@code podman pull} (фаза Podman для b1). */
+    private static List<Long> coldPodmanCacheThenMeasuredPulls() throws Exception {
+        PerformanceColdCacheHelper.clearPodmanCaches();
+        return measuredPodmanPulls();
+    }
+
+    /** 30 подряд измеренных {@code podman pull} (без предварительного prune). */
     private static List<Long> measuredPodmanPulls() throws Exception {
         List<Long> podmanPullMsList = new ArrayList<>();
         String ref = PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE;
