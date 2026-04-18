@@ -18,6 +18,7 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import riid.cache.auth.TokenCache;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
@@ -75,7 +76,7 @@ class ManifestServiceHeadTest {
         HttpClient client = HttpClientFactory.create(cfg);
         HttpExecutor exec = new HttpExecutor(client, cfg);
         AuthService auth = new AuthService(exec, new ObjectMapper(), new TokenCache());
-        return new ManifestService(exec, auth, new ObjectMapper());
+        return new ManifestService(exec, auth, new ObjectMapper(), ClientPlatformConfig.fromHost());
     }
 
     private RegistryEndpoint endpoint() {

@@ -6,6 +6,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.junit.jupiter.api.Test;
 import riid.cache.auth.TokenCache;
 import riid.client.api.ManifestResult;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.Digests;
@@ -45,9 +46,43 @@ class ManifestServiceTest {
         http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers,
                 new ByteArrayInputStream(body), URI.create("https://x"));
 
-        ManifestService svc = new ManifestService(http, new NoAuth(), mapper);
+        ManifestService svc = new ManifestService(http, new NoAuth(), mapper, ClientPlatformConfig.fromHost());
 
         assertThrows(ClientException.class, () -> svc.fetchManifest(endpoint, "library/busybox", "latest", "scope"));
+    }
+
+    @Test
+    void throwsWhenIndexHasNoMatchingPlatform() {
+        byte[] body = """
+                {
+                  "schemaVersion": 2,
+                  "mediaType": "%s",
+                  "manifests": [
+                    {
+                      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "size": 1,
+                      "platform": {"architecture": "arm64", "os": "linux"}
+                    }
+                  ]
+                }
+                """.replace("\n", "%n")
+                .formatted(MediaTypes.OCI_IMAGE_INDEX)
+                .getBytes(StandardCharsets.UTF_8);
+        HttpFields.Mutable headers = HttpFields.build();
+        headers.add("Content-Type", MediaTypes.OCI_IMAGE_INDEX);
+
+        FakeHttp http = new FakeHttp();
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers,
+                new ByteArrayInputStream(body), URI.create("https://x"));
+
+        ManifestService svc = new ManifestService(
+                http, new NoAuth(), mapper, new ClientPlatformConfig("linux", "amd64"));
+
+        ClientException ex = assertThrows(
+                ClientException.class,
+                () -> svc.fetchManifest(endpoint, "library/x", "latest", "scope"));
+        assertTrue(ex.getMessage().contains("No manifest list entry for platform linux/amd64"));
     }
 
     @Test
@@ -69,7 +104,7 @@ class ManifestServiceTest {
         http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers,
                 new ByteArrayInputStream(body), URI.create("https://x"));
 
-        ManifestService svc = new ManifestService(http, new NoAuth(), mapper);
+        ManifestService svc = new ManifestService(http, new NoAuth(), mapper, ClientPlatformConfig.fromHost());
 
         ManifestResult res = svc.fetchManifest(endpoint, "library/busybox", "latest", "scope");
 

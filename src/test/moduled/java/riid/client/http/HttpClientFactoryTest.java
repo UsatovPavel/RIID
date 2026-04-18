@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 
 import org.eclipse.jetty.client.HttpClient;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
@@ -25,9 +26,11 @@ class HttpClientFactoryTest {
         fs.writeString(caPath, TestConfigYaml.CERT_PEM);
         AuthConfig auth = new AuthConfig(300, null, null, caPath.toString());
 
-        HttpClient client = HttpClientFactory.create(defaultConfig(), auth);
+        HttpClientConfig cfg = defaultConfig();
+        HttpClient client = HttpClientFactory.create(cfg, auth);
         try {
             assertTrue(client.isStarted());
+            assertEquals(cfg.requestTimeout().toMillis(), client.getIdleTimeout());
         } finally {
             client.stop();
         }

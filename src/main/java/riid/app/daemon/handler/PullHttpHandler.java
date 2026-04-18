@@ -3,9 +3,12 @@ package riid.app.daemon.handler;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -13,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
@@ -22,15 +26,25 @@ import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Response;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
+import org.slf4j.MDC;
 
 import riid.app.cli.CliApplication;
 import riid.app.service.LoadOutcome;
 import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.metrics.DaemonPullHttpMetrics;
 import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
+import riid.core.logging.MdcContext;
 
 public final class PullHttpHandler extends Handler.Abstract {
     private static final String PULL_PATH = "/pull";
+
+    /** Optional: client-supplied correlation id for logs (validated; invalid → new UUID). */
+    public static final String HEADER_TRACE_ID = "X-Trace-Id";
+
+    /** Optional: alternate header for correlation id (same rules as {@link #HEADER_TRACE_ID}). */
+    public static final String HEADER_REQUEST_ID = "X-Request-Id";
+
+    private static final int TRACE_ID_MAX_LEN = 128;
 
     /**
      * Reserved repository name: if {@value #ENV_INTERNAL_ERROR_PROBE} is set (non-blank), POST /pull returns HTTP 500
@@ -118,6 +132,10 @@ public final class PullHttpHandler extends Handler.Abstract {
             return true;
         }
 
+        String traceId = resolveTraceId(request);
+        MdcContext.putTraceId(traceId);
+        MdcContext.putComponent("app");
+        MdcContext.putOperation("request");
         try {
             String probeEnv = System.getenv(ENV_INTERNAL_ERROR_PROBE);
             if (probeEnv != null && !probeEnv.isBlank()
@@ -155,6 +173,8 @@ public final class PullHttpHandler extends Handler.Abstract {
                 writeJson(response, callback, HttpStatus.INTERNAL_SERVER_ERROR_500,
                         new ErrorResponse("pull_failed", safeMessage(unwrapExecution(e))));
             }
+        } finally {
+            MdcContext.clearRequestContext();
         }
         return true;
     }
@@ -168,9 +188,10 @@ public final class PullHttpHandler extends Handler.Abstract {
     }
 
     private LoadOutcome executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
         long start = System.nanoTime();
-        Future<LoadOutcome> future = pullExecutor.submit(() ->
-                loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId()));
+        Future<LoadOutcome> future = pullExecutor.submit(
+                () -> runLoadWithMdc(mdcSnapshot, pullRequest));
         try {
             LoadOutcome result = future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
             pipelineMetrics.recordSuccess(start, result.tarBytes());
@@ -191,6 +212,74 @@ public final class PullHttpHandler extends Handler.Abstract {
             Thread.currentThread().interrupt();
             throw e;
         }
+    }
+
+    /**
+     * Restores pull MDC on the {@link #pullExecutor} thread (virtual threads do not inherit MDC).
+     */
+    private LoadOutcome runLoadWithMdc(Map<String, String> snapshot, DaemonPullRequest pullRequest) throws Exception {
+        Map<String, String> previous = MDC.getCopyOfContextMap();
+        try {
+            if (snapshot != null && !snapshot.isEmpty()) {
+                MDC.setContextMap(new HashMap<>(snapshot));
+            } else {
+                MDC.clear();
+            }
+            return loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId());
+        } finally {
+            if (previous != null && !previous.isEmpty()) {
+                MDC.setContextMap(previous);
+            } else {
+                MDC.clear();
+            }
+        }
+    }
+
+    static String resolveTraceId(Request request) {
+        return traceIdFromHttpFields(request.getHeaders());
+    }
+
+    /**
+     * Shared header logic (testable without a full {@link Request}).
+     */
+    static String traceIdFromHttpFields(HttpFields headers) {
+        if (headers == null) {
+            return UUID.randomUUID().toString();
+        }
+        String fromHeader = firstNonBlank(
+                headers.get(HEADER_TRACE_ID),
+                headers.get(HEADER_REQUEST_ID));
+        if (fromHeader != null) {
+            String trimmed = fromHeader.trim();
+            if (isValidClientTraceId(trimmed)) {
+                return trimmed;
+            }
+        }
+        return UUID.randomUUID().toString();
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        if (a != null && !a.isBlank()) {
+            return a;
+        }
+        if (b != null && !b.isBlank()) {
+            return b;
+        }
+        return null;
+    }
+
+    static boolean isValidClientTraceId(String value) {
+        if (value.isEmpty() || value.length() > TRACE_ID_MAX_LEN) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (Character.isLetterOrDigit(c) || c == '-' || c == '_' || c == '.' || c == ':') {
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     private void writeJson(Response response, Callback callback, int status, Object payload)

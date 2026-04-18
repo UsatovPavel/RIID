@@ -2,7 +2,7 @@
 
 ### Config
 - Registry endpoints via `RegistryEndpoint` (scheme/host/port/creds); list provided by external config/Orchestrator.
-- HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, configurable `backoffExponentBase`, User-Agent, followRedirects=true для GHCR CDN 302/307).
+- HTTP client: `HttpClientConfig` (timeouts, idempotent GET retries, backoff, configurable `backoffExponentBase`, User-Agent, followRedirects=true для GHCR CDN 302/307). Default `client.http.requestTimeout` is **PT30M** (single registry HTTP request including large blob streaming). Jetty `HttpClient` **idle** timeout is set from the same `requestTimeout` (avoids default ~30s idle cutting off stalled blob reads while the overall request budget is longer).
 - TLS/Auth client wiring: `AuthConfig` supports `defaultTokenTtlSeconds`, `certPath`, `keyPath`, `caPath`.
   - `certPath` + `keyPath` are used as mTLS client cert/key pair.
   - `caPath` is used as custom CA trust source.
