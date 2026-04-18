@@ -327,6 +327,25 @@ class PullHttpHandlerHttpStatusTest {
     }
 
     @Test
+    void clientManifestParseFailureReturns422() throws Exception {
+        pullExecutor = newPullExecutor();
+        startServer(newPullHandler((repo, ref, rt) -> {
+            throw new ClientException(
+                    new ClientError.Parse(
+                            ClientError.ParseKind.MANIFEST,
+                            "No manifest list entry for platform linux/amd64"),
+                    "No manifest list entry for platform linux/amd64");
+        }, pullExecutor));
+
+        ParsedResponse r = postPull(
+                "{\"repository\":\"library/clefos\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}");
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY_422, r.status());
+        assertEquals(DaemonPullErrorMapper.PullErrorCode.MANIFEST_NOT_SATISFIABLE.jsonValue(), r.json().path("code").asText());
+        assertTrue(r.json().path("message").asText().contains("linux/amd64"));
+    }
+
+    @Test
     void registryHttp401Returns404WithUnauthorizedJsonCode() throws Exception {
         pullExecutor = newPullExecutor();
         startServer(newPullHandler((repo, ref, rt) -> {

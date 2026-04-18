@@ -3,6 +3,8 @@ package riid.app.daemon.metrics;
 /**
  * Tar size buckets (MiB, binary) for metrics labels and dashboards,
  * plus sentinels when no bucket applies (timer {@code category} tag only).
+ * Dashboard sort order for {@code riid:image_load:tar_category_sortidx}: keep in sync with
+ * {@code config/metrics/prometheus-rules/riid-recording-rules.yaml}.
  */
 public enum ImageSizeBucket {
 

@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Tar size bucket load counts, and successful pipeline latency p50/p95 per `category` (histogram of `riid_image.load`).",
+  "description": "Tar size bucket load counts, and successful pipeline latency p50/p95 per `category` (histogram of `riid_image.load`). Bucket order uses recording rule `riid:image_load:tar_category_sortidx` (see `config/metrics/prometheus-rules/riid-recording-rules.yaml` + vmalert).",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -22,7 +22,7 @@
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "Successful loads with known tar size: `increase` count per `category` over the dashboard range. Uses **Bar chart** (not bar gauge) so all bars share one Y-axis from 0 to the global max count — avoids per-series max where every column looked 100% tall.",
+      "description": "Successful loads with known tar size: `increase` count per `category` over the dashboard range. Uses **Bar chart** (not bar gauge) so all bars share one Y-axis from 0 to the global max count — avoids per-series max where every column looked 100% tall. **X order**: multiply by `riid:image_load:tar_category_sortidx` (`sort_idx` via recording rule), then hide `sort_idx` in transform.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "fixed", "fixedColor": "blue" },
@@ -77,7 +77,7 @@
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(riid_image_load_tar_size_category_total[$__range])) by (category)",
+          "expr": "sum(increase(riid_image_load_tar_size_category_total[$__range])) by (category) * on(category) group_left(sort_idx) riid:image_load:tar_category_sortidx",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -86,11 +86,35 @@
         }
       ],
       "title": "Loads per tar size bucket (count in range; shared Y max)",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": false,
+                "field": "sort_idx"
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "sort_idx": true
+            },
+            "indexByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
       "type": "barchart"
     },
     {
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "Successful loads only (`result=success`), excluding `unknown` / `n_a`. Percentiles from Micrometer timer histogram (`riid_image_load_seconds_bucket`); aggregation window in query `[5m]` relative to each evaluation instant.",
+      "description": "Successful loads only (`result=success`), excluding `unknown` / `n_a`. Percentiles from Micrometer timer histogram (`riid_image_load_seconds_bucket`); aggregation window in query `[5m]` relative to each evaluation instant. Rows sorted by `sort_idx` via join with recording rule `riid:image_load:tar_category_sortidx`.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -119,7 +143,7 @@
         "cellHeight": "sm",
         "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
         "showHeader": true,
-        "sortBy": [{ "desc": false, "displayName": "category" }]
+        "sortBy": []
       },
       "pluginVersion": "10.0.0",
       "targets": [
@@ -144,6 +168,18 @@
           "legendFormat": "__auto",
           "range": false,
           "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "riid:image_load:tar_category_sortidx",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "C",
+          "hide": true
         }
       ],
       "title": "Load duration p50 / p95 by tar size bucket",
@@ -155,12 +191,39 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "Time 1": true },
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Value #C": true
+            },
             "indexByName": {},
             "renameByName": {
               "Value #A": "p50_s",
               "Value #B": "p95_s"
             }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": false,
+                "field": "sort_idx"
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "sort_idx": true
+            },
+            "indexByName": {},
+            "renameByName": {}
           }
         }
       ],

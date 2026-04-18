@@ -18,6 +18,7 @@ import riid.core.config.TestConfigYaml;
 import riid.core.config.TestRegistryConfig;
 import riid.core.fs.TestFilesystemSupport;
 import riid.performance.DaemonUnixSocketPullSupport;
+import riid.performance.PerformanceColdCacheHelper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,8 +42,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("filesystem")
 class DaemonBenchmarkColdCachePullsTest {
 
-    /** Directory to delete between RIID iterations when set (daemon should use this as cache/temp). */
-    public static final String ENV_RIID_PERF_CACHE_DIR = "RIID_PERF_CACHE_DIR";
+    /** @see PerformanceColdCacheHelper#ENV_RIID_PERF_CACHE_DIR */
+    public static final String ENV_RIID_PERF_CACHE_DIR = PerformanceColdCacheHelper.ENV_RIID_PERF_CACHE_DIR;
 
     private static final String RUNTIME = "podman";
     /** ~50 MiB tier from {@code PopularDockerImagesSizes.txt} ({@code library/irssi}). */
@@ -57,6 +58,8 @@ class DaemonBenchmarkColdCachePullsTest {
 
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
+
+        PerformanceColdCacheHelper.clearAllCache();
 
         Path workDir = Files.createTempDirectory("riid-perf-scenario-a");
         try {
@@ -103,14 +106,7 @@ class DaemonBenchmarkColdCachePullsTest {
     }
 
     private static void coldCachesForRiidIteration() throws Exception {
-        runOrFail("podman", "system", "prune", "-af");
-        String cacheDir = System.getenv(ENV_RIID_PERF_CACHE_DIR);
-        if (cacheDir != null && !cacheDir.isBlank()) {
-            Path p = Path.of(cacheDir);
-            if (Files.isDirectory(p)) {
-                TestFilesystemSupport.deleteRecursive(p);
-            }
-        }
+        PerformanceColdCacheHelper.clearAllCache();
     }
 
     private static String podmanImageReference(String repository, String reference) {

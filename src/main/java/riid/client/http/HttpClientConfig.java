@@ -20,7 +20,7 @@ public record HttpClientConfig(
         @JsonProperty("maxRedirects") int maxRedirects
 ) {
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
     private static final int DEFAULT_MAX_RETRIES = 2;
     private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofMillis(200);
     private static final Duration DEFAULT_MAX_BACKOFF = Duration.ofSeconds(2);

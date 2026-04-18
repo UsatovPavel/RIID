@@ -21,6 +21,9 @@ import riid.client.core.error.ClientException;
  *
  * Registry blocked by allowedRegistries becomes HTTP 403 with registry_not_allowed. Missing runtime adapter becomes HTTP 422 with adapter_not_found.
  *
+ * <p>Manifest resolution that cannot satisfy the configured platform (e.g. empty or non-matching manifest list)
+ * becomes HTTP 422 with manifest_not_satisfiable.
+ *
  * Registry 5xx is not handled here; the handler responds with HTTP 500 and pull_failed.
  */
 public final class DaemonPullErrorMapper {
@@ -43,7 +46,10 @@ public final class DaemonPullErrorMapper {
 
         REGISTRY_RESPONSE_FORBIDDEN("registry_response_forbidden"),
 
-        REGISTRY_RESPONSE_OTHER("registry_response_other");
+        REGISTRY_RESPONSE_OTHER("registry_response_other"),
+
+        /** Manifest list/index cannot supply an image for the client platform (or empty list, parse failure). */
+        MANIFEST_NOT_SATISFIABLE("manifest_not_satisfiable");
 
         private final String jsonValue;
 
@@ -105,6 +111,13 @@ public final class DaemonPullErrorMapper {
     }
 
     private static Optional<MappedHttpError> mapClientException(ClientException e) {
+        if (e.error() instanceof ClientError.Parse parse
+                && parse.kind() == ClientError.ParseKind.MANIFEST) {
+            return Optional.of(new MappedHttpError(
+                    HttpStatus.UNPROCESSABLE_ENTITY_422,
+                    PullErrorCode.MANIFEST_NOT_SATISFIABLE,
+                    safeMessage(e)));
+        }
         if (!(e.error() instanceof ClientError.Http http) || http.status() == null) {
             return Optional.empty();
         }

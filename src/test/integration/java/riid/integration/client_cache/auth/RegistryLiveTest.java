@@ -8,6 +8,7 @@ import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
@@ -48,7 +49,8 @@ public class RegistryLiveTest {
     private final HttpClient httpClient = HttpClientFactory.create(httpConfig);
     private final HttpExecutor http = new HttpExecutor(httpClient, httpConfig);
     private final AuthService authService = new AuthService(http, mapper, new TokenCache());
-    private final ManifestService manifestService = new ManifestService(http, authService, mapper);
+    private final ManifestService manifestService = new ManifestService(http, authService, mapper,
+            ClientPlatformConfig.fromHost());
     private final BlobService blobService = new BlobService(http, authService);
 
     @Test

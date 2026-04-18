@@ -28,11 +28,13 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * PR15 scenario (c): assume RIID daemon already holds layers for the fixture list (warm cache).
  * Implementation: sequential {@code POST /pull} for all
- * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES}, then {@code podman system prune -af}
- * only (RIID cache unchanged), then all 30 {@code POST /pull} in parallel ({@code runtimeId: podman}).
+ * {@link PopularDockerHubImagesFromProgramDocs#SCENARIO_C_WARM_REPOSITORIES} (subset of the PR15 thirty:
+ * excludes {@code library/clefos}, which commonly mismatches amd64 manifests on Docker Hub), then
+ * {@code podman system prune -af}
+ * only (RIID cache unchanged), then the same {@code POST /pull} requests in parallel ({@code runtimeId: podman}).
  *
  * <p>Requires external daemon, {@link TestConfigYaml#resolveDaemonUnixSocketPath()}, Linux, curl, podman,
- * network; {@code app.daemon.maxConcurrentPulls} should accommodate 30 concurrent pulls.
+ * network; {@code app.daemon.maxConcurrentPulls} should accommodate concurrent pulls for this fixture size.
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
@@ -40,7 +42,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest {
 
     private static final String RUNTIME = "podman";
-    private static final int N = PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES.size();
+    private static final int N = PopularDockerHubImagesFromProgramDocs.SCENARIO_C_WARM_REPOSITORIES.size();
 
     @Test
     void sequentialWarmRiidThenPrunePodmanThenConcurrentPulls() throws Exception {
@@ -50,7 +52,7 @@ class Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest {
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
 
-        List<String> repos = PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES;
+        List<String> repos = PopularDockerHubImagesFromProgramDocs.SCENARIO_C_WARM_REPOSITORIES;
         String ref = PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE;
 
         Path workDir = Files.createTempDirectory("riid-perf-scen-c");

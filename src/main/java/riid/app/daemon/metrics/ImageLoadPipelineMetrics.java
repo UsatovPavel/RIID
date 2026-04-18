@@ -1,5 +1,6 @@
 package riid.app.daemon.metrics;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -17,6 +18,12 @@ public final class ImageLoadPipelineMetrics {
 
     /** SLO cohort: throughput for pulls with tar &gt;= 10 MiB. */
     private static final long MIN_SLO_TAR_BYTES = 10L * 1024 * 1024;
+
+    /**
+     * Upper bound for {@link #publishPercentileHistogram()} buckets (matches typical daemon
+     * {@code requestTimeout}, so p50/p95 are not stuck at the default ~30s last finite {@code le}).
+     */
+    private static final Duration LOAD_HISTOGRAM_MAX = Duration.ofMinutes(30);
 
     private enum MetricName {
         LOAD("riid.image.load"),
@@ -89,6 +96,7 @@ public final class ImageLoadPipelineMetrics {
                 .tag("result", result)
                 .tag("category", sizeBucket.metricLabel())
                 .publishPercentileHistogram()
+                .maximumExpectedValue(LOAD_HISTOGRAM_MAX)
                 .register(registry)
                 .record(elapsedNanos, TimeUnit.NANOSECONDS);
     }
