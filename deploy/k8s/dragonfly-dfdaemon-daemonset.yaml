@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dfdaemon
+  namespace: riid-system
+  labels:
+    app.kubernetes.io/name: dfdaemon
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dfdaemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dfdaemon
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
+      containers:
+        - name: dfdaemon
+          image: dragonflyoss/client:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - dfdaemon
+            - --config
+            - /etc/dragonfly/dfget.yaml
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dragonfly/dfget.yaml
+              subPath: dfget.yaml
+            - name: var-run-dragonfly
+              mountPath: /var/run/dragonfly
+            - name: var-lib-dragonfly
+              mountPath: /var/lib/dragonfly
+            - name: var-cache-dragonfly
+              mountPath: /var/cache/dragonfly
+      volumes:
+        - name: config
+          configMap:
+            name: dfdaemon-config
+        - name: var-run-dragonfly
+          hostPath:
+            path: /var/run/dragonfly
+            type: DirectoryOrCreate
+        - name: var-lib-dragonfly
+          hostPath:
+            path: /var/lib/dragonfly
+            type: DirectoryOrCreate
+        - name: var-cache-dragonfly
+          hostPath:
+            path: /var/cache/dragonfly
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dfdaemon-config
+  namespace: riid-system
+data:
+  dfget.yaml: |
+    download:
+      protocol: tcp
+      server:
+        socketPath: /var/run/dragonfly/dfdaemon.sock
+    daemon:
+      dataDir: /var/lib/dragonfly
+      cacheDir: /var/cache/dragonfly
+    scheduler:
+      netAddrs:
+        - "dfscheduler.dragonfly-system.svc.cluster.local:65002"
+      enableBackToSource: true
