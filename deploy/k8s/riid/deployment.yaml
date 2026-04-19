@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: riid
+  namespace: riid-system
+  labels:
+    app.kubernetes.io/name: riid
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: riid
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: riid
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9090"
+    spec:
+      containers:
+        - name: riid
+          image: riid:k8s
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: RIID_CONFIG
+              value: /etc/riid/config.yaml
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          volumeMounts:
+            - name: riid-config
+              mountPath: /etc/riid/config.yaml
+              subPath: config.yaml
+            - name: dragonfly-sock
+              mountPath: /var/run/dragonfly
+      volumes:
+        - name: riid-config
+          configMap:
+            name: riid-config
+        - name: dragonfly-sock
+          hostPath:
+            path: /var/run/dragonfly
+            type: DirectoryOrCreate
