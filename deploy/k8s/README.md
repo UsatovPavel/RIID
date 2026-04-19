@@ -21,11 +21,8 @@ kubectl apply -f deploy/k8s/riid/deployment.yaml
 kubectl apply -f deploy/k8s/riid/service.yaml
 ```
 
-## Build and push RIID image (example)
+## Image from CI (GitHub Actions → GHCR)
 
-```bash
-docker build -f deploy/k8s/riid/Dockerfile.k8s -t <registry>/riid:k8s .
-docker push <registry>/riid:k8s
 ```
 
 Then update `image:` in `deploy/k8s/riid/deployment.yaml`.
