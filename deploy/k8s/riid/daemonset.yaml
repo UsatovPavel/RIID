@@ -1,15 +1,18 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: riid
   namespace: riid-system
   labels:
     app.kubernetes.io/name: riid
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: riid
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   template:
     metadata:
       labels:
@@ -19,9 +22,18 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "9090"
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
       containers:
         - name: riid
-          image: riid:k8s
+          image: ghcr.io/usatovpavel/riid:v0.3.1
           imagePullPolicy: IfNotPresent
           env:
             - name: RIID_CONFIG
