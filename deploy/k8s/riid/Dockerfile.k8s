@@ -1,0 +1,43 @@
+FROM gradle:jdk23 AS builder
+
+WORKDIR /workspace
+
+# Optional GitHub Packages credentials for java-dragonfly-image-puller dependency.
+ARG GITHUB_ACTOR
+ARG GITHUB_PACKAGES_TOKEN
+
+COPY gradlew gradlew
+COPY gradle gradle
+COPY build.gradle.kts settings.gradle.kts ./
+COPY buildSrc buildSrc
+
+RUN chmod +x gradlew
+
+# Prime Gradle caches before copying full sources.
+RUN ./gradlew --no-daemon -q help || true
+
+COPY src src
+COPY config config
+COPY scripts scripts
+
+RUN if [ -n "$GITHUB_ACTOR" ] && [ -n "$GITHUB_PACKAGES_TOKEN" ]; then \
+      ./gradlew --no-daemon -Dorg.gradle.project.gpr.user="$GITHUB_ACTOR" -Dorg.gradle.project.gpr.key="$GITHUB_PACKAGES_TOKEN" clean shadowJar ; \
+    else \
+      ./gradlew --no-daemon clean shadowJar ; \
+    fi
+
+FROM eclipse-temurin:23-jre
+
+WORKDIR /opt/riid
+
+# Keep defaults aligned with config/config.yaml unless overridden by env.
+ENV RIID_CONFIG=/etc/riid/config.yaml
+ENV JAVA_OPTS=""
+
+COPY --from=builder /workspace/build/libs/riid.jar /opt/riid/riid.jar
+COPY config/config.yaml /etc/riid/config.yaml
+
+EXPOSE 9090
+
+# K8s-oriented default: daemon mode with explicit config path.
+ENTRYPOINT ["/bin/sh", "-c", "exec java $JAVA_OPTS -jar /opt/riid/riid.jar --daemon --config $RIID_CONFIG"]
