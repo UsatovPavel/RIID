@@ -21,7 +21,9 @@ import riid.app.cli.CliApplication;
 import riid.app.core.config.AppConfig;
 import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
+import riid.app.daemon.handler.HealthHttpHandler;
 import riid.app.daemon.handler.MetricsHttpHandler;
+import riid.app.daemon.handler.NotFoundHttpHandler;
 import riid.app.daemon.handler.PullHttpHandler;
 import riid.app.daemon.metrics.DaemonPullHttpMetrics;
 import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
@@ -85,6 +87,8 @@ public final class DaemonServer {
             new ImageLoadPipelineMetrics(prometheusRegistry)
         ));
         root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME, prometheusRegistry));
+        root.addHandler(new HealthHttpHandler());
+        root.addHandler(new NotFoundHttpHandler());
         server.setHandler(root);
     }
 
