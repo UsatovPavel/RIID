@@ -20,13 +20,13 @@ This directory matches how CI runs Dragonfly: **full stack via Helm** (`scripts/
 ## Apply manifests
 
 ```bash
-# Selectech setup
-export KUBECONFIG="$PWD/deploy/k8s/Selectech/tatum.yaml"
+# Selectech: kubeconfig-файл в deploy/k8s/Selectech/ (по умолчанию serverConfig.yaml; имя admin@… берётся из current-context)
+export KUBECONFIG="$PWD/deploy/k8s/Selectech/serverConfig.yaml"
 kubectl config get-contexts
-kubectl config use-context admin@tatum
+kubectl config current-context
 kubectl get nodes -o wide
 
-# 0) Тома: на Selectech (Cinder) — пометить класс как default (повторяй после сброса кластера или смены default)
+# 0) Тома: на Selectech (Cinder) — пометить класс как default (переименованный kubeconfig: make … CONFIG_FILE=другой.yaml)
 make -C deploy/k8s/Selectech storage-default
 #    Альтернатива без OpenStack: kubectl apply -f deploy/k8s/storage/local-path-storage.yaml
 kubectl get storageclass
@@ -43,6 +43,23 @@ kubectl apply -f deploy/k8s/riid/configmap.yaml
 kubectl apply -f deploy/k8s/riid/daemonset.yaml
 kubectl apply -f deploy/k8s/riid/service.yaml
 ```
+
+## Docker Hub: Secret без дублирования YAML
+
+Источник правды — `deploy/k8s/riid/configmap.yaml` (`data["config.yaml"]`). Скрипт **не копипастит** конфиг: берёт этот ConfigMap, подставляет `client.registries[]` → `registry-1.docker.io` → `credentials` из `deploy/k8s/riid/.env` и собирает Secret `riid-config-secret`.
+
+1. **yq** нужен [mikefarah/yq](https://github.com/mikefarah/yq) **v4** (не пакет `python-yq`). Пример для Linux x86_64:  
+   `sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq` — проверка: `yq --version` (должно быть `version 4.x`). Другая архитектура — см. [releases](https://github.com/mikefarah/yq/releases). Ещё нужен `kubectl`.
+2. `cp deploy/k8s/riid/.env.example deploy/k8s/riid/.env` — задайте `RIID_DOCKERHUB_USER` и `RIID_DOCKERHUB_TOKEN` (пароль или PAT; при необходимости примет и `RIID_DOCKERHUB_PASSWORD`).
+3. `make -C deploy/k8s/Selectech install-riid` (подхватит `.env` и зальёт `riid-config-secret`), **или** вручную: `bash deploy/k8s/riid/render-riid-config-secret.sh --apply`, затем при необходимости `kubectl -n riid-system rollout restart daemonset riid`.
+
+DaemonSet: initContainer пишет в emptyDir **либо** `config.yaml` из Secret (если есть), **либо** из ConfigMap.
+
+Переменные: `RIID_CONFIGMAP_YAML` / `RIID_ENV_FILE` — путь к ConfigMap-манифесту и к `.env`, если не лежат рядом со скриптом.
+
+Снова без учётки: `kubectl -n riid-system delete secret riid-config-secret` и `rollout restart` DaemonSet.
+
+**Отдельно:** если образ `ghcr.io/.../riid` **приватный**, нужен `imagePullSecrets` на ServiceAccount/поде — это не то же самое, что логин к Docker Hub для OCI-запросов внутри RIID.
 
 To tune Dragonfly (replicas, images), edit `scripts/values.yaml` at the repo root and re-run `install-dragonfly.sh`.
 
