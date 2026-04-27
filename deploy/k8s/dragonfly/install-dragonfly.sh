@@ -21,6 +21,26 @@ if [[ ! -f "${VALUES}" ]]; then
   exit 1
 fi
 
+# Без KUBECONFIG helm/kubectl идут на http://127.0.0.1:8080. При отсутствии переменной
+# пробуем стандартный путь Selectech; иначе явный export.
+if [[ -z "${KUBECONFIG:-}" ]]; then
+  CANDIDATE_KUBECONFIG="${REPO_ROOT}/deploy/k8s/Selectech/serverConfig.yaml"
+  if [[ -f "${CANDIDATE_KUBECONFIG}" ]]; then
+    export KUBECONFIG="${CANDIDATE_KUBECONFIG}"
+    echo ">>> KUBECONFIG not set: using ${KUBECONFIG}" >&2
+  else
+    echo "KUBECONFIG is not set. Point it at your cluster kubeconfig, e.g.:" >&2
+    echo "  export KUBECONFIG=\"\$PWD/deploy/k8s/Selectech/serverConfig.yaml\"" >&2
+    echo "  # or: make -C deploy/k8s/Selectech connect  (stays in a shell with the same KUBECONFIG)" >&2
+    exit 1
+  fi
+fi
+
+if ! kubectl cluster-info &>/dev/null; then
+  echo "kubectl cannot reach the API (check KUBECONFIG and context). Current KUBECONFIG: ${KUBECONFIG}" >&2
+  exit 1
+fi
+
 echo ">>> Helm repo dragonfly"
 helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null || true
 helm repo update
