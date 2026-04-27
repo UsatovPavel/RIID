@@ -31,9 +31,31 @@ spec:
                     operator: DoesNotExist
                   - key: node-role.kubernetes.io/master
                     operator: DoesNotExist
+      # Если Secret riid-config-secret существует, его config.yaml копируется в emptyDir; иначе — из ConfigMap riid-config.
+      initContainers:
+        - name: pick-riid-config
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              if [ -f /sec/config.yaml ]; then
+                cp /sec/config.yaml /work/config.yaml
+              else
+                cp /cm/config.yaml /work/config.yaml
+              fi
+              chmod 644 /work/config.yaml
+          volumeMounts:
+            - name: riid-work
+              mountPath: /work
+            - name: riid-config-cm
+              mountPath: /cm
+            - name: riid-config-secret
+              mountPath: /sec
       containers:
         - name: riid
-          image: ghcr.io/usatovpavel/riid:v0.3.1
+          image: ghcr.io/usatovpavel/riid:v0.3.4
           imagePullPolicy: IfNotPresent
           env:
             - name: RIID_CONFIG
@@ -43,15 +65,21 @@ spec:
               containerPort: 9090
               protocol: TCP
           volumeMounts:
-            - name: riid-config
+            - name: riid-work
               mountPath: /etc/riid/config.yaml
               subPath: config.yaml
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
       volumes:
-        - name: riid-config
+        - name: riid-work
+          emptyDir: {}
+        - name: riid-config-cm
           configMap:
             name: riid-config
+        - name: riid-config-secret
+          secret:
+            secretName: riid-config-secret
+            optional: true
         - name: dragonfly-sock
           hostPath:
             path: /var/run/dragonfly
