@@ -19,7 +19,6 @@ import java.util.UUID;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
-import riid.core.fs.HostFilesystem;
 import riid.core.fs.PathSupport;
 
 /**
@@ -38,34 +37,29 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private volatile Puller sharedPuller;
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    HostFilesystem fs,
                                     DragonflyConfig config) {
-        this(endpoint, fs, config, RegistryAuthProvider.passthrough(),
+        this(endpoint, config, RegistryAuthProvider.passthrough(),
                 cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
     }
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    HostFilesystem fs,
                                     DragonflyConfig config,
                                     RegistryAuthProvider authProvider) {
-        this(endpoint, fs, config, authProvider,
+        this(endpoint, config, authProvider,
                 cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
     }
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    HostFilesystem fs,
                                     DragonflyConfig config,
                                     PullerFactory pullerFactory) {
-        this(endpoint, fs, config, RegistryAuthProvider.passthrough(), pullerFactory);
+        this(endpoint, config, RegistryAuthProvider.passthrough(), pullerFactory);
     }
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    HostFilesystem fs,
                                     DragonflyConfig config,
                                     RegistryAuthProvider authProvider,
                                     PullerFactory pullerFactory) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
-        Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
         this.authProvider = Objects.requireNonNull(authProvider, "authProvider");
         this.pullerFactory = Objects.requireNonNull(pullerFactory, "pullerFactory");

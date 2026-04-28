@@ -84,7 +84,7 @@ class DragonflyGrpcP2PExecutorTest {
         );
         HostFilesystem fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
-        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
+        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, config);
 
         var warmup = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
         assertTrue(warmup.isPresent(), "warmup p2p fetch should succeed");

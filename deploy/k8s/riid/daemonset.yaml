@@ -55,8 +55,13 @@ spec:
               mountPath: /sec
       containers:
         - name: riid
-          image: ghcr.io/usatovpavel/riid:v0.3.5
+          image: ghcr.io/usatovpavel/riid:v0.3.7
           imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - MKNOD
           env:
             - name: RIID_CONFIG
               value: /etc/riid/config.yaml
@@ -70,6 +75,8 @@ spec:
               subPath: config.yaml
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
+            - name: fuse-device
+              mountPath: /dev/fuse
       volumes:
         - name: riid-work
           emptyDir: {}
@@ -84,3 +91,7 @@ spec:
           hostPath:
             path: /var/run/dragonfly
             type: DirectoryOrCreate
+        - name: fuse-device
+          hostPath:
+            path: /dev/fuse
+            type: CharDevice

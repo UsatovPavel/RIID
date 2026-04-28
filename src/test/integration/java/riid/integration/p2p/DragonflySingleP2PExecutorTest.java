@@ -103,7 +103,7 @@ class DragonflySingleP2PExecutorTest {
         );
         fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
-        p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
+        p2p = new DragonflyGrpcP2PExecutor(endpoint, config);
     }
 
     @AfterAll
