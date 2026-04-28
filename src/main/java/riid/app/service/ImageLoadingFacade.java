@@ -298,7 +298,6 @@ public final class ImageLoadingFacade implements AutoCloseable {
             challengeTokenAuthProvider = new ChallengeTokenAuthProvider(httpConfig, authConfig);
             p2p = new DragonflyGrpcP2PExecutor(
                     endpoint,
-                    fs,
                     config.p2p().dragonfly(),
                     challengeTokenAuthProvider);
         }
