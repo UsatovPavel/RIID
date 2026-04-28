@@ -55,7 +55,7 @@ spec:
               mountPath: /sec
       containers:
         - name: riid
-          image: ghcr.io/usatovpavel/riid:v0.3.4
+          image: ghcr.io/usatovpavel/riid:v0.3.5
           imagePullPolicy: IfNotPresent
           env:
             - name: RIID_CONFIG
