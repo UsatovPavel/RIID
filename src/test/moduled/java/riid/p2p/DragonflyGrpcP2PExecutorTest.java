@@ -2,6 +2,7 @@ package riid.p2p;
 
 import riid.p2p.dragonfly.DragonflyConfig;
 import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
+import riid.p2p.dragonfly.RegistryAuthProvider;
 import ru.hse.dragonfly.puller.registry.RegistryAuth;
 import ru.hse.dragonfly.puller.blobpuller.PullResult;
 import ru.hse.dragonfly.puller.error.DragonflyPullErrorKind;
@@ -91,6 +92,32 @@ class DragonflyGrpcP2PExecutorTest {
         RegistryAuth.Basic auth = assertInstanceOf(RegistryAuth.Basic.class, factory.lastPuller.lastRequest.auth());
         assertEquals("u", auth.username());
         assertEquals("p", auth.password());
+    }
+
+    @Test
+    void usesAuthProviderForRegistryPullRequestAuth() throws IOException {
+        RegistryEndpoint endpoint = new RegistryEndpoint(
+                "https",
+                "registry.example.com",
+                -1,
+                Credentials.basic("u", "p")
+        );
+        HostFilesystem fs = new NioHostFilesystem();
+        riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        RecordingPullerFactory factory = new RecordingPullerFactory(Path.of("/tmp/p2p-result.bin"));
+        RegistryAuthProvider authProvider = (ep, repository) -> RegistryAuth.bearer("df-token");
+
+        riid.p2p.dragonfly.DragonflyGrpcP2PExecutor executor = new riid.p2p.dragonfly.DragonflyGrpcP2PExecutor(
+                endpoint,
+                fs,
+                config,
+                authProvider,
+                factory
+        );
+        executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
+
+        RegistryAuth.Bearer auth = assertInstanceOf(RegistryAuth.Bearer.class, factory.lastPuller.lastRequest.auth());
+        assertEquals("df-token", auth.token());
     }
 
     @Test
