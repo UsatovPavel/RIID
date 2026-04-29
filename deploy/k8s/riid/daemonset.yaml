@@ -31,6 +31,8 @@ spec:
                     operator: DoesNotExist
                   - key: node-role.kubernetes.io/master
                     operator: DoesNotExist
+                  - key: riid.monitoring
+                    operator: DoesNotExist
       # Если Secret riid-config-secret существует, его config.yaml копируется в emptyDir; иначе — из ConfigMap riid-config.
       initContainers:
         - name: pick-riid-config
