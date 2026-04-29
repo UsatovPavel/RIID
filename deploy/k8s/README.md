@@ -31,6 +31,10 @@ make -C deploy/k8s/Selectech storage-default
 #    Альтернатива без OpenStack: kubectl apply -f deploy/k8s/storage/local-path-storage.yaml
 kubectl get storageclass
 
+# 0b) Выделить monitoring-ноду (на ней НЕ должны запускаться RIID/dfdaemon): последняя worker
+make -C deploy/k8s/Selectel mark-monitoring-node-auto
+# или явная нода: MONITORING_NODE=<worker-node-name> make -C deploy/k8s/Selectel mark-monitoring-node-auto
+
 # Если Dragonfly уже ставили без томов и PVC висят в Pending — после шага 0: helm uninstall dragonfly -n dragonfly-system (или удалить PVC) и снова ./deploy/k8s/dragonfly/install-dragonfly.sh
 
 # 1) Full Dragonfly stack (manager, scheduler, client/dfdaemon, Redis, DB, …) — same values as CI
@@ -42,6 +46,12 @@ kubectl apply -f deploy/k8s/namespace.yaml
 kubectl apply -f deploy/k8s/riid/configmap.yaml
 kubectl apply -f deploy/k8s/riid/daemonset.yaml
 kubectl apply -f deploy/k8s/riid/service.yaml
+
+# 3) Metrics collector (vmagent DaemonSet, annotation-based scrape)
+kubectl apply -f deploy/k8s/monitoring/vmagent-rbac.yaml
+kubectl apply -f deploy/k8s/monitoring/vmagent-configmap.yaml
+kubectl apply -f deploy/k8s/monitoring/vmagent-daemonset.yaml
+kubectl -n riid-system rollout status daemonset/vmagent
 ```
 
 ## Docker Hub: Secret без дублирования YAML
@@ -77,9 +87,13 @@ kubectl -n dragonfly-system get pods,daemonset -o wide
 kubectl -n riid-system get daemonset riid
 kubectl -n riid-system get pods -l app.kubernetes.io/name=riid -o wide
 kubectl -n riid-system get svc riid-metrics
+kubectl -n riid-system get daemonset vmagent
 ```
 
 Dragonfly client pods and RIID should be Ready; dfdaemon socket on nodes comes from the Helm-managed client, not from a duplicate manifest in `riid-system`.
+
+`vmagent` is deployed as a DaemonSet and discovers scrape targets from `prometheus.io/*` annotations on pods/services.
+`riid` DaemonSet and Dragonfly `client` (dfdaemon) are constrained to nodes without label `riid.monitoring=true`.
 
 ### Найти под RIID на конкретной ноде
 
