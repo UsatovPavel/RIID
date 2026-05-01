@@ -3,8 +3,7 @@ package riid.app.daemon.metrics;
 /**
  * Tar size buckets (MiB, binary) for metrics labels and dashboards,
  * plus sentinels when no bucket applies (timer {@code category} tag only).
- * Dashboard sort order for {@code riid:image_load:tar_category_sortidx}: keep in sync with
- * {@code config/metrics/prometheus-rules/riid-recording-rules.yaml}.
+ * Stable bucket order for Grafana is {@link #sortIdxPadded()} (enum declaration order).
  */
 public enum ImageSizeBucket {
 
@@ -28,6 +27,13 @@ public enum ImageSizeBucket {
 
     ImageSizeBucket(String metricLabel) {
         this.metricLabel = metricLabel;
+    }
+
+    /**
+     * Zero-padded index for Grafana sort order (lexicographic order matches numeric 0…n).
+     */
+    public String sortIdxPadded() {
+        return String.format("%02d", ordinal());
     }
 
     /**
