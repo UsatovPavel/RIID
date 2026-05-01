@@ -57,7 +57,7 @@ spec:
               mountPath: /sec
       containers:
         - name: riid
-          image: ghcr.io/usatovpavel/riid:v0.3.7
+          image: ghcr.io/usatovpavel/riid:v0.3.8
           imagePullPolicy: IfNotPresent
           securityContext:
             capabilities:

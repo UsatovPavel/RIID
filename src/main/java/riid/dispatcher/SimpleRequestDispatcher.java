@@ -136,7 +136,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                                 try {
                                     fs.deleteIfExists(p2pPath.get());
                                 } catch (Exception ex) {
-                                    LOGGER.warn("Failed to delete temp p2p file {}: {}", p2pPath.get(), ex.getMessage());
+                                    LOGGER.warn(
+                                            "Failed to delete temp p2p file {}: {}",
+                                            p2pPath.get(),
+                                            ex.getMessage());
                                 }
                             }
                         } catch (ValidationException ve) {
