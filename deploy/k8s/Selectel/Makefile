@@ -262,7 +262,7 @@ install-all:
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-monitoring-observer
 # всё равно не работает
 
-# Зеркалирование 30 образов из performance-тестов (FIRST_30_REPOSITORIES) в приватный реестр.
+# Зеркалирование образов: объединение (без дубликатов) deploy/k8s/Selectel/registry/images_list.sizes.tsv и списка library/* из Java (PopularDockerHubImagesFromProgramDocs); см. скрипт.
 # В deploy/k8s/Selectech/.env: REGISTRY_USER, REGISTRY_PASSWORD, REGISTRY (например cr.selcloud.ru/my-registry).
 # Другой файл окружения: make init-performance-registry-images ENV_FILE=/path/.env
 ENV_FILE ?= $(SELECTEL_DIR)/.env
