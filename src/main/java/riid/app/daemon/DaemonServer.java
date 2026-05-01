@@ -13,8 +13,6 @@ import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 
@@ -33,7 +31,6 @@ import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
  * Embedded Jetty daemon server for local IPC over HTTP.
  */
 public final class DaemonServer {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DaemonServer.class);
     private static final String CONTROL_CONNECTOR_NAME = "control";
     private static final String METRICS_CONNECTOR_NAME = "metrics";
     private final Server server;
@@ -113,7 +110,6 @@ public final class DaemonServer {
     public void start() throws Exception {
         prepareSocketPath();
         server.start();
-        logStartedState();
     }
 
     /**
@@ -153,37 +149,6 @@ public final class DaemonServer {
             Files.deleteIfExists(unixSocketPath);
         } catch (IOException ignored) {
             // best effort on shutdown
-        }
-    }
-
-    private void logStartedState() {
-        LOGGER.info(
-                "daemon.server.started state={} started={} starting={} running={} connectors={}",
-                server.getState(),
-                server.isStarted(),
-                server.isStarting(),
-                server.isRunning(),
-                server.getConnectors().length
-        );
-        for (var connector : server.getConnectors()) {
-            if (connector instanceof ServerConnector sc) {
-                LOGGER.info(
-                        "daemon.server.connector name={} class={} localPort={} started={} running={}",
-                        connector.getName(),
-                        connector.getClass().getSimpleName(),
-                        sc.getLocalPort(),
-                        connector.isStarted(),
-                        connector.isRunning()
-                );
-            } else {
-                LOGGER.info(
-                        "daemon.server.connector name={} class={} started={} running={}",
-                        connector.getName(),
-                        connector.getClass().getSimpleName(),
-                        connector.isStarted(),
-                        connector.isRunning()
-                );
-            }
         }
     }
 }
