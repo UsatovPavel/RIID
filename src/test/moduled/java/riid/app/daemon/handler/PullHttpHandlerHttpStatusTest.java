@@ -30,7 +30,6 @@ import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 import riid.app.core.error.AppError;
 import riid.app.core.error.AppException;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
-import riid.app.daemon.handler.DaemonPullErrorMapper;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 

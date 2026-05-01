@@ -3,7 +3,7 @@
 # Нужен curl внутри образа: make install-smoke-utils (или цель вызывает её самостоятельно не делает).
 #
 # Env:
-#   SMOKE_REPOSITORY  — например library/busybox или jobber (без library/ для части приватных реестров)
+#   SMOKE_REPOSITORY  — уже разрешённый RIID repository (Makefile задаёт после smoke-resolve-repository.sh)
 #   SMOKE_REFERENCE   — тег (default: latest)
 #   RUNTIME_ID        — default: podman
 #   RIID_NAMESPACE    — default: riid-system

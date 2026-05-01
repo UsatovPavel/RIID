@@ -95,7 +95,9 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         } catch (CompletionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof DragonflyPullException dragonflyPullException) {
-                throw new IOException("dragonfly pull failed: " + dragonflyPullException.getMessage(), dragonflyPullException);
+                throw new IOException(
+                        "dragonfly pull failed: " + dragonflyPullException.getMessage(),
+                        dragonflyPullException);
             }
             throw new IOException("dragonfly pull failed: " + cause.getMessage(), cause);
         } catch (DragonflyPullException e) {
