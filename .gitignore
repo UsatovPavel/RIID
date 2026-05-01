@@ -57,3 +57,4 @@ deploy/k8s/Selectech/*
 !deploy/k8s/Selectech/.env.example
 !deploy/k8s/Selectech/Makefile
 !deploy/k8s/riid/.env.example
+!deploy/k8s/Selectech/init-performance-registry-images.sh

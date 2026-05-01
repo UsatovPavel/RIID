@@ -30,4 +30,12 @@ class ImageSizeBucketTest {
         assertEquals("unknown", ImageSizeBucket.UNKNOWN.metricLabel());
         assertEquals("n_a", ImageSizeBucket.NA.metricLabel());
     }
+
+    @Test
+    void sortIdxPaddedMatchesEnumOrder() {
+        assertEquals("00", ImageSizeBucket.MIB_0_5.sortIdxPadded());
+        assertEquals("02", ImageSizeBucket.MIB_10_50.sortIdxPadded());
+        assertEquals("10", ImageSizeBucket.UNKNOWN.sortIdxPadded());
+        assertEquals("11", ImageSizeBucket.NA.sortIdxPadded());
+    }
 }

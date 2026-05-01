@@ -95,6 +95,7 @@ public final class ImageLoadPipelineMetrics {
                 .description("End-to-end image load in daemon (loader pipeline)")
                 .tag("result", result)
                 .tag("category", sizeBucket.metricLabel())
+                .tag("sort_idx", sizeBucket.sortIdxPadded())
                 .publishPercentileHistogram()
                 .maximumExpectedValue(LOAD_HISTOGRAM_MAX)
                 .register(registry)
@@ -112,12 +113,14 @@ public final class ImageLoadPipelineMetrics {
         DistributionSummary.builder(MetricName.TAR_SIZE_BY_CATEGORY.value())
                 .description("Tar size in bytes per size bucket (for mean size vs latency dashboards)")
                 .tag("category", ImageSizeBucket.fromTarBytes(tarBytes).metricLabel())
+                .tag("sort_idx", ImageSizeBucket.fromTarBytes(tarBytes).sortIdxPadded())
                 .register(registry)
                 .record(tarBytes);
 
         Counter.builder(MetricName.TAR_SIZE_CATEGORY.value())
                 .description("Count of successful loads by tar size category (MiB buckets)")
                 .tag("category", ImageSizeBucket.fromTarBytes(tarBytes).metricLabel())
+                .tag("sort_idx", ImageSizeBucket.fromTarBytes(tarBytes).sortIdxPadded())
                 .register(registry)
                 .increment();
 
