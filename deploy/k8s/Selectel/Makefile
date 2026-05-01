@@ -12,7 +12,7 @@ RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
 MONITORING_NODE ?=
 
-.PHONY: connect nodes mark-monitoring-node-auto storage-default install-dragonfly secret-config secret-config-riid install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images rollout-riid-image-from-manifest
+.PHONY: connect nodes mark-monitoring-node-auto storage-default install-dragonfly secret-config secret-config-riid registry-dockerhub registry-selectel registry-apply-profile install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images rollout-riid-image-from-manifest
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -66,22 +66,32 @@ install-dragonfly:
 	kubectl config use-context "$$CTX"; \
 	"$(K8S)/dragonfly/install-dragonfly.sh"
 
-# Явно собрать/применить Secret riid-config-secret из $(K8S)/riid/.env.
-# Внутри config.yaml будут проставлены client.registries[*].credentials для registry-1.docker.io.
+# Явно собрать/применить Secret riid-config-secret из $(K8S)/riid/.env (профиль Docker Hub).
 secret-config: secret-config-riid
 
 secret-config-riid:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
+	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
+
+# Переключить client.registries в кластере (Secret + rollout riid). Нужен $(K8S)/riid/.env с нужными кредами.
+registry-dockerhub:
+	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
+
+registry-selectel:
+	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=selectel
+
+registry-apply-profile:
+	@if [ -z "$(PROFILE)" ]; then echo "registry-apply-profile: set PROFILE=dockerhub|selectel"; exit 1; fi; \
+	export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
-	[ -f "$(K8S)/riid/.env" ] || { echo "secret-config-riid: нет $(K8S)/riid/.env (см. riid/.env.example)"; exit 1; }; \
+	[ -f "$(K8S)/riid/.env" ] || { echo "registry-apply-profile: нет $(K8S)/riid/.env (см. riid/.env.example)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	bash "$(K8S)/riid/render-riid-config-secret.sh" --apply; \
+	bash "$(K8S)/riid/render-riid-config-secret.sh" --apply --profile "$(PROFILE)"; \
 	if kubectl -n riid-system get daemonset riid >/dev/null 2>&1; then \
 	  kubectl -n riid-system rollout restart daemonset riid; \
 	  kubectl -n riid-system rollout status daemonset riid; \
 	else \
-	  echo "secret-config-riid: daemonset/riid not found yet, restart skipped"; \
+	  echo "registry-apply-profile: daemonset/riid not found yet, restart skipped"; \
 	fi
 
 # Работает из любой cwd; манифесты: $(K8S)/…
@@ -199,8 +209,11 @@ wait-monitoring-observer:
 	kubectl port-forward -n riid-system svc/grafana 3000:3000
 
 # POST /pull в первом pod RIID (нужен curl: make install-smoke-utils). Другая нода: NODE=имя-ноды make smoke-download
-# Образы из make init-performance-registry-images на Selectel без префикса library/: SMOKE_REPOSITORY=jobber make smoke-download
+# smoke: SMOKE_REPOSITORY — имя как на Docker Hub (default library/jobber). Для Selectel зеркала:
+#   make init-performance-registry-images (пишет registry/performance-registry-smoke-map.tsv), затем SMOKE_REGISTRY_TARGET=selectel
 SMOKE_REPOSITORY ?= library/jobber
+SMOKE_REGISTRY_TARGET ?= dockerhub
+SMOKE_REPOSITORY_MAP_FILE ?=
 SMOKE_REFERENCE ?= latest
 RUNTIME_ID ?= podman
 smoke-download:
@@ -208,6 +221,9 @@ smoke-download:
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	REPO=$$(SMOKE_REGISTRY_TARGET="$(SMOKE_REGISTRY_TARGET)" \
+	  SMOKE_REPOSITORY_MAP_FILE="$(SMOKE_REPOSITORY_MAP_FILE)" \
+	  bash "$(SELECTEL_DIR)/registry/smoke-resolve-repository.sh" "$(SMOKE_REPOSITORY)"); \
 	if [ -n "$(NODE)" ]; then \
 	  POD=$$(kubectl -n riid-system get pods -l 'app.kubernetes.io/name=riid' --field-selector=spec.nodeName=$(NODE) -o jsonpath='{.items[0].metadata.name}'); \
 	else \
@@ -217,7 +233,7 @@ smoke-download:
 	kubectl -n riid-system exec -c riid "$$POD" -- \
 	  curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
 	  -H 'Content-Type: application/json' \
-	  -d '{"repository":"$(SMOKE_REPOSITORY)","reference":"$(SMOKE_REFERENCE)","runtimeId":"$(RUNTIME_ID)"}'
+	  -d "{\"repository\":\"$$REPO\",\"reference\":\"$(SMOKE_REFERENCE)\",\"runtimeId\":\"$(RUNTIME_ID)\"}"
 
 # POST /pull во всех pod RIID (по одному на ноду). Нужен curl: install-smoke-utils.
 smoke-download-all:
@@ -225,7 +241,10 @@ smoke-download-all:
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	SMOKE_REPOSITORY="$(SMOKE_REPOSITORY)" SMOKE_REFERENCE="$(SMOKE_REFERENCE)" RUNTIME_ID="$(RUNTIME_ID)" \
+	REPO=$$(SMOKE_REGISTRY_TARGET="$(SMOKE_REGISTRY_TARGET)" \
+	  SMOKE_REPOSITORY_MAP_FILE="$(SMOKE_REPOSITORY_MAP_FILE)" \
+	  bash "$(SELECTEL_DIR)/registry/smoke-resolve-repository.sh" "$(SMOKE_REPOSITORY)"); \
+	SMOKE_REPOSITORY="$$REPO" SMOKE_REFERENCE="$(SMOKE_REFERENCE)" RUNTIME_ID="$(RUNTIME_ID)" \
 	  bash "$(SELECTEL_DIR)/scripts/smoke-download-all-riid-pods.sh"
 
 # Selectech: default StorageClass → Dragonfly Helm → RIID (подряд; не параллелить с -j).
@@ -248,7 +267,7 @@ install-all:
 # Другой файл окружения: make init-performance-registry-images ENV_FILE=/path/.env
 ENV_FILE ?= $(SELECTEL_DIR)/.env
 init-performance-registry-images:
-	@"$(SELECTEL_DIR)/init-performance-registry-images.sh" "$(ENV_FILE)"
+	@"$(SELECTEL_DIR)/registry/init-performance-registry-images.sh" "$(ENV_FILE)"
 
 print-pod:
 	@export KUBECONFIG="$(KUBECONFIG)"; \

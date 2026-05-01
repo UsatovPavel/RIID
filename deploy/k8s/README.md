@@ -32,9 +32,9 @@ RIID and the Helm Dragonfly client run on workers; node `riid.monitoring=true` h
 **Granular (same order if not using `install-all`):**  
 `storage-default` · `mark-monitoring-node-auto` (`MONITORING_NODE=<node>` optional) · `install-dragonfly` · `install-riid` · `wait-riid-ready` · `install-metrics-collector` · `wait-metrics-collector` · `install-riid-runtimes` · `install-smoke-utils`.
 
-**Registry credentials:** put `deploy/k8s/riid/.env` (see `riid/.env.example`); `install-riid` runs `secret-config-riid` when the file exists. Later updates: `make -C deploy/k8s/Selectel secret-config-riid`.
+**Registry credentials:** put `deploy/k8s/riid/.env` (see `riid/.env.example`); `install-riid` runs `secret-config-riid` (Docker Hub profile) when the file exists. Switch registry in-cluster: `make -C deploy/k8s/Selectel registry-dockerhub` or `registry-selectel`; updates `secret-config-riid` flow uses `riid/registry/*.yaml` profiles.
 
-**Smoke pull:** `make -C deploy/k8s/Selectel smoke-download` (optional `NODE=…`, `SMOKE_REPOSITORY=…`).
+**Smoke pull:** `make -C deploy/k8s/Selectel smoke-download` — `SMOKE_REPOSITORY` — имя как на Docker Hub (default `library/jobber`). Для Selectel зеркала: `make init-performance-registry-images`, затем `SMOKE_REGISTRY_TARGET=selectel` (`deploy/k8s/Selectel/registry/performance-registry-smoke-map.tsv`).
 
 **Observer stack** (after labeling the monitoring node): not in Makefile—`kubectl apply -f deploy/k8s/monitoring/observer/victoria-metrics.yaml -f deploy/k8s/monitoring/observer/grafana.yaml`.
 

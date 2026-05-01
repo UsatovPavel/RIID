@@ -1,7 +1,8 @@
 package riid.dispatcher.metrics;
 
 /**
- * Counts layer fetches and payload bytes by logical source (aligned with {@link riid.dispatcher.SimpleRequestDispatcher} order).
+ * Counts layer fetches and payload bytes by logical source (aligned with
+ * {@link riid.dispatcher.SimpleRequestDispatcher} order).
  */
 public interface DispatcherLayerSourceMetrics {
 
