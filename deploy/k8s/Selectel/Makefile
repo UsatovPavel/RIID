@@ -184,7 +184,13 @@ sync-monitoring-observer-chart:
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	bash "$(OBSERVER_CHART)/apply-grafana-configmaps-from-repo.sh"
+	bash "$(OBSERVER_CHART)/apply-grafana-configmaps-from-repo.sh"; \
+	if kubectl -n riid-system get deploy/grafana >/dev/null 2>&1; then \
+	  kubectl rollout restart deployment/grafana -n riid-system; \
+	  kubectl rollout status deployment/grafana -n riid-system --timeout=180s; \
+	else \
+	  echo "sync-monitoring-observer-chart: deploy/grafana not in riid-system (restart skipped)." >&2; \
+	fi
 
 # VictoriaMetrics + Grafana + kube-state-metrics на monitoring-ноде (Helm). При первом переходе с kubectl apply: helm uninstall riid-observer -n riid-system.
 install-monitoring-observer: sync-monitoring-observer-chart

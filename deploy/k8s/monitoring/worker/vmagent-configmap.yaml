@@ -20,6 +20,10 @@ data:
           - action: drop
             source_labels: [__meta_kubernetes_pod_phase]
             regex: Pending|Succeeded|Failed|Completed
+          # Scraped via Service riid-metrics (kubernetes-service-endpoints-annotations); drop pod-target duplicates.
+          - action: drop
+            source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: riid
           - action: replace
             source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
             target_label: __scheme__
