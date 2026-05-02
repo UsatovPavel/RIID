@@ -97,7 +97,13 @@ grafana/grafana-image-renderer	latest	568959180	542.6 MiB
 rancher/rancher-agent	head	570892225	544.4 MiB
 library/elasticsearch	9.3.4	720363761	687.0 MiB
 library/sonarqube	latest	1069502454	1020.0 MiB
-ai/llama3.2	latest	2019391173	1.9 GiB
 library/openjdk	27-ea-windowsservercore-ltsc2025	2355738456	2.2 GiB
+ollama/ollama	rocm	1503238554	1.4 GiB
+pytorch/pytorch	2.11.0-cuda12.8-cudnn9-devel	14065618896	13.1 GiB
+cimg/android	2026.03.1-ndk	5003635700	4.66 GiB
+linuxserver/faster-whisper	3.1.0-gpu	1610612736	1.5 GiB
+pytorch/almalinux-builder	cuda13.2-44c38d967b9e69e8191c1ecbf5b67f890584f8a3	7196069581	6.7 GiB
+pytorch/torchserve	0.12.0-cpp-dev-gpu	5153960755	4.8 GiB
+ai/llama3.2	latest	2019391173	1.9 GiB
 ai/gemma3	latest	3341306506	3.1 GiB
 ai/qwen3	latest	5027795228	4.7 GiB

@@ -12,7 +12,7 @@ RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
 MONITORING_NODE ?=
 
-.PHONY: connect nodes mark-monitoring-node-auto storage-default install-dragonfly secret-config secret-config-riid registry-dockerhub registry-selectel registry-apply-profile install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images rollout-riid-image-from-manifest
+.PHONY: connect nodes mark-monitoring-node-auto storage-default install-dragonfly secret-config secret-config-riid registry-dockerhub registry-selectel registry-apply-profile install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -269,11 +269,19 @@ install-all:
 # всё равно не работает
 
 # Зеркалирование образов: объединение (без дубликатов) deploy/k8s/Selectel/registry/images_list.sizes.tsv и списка library/* из Java (PopularDockerHubImagesFromProgramDocs); см. скрипт.
+# Инкремент (только новые строки снизу TSV): один раз make init-performance-registry-images-state-init, затем make init-performance-registry-images-incremental.
 # В deploy/k8s/Selectech/.env: REGISTRY_USER, REGISTRY_PASSWORD, REGISTRY (например cr.selcloud.ru/my-registry).
 # Другой файл окружения: make init-performance-registry-images ENV_FILE=/path/.env
 ENV_FILE ?= $(SELECTEL_DIR)/.env
 init-performance-registry-images:
 	@"$(SELECTEL_DIR)/registry/init-performance-registry-images.sh" "$(ENV_FILE)"
+
+init-performance-registry-images-state-init:
+	@"$(SELECTEL_DIR)/registry/init-performance-registry-images-incremental.sh" --init-state "$(ENV_FILE)"
+
+# Опции: REGISTRY_INCREMENTAL_ARGS='--from-line 104' или --no-update-state
+init-performance-registry-images-incremental:
+	@"$(SELECTEL_DIR)/registry/init-performance-registry-images-incremental.sh" $(REGISTRY_INCREMENTAL_ARGS) "$(ENV_FILE)"
 
 print-pod:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
