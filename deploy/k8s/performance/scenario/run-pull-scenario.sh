@@ -163,8 +163,7 @@ run_for_current_image() {
 
 if [[ -n "$OUTPUT_TSV" ]]; then
   mkdir -p "$(dirname "$OUTPUT_TSV")"
-  emit_header >"$OUTPUT_TSV"
-  exec > >(tee -a "$OUTPUT_TSV")
+  exec > >(tee "$OUTPUT_TSV")
 fi
 
 emit_header

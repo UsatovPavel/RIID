@@ -5,6 +5,7 @@ K8S := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 OBSERVER_CHART := $(K8S)/monitoring/helm/riid-observer
 KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
 LOCAL_REGISTRY_MANIFEST := $(K8S)/performance/registry/local-registry.yaml
+DRAGONFLY_PULL_SECRET_SCRIPT := $(K8S)/dragonfly/setup-dockerhub-pull-secret.sh
 
 # OpenStack Cinder: класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
 # Переопределить: make storage-default STORAGE_CLASS=другой-класс
@@ -14,8 +15,9 @@ RIID_WAIT_TIMEOUT ?= 600
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
 PERF_REGISTRY_DATASET ?= $(K8S)/performance/input/dataset_a.tsv
+INSTALL_SMOKE_UTILS_CONCURRENCY ?= 4
 
-.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly secret-config secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile install-local-registry wait-local-registry load-performance-registry-dataset install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
+.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly dragonfly-dockerhub-pull-secret secret-config secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile install-local-registry wait-local-registry load-performance-registry-dataset install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -81,7 +83,15 @@ storage-default:
 		-p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
 # Новый конфиг Dragonfly: правите repo root scripts/values.yaml, затем снова эта цель (helm upgrade --install).
+dragonfly-dockerhub-pull-secret:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(DRAGONFLY_PULL_SECRET_SCRIPT)"
+
 install-dragonfly:
+	@$(MAKE) -C "$(SELECTEL_DIR)" dragonfly-dockerhub-pull-secret
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
@@ -207,12 +217,17 @@ install-riid-runtimes:
 install-smoke-utils:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	case "$(INSTALL_SMOKE_UTILS_CONCURRENCY)" in ''|*[!0-9]*|0) echo "install-smoke-utils: INSTALL_SMOKE_UTILS_CONCURRENCY must be a positive integer"; exit 1;; esac; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	for p in $$(kubectl -n riid-system get pods -l app.kubernetes.io/name=riid -o name); do \
-	  echo ">>> $$p"; \
-	  kubectl -n riid-system exec -c riid "$$p" -- sh -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends curl'; \
-	done; \
+	pods="$$(kubectl -n riid-system get pods -l app.kubernetes.io/name=riid -o name)"; \
+	[ -n "$$pods" ] || { echo "install-smoke-utils: no riid pods found"; exit 1; }; \
+	printf '%s\n' "$$pods" \
+	  | xargs -r -P "$(INSTALL_SMOKE_UTILS_CONCURRENCY)" -I {} sh -c ' \
+	      p="$$1"; \
+	      echo ">>> $$p"; \
+	      kubectl -n riid-system exec -c riid "$$p" -- sh -c '"'"'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends curl'"'"'; \
+	    ' _ {}; \
 	echo "Done. Smoke POST /pull: deploy/k8s/internalDocs.md" >&2
 
 # vmagent (DaemonSet) для сбора метрик по prometheus-аннотациям pod/service.

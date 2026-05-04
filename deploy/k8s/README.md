@@ -2,6 +2,14 @@
 
 Kubernetes manifests for **RIID** + **Dragonfly** (same Helm values as CI: root `scripts/values.yaml`). One Dragonfly client only—in `dragonfly-system`; do not add dfdaemon in `riid-system`. Java-side notes: **internalDocs/moduledocs/**.
 
+### Env 
+in riid/ directory
+```.env
+RIID_DOCKERHUB_USER=
+RIID_DOCKERHUB_TOKEN=
+RIID_SELECTEL_USER=
+RIID_SELECTEL_TOKEN=
+```
 ### Layout
 
 `namespace.yaml` · `riid/` (DaemonSet, ConfigMap, Service, `.env` → Secret) · `dragonfly/install-dragonfly.sh` · `storage/local-path-storage.yaml` (optional default SC) · `monitoring/worker/` (vmagent) · `monitoring/observer/` (VictoriaMetrics, Grafana) · **`Selectel/Makefile`** — deploy commands below.

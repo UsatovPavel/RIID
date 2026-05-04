@@ -39,6 +39,14 @@ run:
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	out="$(OUTPUT_TSV)"; \
+	if [ -z "$$out" ]; then \
+	  if [ "$(BACKEND)" = "riid" ]; then \
+	    out="$(RIID_RESULTS)"; \
+	  else \
+	    out="$(PODMAN_RESULTS)"; \
+	  fi; \
+	fi; \
 	MODE="$(MODE)" \
 	BACKEND="$(BACKEND)" \
 	CONCURRENCY="$(CONCURRENCY)" \
@@ -48,7 +56,7 @@ run:
 	RUNTIME_ID="$(RUNTIME_ID)" \
 	PODMAN_CLEAR_CACHE_BEFORE_PULL="$(PODMAN_CLEAR_CACHE_BEFORE_PULL)" \
 	PODMAN_REGISTRY_PULL_HOST="$(PODMAN_REGISTRY_PULL_HOST)" \
-	OUTPUT_TSV="$(OUTPUT_TSV)" \
+	OUTPUT_TSV="$$out" \
 	bash "$(PERF_DIR)/scenario/run-pull-scenario.sh"
 
 rolling-riid:
