@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Unsuccess rate, pipeline latency p50/p95, throughput SLO (tar ≥ 10 MiB). Layer byte volume over time: `increase(riid_dispatcher_layer_bytes_total[6h])` by `source` (time series).",
+  "description": "Unsuccess rate, pipeline latency p50/p95, throughput SLO (tar ≥ 10 MiB). Layer byte volume over time: `increase(riid_dispatcher_layer_bytes_total[6h])` by `source` (time series). Traffic split panel: inter = Dragonfly scheduler BACK_TO_SOURCE + RIID `registry`; intra = scheduler REMOTE_PEER/p2p",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -254,6 +254,67 @@
         }
       ],
       "title": "Layer bytes by source (trailing 6h)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "description": "Inter = `sum(increase(dragonfly_scheduler_traffic{type=~\"BACK_TO_SOURCE|SOURCE|ORIGIN\"}[6h]))` + `sum(increase(riid_dispatcher_layer_bytes_total{source=\"registry\"}[6h]))`. Intra = `sum(increase(dragonfly_scheduler_traffic{type=~\"REMOTE_PEER|PEER|P2P\"}[6h]))`.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 14,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 18 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "expr": "sum(increase(dragonfly_scheduler_traffic{type=~\"BACK_TO_SOURCE|SOURCE|ORIGIN\"}[6h])) + sum(increase(riid_dispatcher_layer_bytes_total{source=\"registry\"}[6h]))",
+          "legendFormat": "inter-network (DF back-to-source ∪ + RIID registry)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+          "editorMode": "code",
+          "expr": "sum(increase(dragonfly_scheduler_traffic{type=~\"REMOTE_PEER|PEER|P2P\"}[6h]))",
+          "legendFormat": "intra-network (DF peer/p2p)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Traffic inter vs intra (trailing 6h, network_traffic.md)",
       "type": "timeseries"
     }
   ],

@@ -53,6 +53,11 @@ data:
           - action: keep
             source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
             regex: "true"
+          # Dragonfly scheduler is scraped by a dedicated job below to avoid
+          # duplicate targets when multiple service ports share the same labels.
+          - action: drop
+            source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+            regex: dragonfly-system;(dragonfly-scheduler|dragonfly-scheduler-metrics)
           - action: replace
             source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
             target_label: __scheme__
@@ -66,6 +71,28 @@ data:
             target_label: __address__
             regex: ([^:]+)(?::\d+)?;(\d+)
             replacement: $1:$2
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - action: replace
+            source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - action: replace
+            source_labels: [__meta_kubernetes_service_name]
+            target_label: kubernetes_service_name
+
+      - job_name: dragonfly-scheduler-metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - action: keep
+            source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+            regex: dragonfly-system;dragonfly-scheduler-metrics
+          - action: keep
+            source_labels: [__address__]
+            regex: .+:8000
+          - action: replace
+            target_label: __metrics_path__
+            replacement: /metrics
           - action: labelmap
             regex: __meta_kubernetes_service_label_(.+)
           - action: replace

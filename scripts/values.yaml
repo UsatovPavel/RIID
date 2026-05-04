@@ -13,7 +13,7 @@ scheduler:
   metrics:
     enable: true
 seedClient:
-  replicas: 1
+  replicas: 2
   image:
     repository: dragonflyoss/client
     tag: latest

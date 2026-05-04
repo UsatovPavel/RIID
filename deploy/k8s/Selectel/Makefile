@@ -4,6 +4,7 @@ SELECTEL_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 K8S := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 OBSERVER_CHART := $(K8S)/monitoring/helm/riid-observer
 KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
+LOCAL_REGISTRY_MANIFEST := $(K8S)/performance/registry/local-registry.yaml
 
 # OpenStack Cinder: класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
 # Переопределить: make storage-default STORAGE_CLASS=другой-класс
@@ -11,8 +12,10 @@ STORAGE_CLASS ?= fast.ru-3b
 RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
 MONITORING_NODE ?=
+REGISTRY_NODE ?=
+PERF_REGISTRY_DATASET ?= $(K8S)/performance/input/dataset_a.tsv
 
-.PHONY: connect nodes mark-monitoring-node-auto storage-default install-dragonfly secret-config secret-config-riid registry-dockerhub registry-selectel registry-apply-profile install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
+.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly secret-config secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile install-local-registry wait-local-registry load-performance-registry-dataset install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -49,6 +52,25 @@ mark-monitoring-node-auto:
 	echo "monitoring node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.monitoring/p'
 
+# Автовыбор registry-ноды: первый worker, который не помечен как monitoring.
+# Если задан REGISTRY_NODE, используется он.
+mark-registry-node-auto:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	if [ -n "$(REGISTRY_NODE)" ]; then \
+	  NODE="$(REGISTRY_NODE)"; \
+	else \
+	  NODE=$$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/control-plane}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/master}{"\t"}{.metadata.labels.riid\.monitoring}{"\n"}{end}' \
+	    | awk '$$2=="" && $$3=="" && $$4!="true" {print $$1}' | head -n1); \
+	fi; \
+	[ -n "$$NODE" ] || { echo "mark-registry-node-auto: no worker node (excluding monitoring) found"; exit 1; }; \
+	kubectl label node --all riid.registry- >/dev/null 2>&1 || true; \
+	kubectl label node "$$NODE" riid.registry=true --overwrite; \
+	echo "registry node: $$NODE"; \
+	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.registry/p'
+
 # Пометить Cinder StorageClass как default (нужно для Dragonfly Helm на этом стенде).
 storage-default:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -73,14 +95,18 @@ secret-config-riid:
 	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
 
 # Переключить client.registries в кластере (Secret + rollout riid). Нужен $(K8S)/riid/.env с нужными кредами.
+# PROFILE=selectel: дополнительно podman login (riid/registry/sync-podman-selectel-login.sh) во все Running-подах riid.
 registry-dockerhub:
 	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
 
 registry-selectel:
 	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=selectel
 
+registry-local:
+	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=local
+
 registry-apply-profile:
-	@if [ -z "$(PROFILE)" ]; then echo "registry-apply-profile: set PROFILE=dockerhub|selectel"; exit 1; fi; \
+	@if [ -z "$(PROFILE)" ]; then echo "registry-apply-profile: set PROFILE=dockerhub|selectel|local"; exit 1; fi; \
 	export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	[ -f "$(K8S)/riid/.env" ] || { echo "registry-apply-profile: нет $(K8S)/riid/.env (см. riid/.env.example)"; exit 1; }; \
@@ -92,7 +118,35 @@ registry-apply-profile:
 	  kubectl -n riid-system rollout status daemonset riid; \
 	else \
 	  echo "registry-apply-profile: daemonset/riid not found yet, restart skipped"; \
+	fi; \
+	if [ "$(PROFILE)" = selectel ]; then \
+	  bash "$(K8S)/riid/registry/sync-podman-selectel-login.sh"; \
 	fi
+
+# Поднимает local registry для схемы 10 + 1 + 1: отдельный pod на ноде с label riid.registry=true.
+install-local-registry:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	kubectl apply -f "$(LOCAL_REGISTRY_MANIFEST)"
+
+wait-local-registry:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	kubectl -n registry-system rollout status deployment/local-registry
+
+# Прогоняет dataset через podman на RIID pod у registry-ноды (riid.registry=true) и пушит в local-registry.
+# По умолчанию dataset A: deploy/k8s/performance/input/dataset_a.tsv
+load-performance-registry-dataset:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	DATASET_FILE="$(PERF_REGISTRY_DATASET)" \
+	  bash "$(K8S)/performance/registry/load-dataset-into-local-registry.sh"
 
 # Работает из любой cwd; манифесты: $(K8S)/…
 # Secret riid-config-secret: при наличии $(K8S)/riid/.env — render-riid-config-secret.sh (yq + kubectl), иначе пропуск.
@@ -257,16 +311,22 @@ smoke-download-all:
 install-all:
 	@$(MAKE) -C "$(SELECTEL_DIR)" storage-default
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-monitoring-node-auto
+	@$(MAKE) -C "$(SELECTEL_DIR)" mark-registry-node-auto
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-dragonfly
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-riid
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-riid-ready 
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-metrics-collector
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-metrics-collector
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-riid-runtimes
+	@$(MAKE) -C "$(SELECTEL_DIR)" install-local-registry
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-smoke-utils
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-monitoring-observer
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-monitoring-observer
-# всё равно не работает
+	@$(MAKE) -C "$(SELECTEL_DIR)" wait-local-registry
+	@$(MAKE) -C "$(SELECTEL_DIR)" load-performance-registry-dataset
+	@$(MAKE) -C "$(SELECTEL_DIR)" registry-local
+# comment registry-local if you want DockerHub as registry provider or use registry-selectel
+# что-то может не поставится = > ручками шаги доделывать
 
 # Зеркалирование образов: объединение (без дубликатов) deploy/k8s/Selectel/registry/images_list.sizes.tsv и списка library/* из Java (PopularDockerHubImagesFromProgramDocs); см. скрипт.
 # Инкремент (только новые строки снизу TSV): один раз make init-performance-registry-images-state-init, затем make init-performance-registry-images-incremental.

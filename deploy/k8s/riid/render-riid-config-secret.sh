@@ -11,11 +11,12 @@ APPLY=0
 
 usage() {
   echo "Usage: $0 [--apply] [--profile NAME]"
-  echo "  NAME: dockerhub | selectel (file deploy/k8s/riid/registry/<NAME>.yaml must exist)"
+  echo "  NAME: dockerhub | selectel | local (file deploy/k8s/riid/registry/<NAME>.yaml must exist)"
   echo "Env: RIID_CONFIGMAP_YAML, RIID_ENV_FILE, RIID_REGISTRY_PROFILE"
   echo "Credentials in .env:"
   echo "  dockerhub — RIID_DOCKERHUB_USER, RIID_DOCKERHUB_TOKEN (or RIID_DOCKERHUB_PASSWORD)"
   echo "  selectel  — RIID_SELECTEL_USER, RIID_SELECTEL_TOKEN (or RIID_SELECTEL_PASSWORD)"
+  echo "  local     — credentials are not required"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -56,6 +57,7 @@ case "$PROFILE" in
     : "${_PASSWORD:?Set RIID_DOCKERHUB_TOKEN (or RIID_DOCKERHUB_PASSWORD) in $ENV_FILE}"
     export _RIID_REG_USER="$RIID_DOCKERHUB_USER"
     export _RIID_REG_PASS="$_PASSWORD"
+    export _RIID_SET_CREDENTIALS=1
     ;;
   selectel)
     : "${RIID_SELECTEL_USER:?Set RIID_SELECTEL_USER in $ENV_FILE}"
@@ -63,9 +65,13 @@ case "$PROFILE" in
     : "${_PASSWORD:?Set RIID_SELECTEL_TOKEN (or RIID_SELECTEL_PASSWORD) in $ENV_FILE}"
     export _RIID_REG_USER="$RIID_SELECTEL_USER"
     export _RIID_REG_PASS="$_PASSWORD"
+    export _RIID_SET_CREDENTIALS=1
+    ;;
+  local)
+    export _RIID_SET_CREDENTIALS=0
     ;;
   *)
-    echo "Unsupported profile '$PROFILE' (add case + credentials in $0, or use dockerhub|selectel)." >&2
+    echo "Unsupported profile '$PROFILE' (add case + credentials in $0, or use dockerhub|selectel|local)." >&2
     exit 1
     ;;
 esac
@@ -76,11 +82,14 @@ trap 'rm -f "$TMP_INNER" "$OUT"' EXIT
 
 export _RIID_PROFILE_YAML="$PROFILE_YAML"
 
-# Base structure from ConfigMap; client.registries replaced from registry/<profile>.yaml; then credentials on all entries.
+# Base structure from ConfigMap; client.registries replaced from registry/<profile>.yaml.
 yq e '.data["config.yaml"]' "$CONFIGMAP_YAML" \
   | yq e '.client.registries = load(strenv(_RIID_PROFILE_YAML)).registries' - \
-  | yq e '(.client.registries[].credentials) = {"username": strenv(_RIID_REG_USER), "password": strenv(_RIID_REG_PASS)}' - \
   > "$TMP_INNER"
+
+if [[ "${_RIID_SET_CREDENTIALS}" == "1" ]]; then
+  yq e '(.client.registries[].credentials) = {"username": strenv(_RIID_REG_USER), "password": strenv(_RIID_REG_PASS)}' -i "$TMP_INNER"
+fi
 
 kubectl create secret generic riid-config-secret \
   --from-file="config.yaml=$TMP_INNER" \

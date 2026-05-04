@@ -16,7 +16,7 @@ SCENARIO="${SCENARIO:-scenario-unnamed}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-}"
 IMAGE_REFERENCE="${IMAGE_REFERENCE:-latest}"
 RUNTIME_ID="${RUNTIME_ID:-podman}"
-OUTPUT_CSV="${OUTPUT_CSV:-}"
+OUTPUT_TSV="${OUTPUT_TSV:-${OUTPUT_CSV:-}}"
 BACKEND_CMD="$BACKEND_DIR/${BACKEND}.sh"
 DATASET_FILE="${DATASET_FILE:-}"
 
@@ -161,10 +161,10 @@ run_for_current_image() {
   return "$run_failed"
 }
 
-if [[ -n "$OUTPUT_CSV" ]]; then
-  mkdir -p "$(dirname "$OUTPUT_CSV")"
-  emit_header >"$OUTPUT_CSV"
-  exec > >(tee -a "$OUTPUT_CSV")
+if [[ -n "$OUTPUT_TSV" ]]; then
+  mkdir -p "$(dirname "$OUTPUT_TSV")"
+  emit_header >"$OUTPUT_TSV"
+  exec > >(tee -a "$OUTPUT_TSV")
 fi
 
 emit_header

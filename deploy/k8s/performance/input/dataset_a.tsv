@@ -1,12 +1,11 @@
 repository	tag	size_bytes	size_human
-cfcommunity/slack-notification-resource	latest	10817066	10.3 MiB
-prom/node-exporter	latest	13302026	12.7 MiB
-stakater/reloader	merge-1138-ubi	19326980	18.4 MiB
-library/registry	latest	20187413	19.3 MiB
-istio/operator	1.23.6-distroless	29505825	28.1 MiB
-bitnami/sealed-secrets-controller	latest	29652946	28.3 MiB
-library/ubuntu	latest	29732978	28.4 MiB
-google/cadvisor	latest	30525033	29.1 MiB
-library/memcached	latest	32198630	30.7 MiB
-newrelic/nri-kube-events	latest	33976392	32.4 MiB
-amazon/amazon-ecs-agent	latest	36007658	34.3 MiB
+riid/containrrr/watchtower	latest	5633191	5.4 MiB
+riid/curlimages/curl	latest	10628359	10.1 MiB
+riid/cfcommunity/slack-notification-resource	latest	10817066	10.3 MiB
+riid/prom/node-exporter	latest	13302026	12.7 MiB
+riid/stakater/reloader	merge-1138-ubi	19326980	18.4 MiB
+riid/registry	latest	20187413	19.3 MiB
+riid/istio/operator	1.23.6-distroless	29505825	28.1 MiB
+riid/bitnami/sealed-secrets-controller	latest	29652946	28.3 MiB
+riid/ubuntu	latest	29732978	28.4 MiB
+riid/google/cadvisor	latest	30525033	29.1 MiB

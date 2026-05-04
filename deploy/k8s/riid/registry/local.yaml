@@ -1,0 +1,7 @@
+# Merged into RIID config client.registries by render-riid-config-secret.sh (--profile local).
+# local-registry Service expected in namespace registry-system (ClusterIP:5000, plain HTTP).
+registries:
+  - scheme: "http"
+    host: "local-registry.registry-system.svc.cluster.local"
+    port: 5000
+    credentials: null
