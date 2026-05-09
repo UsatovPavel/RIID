@@ -54,14 +54,19 @@ bin/
 external_utils/*
 **/*.log
 ## Selectel artifacts###
-deploy/k8s/Selectel/*
-!deploy/k8s/Selectel/sync-dotenv-from-serverconfig.sh
-!deploy/k8s/Selectel/.env.example
-!deploy/k8s/Selectel/Makefile
+deploy/k8s/bootstrap/*
+!deploy/k8s/bootstrap/sync-dotenv-from-serverconfig.sh
+!deploy/k8s/bootstrap/.env.example
+!deploy/k8s/bootstrap/Makefile
 !deploy/k8s/riid/.env.example
-!deploy/k8s/Selectel/init-performance-registry-images.sh
-deploy/k8s/Selectel/serverConfig.yaml
+!deploy/k8s/bootstrap/init-performance-registry-images.sh
+!deploy/k8s/bootstrap/logs/
+!deploy/k8s/bootstrap/registry/images_list.sizes.tsv
+deploy/k8s/bootstrap/serverConfig.yaml
 
 ## temp files ###
-deploy/k8s/Selectel/registry/init-performance-registry-images-incremental.sh
+deploy/k8s/bootstrap/registry/init-performance-registry-images-incremental.sh
 **/performance-registry-smoke-map.tsv
+
+deploy/k8s/performance/output/
+deploy/k8s/performance/input/dataset_a_test.tsv

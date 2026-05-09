@@ -5,7 +5,9 @@ K8S := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 OBSERVER_CHART := $(K8S)/monitoring/helm/riid-observer
 KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
 LOCAL_REGISTRY_MANIFEST := $(K8S)/performance/registry/local-registry.yaml
-DRAGONFLY_PULL_SECRET_SCRIPT := $(K8S)/dragonfly/setup-dockerhub-pull-secret.sh
+DRAGONFLY_REGISTRY_DIR := $(K8S)/dragonfly/registry
+DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
+DRAGONFLY_SELECTEL_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-selectel-registry-pull-secret.sh
 
 # OpenStack Cinder: класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
 # Переопределить: make storage-default STORAGE_CLASS=другой-класс
@@ -15,9 +17,11 @@ RIID_WAIT_TIMEOUT ?= 600
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
 PERF_REGISTRY_DATASET ?= $(K8S)/performance/input/dataset_a.tsv
-INSTALL_SMOKE_UTILS_CONCURRENCY ?= 4
+INIT_WORKER_IMAGE_SCRIPT := $(SELECTEL_DIR)/registry/init-worker-image.sh
 
-.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly dragonfly-dockerhub-pull-secret secret-config secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile install-local-registry wait-local-registry load-performance-registry-dataset install-riid wait-riid-ready install-riid-runtimes install-smoke-utils install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
+# Образ DaemonSet должен уже содержать podman+fuse-overlayfs+curl+jq (+ storage/registries как в Dockerfile.worker или экв.).
+# На нодах ничего не ставим: сборка и пуш — `make init-worker-tooling-image`; loader для local-registry см. REGISTRY_LOADER_IMAGE.
+.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly dragonfly-dockerhub-pull-secret dragonfly-selectel-registry-pull-secret secret-config secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile install-local-registry wait-local-registry load-performance-registry-dataset init-worker-tooling-image verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -90,6 +94,13 @@ dragonfly-dockerhub-pull-secret:
 	kubectl config use-context "$$CTX"; \
 	bash "$(DRAGONFLY_PULL_SECRET_SCRIPT)"
 
+dragonfly-selectel-registry-pull-secret:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(DRAGONFLY_SELECTEL_PULL_SECRET_SCRIPT)" "$(SELECTEL_DIR)/.env" "$(K8S)/riid/.env"
+
 install-dragonfly:
 	@$(MAKE) -C "$(SELECTEL_DIR)" dragonfly-dockerhub-pull-secret
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -104,8 +115,8 @@ secret-config: secret-config-riid
 secret-config-riid:
 	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
 
-# Переключить client.registries в кластере (Secret + rollout riid). Нужен $(K8S)/riid/.env с нужными кредами.
-# PROFILE=selectel: дополнительно podman login (riid/registry/sync-podman-selectel-login.sh) во все Running-подах riid.
+# Переключить client.registries в кластере (Secret + rollout riid). Перед этим dragonfly-system imagePullSecret под PROFILE.
+# PROFILE=dockerhub: setup-dockerhub-pull-secret.sh · selectel|local: setup-selectel-registry-pull-secret.sh
 registry-dockerhub:
 	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
 
@@ -122,6 +133,11 @@ registry-apply-profile:
 	[ -f "$(K8S)/riid/.env" ] || { echo "registry-apply-profile: нет $(K8S)/riid/.env (см. riid/.env.example)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	if [ "$(PROFILE)" = dockerhub ]; then \
+	  $(MAKE) -C "$(SELECTEL_DIR)" dragonfly-dockerhub-pull-secret; \
+	else \
+	  $(MAKE) -C "$(SELECTEL_DIR)" dragonfly-selectel-registry-pull-secret; \
+	fi; \
 	bash "$(K8S)/riid/render-riid-config-secret.sh" --apply --profile "$(PROFILE)"; \
 	if kubectl -n riid-system get daemonset riid >/dev/null 2>&1; then \
 	  kubectl -n riid-system rollout restart daemonset riid; \
@@ -148,14 +164,30 @@ wait-local-registry:
 	kubectl config use-context "$$CTX"; \
 	kubectl -n registry-system rollout status deployment/local-registry
 
-# Прогоняет dataset через podman на RIID pod у registry-ноды (riid.registry=true) и пушит в local-registry.
-# По умолчанию dataset A: deploy/k8s/performance/input/dataset_a.tsv
+# Сборка и push worker-tooling image (Podman + curl + …) в Selectel registry; нужен docker/podman у оператора.
+init-worker-tooling-image:
+	@"$(INIT_WORKER_IMAGE_SCRIPT)" "$(SELECTEL_DIR)/.env" "$(K8S)/riid/.env"
+
+# Прогоняет dataset через podman в ephemeral loader pod (registry-нода). Образ loader: REGISTRY_LOADER_IMAGE
+# или <REGISTRY из Selectel .env>/worker/k8s-worker-tooling:24.04 (после init-worker-tooling-image).
 load-performance-registry-dataset:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	DATASET_FILE="$(PERF_REGISTRY_DATASET)" \
+	LOADER_IMG="$${REGISTRY_LOADER_IMAGE:-}"; \
+	if [ -z "$$LOADER_IMG" ]; then \
+	  ENV_FILE="$(SELECTEL_DIR)/.env"; \
+	  [ -f "$$ENV_FILE" ] || { echo "load-performance-registry-dataset: set REGISTRY_LOADER_IMAGE or create $$ENV_FILE with REGISTRY"; exit 1; }; \
+	  set -a; . "$$ENV_FILE"; \
+	  set +a; \
+	  : "$${REGISTRY:?load-performance-registry-dataset: REGISTRY is required in $$ENV_FILE}"; \
+	  REGISTRY="$${REGISTRY%/}"; \
+	  case "$$REGISTRY" in */*) REG_PREFIX="$$REGISTRY";; *) REG_PREFIX="$${REGISTRY_LOGIN_HOST:-cr.selcloud.ru}/$$REGISTRY";; esac; \
+	  LOADER_IMG="$$REG_PREFIX/worker/k8s-worker-tooling:24.04"; \
+	fi; \
+	echo "load-performance-registry-dataset: REGISTRY_LOADER_IMAGE=$$LOADER_IMG" >&2; \
+	DATASET_FILE="$(PERF_REGISTRY_DATASET)" REGISTRY_LOADER_IMAGE="$$LOADER_IMG" \
 	  bash "$(K8S)/performance/registry/load-dataset-into-local-registry.sh"
 
 # Работает из любой cwd; манифесты: $(K8S)/…
@@ -199,36 +231,23 @@ wait-riid-ready:
 	  sleep $(RIID_WAIT_INTERVAL); \
 	done
 
-# Установка runtime-инструментов в pod RIID (по аналогии с CI: podman install + проверка docker CLI).
-install-riid-runtimes:
+# Проверка, что образ контейнера riid уже содержит инструменты (без apt в кластере).
+verify-riid-pod-tooling:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	for p in $$(kubectl -n riid-system get pods -l app.kubernetes.io/name=riid -o name); do \
-	  echo ">>> $$p"; \
-	  kubectl -n riid-system exec -c riid "$$p" -- sh -c 'export DEBIAN_FRONTEND=noninteractive; apt-get install -y --no-install-recommends podman fuse-overlayfs && mkdir -p /etc/containers'; \
-	  kubectl cp "$(CURDIR)/../riid/storage.conf" "riid-system/$$(echo "$$p" | cut -d/ -f2):/etc/containers/storage.conf" -c riid; \
-	  kubectl -n riid-system exec -c riid "$$p" -- sh -c 'podman --version && test -x /usr/bin/fuse-overlayfs && grep -q fuse-overlayfs /etc/containers/storage.conf'; \
-	  kubectl -n riid-system exec -c riid "$$p" -- sh -c 'docker --version || true'; \
-	done
-
-# curl в подах RIID (debian-образ) — для smoke POST /pull по Unix-сокету; в каждом pod DaemonSet
-install-smoke-utils:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
-	case "$(INSTALL_SMOKE_UTILS_CONCURRENCY)" in ''|*[!0-9]*|0) echo "install-smoke-utils: INSTALL_SMOKE_UTILS_CONCURRENCY must be a positive integer"; exit 1;; esac; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	pods="$$(kubectl -n riid-system get pods -l app.kubernetes.io/name=riid -o name)"; \
-	[ -n "$$pods" ] || { echo "install-smoke-utils: no riid pods found"; exit 1; }; \
-	printf '%s\n' "$$pods" \
-	  | xargs -r -P "$(INSTALL_SMOKE_UTILS_CONCURRENCY)" -I {} sh -c ' \
-	      p="$$1"; \
-	      echo ">>> $$p"; \
-	      kubectl -n riid-system exec -c riid "$$p" -- sh -c '"'"'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends curl'"'"'; \
-	    ' _ {}; \
-	echo "Done. Smoke POST /pull: deploy/k8s/internalDocs.md" >&2
+	[ -n "$$pods" ] || { echo "verify-riid-pod-tooling: no riid pods"; exit 1; }; \
+	printf '%s\n' "$$pods" | while IFS= read -r pod; do \
+	  echo ">>> $$pod"; \
+	  kubectl -n riid-system exec -c riid "$$pod" -- sh -c \
+	    'podman --version >/dev/null && test -x /usr/bin/fuse-overlayfs \
+	      && grep -q fuse-overlayfs /etc/containers/storage.conf \
+	      && command -v curl >/dev/null && curl --version | head -n1 \
+	      && command -v jq >/dev/null && jq --version'; \
+	done; \
+	echo "verify-riid-pod-tooling: ok"
 
 # vmagent (DaemonSet) для сбора метрик по prometheus-аннотациям pod/service.
 install-metrics-collector:
@@ -283,7 +302,7 @@ wait-monitoring-observer:
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl port-forward -n riid-system svc/grafana 3000:3000
 
-# POST /pull в первом pod RIID (нужен curl: make install-smoke-utils). Другая нода: NODE=имя-ноды make smoke-download
+# POST /pull в первом pod RIID (curl уже в образе контейнера). Другая нода: NODE=имя-ноды make smoke-download
 # smoke: SMOKE_REPOSITORY — имя как на Docker Hub (default library/jobber). Для Selectel зеркала:
 #   make init-performance-registry-images (пишет registry/performance-registry-smoke-map.tsv), затем SMOKE_REGISTRY_TARGET=selectel
 SMOKE_REPOSITORY ?= library/jobber
@@ -304,13 +323,13 @@ smoke-download:
 	else \
 	  POD=$$(kubectl -n riid-system get pods -l 'app.kubernetes.io/name=riid' -o jsonpath='{.items[0].metadata.name}'); \
 	fi; \
-	[ -n "$$POD" ] || { echo "smoke-download: no RIID pod (install-riid + install-smoke-utils?)" >&2; exit 1; }; \
+	[ -n "$$POD" ] || { echo "smoke-download: no RIID pod (install-riid / worker-image образ?)" >&2; exit 1; }; \
 	kubectl -n riid-system exec -c riid "$$POD" -- \
 	  curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
 	  -H 'Content-Type: application/json' \
 	  -d "{\"repository\":\"$$REPO\",\"reference\":\"$(SMOKE_REFERENCE)\",\"runtimeId\":\"$(RUNTIME_ID)\"}"
 
-# POST /pull во всех pod RIID (по одному на ноду). Нужен curl: install-smoke-utils.
+# POST /pull во всех pod RIID (по одному на ноду); curl должен быть в образе контейнера.
 smoke-download-all:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -329,19 +348,18 @@ install-all:
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-registry-node-auto
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-dragonfly
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-riid
-	@$(MAKE) -C "$(SELECTEL_DIR)" wait-riid-ready 
+	@$(MAKE) -C "$(SELECTEL_DIR)" wait-riid-ready
+	@$(MAKE) -C "$(SELECTEL_DIR)" verify-riid-pod-tooling
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-metrics-collector
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-metrics-collector
-	@$(MAKE) -C "$(SELECTEL_DIR)" install-riid-runtimes
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-local-registry
-	@$(MAKE) -C "$(SELECTEL_DIR)" install-smoke-utils
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-monitoring-observer
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-monitoring-observer
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-local-registry
 	@$(MAKE) -C "$(SELECTEL_DIR)" load-performance-registry-dataset
 	@$(MAKE) -C "$(SELECTEL_DIR)" registry-local
 # comment registry-local if you want DockerHub as registry provider or use registry-selectel
-# что-то может не поставится = > ручками шаги доделывать
+# Перед install-all: образ в riid/daemonset.yaml — worker-based (podman+curl+jq+…); при необходимости: make init-worker-tooling-image
 
 # Зеркалирование образов: объединение (без дубликатов) deploy/k8s/Selectel/registry/images_list.sizes.tsv и списка library/* из Java (PopularDockerHubImagesFromProgramDocs); см. скрипт.
 # Инкремент (только новые строки снизу TSV): один раз make init-performance-registry-images-state-init, затем make init-performance-registry-images-incremental.
@@ -384,6 +402,5 @@ rollout-riid-image-from-manifest:
 	kubectl -n riid-system rollout status daemonset/riid; \
 	kubectl -n riid-system get pods -l app.kubernetes.io/name=riid \
 	  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}'; \
-	$(MAKE) -C "$(SELECTEL_DIR)" install-smoke-utils; \
-	$(MAKE) -C "$(SELECTEL_DIR)" install-riid-runtimes
+	$(MAKE) -C "$(SELECTEL_DIR)" verify-riid-pod-tooling
 

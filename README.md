@@ -1,4 +1,4 @@
-# RIID CLI quick start
+# RIID Daemon quick start
 
 Minimal steps to run the client end-to-end from the Shadow JAR.
 ## Requirements
@@ -136,5 +136,11 @@ Typical first-time bootstrap:
 ```bash
 make -C deploy/k8s/Selectel install-all
 ```
-
+```.env
+RIID_DOCKERHUB_USER=
+RIID_DOCKERHUB_TOKEN=
+RIID_SELECTEL_USER=
+RIID_SELECTEL_TOKEN=
+RIID_REGISTRY_PROVIDER=SELECTEL/DOCKERHUB
+```
 That wires storage labels (when applicable), Dragonfly, RIID DaemonSet, vmagent, pod tooling, and the monitoring observer chart. Put **`deploy/k8s/riid/.env`** for registry secrets when needed — see **`deploy/k8s/riid/.env.example`**. Full sequence, smoke pulls, and registry switching: **[deploy/k8s/README.md](deploy/k8s/README.md)**.

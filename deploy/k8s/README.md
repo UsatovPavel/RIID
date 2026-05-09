@@ -2,6 +2,27 @@
 
 Kubernetes manifests for **RIID** + **Dragonfly** (same Helm values as CI: root `scripts/values.yaml`). One Dragonfly client only—in `dragonfly-system`; do not add dfdaemon in `riid-system`. Java-side notes: **internalDocs/moduledocs/**.
 
+## Scripts architecture
+```mermaid
+flowchart TB
+  subgraph SE["Selectel-specific (registry, cluster)"]
+    MK[Makefile orchestrator]
+    REG[Selectel/registry зеркала и init-скрипты]
+    CFG[cluster kubeconfig]
+    REG ~~~ CFG
+  end
+
+  MK --> DF["dragonfly/"]
+  MK --> MO["monitoring/"]
+  MK --> STO["storage/"]
+  MK --> PERF["performance/"]
+
+  BASE["Развертывание кластера"]
+
+  MK -.-> BASE
+  BASE -. "performance" .-> PERF
+```
+
 ### Env 
 in riid/ directory
 ```.env
@@ -14,7 +35,7 @@ RIID_SELECTEL_TOKEN=
 
 `namespace.yaml` · `riid/` (DaemonSet, ConfigMap, Service, `.env` → Secret) · `dragonfly/install-dragonfly.sh` · `storage/local-path-storage.yaml` (optional default SC) · `monitoring/worker/` (vmagent) · `monitoring/observer/` (VictoriaMetrics, Grafana) · **`Selectel/Makefile`** — deploy commands below.
 
-### Flow
+### Target cluster
 
 ```mermaid
 flowchart LR
