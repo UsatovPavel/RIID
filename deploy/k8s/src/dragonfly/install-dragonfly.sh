@@ -5,7 +5,8 @@
 #
 # Провайдерские переопределения образов/Helm (поверх scripts/render-values-from-infra.sh):
 #   DRAGONFLY_REGISTRY_PROFILE — dockerhub | selectel | local (по умолчанию dockerhub).
-#   SELECTEL_ENV_FILE — .env с REGISTRY для render-selectel-dragonfly-images.sh (selectel).
+#   Selectel: слой образов берётся из deploy/k8s/.resolved/registry/helm/dragonfly-values-selectel.yaml
+#   (пишется при make imagelist-overlays или provider-apply).
 # Дополнительный необязательный слой (если файл есть): deploy/k8s/providers/registry/dragonfly/values-<PROFILE>.yaml
 set -euo pipefail
 
@@ -18,18 +19,17 @@ if ! command -v helm >/dev/null 2>&1; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 VALUES="${REPO_ROOT}/scripts/values.yaml"
 RENDER_VALUES="${REPO_ROOT}/scripts/render-values-from-infra.sh"
-RENDER_SELECTEL="${SCRIPT_DIR}/registry/render-selectel-dragonfly-images.sh"
+SELECTEL_HELM_FRAGMENT="${REPO_ROOT}/deploy/k8s/.resolved/registry/helm/dragonfly-values-selectel.yaml"
 
 TMP_VALUES="$(mktemp)"
-TMP_SEL=""
 TMP_MERGED=""
 TMP_PROVIDER_MERGED=""
 
 cleanup() {
-  rm -f "${TMP_VALUES}" "${TMP_SEL}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}"
+  rm -f "${TMP_VALUES}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}"
 }
 trap cleanup EXIT
 
@@ -61,22 +61,17 @@ esac
 HELM_VALUES="${TMP_VALUES}"
 
 if [[ "${PROFILE}" == selectel ]]; then
-  if [[ ! -f "${RENDER_SELECTEL}" ]]; then
-    echo "render script not found: ${RENDER_SELECTEL}" >&2
+  if [[ ! -f "${SELECTEL_HELM_FRAGMENT}" ]]; then
+    echo "install-dragonfly.sh (PROFILE=selectel): resolved Helm fragment not found: ${SELECTEL_HELM_FRAGMENT}" >&2
+    echo "Run: make -C deploy/k8s/providers imagelist-overlays CONFIG_ENV=deploy/k8s/config/.env" >&2
+    echo "  or: bash deploy/k8s/providers/registry/image/provider-apply.sh (after overlays)" >&2
     exit 1
   fi
-  SEL_ENV="${SELECTEL_ENV_FILE:-${REPO_ROOT}/deploy/k8s/bootstrap/.env}"
-  if [[ ! -f "${SEL_ENV}" ]]; then
-    echo "install-dragonfly.sh (PROFILE=selectel): SELECTEL_ENV_FILE / bootstrap .env not found: ${SEL_ENV}" >&2
-    exit 1
-  fi
-  TMP_SEL="$(mktemp)"
   TMP_MERGED="$(mktemp)"
-  bash "${RENDER_SELECTEL}" "${SEL_ENV}" >"${TMP_SEL}"
   # Правая карта побеждает при конфликте ключей (образы Selectel).
-  yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${TMP_VALUES}" "${TMP_SEL}" >"${TMP_MERGED}"
+  yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${TMP_VALUES}" "${SELECTEL_HELM_FRAGMENT}" >"${TMP_MERGED}"
   HELM_VALUES="${TMP_MERGED}"
-  echo ">>> Dragonfly Helm: merged Selectel mirror overrides from ${RENDER_SELECTEL}" >&2
+  echo ">>> Dragonfly Helm: merged Selectel fragment from ${SELECTEL_HELM_FRAGMENT}" >&2
 fi
 
 OPTIONAL_PROVIDER_VALUES="${REPO_ROOT}/deploy/k8s/providers/registry/dragonfly/values-${PROFILE}.yaml"
@@ -91,16 +86,16 @@ echo ">>> Effective Dragonfly images (after profile=${PROFILE}):"
 yq e '.manager.image, .scheduler.image, .seedClient.image, .client.image' "${HELM_VALUES}"
 
 # Без KUBECONFIG helm/kubectl идут на http://127.0.0.1:8080. При отсутствии переменной
-# пробуем стандартный путь Selectech; иначе явный export.
+# пробуем путь Selectel из providers/cluster; иначе явный export.
 if [[ -z "${KUBECONFIG:-}" ]]; then
-  CANDIDATE_KUBECONFIG="${REPO_ROOT}/deploy/k8s/Selectech/serverConfig.yaml"
+  CANDIDATE_KUBECONFIG="${REPO_ROOT}/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml"
   if [[ -f "${CANDIDATE_KUBECONFIG}" ]]; then
     export KUBECONFIG="${CANDIDATE_KUBECONFIG}"
     echo ">>> KUBECONFIG not set: using ${KUBECONFIG}" >&2
   else
     echo "KUBECONFIG is not set. Point it at your cluster kubeconfig, e.g.:" >&2
-    echo "  export KUBECONFIG=\"\$PWD/deploy/k8s/Selectech/serverConfig.yaml\"" >&2
-    echo "  # or: make -C deploy/k8s/Selectech connect  (stays in a shell with the same KUBECONFIG)" >&2
+    echo "  export KUBECONFIG=\"\$PWD/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml\"" >&2
+    echo "  # or: make -C deploy/k8s/bootstrap connect  (stays in a shell with the same KUBECONFIG)" >&2
     exit 1
   fi
 fi

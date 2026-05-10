@@ -44,7 +44,7 @@ _helm-install:
 	@TMP_VALUES=$$(mktemp); \
 	trap 'rm -f "$$TMP_VALUES"' EXIT; \
 	./render-values-from-infra.sh "$$TMP_VALUES"; \
-	echo ">>> Effective images from deploy/k8s/config/infra_versions.yaml:"; \
+	echo ">>> Effective images from deploy/k8s/config/imagelist/dockerhub.yaml (.infra.images) → Helm values:"; \
 	yq e '.manager.image, .scheduler.image, .seedClient.image, .client.image' "$$TMP_VALUES"; \
 	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true; \
 	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f "$$TMP_VALUES"
@@ -62,7 +62,7 @@ _helm-install-2nodes:
 	@TMP_VALUES=$$(mktemp); \
 	trap 'rm -f "$$TMP_VALUES"' EXIT; \
 	./render-values-from-infra.sh "$$TMP_VALUES"; \
-	echo ">>> Effective images from deploy/k8s/config/infra_versions.yaml:"; \
+	echo ">>> Effective images from deploy/k8s/config/imagelist/dockerhub.yaml (.infra.images) → Helm values:"; \
 	yq e '.manager.image, .scheduler.image, .seedClient.image, .client.image' "$$TMP_VALUES"; \
 	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true; \
 	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f "$$TMP_VALUES" -f values-minikube-2nodes.yaml

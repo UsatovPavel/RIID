@@ -54,6 +54,7 @@ bin/
 external_utils/*
 **/*.log
 ### Deploy artifacts###
+deploy/k8s/.resolved/
 deploy/k8s/bootstrap/*
 deploy/k8s/providers/cluster/**/serverConfig.yaml
 deploy/k8s/**/output/

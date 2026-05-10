@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BASE_VALUES="${SCRIPT_DIR}/values.yaml"
-INFRA_VERSIONS="${REPO_ROOT}/deploy/k8s/config/infra_versions.yaml"
+IMAGE_LIST="${IMAGE_LIST_FILE:-${REPO_ROOT}/deploy/k8s/config/imagelist/dockerhub.yaml}"
 
 OUT_FILE="${1:-}"
 TMP_OVERRIDE="$(mktemp)"
@@ -12,7 +12,15 @@ trap 'rm -f "${TMP_OVERRIDE}"' EXIT
 
 command -v yq >/dev/null 2>&1 || { echo "render-values-from-infra: yq is required" >&2; exit 1; }
 [[ -f "${BASE_VALUES}" ]] || { echo "render-values-from-infra: missing ${BASE_VALUES}" >&2; exit 1; }
-[[ -f "${INFRA_VERSIONS}" ]] || { echo "render-values-from-infra: missing ${INFRA_VERSIONS}" >&2; exit 1; }
+[[ -f "${IMAGE_LIST}" ]] || { echo "render-values-from-infra: missing ${IMAGE_LIST}" >&2; exit 1; }
+
+infra_image() {
+  local key="$1"
+  local img
+  img="$(yq e ".infra.images[\"${key}\"]" "${IMAGE_LIST}")"
+  [[ -n "${img}" && "${img}" != "null" ]] || return 1
+  printf '%s\n' "${img}"
+}
 
 parse_ref() {
   local ref="$1"
@@ -42,38 +50,40 @@ parse_ref() {
   printf '%s\t%s\t%s\n' "${registry}" "${repo}" "${tag_part}"
 }
 
-for key in manager scheduler client seed_client; do
-  img="$(yq e ".dragonfly.images.${key}.image" "${INFRA_VERSIONS}")"
-  [[ -n "${img}" && "${img}" != "null" ]] || {
-    echo "render-values-from-infra: missing dragonfly.images.${key}.image in ${INFRA_VERSIONS}" >&2
+for key in dragonfly.manager dragonfly.scheduler dragonfly.client dragonfly.seed_client; do
+  infra_image "${key}" >/dev/null || {
+    echo "render-values-from-infra: missing infra.images[\"${key}\"] in ${IMAGE_LIST}" >&2
     exit 1
   }
 done
 
-read -r mgr_reg mgr_repo mgr_tag < <(parse_ref "$(yq e '.dragonfly.images.manager.image' "${INFRA_VERSIONS}")")
-read -r sch_reg sch_repo sch_tag < <(parse_ref "$(yq e '.dragonfly.images.scheduler.image' "${INFRA_VERSIONS}")")
-read -r cli_reg cli_repo cli_tag < <(parse_ref "$(yq e '.dragonfly.images.client.image' "${INFRA_VERSIONS}")")
-read -r seed_reg seed_repo seed_tag < <(parse_ref "$(yq e '.dragonfly.images.seed_client.image' "${INFRA_VERSIONS}")")
+read -r mgr_reg mgr_repo mgr_tag < <(parse_ref "$(infra_image dragonfly.manager)")
+read -r sch_reg sch_repo sch_tag < <(parse_ref "$(infra_image dragonfly.scheduler)")
+read -r cli_reg cli_repo cli_tag < <(parse_ref "$(infra_image dragonfly.client)")
+read -r seed_reg seed_repo seed_tag < <(parse_ref "$(infra_image dragonfly.seed_client)")
 
-yq e -n \
-  --arg mgr_reg "${mgr_reg}" --arg mgr_repo "${mgr_repo}" --arg mgr_tag "${mgr_tag}" \
-  --arg sch_reg "${sch_reg}" --arg sch_repo "${sch_repo}" --arg sch_tag "${sch_tag}" \
-  --arg cli_reg "${cli_reg}" --arg cli_repo "${cli_repo}" --arg cli_tag "${cli_tag}" \
-  --arg seed_reg "${seed_reg}" --arg seed_repo "${seed_repo}" --arg seed_tag "${seed_tag}" \
-  '
-  .manager.image.registry = $mgr_reg |
-  .manager.image.repository = $mgr_repo |
-  .manager.image.tag = $mgr_tag |
-  .scheduler.image.registry = $sch_reg |
-  .scheduler.image.repository = $sch_repo |
-  .scheduler.image.tag = $sch_tag |
-  .client.image.registry = $cli_reg |
-  .client.image.repository = $cli_repo |
-  .client.image.tag = $cli_tag |
-  .seedClient.image.registry = $seed_reg |
-  .seedClient.image.repository = $seed_repo |
-  .seedClient.image.tag = $seed_tag
-  ' > "${TMP_OVERRIDE}"
+cat > "${TMP_OVERRIDE}" <<EOF
+manager:
+  image:
+    registry: ${mgr_reg}
+    repository: ${mgr_repo}
+    tag: ${mgr_tag}
+scheduler:
+  image:
+    registry: ${sch_reg}
+    repository: ${sch_repo}
+    tag: ${sch_tag}
+client:
+  image:
+    registry: ${cli_reg}
+    repository: ${cli_repo}
+    tag: ${cli_tag}
+seedClient:
+  image:
+    registry: ${seed_reg}
+    repository: ${seed_repo}
+    tag: ${seed_tag}
+EOF
 
 if [[ -n "${OUT_FILE}" ]]; then
   yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${BASE_VALUES}" "${TMP_OVERRIDE}" > "${OUT_FILE}"

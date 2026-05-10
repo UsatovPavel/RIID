@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIGMAP_YAML="${RIID_CONFIGMAP_YAML:-$SCRIPT_DIR/configmap.yaml}"
-ENV_FILE="${RIID_ENV_FILE:-$K8S_DIR/config/.env}"
+ENV_FILE="${ENV_FILE:-$K8S_DIR/config/.env}"
 PROFILE="${RIID_REGISTRY_PROFILE:-dockerhub}"
 PROFILE_DIR="${RIID_REGISTRY_PROFILE_DIR:-$K8S_DIR/providers/registry/client}"
 APPLY=0
@@ -14,7 +14,7 @@ APPLY=0
 usage() {
   echo "Usage: $0 [--apply] [--profile NAME]"
   echo "  NAME: dockerhub | selectel | local (file deploy/k8s/providers/registry/client/<NAME>.yaml must exist)"
-  echo "Env: RIID_CONFIGMAP_YAML, RIID_ENV_FILE, RIID_REGISTRY_PROFILE, RIID_REGISTRY_PROFILE_DIR"
+  echo "Env: RIID_CONFIGMAP_YAML, ENV_FILE, RIID_REGISTRY_PROFILE, RIID_REGISTRY_PROFILE_DIR"
   echo "Credentials in .env:"
   echo "  dockerhub — RIID_DOCKERHUB_USER, RIID_DOCKERHUB_TOKEN (or RIID_DOCKERHUB_PASSWORD)"
   echo "  selectel  — RIID_SELECTEL_USER, RIID_SELECTEL_TOKEN (or RIID_SELECTEL_PASSWORD)"

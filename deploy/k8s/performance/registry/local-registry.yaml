@@ -24,7 +24,7 @@ spec:
         riid.registry: "true"
       containers:
         - name: registry
-          image: registry:2
+          image: performance.local_registry
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -1,32 +1,29 @@
 #!/usr/bin/env bash
 # docker-registry secret + default SA imagePullSecret for Selectel CR (mirrored Dragonfly/Bitnami images).
 #
-# Usage: setup-selectel-registry-pull-secret.sh [Selectel/.env] [config/.env]
+# Usage: setup-selectel-registry-pull-secret.sh [config/.env]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-K8S_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SELECTEL_ENV="${1:-$K8S_DIR/Selectel/.env}"
-RIID_ENV="${2:-$K8S_DIR/config/.env}"
+K8S_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+ENV_FILE="${1:-$K8S_DIR/config/.env}"
 
 NAMESPACE="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
 SECRET_NAME="${DRAGONFLY_SELECTEL_PULL_SECRET_NAME:-dragonfly-selectel-registry}"
 SERVICE_ACCOUNT="${DRAGONFLY_SERVICE_ACCOUNT:-default}"
 
-if [[ ! -f "$SELECTEL_ENV" ]] || [[ ! -f "$RIID_ENV" ]]; then
+if [[ ! -f "$ENV_FILE" ]]; then
   echo "setup-selectel-registry-pull-secret: missing env file (skip)." >&2
   exit 0
 fi
 
 set -a
 # shellcheck disable=SC1090
-source "$SELECTEL_ENV"
-# shellcheck disable=SC1090
-source "$RIID_ENV"
+source "$ENV_FILE"
 set +a
 
 if [[ -z "${RIID_SELECTEL_USER:-}" ]]; then
-  echo "setup-selectel-registry-pull-secret: RIID_SELECTEL_USER empty in $RIID_ENV (skip)." >&2
+  echo "setup-selectel-registry-pull-secret: RIID_SELECTEL_USER empty in $ENV_FILE (skip)." >&2
   exit 0
 fi
 
@@ -36,14 +33,7 @@ if [[ -z "$SELECTEL_PASS" ]]; then
   exit 0
 fi
 
-: "${REGISTRY:?set REGISTRY in $SELECTEL_ENV}"
-REGISTRY="${REGISTRY%/}"
-if [[ "$REGISTRY" == */* ]]; then
-  REG_HOST="${REGISTRY%%/*}"
-else
-  REG_HOST="${REGISTRY_LOGIN_HOST:-cr.selcloud.ru}"
-fi
-
+REG_HOST="${REGISTRY_LOGIN_HOST:-cr.selcloud.ru}"
 DOCKER_SERVER="https://${REG_HOST}"
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null

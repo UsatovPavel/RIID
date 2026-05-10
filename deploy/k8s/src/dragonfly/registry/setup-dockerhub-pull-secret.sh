@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-K8S_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ENV_FILE="${RIID_ENV_FILE:-$K8S_DIR/config/.env}"
+K8S_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$K8S_DIR/config/.env}"
 
 NAMESPACE="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
 SECRET_NAME="${DRAGONFLY_DOCKERHUB_PULL_SECRET_NAME:-dragonfly-dockerhub}"

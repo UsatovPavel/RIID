@@ -1,0 +1,19 @@
+apiVersion: v1
+clusters:
+  - cluster:
+      certificate-authority-data: "REPLACE_WITH_BASE64_CLUSTER_CA"
+      server: https://REPLACE_WITH_KUBE_API_HOST:6443
+    name: "REPLACE_WITH_CLUSTER_NAME"
+contexts:
+  - context:
+      cluster: "REPLACE_WITH_CLUSTER_NAME"
+      user: "REPLACE_WITH_USER_NAME"
+    name: "REPLACE_WITH_CONTEXT_NAME"
+current-context: "REPLACE_WITH_CONTEXT_NAME"
+kind: Config
+preferences: {}
+users:
+  - name: "REPLACE_WITH_USER_NAME"
+    user:
+      client-certificate-data: "REPLACE_WITH_BASE64_CLIENT_CERT"
+      client-key-data: "REPLACE_WITH_BASE64_CLIENT_KEY"

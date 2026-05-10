@@ -5,9 +5,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RIID_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-K8S_DIR="$(cd "$RIID_DIR/../.." && pwd)"
-ENV_FILE="${RIID_ENV_FILE:-$K8S_DIR/config/.env}"
+K8S_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$K8S_DIR/config/.env}"
 PROFILE_YAML="${RIID_REGISTRY_SELECTEL_PROFILE:-$K8S_DIR/providers/registry/client/selectel.yaml}"
 NS="${RIID_NAMESPACE:-riid-system}"
 CONTAINER="${RIID_CONTAINER:-riid}"

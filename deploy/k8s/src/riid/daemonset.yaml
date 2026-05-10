@@ -38,7 +38,7 @@ spec:
       # Если Secret riid-config-secret существует, его config.yaml копируется в emptyDir; иначе — из ConfigMap riid-config.
       initContainers:
         - name: pick-riid-config
-          image: busybox:1.36.1
+          image: riid.daemonset.init_busybox
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
@@ -59,7 +59,7 @@ spec:
               mountPath: /sec
       containers:
         - name: riid
-          image: ghcr.io/usatovpavel/riid:v0.3.8
+          image: riid.daemonset.riid
           imagePullPolicy: IfNotPresent
           securityContext:
             capabilities:

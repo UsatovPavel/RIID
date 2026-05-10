@@ -1,0 +1,7 @@
+# Source of truth for RIID client.registries (provider=selectel).
+# Change host if your Selectel CR endpoint differs.
+registries:
+  - scheme: "https"
+    host: "cr.selcloud.ru"
+    port: -1
+    credentials: null

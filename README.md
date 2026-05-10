@@ -129,12 +129,12 @@ For more info see docs/*.md
 
 ## Kubernetes deployment
 
-Manifests and **Make** targets are under **`deploy/k8s/`**. Set kubectl context via kubeconfig (default **`deploy/k8s/Selectel/serverConfig.yaml`**; override with **`CONFIG_FILE=…`** on each `make -C deploy/k8s/Selectel …`).
+Manifests and **Make** targets are under **`deploy/k8s/`**. Set kubectl context via kubeconfig (default **`deploy/k8s/providers/cluster/Selectel/serverConfig.yaml`**; copy from **`serverConfig.example.yaml`** in that folder; override with **`CONFIG_FILE=…`** on each `make -C deploy/k8s/bootstrap …`).
 
 Typical first-time bootstrap:
 
 ```bash
-make -C deploy/k8s/Selectel install-all
+make -C deploy/k8s/bootstrap install-all
 ```
 ```.env
 RIID_DOCKERHUB_USER=
@@ -143,4 +143,4 @@ RIID_SELECTEL_USER=
 RIID_SELECTEL_TOKEN=
 RIID_REGISTRY_PROVIDER=SELECTEL/DOCKERHUB
 ```
-That wires storage labels (when applicable), Dragonfly, RIID DaemonSet, vmagent, pod tooling, and the monitoring observer chart. Put **`deploy/k8s/riid/.env`** for registry secrets when needed — see **`deploy/k8s/riid/.env.example`**. Full sequence, smoke pulls, and registry switching: **[deploy/k8s/README.md](deploy/k8s/README.md)**.
+That wires storage labels (when applicable), Dragonfly, RIID DaemonSet, vmagent, pod tooling, and the monitoring observer chart. Put **`deploy/k8s/config/.env`** for registry secrets when needed — see **`deploy/k8s/config/.env.example`**. Full sequence, smoke pulls, and registry switching: **[deploy/k8s/README.md](deploy/k8s/README.md)**.

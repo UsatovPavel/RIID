@@ -1,0 +1,6 @@
+# Source of truth for RIID client.registries (provider=dockerhub).
+registries:
+  - scheme: "https"
+    host: "registry-1.docker.io"
+    port: -1
+    credentials: null

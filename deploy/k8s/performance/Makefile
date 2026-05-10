@@ -1,4 +1,4 @@
-CONFIG_FILE ?= ../Selectel/serverConfig.yaml
+CONFIG_FILE ?= ../providers/cluster/Selectel/serverConfig.yaml
 KUBECONFIG := $(abspath $(CONFIG_FILE))
 PERF_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 INPUT_DIR := $(PERF_DIR)/input
