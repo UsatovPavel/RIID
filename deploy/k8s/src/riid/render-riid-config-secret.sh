@@ -4,15 +4,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+K8S_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIGMAP_YAML="${RIID_CONFIGMAP_YAML:-$SCRIPT_DIR/configmap.yaml}"
-ENV_FILE="${RIID_ENV_FILE:-$SCRIPT_DIR/.env}"
+ENV_FILE="${RIID_ENV_FILE:-$K8S_DIR/config/.env}"
 PROFILE="${RIID_REGISTRY_PROFILE:-dockerhub}"
+PROFILE_DIR="${RIID_REGISTRY_PROFILE_DIR:-$K8S_DIR/providers/registry/client}"
 APPLY=0
 
 usage() {
   echo "Usage: $0 [--apply] [--profile NAME]"
-  echo "  NAME: dockerhub | selectel | local (file deploy/k8s/riid/registry/<NAME>.yaml must exist)"
-  echo "Env: RIID_CONFIGMAP_YAML, RIID_ENV_FILE, RIID_REGISTRY_PROFILE"
+  echo "  NAME: dockerhub | selectel | local (file deploy/k8s/providers/registry/client/<NAME>.yaml must exist)"
+  echo "Env: RIID_CONFIGMAP_YAML, RIID_ENV_FILE, RIID_REGISTRY_PROFILE, RIID_REGISTRY_PROFILE_DIR"
   echo "Credentials in .env:"
   echo "  dockerhub — RIID_DOCKERHUB_USER, RIID_DOCKERHUB_TOKEN (or RIID_DOCKERHUB_PASSWORD)"
   echo "  selectel  — RIID_SELECTEL_USER, RIID_SELECTEL_TOKEN (or RIID_SELECTEL_PASSWORD)"
@@ -39,7 +41,7 @@ command -v kubectl >/dev/null 2>&1 || { echo "kubectl is required" >&2; exit 1; 
 [[ -f "$CONFIGMAP_YAML" ]] || { echo "ConfigMap not found: $CONFIGMAP_YAML" >&2; exit 1; }
 [[ -f "$ENV_FILE" ]] || { echo "No .env (copy from .env.example): $ENV_FILE" >&2; exit 1; }
 
-PROFILE_YAML="$SCRIPT_DIR/registry/${PROFILE}.yaml"
+PROFILE_YAML="$PROFILE_DIR/${PROFILE}.yaml"
 [[ -f "$PROFILE_YAML" ]] || {
   echo "Unknown registry profile '${PROFILE}': missing $PROFILE_YAML" >&2
   exit 1
@@ -82,7 +84,7 @@ trap 'rm -f "$TMP_INNER" "$OUT"' EXIT
 
 export _RIID_PROFILE_YAML="$PROFILE_YAML"
 
-# Base structure from ConfigMap; client.registries replaced from registry/<profile>.yaml.
+# Base structure from ConfigMap; client.registries replaced from providers/registry/client/<profile>.yaml.
 yq e '.data["config.yaml"]' "$CONFIGMAP_YAML" \
   | yq e '.client.registries = load(strenv(_RIID_PROFILE_YAML)).registries' - \
   > "$TMP_INNER"

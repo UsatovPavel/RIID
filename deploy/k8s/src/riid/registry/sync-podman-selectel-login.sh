@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Во все Running-подах riid выполняется podman login на хост из sibling selectel.yaml
-# и кредитами RIID_SELECTEL_* из deploy/k8s/riid/.env (как для render-riid-config-secret).
+# Во все Running-подах riid выполняется podman login на host из providers/registry/client/selectel.yaml
+# и кредитами RIID_SELECTEL_* из deploy/k8s/config/.env (как для render-riid-config-secret).
 # Вызывать после rollout riid при make registry-selectel.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RIID_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="${RIID_ENV_FILE:-$RIID_DIR/.env}"
-PROFILE_YAML="${RIID_REGISTRY_SELECTEL_PROFILE:-$SCRIPT_DIR/selectel.yaml}"
+K8S_DIR="$(cd "$RIID_DIR/../.." && pwd)"
+ENV_FILE="${RIID_ENV_FILE:-$K8S_DIR/config/.env}"
+PROFILE_YAML="${RIID_REGISTRY_SELECTEL_PROFILE:-$K8S_DIR/providers/registry/client/selectel.yaml}"
 NS="${RIID_NAMESPACE:-riid-system}"
 CONTAINER="${RIID_CONTAINER:-riid}"
 

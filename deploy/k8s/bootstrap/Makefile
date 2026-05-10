@@ -1,13 +1,11 @@
-# Selectech — kubeconfig: локальный файл (по умолчанию serverConfig.yaml; при смене аренды часто тот же файл, контекст внутри меняется).
+# Selectel — kubeconfig: локальный файл (по умолчанию serverConfig.yaml; при смене аренды часто тот же файл, контекст внутри меняется).
 CONFIG_FILE ?= serverConfig.yaml
 SELECTEL_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 K8S := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 OBSERVER_CHART := $(K8S)/monitoring/helm/riid-observer
 KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
-LOCAL_REGISTRY_MANIFEST := $(K8S)/performance/registry/local-registry.yaml
-DRAGONFLY_REGISTRY_DIR := $(K8S)/dragonfly/registry
+DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
-DRAGONFLY_SELECTEL_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-selectel-registry-pull-secret.sh
 
 # OpenStack Cinder: класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
 # Переопределить: make storage-default STORAGE_CLASS=другой-класс
@@ -16,12 +14,9 @@ RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
-PERF_REGISTRY_DATASET ?= $(K8S)/performance/input/dataset_a.tsv
-INIT_WORKER_IMAGE_SCRIPT := $(SELECTEL_DIR)/registry/init-worker-image.sh
-
 # Образ DaemonSet должен уже содержать podman+fuse-overlayfs+curl+jq (+ storage/registries как в Dockerfile.worker или экв.).
-# На нодах ничего не ставим: сборка и пуш — `make init-worker-tooling-image`; loader для local-registry см. REGISTRY_LOADER_IMAGE.
-.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly dragonfly-dockerhub-pull-secret dragonfly-selectel-registry-pull-secret secret-config secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile install-local-registry wait-local-registry load-performance-registry-dataset init-worker-tooling-image verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental rollout-riid-image-from-manifest
+# На нодах ничего не ставим; worker-tooling, local-registry и профили registry — bootstrap/registry/Makefile.
+.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -87,111 +82,21 @@ storage-default:
 		-p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
 # Новый конфиг Dragonfly: правите repo root scripts/values.yaml, затем снова эта цель (helm upgrade --install).
-dragonfly-dockerhub-pull-secret:
+# Перед helm: Docker Hub imagePullSecret в dragonfly-system (см. также bootstrap/registry/Makefile для профилей registry).
+install-dragonfly:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	bash "$(DRAGONFLY_PULL_SECRET_SCRIPT)"
-
-dragonfly-selectel-registry-pull-secret:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	bash "$(DRAGONFLY_SELECTEL_PULL_SECRET_SCRIPT)" "$(SELECTEL_DIR)/.env" "$(K8S)/riid/.env"
-
-install-dragonfly:
-	@$(MAKE) -C "$(SELECTEL_DIR)" dragonfly-dockerhub-pull-secret
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	"$(K8S)/dragonfly/install-dragonfly.sh"
-
-# Явно собрать/применить Secret riid-config-secret из $(K8S)/riid/.env (профиль Docker Hub).
-secret-config: secret-config-riid
-
-secret-config-riid:
-	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
-
-# Переключить client.registries в кластере (Secret + rollout riid). Перед этим dragonfly-system imagePullSecret под PROFILE.
-# PROFILE=dockerhub: setup-dockerhub-pull-secret.sh · selectel|local: setup-selectel-registry-pull-secret.sh
-registry-dockerhub:
-	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=dockerhub
-
-registry-selectel:
-	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=selectel
-
-registry-local:
-	@$(MAKE) -C "$(SELECTEL_DIR)" registry-apply-profile PROFILE=local
-
-registry-apply-profile:
-	@if [ -z "$(PROFILE)" ]; then echo "registry-apply-profile: set PROFILE=dockerhub|selectel|local"; exit 1; fi; \
-	export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
-	[ -f "$(K8S)/riid/.env" ] || { echo "registry-apply-profile: нет $(K8S)/riid/.env (см. riid/.env.example)"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	if [ "$(PROFILE)" = dockerhub ]; then \
-	  $(MAKE) -C "$(SELECTEL_DIR)" dragonfly-dockerhub-pull-secret; \
-	else \
-	  $(MAKE) -C "$(SELECTEL_DIR)" dragonfly-selectel-registry-pull-secret; \
-	fi; \
-	bash "$(K8S)/riid/render-riid-config-secret.sh" --apply --profile "$(PROFILE)"; \
-	if kubectl -n riid-system get daemonset riid >/dev/null 2>&1; then \
-	  kubectl -n riid-system rollout restart daemonset riid; \
-	  kubectl -n riid-system rollout status daemonset riid; \
-	else \
-	  echo "registry-apply-profile: daemonset/riid not found yet, restart skipped"; \
-	fi; \
-	if [ "$(PROFILE)" = selectel ]; then \
-	  bash "$(K8S)/riid/registry/sync-podman-selectel-login.sh"; \
-	fi
-
-# Поднимает local registry для схемы 10 + 1 + 1: отдельный pod на ноде с label riid.registry=true.
-install-local-registry:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	kubectl apply -f "$(LOCAL_REGISTRY_MANIFEST)"
-
-wait-local-registry:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	kubectl -n registry-system rollout status deployment/local-registry
-
-# Сборка и push worker-tooling image (Podman + curl + …) в Selectel registry; нужен docker/podman у оператора.
-init-worker-tooling-image:
-	@"$(INIT_WORKER_IMAGE_SCRIPT)" "$(SELECTEL_DIR)/.env" "$(K8S)/riid/.env"
-
-# Прогоняет dataset через podman в ephemeral loader pod (registry-нода). Образ loader: REGISTRY_LOADER_IMAGE
-# или <REGISTRY из Selectel .env>/worker/k8s-worker-tooling:24.04 (после init-worker-tooling-image).
-load-performance-registry-dataset:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	LOADER_IMG="$${REGISTRY_LOADER_IMAGE:-}"; \
-	if [ -z "$$LOADER_IMG" ]; then \
-	  ENV_FILE="$(SELECTEL_DIR)/.env"; \
-	  [ -f "$$ENV_FILE" ] || { echo "load-performance-registry-dataset: set REGISTRY_LOADER_IMAGE or create $$ENV_FILE with REGISTRY"; exit 1; }; \
-	  set -a; . "$$ENV_FILE"; \
-	  set +a; \
-	  : "$${REGISTRY:?load-performance-registry-dataset: REGISTRY is required in $$ENV_FILE}"; \
-	  REGISTRY="$${REGISTRY%/}"; \
-	  case "$$REGISTRY" in */*) REG_PREFIX="$$REGISTRY";; *) REG_PREFIX="$${REGISTRY_LOGIN_HOST:-cr.selcloud.ru}/$$REGISTRY";; esac; \
-	  LOADER_IMG="$$REG_PREFIX/worker/k8s-worker-tooling:24.04"; \
-	fi; \
-	echo "load-performance-registry-dataset: REGISTRY_LOADER_IMAGE=$$LOADER_IMG" >&2; \
-	DATASET_FILE="$(PERF_REGISTRY_DATASET)" REGISTRY_LOADER_IMAGE="$$LOADER_IMG" \
-	  bash "$(K8S)/performance/registry/load-dataset-into-local-registry.sh"
+	bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
 
 # Работает из любой cwd; манифесты: $(K8S)/…
-# Secret riid-config-secret: при наличии $(K8S)/riid/.env — render-riid-config-secret.sh (yq + kubectl), иначе пропуск.
+# Secret riid-config-secret из $(K8S)/config/.env — только bootstrap/registry/Makefile (secret-config-riid / registry-apply-profile).
 install-riid:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
@@ -199,10 +104,10 @@ install-riid:
 	kubectl config use-context "$$CTX"; \
 	kubectl apply -f "$(K8S)/namespace.yaml"; \
 	kubectl apply -f "$(K8S)/riid/configmap.yaml"; \
-	if [ -f "$(K8S)/riid/.env" ]; then \
-	  $(MAKE) -C "$(SELECTEL_DIR)" secret-config-riid; \
+	if [ -f "$(K8S)/config/.env" ]; then \
+	  echo "install-riid: есть $(K8S)/config/.env — при необходимости примените Secret из bootstrap/registry/Makefile (secret-config-riid)." >&2; \
 	else \
-	  echo "install-riid: нет $(K8S)/riid/.env — пропуск riid-config-secret (см. riid/.env.example)" >&2; \
+	  echo "install-riid: нет $(K8S)/config/.env — пропуск riid-config-secret (см. config/.env.example)" >&2; \
 	fi; \
 	kubectl apply -f "$(K8S)/riid/daemonset.yaml"; \
 	kubectl apply -f "$(K8S)/riid/service.yaml"
@@ -304,7 +209,7 @@ wait-monitoring-observer:
 
 # POST /pull в первом pod RIID (curl уже в образе контейнера). Другая нода: NODE=имя-ноды make smoke-download
 # smoke: SMOKE_REPOSITORY — имя как на Docker Hub (default library/jobber). Для Selectel зеркала:
-#   make init-performance-registry-images (пишет registry/performance-registry-smoke-map.tsv), затем SMOKE_REGISTRY_TARGET=selectel
+#   из bootstrap/registry/Makefile: init-performance-registry-images (пишет registry/performance-registry-smoke-map.tsv), затем SMOKE_REGISTRY_TARGET=selectel
 SMOKE_REPOSITORY ?= library/jobber
 SMOKE_REGISTRY_TARGET ?= dockerhub
 SMOKE_REPOSITORY_MAP_FILE ?=
@@ -352,29 +257,9 @@ install-all:
 	@$(MAKE) -C "$(SELECTEL_DIR)" verify-riid-pod-tooling
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-metrics-collector
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-metrics-collector
-	@$(MAKE) -C "$(SELECTEL_DIR)" install-local-registry
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-monitoring-observer
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-monitoring-observer
-	@$(MAKE) -C "$(SELECTEL_DIR)" wait-local-registry
-	@$(MAKE) -C "$(SELECTEL_DIR)" load-performance-registry-dataset
-	@$(MAKE) -C "$(SELECTEL_DIR)" registry-local
-# comment registry-local if you want DockerHub as registry provider or use registry-selectel
-# Перед install-all: образ в riid/daemonset.yaml — worker-based (podman+curl+jq+…); при необходимости: make init-worker-tooling-image
-
-# Зеркалирование образов: объединение (без дубликатов) deploy/k8s/Selectel/registry/images_list.sizes.tsv и списка library/* из Java (PopularDockerHubImagesFromProgramDocs); см. скрипт.
-# Инкремент (только новые строки снизу TSV): один раз make init-performance-registry-images-state-init, затем make init-performance-registry-images-incremental.
-# В deploy/k8s/Selectech/.env: REGISTRY_USER, REGISTRY_PASSWORD, REGISTRY (например cr.selcloud.ru/my-registry).
-# Другой файл окружения: make init-performance-registry-images ENV_FILE=/path/.env
-ENV_FILE ?= $(SELECTEL_DIR)/.env
-init-performance-registry-images:
-	@"$(SELECTEL_DIR)/registry/init-performance-registry-images.sh" "$(ENV_FILE)"
-
-init-performance-registry-images-state-init:
-	@"$(SELECTEL_DIR)/registry/init-performance-registry-images-incremental.sh" --init-state "$(ENV_FILE)"
-
-# Опции: REGISTRY_INCREMENTAL_ARGS='--from-line 104' или --no-update-state
-init-performance-registry-images-incremental:
-	@"$(SELECTEL_DIR)/registry/init-performance-registry-images-incremental.sh" $(REGISTRY_INCREMENTAL_ARGS) "$(ENV_FILE)"
+# Local registry, dataset, registry-профиль и зеркалирование образов — bootstrap/registry/Makefile.
 
 print-pod:
 	@export KUBECONFIG="$(KUBECONFIG)"; \

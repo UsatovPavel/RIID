@@ -1,7 +1,0 @@
-# Merged into RIID config client.registries by render-riid-config-secret.sh (--profile selectel).
-# Change host if your Selectel CR endpoint differs.
-registries:
-  - scheme: "https"
-    host: "cr.selcloud.ru"
-    port: -1
-    credentials: null

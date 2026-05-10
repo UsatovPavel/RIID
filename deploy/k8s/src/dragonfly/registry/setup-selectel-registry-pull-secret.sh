@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # docker-registry secret + default SA imagePullSecret for Selectel CR (mirrored Dragonfly/Bitnami images).
 #
-# Usage: setup-selectel-registry-pull-secret.sh [Selectel/.env] [riid/.env]
+# Usage: setup-selectel-registry-pull-secret.sh [Selectel/.env] [config/.env]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SELECTEL_ENV="${1:-$K8S_DIR/Selectel/.env}"
-RIID_ENV="${2:-$K8S_DIR/riid/.env}"
+RIID_ENV="${2:-$K8S_DIR/config/.env}"
 
 NAMESPACE="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
 SECRET_NAME="${DRAGONFLY_SELECTEL_PULL_SECRET_NAME:-dragonfly-selectel-registry}"
