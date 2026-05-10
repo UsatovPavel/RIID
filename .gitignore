@@ -57,3 +57,4 @@ external_utils/*
 deploy/k8s/bootstrap/*
 deploy/k8s/providers/cluster/**/serverConfig.yaml
 deploy/k8s/**/output/
+deploy/k8s/performance/input/

@@ -21,7 +21,7 @@ spec:
       serviceAccountName: vmagent
       containers:
         - name: vmagent
-          image: victoriametrics/vmagent:latest
+          image: docker.io/victoriametrics/vmagent:v1.142.0
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-ec"]
           args:

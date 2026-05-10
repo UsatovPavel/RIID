@@ -4,6 +4,8 @@ SELECTEL_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 K8S := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 OBSERVER_CHART := $(K8S)/monitoring/helm/riid-observer
 KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
+GLOBAL_CONFIG_FILE := $(K8S)/config/config.yaml
+INFRA_VERSIONS_FILE := $(K8S)/config/infra_versions.yaml
 DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
 
@@ -16,7 +18,7 @@ MONITORING_NODE ?=
 REGISTRY_NODE ?=
 # Образ DaemonSet должен уже содержать podman+fuse-overlayfs+curl+jq (+ storage/registries как в Dockerfile.worker или экв.).
 # На нодах ничего не ставим; worker-tooling, local-registry и профили registry — bootstrap/registry/Makefile.
-.PHONY: connect nodes mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -33,6 +35,20 @@ nodes:
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	kubectl get nodes -o wide
+
+# Проверяет соответствие текущего числа worker-нод глобальному config.yaml (cluster_topology.workers).
+validate-cluster-state:
+	@command -v yq >/dev/null || { echo "yq not found"; exit 1; }
+	@[ -f "$(GLOBAL_CONFIG_FILE)" ] || { echo "global config not found: $(GLOBAL_CONFIG_FILE)"; exit 1; }
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	EXPECTED_WORKERS=$$(yq e '.cluster_topology.workers' "$(GLOBAL_CONFIG_FILE)"); \
+	[ "$$EXPECTED_WORKERS" != "null" ] && [ -n "$$EXPECTED_WORKERS" ] || { echo "cluster_topology.workers is empty in $(GLOBAL_CONFIG_FILE)"; exit 1; }; \
+	ACTUAL_WORKERS=$$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.labels.node-role\.kubernetes\.io/control-plane}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/master}{"\n"}{end}' | awk '$$1=="" && $$2=="" {c++} END {print c+0}'); \
+	echo "validate-cluster-state: workers actual=$$ACTUAL_WORKERS expected=$$EXPECTED_WORKERS"; \
+	[ "$$ACTUAL_WORKERS" -eq "$$EXPECTED_WORKERS" ] || { echo "workers mismatch: expected=$$EXPECTED_WORKERS actual=$$ACTUAL_WORKERS"; exit 1; }
 
 # Автовыбор monitoring-ноды: последняя worker-нода (не control-plane/master).
 # Если задан MONITORING_NODE, используется он.
@@ -156,13 +172,18 @@ verify-riid-pod-tooling:
 
 # vmagent (DaemonSet) для сбора метрик по prometheus-аннотациям pod/service.
 install-metrics-collector:
+	@command -v yq >/dev/null || { echo "yq not found"; exit 1; }
+	@[ -f "$(INFRA_VERSIONS_FILE)" ] || { echo "infra versions not found: $(INFRA_VERSIONS_FILE)"; exit 1; }
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	VMAGENT_IMAGE=$$(yq e '.monitoring.vmagent.image' "$(INFRA_VERSIONS_FILE)"); \
+	[ "$$VMAGENT_IMAGE" != "null" ] && [ -n "$$VMAGENT_IMAGE" ] || { echo "monitoring.vmagent.image is empty in $(INFRA_VERSIONS_FILE)"; exit 1; }; \
 	kubectl apply -f "$(K8S)/monitoring/worker/vmagent-rbac.yaml"; \
 	kubectl apply -f "$(K8S)/monitoring/worker/vmagent-configmap.yaml"; \
-	kubectl apply -f "$(K8S)/monitoring/worker/vmagent-daemonset.yaml"
+	kubectl apply -f "$(K8S)/monitoring/worker/vmagent-daemonset.yaml"; \
+	kubectl -n riid-system set image daemonset/vmagent vmagent="$$VMAGENT_IMAGE"
 
 wait-metrics-collector:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -188,12 +209,23 @@ sync-monitoring-observer-chart:
 # VictoriaMetrics + Grafana + kube-state-metrics на monitoring-ноде (Helm). При первом переходе с kubectl apply: helm uninstall riid-observer -n riid-system.
 install-monitoring-observer: sync-monitoring-observer-chart
 	@command -v helm >/dev/null || { echo "helm not found (same install as Dragonfly)"; exit 1; }
+	@command -v yq >/dev/null || { echo "yq not found"; exit 1; }
+	@[ -f "$(INFRA_VERSIONS_FILE)" ] || { echo "infra versions not found: $(INFRA_VERSIONS_FILE)"; exit 1; }
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	VM_IMAGE=$$(yq e '.monitoring.victoria_metrics.image' "$(INFRA_VERSIONS_FILE)"); \
+	GRAFANA_IMAGE=$$(yq e '.monitoring.grafana.image' "$(INFRA_VERSIONS_FILE)"); \
+	KSM_IMAGE=$$(yq e '.monitoring.kube_state_metrics.image' "$(INFRA_VERSIONS_FILE)"); \
+	[ "$$VM_IMAGE" != "null" ] && [ -n "$$VM_IMAGE" ] || { echo "monitoring.victoria_metrics.image is empty in $(INFRA_VERSIONS_FILE)"; exit 1; }; \
+	[ "$$GRAFANA_IMAGE" != "null" ] && [ -n "$$GRAFANA_IMAGE" ] || { echo "monitoring.grafana.image is empty in $(INFRA_VERSIONS_FILE)"; exit 1; }; \
+	[ "$$KSM_IMAGE" != "null" ] && [ -n "$$KSM_IMAGE" ] || { echo "monitoring.kube_state_metrics.image is empty in $(INFRA_VERSIONS_FILE)"; exit 1; }; \
 	helm upgrade --install riid-observer "$(OBSERVER_CHART)" \
 		--namespace riid-system \
+		--set "victoriaMetrics.image=$$VM_IMAGE" \
+		--set "grafana.image=$$GRAFANA_IMAGE" \
+		--set "kubeStateMetrics.image=$$KSM_IMAGE" \
 		--wait=false && \
 	kubectl rollout restart deployment/grafana -n riid-system
 
@@ -249,6 +281,7 @@ smoke-download-all:
 # Selectech: default StorageClass → Dragonfly Helm → RIID (подряд; не параллелить с -j).
 install-all:
 	@$(MAKE) -C "$(SELECTEL_DIR)" storage-default
+	@$(MAKE) -C "$(SELECTEL_DIR)" validate-cluster-state
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-monitoring-node-auto
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-registry-node-auto
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-dragonfly
