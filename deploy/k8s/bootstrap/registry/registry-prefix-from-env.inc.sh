@@ -3,8 +3,9 @@
 # После source deploy/k8s/config/.env выставляет REG_PREFIX, REG_HOST, REG_REPO_PREFIX
 # (та же семантика, что resolve_registry_prefix в providers/registry/image/mapper-common.sh).
 riid_registry_prefix_from_env() {
-  : "${REGISTRY_SELECTEL_ID:?REGISTRY_SELECTEL_ID is required in environment}"
-  local sel="${REGISTRY_SELECTEL_ID%/}"
+  local sel_raw="${REGISTRY_SELECTEL_NAME:-}"
+  : "${sel_raw:?REGISTRY_SELECTEL_NAME is required in environment}"
+  local sel="${sel_raw%/}"
   if [[ "$sel" == */* ]]; then
     REG_PREFIX="$sel"
     REG_HOST="${sel%%/*}"

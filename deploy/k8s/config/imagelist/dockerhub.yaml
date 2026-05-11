@@ -22,7 +22,7 @@ infra:
     dragonfly.client: docker.io/dragonflyoss/client:v1.3.8
     dragonfly.seed_client: docker.io/dragonflyoss/client:v1.3.8
     riid.daemonset.init_busybox: docker.io/library/busybox:1.36.1
-    riid.daemonset.riid: ghcr.io/usatovpavel/riid:v0.3.8
+    riid.daemonset.riid: ghcr.io/usatovpavel/riid:v0.3.11
 
 test:
   images:

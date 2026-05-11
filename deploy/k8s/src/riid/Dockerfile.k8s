@@ -47,7 +47,7 @@ RUN apt-get update \
     iproute2 \
     netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*
-COPY deploy/k8s/riid/storage.conf /etc/containers/storage.conf
+COPY deploy/k8s/src/riid/storage.conf /etc/containers/storage.conf
 
 EXPOSE 9090
 

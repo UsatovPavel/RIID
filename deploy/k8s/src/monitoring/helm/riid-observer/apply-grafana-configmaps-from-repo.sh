@@ -4,7 +4,7 @@
 set -euo pipefail
 NS="${1:-riid-system}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../../" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../../../" && pwd)"
 DASH_DIR="${REPO_ROOT}/config/metrics/grafana/dashboards"
 HOME_JSON="${REPO_ROOT}/config/metrics/grafana/home/riid-home.json"
 

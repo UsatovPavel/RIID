@@ -5,7 +5,7 @@
 # Usage:
 #   ./load-worker-node-image.sh [deploy/k8s/config/.env] [optional-second-.env]
 #
-# Переменные — см. deploy/k8s/config/.env.example (REGISTRY_SELECTEL_ID, RIID_*).
+# Переменные — см. deploy/k8s/config/.env.example (REGISTRY_SELECTEL_NAME, RIID_*).
 #
 # Optional:
 #   REGISTRY_LOGIN_HOST

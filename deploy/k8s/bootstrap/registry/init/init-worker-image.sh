@@ -9,7 +9,7 @@
 #   ./init-worker-image.sh [deploy/k8s/config/.env] [optional-second-.env]
 #
 # Required in config .env (see deploy/k8s/config/.env.example):
-#   REGISTRY_SELECTEL_ID
+#   REGISTRY_SELECTEL_NAME
 #   RIID_DOCKERHUB_USER
 #   RIID_DOCKERHUB_TOKEN or RIID_DOCKERHUB_PASSWORD
 #   RIID_SELECTEL_USER

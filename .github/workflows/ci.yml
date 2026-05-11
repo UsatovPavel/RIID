@@ -167,7 +167,7 @@ jobs:
           OWNER_LC="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           IMAGE="${REGISTRY}/${OWNER_LC}/riid"
           TAG="${GITHUB_REF_NAME}"
-          docker build -f deploy/k8s/riid/Dockerfile.k8s \
+          docker build -f deploy/k8s/src/riid/Dockerfile.k8s \
             --build-arg GITHUB_ACTOR="${GITHUB_ACTOR}" \
             --build-arg GITHUB_PACKAGES_TOKEN="${GITHUB_PACKAGES_TOKEN}" \
             -t "${IMAGE}:${TAG}" \

@@ -24,7 +24,7 @@ if [[ -z "$_pull_host" ]]; then
     # shellcheck source=/dev/null
     source "$_cfg"
     set +a
-    if [[ -n "${REGISTRY_SELECTEL_ID:-}" ]]; then
+    if [[ -n "${REGISTRY_SELECTEL_NAME:-}" ]]; then
       _pull_host="${REGISTRY_LOGIN_HOST:-cr.selcloud.ru}"
     fi
   fi

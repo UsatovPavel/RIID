@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Генерирует deploy/k8s/config/imagelist/selectel.yaml и local.yaml из dockerhub.yaml.
 #
-# Env: PROVIDER_REGISTRY_ENV_FILE — для selectel (REGISTRY_SELECTEL_ID); если файла нет,
+# Env: PROVIDER_REGISTRY_ENV_FILE — для selectel (REGISTRY_SELECTEL_NAME); если файла нет,
 #      infra.images в selectel.yaml будет пустым.
 #
 # Usage:
