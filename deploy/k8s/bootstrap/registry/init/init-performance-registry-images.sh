@@ -2,9 +2,15 @@
 # Зеркалирует образы в приватный реестр для performance/smoke сценариев.
 #
 # Список имён — объединение без дубликатов (A ∪ B):
-#   A — строки images_list.sizes.tsv: колонка repository + колонка tag (если tag пустой — берётся POPULAR_IMAGES_REFERENCE из Java).
+#   A — строки TSV (по умолчанию images_list.sizes.tsv): колонка repository + колонка tag
+#       (если tag пустой — берётся POPULAR_IMAGES_REFERENCE из Java).
 #   B — репозитории из PopularDockerHubImagesFromProgramDocs.java; только те, которых ещё нет в A; тег для них — POPULAR_IMAGES_REFERENCE.
 # Повторные строки заголовка (repository<TAB>tag) пропускаются.
+#
+# RIID_IMAGES_LIST может указывать на альтернативный TSV (например infra_images_list.tsv).
+# Поддерживаются как docker.io-style репозитории (library/nginx), так и fully-qualified
+# источники (registry.k8s.io/ns/repo, ghcr.io/org/repo). Для fully-qualified источника
+# registry host отбрасывается только в destination path.
 #
 # Реестр назначения (push): из REGISTRY_SELECTEL_ID (+ опционально REGISTRY_LOGIN_HOST), см. mapper-common / .env.example.
 #   Полный префикс допускается в REGISTRY_SELECTEL_ID (host/путь).
@@ -16,8 +22,8 @@
 # Смок Selectel: SMOKE_REFERENCE должен совпадать с reference для выбранного образа (колонка 3 в map или тег из TSV).
 # Отключить strip library/: REGISTRY_PUSH_REPO_STRIP_LIBRARY=0
 #
-# Неудачные pull/tag/push пишутся в unsuccessfule_downloads.txt (рядом со скриптом), цикл не прерывается.
-# В performance-registry-smoke-map.tsv попадают только успешно зеркалированные репы.
+# Неудачные pull/tag/push пишутся в out/unsuccessfule_downloads.txt, цикл не прерывается.
+# В out/performance-registry-smoke-map.tsv попадают только успешно зеркалированные репы.
 #
 # Режим только списка (без ∪ Java): REGISTRY_MIRROR_TSV_ONLY=1 — для инкрементального зеркала по урезанному TSV.
 # Дописать строки в smoke-map без перезатирания: REGISTRY_MIRROR_APPEND_SMOKE_MAP=1.
@@ -27,21 +33,26 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$DIR/../../../../../.." && pwd)"
+REPO_ROOT="$(cd "$DIR/../../../../.." && pwd)"
+OUT_DIR="${DIR}/out"
 ENV_FILE="${1:-$REPO_ROOT/deploy/k8s/config/.env}"
 JAVA_LIST="$REPO_ROOT/src/testFixtures/java/riid/config/PopularDockerHubImagesFromProgramDocs.java"
 IMAGES_LIST_FILE="${RIID_IMAGES_LIST:-$DIR/../images_list.sizes.tsv}"
+if [[ "$IMAGES_LIST_FILE" != /* ]]; then
+  IMAGES_LIST_FILE="$REPO_ROOT/$IMAGES_LIST_FILE"
+fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "init-performance-registry-images: нет $ENV_FILE (задайте путь: $0 /path/.env)" >&2
   exit 1
 fi
-if [[ ! -f "$JAVA_LIST" ]]; then
-  echo "init-performance-registry-images: не найден $JAVA_LIST" >&2
-  exit 1
-fi
 if [[ ! -f "$IMAGES_LIST_FILE" ]]; then
   echo "init-performance-registry-images: не найден $IMAGES_LIST_FILE (задайте RIID_IMAGES_LIST или положите images_list.sizes.tsv рядом со скриптом)" >&2
+  exit 1
+fi
+
+if [[ "${REGISTRY_MIRROR_TSV_ONLY:-}" != 1 ]] && [[ ! -f "$JAVA_LIST" ]]; then
+  echo "init-performance-registry-images: не найден $JAVA_LIST" >&2
   exit 1
 fi
 
@@ -103,6 +114,12 @@ _mirror_skip_repo() {
   return 1
 }
 
+_is_fully_qualified_repo() {
+  local repo="$1"
+  local first="${repo%%/*}"
+  [[ "$first" == "localhost" || "$first" == *.* || "$first" == *:* ]]
+}
+
 while IFS=$'\t' read -r repo tcol || [[ -n "${repo:-}" ]]; do
   [[ -z "${repo:-}" ]] && continue
   _add_union_repo "$repo" "${tcol:-}"
@@ -134,7 +151,8 @@ if [[ "${REGISTRY_MIRROR_TSV_ONLY:-}" == 1 ]]; then
 else
   echo "init-performance-registry-images: к зеркалированию ${#REPOS[@]} уникальных репозиториев (TSV ∪ Java)" >&2
 fi
-FAIL_LOG="$DIR/unsuccessfule_downloads.txt"
+mkdir -p "$OUT_DIR"
+FAIL_LOG="$OUT_DIR/unsuccessfule_downloads.txt"
 if [[ "${REGISTRY_MIRROR_APPEND_FAIL_LOG:-}" == 1 ]] && [[ -f "$FAIL_LOG" ]]; then
   {
     echo ""
@@ -179,7 +197,12 @@ for i in "${!REPOS[@]}"; do
   if [[ "$REGISTRY_PUSH_REPO_STRIP_LIBRARY" == 1 ]] && [[ "$repo" == library/* ]]; then
     push_repo="${repo#library/}"
   fi
-  src="docker.io/${repo}:${tuse}"
+  if _is_fully_qualified_repo "$repo"; then
+    src="${repo}:${tuse}"
+    push_repo="${push_repo#*/}"
+  else
+    src="docker.io/${repo}:${tuse}"
+  fi
   dst="${REG_PREFIX}/${push_repo}:${tuse}"
   echo ">>> pull  $src (timeout ${PULL_TIMEOUT})" >&2
   _step_log="$(mktemp)"
@@ -232,6 +255,9 @@ emit_performance_registry_smoke_map_rows() {
     if [[ "$REGISTRY_PUSH_REPO_STRIP_LIBRARY" == 1 ]] && [[ "$repo" == library/* ]]; then
       push_repo="${repo#library/}"
     fi
+    if _is_fully_qualified_repo "$repo"; then
+      push_repo="${push_repo#*/}"
+    fi
     if [[ -n "$REG_REPO_PREFIX" ]]; then
       riid_repo="${REG_REPO_PREFIX}/${push_repo}"
     else
@@ -248,13 +274,13 @@ emit_performance_registry_smoke_map() {
   if [[ "${REGISTRY_MIRROR_TSV_ONLY:-}" == 1 ]]; then
     echo "# merge: ${IMAGES_LIST_FILE##*/} only (REGISTRY_MIRROR_TSV_ONLY); skip: clefos + REGISTRY_MIRROR_SKIP"
   else
-    echo "# merge: ${IMAGES_LIST_FILE##*/} ∪ Java library/*; skip: clefos + REGISTRY_MIRROR_SKIP; в таблице только успешно зеркалированные (см. unsuccessfule_downloads.txt)"
+    echo "# merge: ${IMAGES_LIST_FILE##*/} ∪ Java library/*; skip: clefos + REGISTRY_MIRROR_SKIP; в таблице только успешно зеркалированные (см. out/unsuccessfule_downloads.txt)"
   fi
   echo "# Columns: docker_hub_repository<TAB>riid_registry_path<TAB>reference (tag on mirror)"
   emit_performance_registry_smoke_map_rows
 }
 
-MAP_OUT="$DIR/performance-registry-smoke-map.tsv"
+MAP_OUT="$OUT_DIR/performance-registry-smoke-map.tsv"
 if [[ "${REGISTRY_MIRROR_APPEND_SMOKE_MAP:-}" == 1 ]] && [[ -f "$MAP_OUT" ]]; then
   emit_performance_registry_smoke_map_rows >> "$MAP_OUT"
 else

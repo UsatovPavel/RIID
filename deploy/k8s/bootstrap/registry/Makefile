@@ -1,6 +1,8 @@
 REGISTRY_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 SELECTEL_DIR ?= $(abspath $(REGISTRY_DIR)/..)
 K8S ?= $(abspath $(SELECTEL_DIR)/..)
+GLOBAL_CONFIG_FILE := $(K8S)/config/config.yaml
+PROFILE ?= $(shell yq e '.cluster_provider // ""' "$(GLOBAL_CONFIG_FILE)" 2>/dev/null | sed -e 's/#.*//' | tr '[:upper:]' '[:lower:]' | xargs)
 CONFIG_FILE ?= ../providers/cluster/Selectel/serverConfig.yaml
 KUBECONFIG ?= $(abspath $(SELECTEL_DIR)/$(CONFIG_FILE))
 
@@ -47,9 +49,10 @@ registry-selectel:
 registry-local:
 	@$(MAKE) -C "$(REGISTRY_DIR)" registry-apply-profile PROFILE=local K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)" SELECTEL_DIR="$(SELECTEL_DIR)"
 
-# Pull-secret → RIID Secret/rollout → [selectel: imagelist-overlays + Helm fragment] → install-dragonfly.sh → perf lists (опционально).
+# Pull-secret → RIID Secret/rollout → install-dragonfly.sh → copy pre-generated perf datasets.
 registry-apply-profile:
-	@if [ -z "$(PROFILE)" ]; then echo "registry-apply-profile: set PROFILE=dockerhub|selectel|local"; exit 1; fi; \
+	@if [ -z "$(PROFILE)" ]; then echo "registry-apply-profile: set PROFILE=dockerhub|selectel|local или заполните cluster_provider в $(GLOBAL_CONFIG_FILE)"; exit 1; fi; \
+	echo "registry-apply-profile: PROFILE=$(PROFILE)"; \
 	case "$(PROFILE)" in dockerhub|selectel|local) ;; *) echo "registry-apply-profile: invalid PROFILE=$(PROFILE)"; exit 1;; esac; \
 	export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
@@ -73,23 +76,26 @@ registry-apply-profile:
 	if [ "$(PROFILE)" = selectel ]; then \
 	  bash "$(K8S)/src/riid/registry/sync-podman-selectel-login.sh"; \
 	fi; \
-	if [ "$(PROFILE)" = selectel ]; then \
-	  echo "registry-apply-profile: imagelist-overlays (Selectel Helm fragment -> .resolved)"; \
-	  $(MAKE) -C "$(PROVIDERS_MAKE_DIR)" imagelist-overlays CONFIG_ENV="$(K8S)/config/.env"; \
-	fi; \
 	echo "registry-apply-profile: helm upgrade dragonfly (render-values + .resolved Helm fragment)"; \
 	DRAGONFLY_REGISTRY_PROFILE="$(PROFILE)" bash "$(K8S)/src/dragonfly/install-dragonfly.sh"; \
-	if [ -z "$${SKIP_REGISTRY_PROVIDER_PERF_SYNC:-}" ]; then \
-	  echo "registry-apply-profile: generate-registry-image-lists (providers)"; \
-	  $(MAKE) -C "$(PROVIDERS_MAKE_DIR)" generate-registry-image-lists CONFIG_ENV="$(K8S)/config/.env"; \
-	else \
-	  echo "registry-apply-profile: skip perf lists (SKIP_REGISTRY_PROVIDER_PERF_SYNC set)" >&2; \
-	fi; \
+	echo "registry-apply-profile: providers generation is out of bootstrap scope (no imagelist-overlays / generate-registry-image-lists)"; \
 	PERF_IN="$(K8S)/performance/input"; \
+	FILTER_TSV="$$PERF_IN/filter.tsv"; \
 	DSA="$(K8S)/providers/registry/image/dataset/output/dataset_$(PROFILE)_a.tsv"; \
 	DSB="$(K8S)/providers/registry/image/dataset/output/dataset_$(PROFILE)_b.tsv"; \
 	mkdir -p "$$PERF_IN"; \
-	if [ -f "$$DSA" ]; then cp "$$DSA" "$$PERF_IN/dataset_a.tsv"; echo "registry-apply-profile: performance/input/dataset_a.tsv <- $$DSA"; else echo "registry-apply-profile: warning: missing $$DSA" >&2; fi; \
+	if [ -f "$$FILTER_TSV" ] && [ -s "$$FILTER_TSV" ]; then \
+	  [ -f "$$DSA" ] || { echo "registry-apply-profile: filter.tsv needs $$DSA (run generate-registry-image-lists)" >&2; exit 1; }; \
+	  python3 "$(K8S)/performance/input/write_filtered_dataset_a.py" \
+	    --k8s-root "$(K8S)" --provider "$(PROFILE)" --source "$$DSA" \
+	    --filter "$$FILTER_TSV" --out "$$PERF_IN/dataset_a.tsv" \
+	    || exit 1; \
+	  echo "registry-apply-profile: performance/input/dataset_a.tsv (filtered $$DSA via $$FILTER_TSV)"; \
+	elif [ -f "$$DSA" ]; then \
+	  cp "$$DSA" "$$PERF_IN/dataset_a.tsv"; echo "registry-apply-profile: performance/input/dataset_a.tsv <- $$DSA"; \
+	else \
+	  echo "registry-apply-profile: warning: missing $$DSA (and no non-empty $$FILTER_TSV)" >&2; \
+	fi; \
 	if [ -f "$$DSB" ]; then cp "$$DSB" "$$PERF_IN/dataset_b.tsv"; echo "registry-apply-profile: performance/input/dataset_b.tsv <- $$DSB"; else echo "registry-apply-profile: warning: missing $$DSB" >&2; fi; \
 	GLOBAL_CFG="$(K8S)/config/config.yaml"; \
 	RP_LABEL=""; \
@@ -98,9 +104,9 @@ registry-apply-profile:
 	  selectel) RP_LABEL='Selectel';; \
 	  local) RP_LABEL='local';; \
 	esac; \
-	yq e -i '.registry_provider = $$rp' --arg rp "$$RP_LABEL" "$$GLOBAL_CFG"; \
-	yq e -i '.test_registry_provider = $$tp' --arg tp "$(PROFILE)" "$$GLOBAL_CFG"; \
-	echo "registry-apply-profile: $$GLOBAL_CFG registry_provider=$$RP_LABEL test_registry_provider=$(PROFILE)"
+	export RIID_RP_LABEL="$$RP_LABEL"; \
+	yq e -i '.registry_provider = strenv(RIID_RP_LABEL)' "$$GLOBAL_CFG"; \
+	echo "registry-apply-profile: $$GLOBAL_CFG registry_provider=$$RP_LABEL (test_registry_provider unchanged)"
 
 install-local-registry:
 	@$(PROVIDER_APPLY_SH)

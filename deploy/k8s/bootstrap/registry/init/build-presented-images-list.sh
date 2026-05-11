@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INPUT_TSV="${1:-$SCRIPT_DIR/../images_list.sizes.tsv}"
-UNSUCCESSFUL_TXT="${2:-$SCRIPT_DIR/unsuccessfule_downloads.txt}"
+UNSUCCESSFUL_TXT="${2:-$SCRIPT_DIR/out/unsuccessfule_downloads.txt}"
 OUTPUT_TSV="${3:-$SCRIPT_DIR/presented_images_list_sizes.tsv}"
 
 if [[ ! -f "$INPUT_TSV" ]]; then

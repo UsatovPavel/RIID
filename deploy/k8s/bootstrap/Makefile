@@ -15,6 +15,7 @@ DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-s
 STORAGE_CLASS ?= fast.ru-3b
 RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
+OBSERVER_ROLLOUT_TIMEOUT ?= 600s
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
 # Образ DaemonSet должен уже содержать podman+fuse-overlayfs+curl+jq (+ storage/registries как в Dockerfile.worker или экв.).
@@ -237,11 +238,19 @@ wait-monitoring-observer:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	echo "wait-monitoring-observer: rollout status (timeout $(OBSERVER_ROLLOUT_TIMEOUT))"; \
+	kubectl -n riid-system rollout status deployment/victoria-metrics --timeout="$(OBSERVER_ROLLOUT_TIMEOUT)"; \
+	kubectl -n riid-system rollout status deployment/grafana --timeout="$(OBSERVER_ROLLOUT_TIMEOUT)"; \
+	if kubectl -n riid-system get deployment/kube-state-metrics >/dev/null 2>&1; then \
+	  kubectl -n riid-system rollout status deployment/kube-state-metrics --timeout="$(OBSERVER_ROLLOUT_TIMEOUT)"; \
+	fi; \
+	echo "wait-monitoring-observer: port-forward svc/grafana (Ctrl+C to stop)"; \
 	kubectl port-forward -n riid-system svc/grafana 3000:3000
 
 # POST /pull в первом pod RIID (curl уже в образе контейнера). Другая нода: NODE=имя-ноды make smoke-download
 # smoke: SMOKE_REPOSITORY — имя как на Docker Hub (default library/jobber). Для Selectel зеркала:
-#   из bootstrap/registry/Makefile: init-performance-registry-images (пишет registry/performance-registry-smoke-map.tsv), затем SMOKE_REGISTRY_TARGET=selectel
+#   из bootstrap/registry/Makefile: init-performance-registry-images (пишет registry/init/out/performance-registry-smoke-map.tsv), затем SMOKE_REGISTRY_TARGET=selectel
 SMOKE_REPOSITORY ?= library/jobber
 SMOKE_REGISTRY_TARGET ?= dockerhub
 SMOKE_REPOSITORY_MAP_FILE ?=
