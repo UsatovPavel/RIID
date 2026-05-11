@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Emit Helm values fragment for Dragonfly on Selectel (mirror layout with .../worker/...).
+"""Emit Helm values fragment for Dragonfly on Selectel (without forced worker/ prefix).
 
 Reads resolved refs from deploy/k8s/config/imagelist/selectel.yaml (.infra.images).
 Tags and repositories follow the same layout as the former render-selectel-dragonfly-images.sh.
 
 Optional env (same semantics as mapper / deploy/k8s/config/.env):
-  REGISTRY_SELECTEL_ID — UUID или полный префикс host/path; один сегмент → REGISTRY_LOGIN_HOST (default cr.selcloud.ru)
-  REGISTRY_LOGIN_HOST — used when REGISTRY_SELECTEL_ID is a single segment (default cr.selcloud.ru)
+  REGISTRY_SELECTEL_NAME — имя проекта registry или полный префикс host/path; один сегмент → REGISTRY_LOGIN_HOST (default cr.selcloud.ru)
+  REGISTRY_LOGIN_HOST — used when REGISTRY_SELECTEL_NAME is a single segment (default cr.selcloud.ru)
   DRAGONFLY_OSS_IMAGE_TAG — overrides manager, scheduler, client, seedClient tags
   DRAGONFLY_SCHEDULER_IMAGE_TAG / DRAGONFLY_CLIENT_IMAGE_TAG
   DRAGONFLY_BUSYBOX_TAG or DRAGONFLY_BUSYBOX_IMAGE_TAG — init busybox tag
   DRAGONFLY_MYSQL_IMAGE_TAG (default 8.4.3-debian-12-r0)
   DRAGONFLY_REDIS_IMAGE_TAG (default 7.2.5-debian-12-r0)
+  DRAGONFLY_SELECTEL_PULL_SECRET_NAME — docker-registry secret for cr.selcloud.ru (default dragonfly-selectel-registry).
+    Must match deploy/k8s/src/dragonfly/registry/setup-selectel-registry-pull-secret.sh.
 
 Usage: emit_dragonfly_selectel_fragment.py <path/to/selectel.yaml>
 """
@@ -78,9 +80,16 @@ def load_infra_images(imagelist: Path) -> dict[str, str]:
     return out
 
 
-def resolve_registry_wp(manager_repo: str) -> tuple[str, str]:
-    """Returns (helm image.registry host, worker prefix for repository paths)."""
-    reg = os.environ.get("REGISTRY_SELECTEL_ID", "").strip()
+def selectel_pull_secret_name() -> str:
+    raw = os.environ.get("DRAGONFLY_SELECTEL_PULL_SECRET_NAME", "dragonfly-selectel-registry").strip()
+    if raw and all(c.isalnum() or c in "-_" for c in raw):
+        return raw
+    return "dragonfly-selectel-registry"
+
+
+def resolve_registry_prefix(manager_repo: str) -> tuple[str, str]:
+    """Returns (helm image.registry host, repository prefix path)."""
+    reg = os.environ.get("REGISTRY_SELECTEL_NAME", "").strip()
     if reg:
         reg = reg.rstrip("/")
         if "/" in reg:
@@ -88,12 +97,12 @@ def resolve_registry_wp(manager_repo: str) -> tuple[str, str]:
         else:
             img_registry = os.environ.get("REGISTRY_LOGIN_HOST", "cr.selcloud.ru")
             reg_path = reg
-        wp = f"{reg_path.rstrip('/')}/worker"
-        return img_registry, wp
+        reg_prefix = reg_path.rstrip("/")
+        return img_registry, reg_prefix
 
     pid = manager_repo.split("/", 1)[0]
     img_registry = os.environ.get("REGISTRY_LOGIN_HOST", "cr.selcloud.ru")
-    return img_registry, f"{pid}/worker"
+    return img_registry, pid
 
 
 def main() -> int:
@@ -150,59 +159,75 @@ def main() -> int:
     tag_mysql = os.environ.get("DRAGONFLY_MYSQL_IMAGE_TAG", "8.4.3-debian-12-r0").strip()
     tag_redis = os.environ.get("DRAGONFLY_REDIS_IMAGE_TAG", "7.2.5-debian-12-r0").strip()
 
-    img_registry, wp = resolve_registry_wp(mgr_repo)
+    img_registry, reg_prefix = resolve_registry_prefix(mgr_repo)
+    pull_secret = selectel_pull_secret_name()
 
     print(
-        f"""manager:
+        f"""global:
+  imagePullSecrets:
+    - {pull_secret}
+manager:
   image:
     registry: {img_registry}
-    repository: {wp}/dragonflyoss/manager
+    repository: {reg_prefix}/dragonflyoss/manager
     tag: {tag_mgr}
+    pullSecrets:
+      - name: {pull_secret}
   initContainer:
     image:
       registry: {img_registry}
-      repository: {wp}/library/busybox
+      repository: {reg_prefix}/library/busybox
       tag: {tag_bb}
 scheduler:
   image:
     registry: {img_registry}
-    repository: {wp}/dragonflyoss/scheduler
+    repository: {reg_prefix}/dragonflyoss/scheduler
     tag: {tag_sch}
+    pullSecrets:
+      - name: {pull_secret}
   initContainer:
     image:
       registry: {img_registry}
-      repository: {wp}/library/busybox
+      repository: {reg_prefix}/library/busybox
       tag: {tag_bb}
 seedClient:
   image:
     registry: {img_registry}
-    repository: {wp}/dragonflyoss/client
+    repository: {reg_prefix}/dragonflyoss/client
     tag: {tag_cli}
+    pullSecrets:
+      - name: {pull_secret}
   initContainer:
     image:
       registry: {img_registry}
-      repository: {wp}/library/busybox
+      repository: {reg_prefix}/library/busybox
       tag: {tag_bb}
 client:
   image:
     registry: {img_registry}
-    repository: {wp}/dragonflyoss/client
+    repository: {reg_prefix}/dragonflyoss/client
     tag: {tag_cli}
+    pullSecrets:
+      - name: {pull_secret}
   initContainer:
     image:
       registry: {img_registry}
-      repository: {wp}/library/busybox
+      repository: {reg_prefix}/library/busybox
       tag: {tag_bb}
 mysql:
   image:
     registry: {img_registry}
-    repository: {wp}/bitnamilegacy/mysql
+    repository: {reg_prefix}/bitnamilegacy/mysql
     tag: {tag_mysql}
+    pullSecrets:
+      - {pull_secret}
 redis:
   image:
     registry: {img_registry}
-    repository: {wp}/bitnamilegacy/redis
+    repository: {reg_prefix}/bitnamilegacy/redis
     tag: {tag_redis}
+    pullSecrets:
+      - {pull_secret}
 """
     )
     return 0

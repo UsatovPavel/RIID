@@ -39,9 +39,10 @@ resolve_registry_prefix() {
   source "$env_file"
   set +a
 
-  : "${REGISTRY_SELECTEL_ID:?mapper: REGISTRY_SELECTEL_ID is required in $env_file for selectel mapping}"
+  local sel_raw="${REGISTRY_SELECTEL_NAME:-}"
+  : "${sel_raw:?mapper: REGISTRY_SELECTEL_NAME is required in $env_file for selectel overlay (imagelist/selectel.yaml)}"
 
-  local sel="${REGISTRY_SELECTEL_ID%/}"
+  local sel="${sel_raw%/}"
   if [[ "$sel" == */* ]]; then
     REG_PREFIX="$sel"
     REG_HOST="${sel%%/*}"

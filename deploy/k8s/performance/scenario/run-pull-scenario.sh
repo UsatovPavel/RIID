@@ -10,7 +10,17 @@ BACKEND_DIR="${BACKEND_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)/backend}"
 MODE="${MODE:-rolling}"              # rolling | recreate
 BACKEND="${BACKEND:-riid}"           # riid | podman
 CONCURRENCY="${CONCURRENCY:-2}"      # used in rolling mode
-EXPECTED_RIID_PODS="${EXPECTED_RIID_PODS:-10}"  # 0 disables strict count check
+
+K8S_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CLUSTER_CONFIG="${CLUSTER_CONFIG:-$K8S_ROOT/config/config.yaml}"
+if [[ ! -v EXPECTED_RIID_PODS ]] || [[ -z "${EXPECTED_RIID_PODS}" ]]; then
+  if [[ -f "$CLUSTER_CONFIG" ]] && command -v yq >/dev/null 2>&1; then
+    EXPECTED_RIID_PODS="$(yq e '.cluster_topology.workers // 0' "$CLUSTER_CONFIG" 2>/dev/null || echo 0)"
+  else
+    EXPECTED_RIID_PODS=0
+  fi
+fi
+EXPECTED_RIID_PODS="${EXPECTED_RIID_PODS//[[:space:]]/}"
 
 SCENARIO="${SCENARIO:-scenario-unnamed}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-}"
@@ -32,6 +42,11 @@ fi
 
 if ! [[ "$CONCURRENCY" =~ ^[0-9]+$ ]] || [[ "$CONCURRENCY" -le 0 ]]; then
   echo "CONCURRENCY must be a positive integer, got: $CONCURRENCY" >&2
+  exit 2
+fi
+
+if ! [[ "$EXPECTED_RIID_PODS" =~ ^[0-9]+$ ]]; then
+  echo "EXPECTED_RIID_PODS must be a non-negative integer (or empty for config), got: $EXPECTED_RIID_PODS" >&2
   exit 2
 fi
 

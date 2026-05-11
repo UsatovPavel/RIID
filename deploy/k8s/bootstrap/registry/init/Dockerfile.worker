@@ -21,7 +21,7 @@ RUN apt-get update \
     procps \
  && rm -rf /var/lib/apt/lists/*
 
-COPY deploy/k8s/riid/storage.conf /etc/containers/storage.conf
+COPY deploy/k8s/src/riid/storage.conf /etc/containers/storage.conf
 
 RUN mkdir -p /etc/containers/registries.conf.d \
  && printf '%s\n' \

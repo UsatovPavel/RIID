@@ -1,4 +1,23 @@
 ## deploy/k8s
+## Quickstart 
+## Install cluster
+make -C deploy/k8s/bootstrap install-all
+## Install local registry
+make -C deploy/k8s/bootstrap/registry registry-apply-profile
+make -C deploy/k8s/bootstrap/registry install-local-registry
+make -C deploy/k8s/bootstrap/registry wait-local-registry
+make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset
+## Testing
+make -C deploy/k8s/performance clear-cluster-cache
+make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid
+make -C deploy/k8s/performance summarize
+
+
+## Change test registry_provider:
+Change config.yaml
+Generate test dataset.
+make -C deploy/k8s/providers generate-registry-image-lists
+
 
 Kubernetes manifests for **RIID** + **Dragonfly** (same Helm values as CI: root `scripts/values.yaml`). One Dragonfly client only—in `dragonfly-system`; do not add dfdaemon in `riid-system`. Java-side notes: **internalDocs/moduledocs/**.
 

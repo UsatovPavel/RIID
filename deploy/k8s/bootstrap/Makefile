@@ -287,13 +287,13 @@ smoke-download-all:
 	SMOKE_REPOSITORY="$$REPO" SMOKE_REFERENCE="$(SMOKE_REFERENCE)" RUNTIME_ID="$(RUNTIME_ID)" \
 	  bash "$(SELECTEL_DIR)/scripts/smoke-download-all-riid-pods.sh"
 
-# Selectech: default StorageClass → Dragonfly Helm → RIID (подряд; не параллелить с -j).
+# Selectech: default StorageClass → registry profile (cluster_provider/config) + Dragonfly Helm → RIID (подряд; не параллелить с -j).
 install-all:
 	@$(MAKE) -C "$(SELECTEL_DIR)" storage-default
 	@$(MAKE) -C "$(SELECTEL_DIR)" validate-cluster-state
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-monitoring-node-auto
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-registry-node-auto
-	@$(MAKE) -C "$(SELECTEL_DIR)" install-dragonfly
+	@$(MAKE) -C "$(SELECTEL_DIR)/registry" registry-apply-profile K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)" SELECTEL_DIR="$(SELECTEL_DIR)"
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-riid
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-riid-ready
 	@$(MAKE) -C "$(SELECTEL_DIR)" verify-riid-pod-tooling

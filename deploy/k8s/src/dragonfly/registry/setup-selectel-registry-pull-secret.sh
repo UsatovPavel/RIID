@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # docker-registry secret + default SA imagePullSecret for Selectel CR (mirrored Dragonfly/Bitnami images).
+# Helm Selectel fragment deploy/k8s/.resolved/registry/helm/dragonfly-values-selectel.yaml sets
+# global.imagePullSecrets so Redis/MySQL (their own ServiceAccounts) still pull cr.selcloud.ru images.
 #
 # Usage: setup-selectel-registry-pull-secret.sh [config/.env]
 set -euo pipefail

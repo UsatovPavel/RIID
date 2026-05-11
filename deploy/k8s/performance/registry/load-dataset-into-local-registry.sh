@@ -2,7 +2,7 @@
 # Зеркалирует образы в локальный registry для perf/smoke.
 #
 # Режимы:
-#   По умолчанию — TSV DATASET_FILE + deploy/k8s/config/.env (REGISTRY_SELECTEL_ID → префикс источника).
+#   По умолчанию — TSV DATASET_FILE + deploy/k8s/config/.env (REGISTRY_SELECTEL_NAME → префикс источника).
 #   LOAD_TEST_IMAGELIST=1 — список из resolve_smoke_repository.py (config/imagelist YAML);
 #     опционально PERF_REGISTRY_ENV_FILE для тех же переменных;
 #     префикс pull: TEST_REGISTRY_PULL_HOST, config test_registry_pull_host, или FQ ref в каталоге.

@@ -12,8 +12,8 @@
 # источники (registry.k8s.io/ns/repo, ghcr.io/org/repo). Для fully-qualified источника
 # registry host отбрасывается только в destination path.
 #
-# Реестр назначения (push): из REGISTRY_SELECTEL_ID (+ опционально REGISTRY_LOGIN_HOST), см. mapper-common / .env.example.
-#   Полный префикс допускается в REGISTRY_SELECTEL_ID (host/путь).
+# Реестр назначения (push): из REGISTRY_SELECTEL_NAME (+ опционально REGISTRY_LOGIN_HOST), см. mapper-common / .env.example.
+#   Полный префикс допускается в REGISTRY_SELECTEL_NAME (host/путь).
 #
 # Selectel: в доке лимит длины имени образа; пути вида library/hello-seattle (21 символ) реестр отклоняет
 # (docker push после ретраев: unknown:). Для *selcloud.ru по умолчанию push идёт без префикса library/:

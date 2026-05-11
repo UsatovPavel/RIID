@@ -6,7 +6,7 @@ INPUT_DIR := $(PERF_DIR)/input
 MODE ?= rolling
 BACKEND ?= riid
 CONCURRENCY ?= 2
-EXPECTED_RIID_PODS ?= 10
+# EXPECTED_RIID_PODS — опционально; если пусто, run-pull-scenario.sh берёт cluster_topology.workers из deploy/k8s/config/config.yaml (0 = не проверять число подов).
 
 SCENARIO ?= pr18
 DATASET ?= A
@@ -47,10 +47,10 @@ run:
 	    out="$(PODMAN_RESULTS)"; \
 	  fi; \
 	fi; \
+	if [ -n "$(strip $(EXPECTED_RIID_PODS))" ]; then export EXPECTED_RIID_PODS="$(EXPECTED_RIID_PODS)"; fi; \
 	MODE="$(MODE)" \
 	BACKEND="$(BACKEND)" \
 	CONCURRENCY="$(CONCURRENCY)" \
-	EXPECTED_RIID_PODS="$(EXPECTED_RIID_PODS)" \
 	SCENARIO="$(SCENARIO)" \
 	DATASET_FILE="$(DATASET_FILE)" \
 	RUNTIME_ID="$(RUNTIME_ID)" \

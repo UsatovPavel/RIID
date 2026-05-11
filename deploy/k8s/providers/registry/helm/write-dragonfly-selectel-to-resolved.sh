@@ -4,7 +4,7 @@
 # Args:
 #   $1 — deploy/k8s root (directory containing config/ and .resolved/)
 #   $2 — path to config/imagelist/selectel.yaml
-#   $3 — optional env file (REGISTRY_SELECTEL_ID / REGISTRY_LOGIN_HOST / DRAGONFLY_*), same as imagelist
+#   $3 — optional env file (REGISTRY_SELECTEL_NAME / REGISTRY_LOGIN_HOST / DRAGONFLY_*), same as imagelist
 set -euo pipefail
 
 K8S_ROOT="${1:?deploy/k8s root}"
