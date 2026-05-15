@@ -13,6 +13,11 @@ make -C deploy/k8s/performance clear-cluster-cache
 make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid
 make -C deploy/k8s/performance summarize
 
+### Network / `tc` (Traffic Control)
+
+**На этом дереве (`deploy/k8s`) WAN не эмулируется:** ограничения RTT или полосы через Linux **Traffic Control (`tc`, `netem`, TBF и т.п.) не применяются** скриптами performance/bootstrap. Замеры идут в **реальной топологии** кластера (узлы провайдера ↔ реестр, Dragonfly, лимиты SLA сети/диска).
+
+Это сознательно отличается от ряда исследовательских статей (например, NSDI 2022 *Starlight*), где между VM гоняли фиксированные **RTT/BW через `tc`**. Если понадится воспроизводимый профиль WAN, его нужно вводить **отдельно** ( DaemonSet/helpers на нодах, NetworkPolicy+QOS где применимо, отдельный «шейпер» между стендами)—в этом репозитории универсального решения пока нет.
 ## Change test registry_provider:
 Change config.yaml
 Generate test dataset.

@@ -5,3 +5,6 @@ cluster_topology:
   workers: 4
   observers: 1
   registry_nodes: 1
+network_parameters:
+  bandwidth: "20 MB/s"
+  latency_additional: "0 ms"

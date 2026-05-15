@@ -20,7 +20,8 @@ MONITORING_NODE ?=
 REGISTRY_NODE ?=
 # Образ DaemonSet должен уже содержать podman+fuse-overlayfs+curl+jq (+ storage/registries как в Dockerfile.worker или экв.).
 # На нодах ничего не ставим; worker-tooling, local-registry и профили registry — bootstrap/registry/Makefile.
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests
+REGISTRY_TC_SCRIPT := $(SELECTEL_DIR)/scripts/registry-node-tc.sh
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto registry-node-tc-apply registry-node-tc-clear storage-default install-dragonfly verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -100,6 +101,18 @@ mark-registry-node-auto:
 	kubectl label node "$$NODE" riid.registry=true --overwrite; \
 	echo "registry node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.registry/p'
+
+# tc на registry-ноде (hostNetwork + privileged Pod): latency/bandwidth из $(GLOBAL_CONFIG_FILE) (.network_parameters или .newtork_parameters).
+registry-node-tc-apply:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	command -v yq >/dev/null || { echo "yq not found"; exit 1; }; \
+	command -v bash >/dev/null || { echo "bash not found"; exit 1; }; \
+	CLUSTER_CONFIG="$(GLOBAL_CONFIG_FILE)" bash "$(REGISTRY_TC_SCRIPT)" apply
+
+registry-node-tc-clear:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	command -v bash >/dev/null || { echo "bash not found"; exit 1; }; \
+	bash "$(REGISTRY_TC_SCRIPT)" clear
 
 # Пометить Cinder StorageClass как default (нужно для Dragonfly Helm на этом стенде).
 storage-default:
