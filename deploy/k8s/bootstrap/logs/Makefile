@@ -1,5 +1,6 @@
 # Логи по одной цепочке pull: RIID pod + dfdaemon pod на той же ноде.
-CONFIG_FILE ?= ../serverConfig.yaml
+# Kubeconfig: как в performance/Makefile (Selectel). Переопределение: CONFIG_FILE=path/to/kubeconfig
+CONFIG_FILE ?= ../../providers/cluster/Selectel/serverConfig.yaml
 KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
 
 # Сколько "назад" смотреть логи (kubectl logs --since).
@@ -8,11 +9,14 @@ SINCE ?= 20m
 # Опционально: фиксируем конкретную ноду. Иначе берётся нода первого RIID pod.
 NODE ?=
 
+# Опционально: фильтр для scheduler-логов (например IMAGE_FILTER='riid/bitnami/mongodb').
+IMAGE_FILTER ?=
+
 # Файлы: сырой лог и полезная выжимка.
 RAW_LOG ?= out.txt
 SUMMARY_LOG ?= summary.txt
 
-.PHONY: logs-riid-pull logs-dfdaemon-pull logs-pull-all logs-capture-pull logs-summarize-pull logs-capture-and-summarize
+.PHONY: logs-riid-pull logs-dfdaemon-pull logs-dfscheduler-pull logs-pull-all logs-capture-pull logs-summarize-pull logs-capture-and-summarize
 
 logs-riid-pull:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -44,6 +48,24 @@ logs-dfdaemon-pull:
 	[ -n "$$DF_POD" ] || { echo "logs-dfdaemon-pull: no dfdaemon pod on node=$$NODE_NAME"; exit 1; }; \
 	echo "NODE=$$NODE_NAME DF_POD=$$DF_POD SINCE=$(SINCE)"; \
 	kubectl -n dragonfly-system logs "$$DF_POD" --since=$(SINCE) --timestamps
+
+# Логи Dragonfly scheduler: как назначаются/трекатся задачи скачивания image.
+# Пример:
+#   make -C deploy/k8s/bootstrap/logs logs-dfscheduler-pull SINCE=30m
+#   make -C deploy/k8s/bootstrap/logs logs-dfscheduler-pull SINCE=30m IMAGE_FILTER='riid/grafana/loki'
+logs-dfscheduler-pull:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	SCHED_POD=$$(kubectl -n dragonfly-system get pods -l app=dragonfly,component=scheduler -o jsonpath='{.items[0].metadata.name}'); \
+	[ -n "$$SCHED_POD" ] || { echo "logs-dfscheduler-pull: no scheduler pod found"; exit 1; }; \
+	echo "SCHED_POD=$$SCHED_POD SINCE=$(SINCE) IMAGE_FILTER=$(IMAGE_FILTER)"; \
+	if [ -n "$(IMAGE_FILTER)" ]; then \
+	  kubectl -n dragonfly-system logs "$$SCHED_POD" --since=$(SINCE) --timestamps | awk '/task|peer|download|image|manifest|digest/ {print}' | grep -F "$(IMAGE_FILTER)" || true; \
+	else \
+	  kubectl -n dragonfly-system logs "$$SCHED_POD" --since=$(SINCE) --timestamps | awk '/task|peer|download|image|manifest|digest/ {print}' || true; \
+	fi
 
 logs-pull-all:
 	@$(MAKE) logs-riid-pull SINCE="$(SINCE)" NODE="$(NODE)"

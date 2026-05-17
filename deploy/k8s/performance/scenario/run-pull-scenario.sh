@@ -29,6 +29,10 @@ RUNTIME_ID="${RUNTIME_ID:-podman}"
 OUTPUT_TSV="${OUTPUT_TSV:-${OUTPUT_CSV:-}}"
 BACKEND_CMD="$BACKEND_DIR/${BACKEND}.sh"
 DATASET_FILE="${DATASET_FILE:-}"
+REGISTRY_TX_NAMESPACE="${REGISTRY_TX_NAMESPACE:-riid-system}"
+REGISTRY_TX_POD_NAME="${REGISTRY_TX_POD_NAME:-riid-registry-node-tx-bytes}"
+REGISTRY_TX_IMAGE="${REGISTRY_TX_IMAGE:-ubuntu:24.04}"
+REGISTRY_TX_HELPER="${REGISTRY_TX_HELPER:-$SCRIPT_DIR/registry-tx.sh}"
 
 if [[ "$MODE" != "rolling" && "$MODE" != "recreate" ]]; then
   echo "Unsupported MODE=$MODE. Use rolling|recreate." >&2
@@ -64,6 +68,14 @@ if [[ -n "$DATASET_FILE" && ! -f "$DATASET_FILE" ]]; then
   echo "Dataset file not found: $DATASET_FILE" >&2
   exit 2
 fi
+
+if [[ ! -f "$REGISTRY_TX_HELPER" ]]; then
+  echo "Registry tx helper script not found: $REGISTRY_TX_HELPER" >&2
+  exit 2
+fi
+
+# shellcheck source=/dev/null
+source "$REGISTRY_TX_HELPER"
 
 now_ms() {
   date +%s%3N
@@ -184,6 +196,16 @@ fi
 emit_header
 
 failed=0
+registry_tx_before=""
+registry_tx_after=""
+registry_tx_delta=""
+
+if probe_before="$(registry_node_probe_tx)"; then
+  registry_tx_before="$(awk -F '\t' '{print $2}' <<<"$probe_before")"
+else
+  echo "WARN: failed to measure registry tx_bytes before scenario" >&2
+fi
+
 if [[ -n "$DATASET_FILE" ]]; then
   while IFS=$'\t' read -r repo ref _size_bytes _size_human; do
     if [[ "$repo" == "repository" || -z "$repo" || "$repo" == \#* ]]; then
@@ -200,5 +222,21 @@ else
   fi
   run_for_current_image || failed=1
 fi
+
+if probe_after="$(registry_node_probe_tx)"; then
+  registry_tx_after="$(awk -F '\t' '{print $2}' <<<"$probe_after")"
+else
+  echo "WARN: failed to measure registry tx_bytes after scenario" >&2
+fi
+
+if registry_tx_is_uint "$registry_tx_before" && registry_tx_is_uint "$registry_tx_after" && ((registry_tx_after >= registry_tx_before)); then
+  registry_tx_delta=$((registry_tx_after - registry_tx_before))
+elif registry_tx_is_uint "$registry_tx_before" && registry_tx_is_uint "$registry_tx_after"; then
+  echo "WARN: registry tx_bytes counter wrapped or reset (before=$registry_tx_before after=$registry_tx_after)" >&2
+fi
+
+printf '# registry_tx_bytes_before:\t%s\n' "${registry_tx_before:--}"
+printf '# registry_tx_bytes_after:\t%s\n' "${registry_tx_after:--}"
+printf '# registry_tx_bytes_delta:\t%s\n' "${registry_tx_delta:--}"
 
 exit "$failed"

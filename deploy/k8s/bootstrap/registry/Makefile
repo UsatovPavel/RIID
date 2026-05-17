@@ -3,6 +3,7 @@ SELECTEL_DIR ?= $(abspath $(REGISTRY_DIR)/..)
 K8S ?= $(abspath $(SELECTEL_DIR)/..)
 GLOBAL_CONFIG_FILE := $(K8S)/config/config.yaml
 PROFILE ?= $(shell yq e '.cluster_provider // ""' "$(GLOBAL_CONFIG_FILE)" 2>/dev/null | sed -e 's/#.*//' | tr '[:upper:]' '[:lower:]' | xargs)
+TEST_PROFILE ?= $(shell yq e '.test_registry_provider // ""' "$(GLOBAL_CONFIG_FILE)" 2>/dev/null | sed -e 's/#.*//' | tr '[:upper:]' '[:lower:]' | xargs)
 CONFIG_FILE ?= ../providers/cluster/Selectel/serverConfig.yaml
 KUBECONFIG ?= $(abspath $(SELECTEL_DIR)/$(CONFIG_FILE))
 
@@ -19,6 +20,7 @@ DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-s
 DRAGONFLY_SELECTEL_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-selectel-registry-pull-secret.sh
 
 .PHONY: secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile \
+	registry-apply-test-profile \
 	install-local-registry wait-local-registry init-worker-tooling-image load-performance-registry-dataset \
 	init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental \
 	dragonfly-dockerhub-pull-secret dragonfly-selectel-registry-pull-secret
@@ -107,6 +109,48 @@ registry-apply-profile:
 	export RIID_RP_LABEL="$$RP_LABEL"; \
 	yq e -i '.registry_provider = strenv(RIID_RP_LABEL)' "$$GLOBAL_CFG"; \
 	echo "registry-apply-profile: $$GLOBAL_CFG registry_provider=$$RP_LABEL (test_registry_provider unchanged)"
+
+# Test profile only: RIID Secret/rollout + perf datasets sync
+registry-apply-test-profile:
+	@if [ -z "$(TEST_PROFILE)" ]; then echo "registry-apply-test-profile: set TEST_PROFILE=dockerhub|selectel|local или заполните test_registry_provider в $(GLOBAL_CONFIG_FILE)"; exit 1; fi; \
+	echo "registry-apply-test-profile: TEST_PROFILE=$(TEST_PROFILE)"; \
+	case "$(TEST_PROFILE)" in dockerhub|selectel|local) ;; *) echo "registry-apply-test-profile: invalid TEST_PROFILE=$(TEST_PROFILE)"; exit 1;; esac; \
+	export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	[ -f "$(K8S)/config/.env" ] || { echo "registry-apply-test-profile: нет $(K8S)/config/.env (см. config/.env.example)"; exit 1; }; \
+	command -v yq >/dev/null || { echo "registry-apply-test-profile: yq not found"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(K8S)/src/riid/render-riid-config-secret.sh" --apply --profile "$(TEST_PROFILE)"; \
+	if kubectl -n riid-system get daemonset riid >/dev/null 2>&1; then \
+	  kubectl -n riid-system rollout restart daemonset riid; \
+	  kubectl -n riid-system rollout status daemonset riid; \
+	else \
+	  echo "registry-apply-test-profile: daemonset/riid not found yet, restart skipped"; \
+	fi; \
+	if [ "$(TEST_PROFILE)" = selectel ]; then \
+	  bash "$(K8S)/src/riid/registry/sync-podman-selectel-login.sh"; \
+	fi; \
+	echo "registry-apply-test-profile: providers generation is out of bootstrap scope (no imagelist-overlays / generate-registry-image-lists)"; \
+	PERF_IN="$(K8S)/performance/input"; \
+	FILTER_TSV="$$PERF_IN/filter.tsv"; \
+	DSA="$(K8S)/providers/registry/image/dataset/output/dataset_$(TEST_PROFILE)_a.tsv"; \
+	DSB="$(K8S)/providers/registry/image/dataset/output/dataset_$(TEST_PROFILE)_b.tsv"; \
+	mkdir -p "$$PERF_IN"; \
+	if [ -f "$$FILTER_TSV" ] && [ -s "$$FILTER_TSV" ]; then \
+	  [ -f "$$DSA" ] || { echo "registry-apply-test-profile: filter.tsv needs $$DSA (run generate-registry-image-lists)" >&2; exit 1; }; \
+	  python3 "$(K8S)/performance/input/write_filtered_dataset_a.py" \
+	    --k8s-root "$(K8S)" --provider "$(TEST_PROFILE)" --source "$$DSA" \
+	    --filter "$$FILTER_TSV" --out "$$PERF_IN/dataset_a.tsv" \
+	    || exit 1; \
+	  echo "registry-apply-test-profile: performance/input/dataset_a.tsv (filtered $$DSA via $$FILTER_TSV)"; \
+	elif [ -f "$$DSA" ]; then \
+	  cp "$$DSA" "$$PERF_IN/dataset_a.tsv"; echo "registry-apply-test-profile: performance/input/dataset_a.tsv <- $$DSA"; \
+	else \
+	  echo "registry-apply-test-profile: warning: missing $$DSA (and no non-empty $$FILTER_TSV)" >&2; \
+	fi; \
+	if [ -f "$$DSB" ]; then cp "$$DSB" "$$PERF_IN/dataset_b.tsv"; echo "registry-apply-test-profile: performance/input/dataset_b.tsv <- $$DSB"; else echo "registry-apply-test-profile: warning: missing $$DSB" >&2; fi; \
+	echo "registry-apply-test-profile: test profile applied for RIID/perf only (registry_provider unchanged)"
 
 install-local-registry:
 	@$(PROVIDER_APPLY_SH)

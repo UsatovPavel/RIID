@@ -2,7 +2,7 @@ registry_provider: Selectel
 test_registry_provider: local # именно откуда загружает УЖЕ развернутый кластер образы в performance
 cluster_provider: Selectel
 cluster_topology:
-  workers: 4
+  workers: 10
   observers: 1
   registry_nodes: 1
 network_parameters:
