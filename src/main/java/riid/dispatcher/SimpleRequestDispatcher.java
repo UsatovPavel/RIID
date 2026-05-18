@@ -24,6 +24,8 @@ import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.api.RegistryClient;
 import riid.core.model.manifest.MediaType;
+import riid.dispatcher.core.config.DispatcherConfig;
+import riid.dispatcher.core.logging.DispatcherMilestoneLogger;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
@@ -41,6 +43,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     private final P2PExecutor p2p;
     private final HostFilesystem fs;
     private final Optional<Semaphore> registryLimiter; // limits concurrent downloads from registry
+    private final DispatcherMilestoneLogger stepLogger;
 
     public SimpleRequestDispatcher(RegistryClient client,
                                    CacheAdapter cache,
@@ -60,6 +63,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         this.fs = Objects.requireNonNull(fs, "fs");
         int maxConc = config != null ? config.maxConcurrentRegistry() : 0;
         this.registryLimiter = maxConc > 0 ? Optional.of(new Semaphore(maxConc)) : Optional.empty();
+        this.stepLogger = new DispatcherMilestoneLogger(LOGGER);
     }
 
     @Override
@@ -77,6 +81,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType) {
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest);
+        long selectStartedNs = System.nanoTime();
 
         // 1) cache
         Path cachedPath = null;
@@ -86,12 +91,16 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     .orElse(null);
         }
         if (cachedPath != null) {
+            stepLogger.sourceSelectFromCache(selectStartedNs);
+            long fetchStartedNs = System.nanoTime();
             LOGGER.info("cache hit for layer {}", digest);
+            stepLogger.sourceFetchFromCache(fetchStartedNs);
             return new FetchResult(digest, mediaType, cachedPath);
         }
 
         // 2) P2P
         if (p2p != null) {
+            long fetchStartedNs = System.nanoTime();
             try {
                 var p2pPath = p2p.fetch(
                         repository.value(),
@@ -124,6 +133,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                             LOGGER.warn("Failed to put P2P layer {} to cache: {}", digest, ex.getMessage());
                         }
                     }
+                    stepLogger.sourceSelectFromP2p(selectStartedNs);
+                    stepLogger.sourceFetchFromP2p(fetchStartedNs);
                     return new FetchResult(digest, mediaType, resultPath);
                 }
             } catch (IOException ex) {
@@ -132,6 +143,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         }
 
         // 3) Registry download
+        stepLogger.sourceSelectFromRegistry(selectStartedNs);
+        long fetchStartedNs = System.nanoTime();
+        boolean fetchSucceeded = false;
         acquireRegistry();
         try {
             File tmp = createTemp();
@@ -186,10 +200,20 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 }
             }
 
+            fetchSucceeded = true;
             return new FetchResult(ImageDigest.parse(blob.digest()),
                     MediaType.from(blob.mediaType()),
                     resultPath);
+        } catch (RuntimeException e) {
+            stepLogger.sourceFetchFailed(fetchStartedNs, e);
+            throw e;
+        } catch (Error e) {
+            stepLogger.sourceFetchFailed(fetchStartedNs, e);
+            throw e;
         } finally {
+            if (fetchSucceeded) {
+                stepLogger.sourceFetchFromRegistry(fetchStartedNs);
+            }
             releaseRegistry();
         }
     }

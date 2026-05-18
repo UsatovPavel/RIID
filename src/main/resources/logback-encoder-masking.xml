@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<included>
+    <appender name="STDOUT_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <version>[ignore]</version>
+            </fieldNames>
+            <decorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <defaultMask>[REDACTED]</defaultMask>
+                <path>authorization</path>
+                <path>password</path>
+                <path>token</path>
+                <path>identityToken</path>
+                <valueMask>
+                    <value>(?i)(bearer\\s+)[-A-Za-z0-9._~+/]+=*</value>
+                    <mask>$1[REDACTED]</mask>
+                </valueMask>
+                <valueMask>
+                    <value>(?i)(authorization|password|token|identityToken)=([^\\s&amp;]+)</value>
+                    <mask>$1=[REDACTED]</mask>
+                </valueMask>
+            </decorator>
+            <includeMdcKeyName>trace_id</includeMdcKeyName>
+            <includeMdcKeyName>component</includeMdcKeyName>
+            <includeMdcKeyName>operation</includeMdcKeyName>
+            <includeKeyValueKeyName>event</includeKeyValueKeyName>
+            <includeKeyValueKeyName>result</includeKeyValueKeyName>
+            <includeKeyValueKeyName>duration_ms</includeKeyValueKeyName>
+            <includeKeyValueKeyName>error_kind</includeKeyValueKeyName>
+            <includeKeyValueKeyName>error_code</includeKeyValueKeyName>
+        </encoder>
+    </appender>
+</included>

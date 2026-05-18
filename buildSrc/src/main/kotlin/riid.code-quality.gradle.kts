@@ -6,6 +6,9 @@ import org.gradle.testing.jacoco.tasks.JacocoReport
 
 val skipQuality = project.hasProperty("skipQuality")
 
+private fun isGeneratedPath(path: String): Boolean =
+    path.replace('\\', '/').contains("/generated/")
+
 extensions.configure(CheckstyleExtension::class) {
     configFile = file("config/checkstyle/checkstyle.xml")
 }
@@ -15,6 +18,9 @@ tasks.withType(Checkstyle::class).configureEach {
     if (name != "checkstyleMain") {
         configFile = file("config/checkstyle/checkstyle-test.xml")
     }
+    source = source.matching {
+        exclude { isGeneratedPath(it.file.absolutePath) }
+    }
 }
 
 tasks.withType(Pmd::class).configureEach {
@@ -22,6 +28,9 @@ tasks.withType(Pmd::class).configureEach {
     if (name != "pmdMain") {
         ruleSetFiles = files("config/pmd/pmd-test.xml")
         ruleSets = emptyList()
+    }
+    source = source.matching {
+        exclude { isGeneratedPath(it.file.absolutePath) }
     }
 }
 

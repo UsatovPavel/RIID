@@ -18,13 +18,18 @@ import riid.core.fs.PathSupport;
 import riid.client.api.ManifestResult;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.MediaType;
+import riid.core.logging.MdcContext;
+import riid.core.logging.MilestoneEventLogger;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.RepositoryName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Builds an OCI archive from a manifest, pulling blobs via RequestDispatcher.
  */
 public final class OciArchiveBuilder {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OciArchiveBuilder.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final RequestDispatcher dispatcher;
@@ -44,8 +49,28 @@ public final class OciArchiveBuilder {
     public <T> T withArchive(ImageId imageId,
                              ManifestResult manifestResult,
                              ArchiveUser<T> user) throws IOException, InterruptedException {
+        String previousOperation = MdcContext.getOperation();
+        MdcContext.putOperation("archive.build");
+        long startedNs = System.nanoTime();
         try (OciArchive archive = build(imageId, manifestResult)) {
+            MilestoneEventLogger.info(LOGGER)
+                    .addEvent("archive.build")
+                    .addResult("success")
+                    .addDurationMs(durationMs(startedNs))
+                    .log("OCI archive build completed");
             return user.use(archive.archivePath());
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            MilestoneEventLogger.error(LOGGER)
+                    .addCause(e)
+                    .addEvent("archive.build")
+                    .addResult("error")
+                    .addDurationMs(durationMs(startedNs))
+                    .addErrorKind("INTERNAL")
+                    .addErrorCode("ARCHIVE_BUILD_FAILED")
+                    .log("OCI archive build failed");
+            throw e;
+        } finally {
+            MdcContext.restoreOperation(previousOperation);
         }
     }
 
@@ -139,6 +164,10 @@ public final class OciArchiveBuilder {
                     new AppError.OciError(AppError.OciErrorKind.RESOURCE_READ_FAILED, msg),
                     msg, e);
         }
+    }
+
+    private static long durationMs(long startedNs) {
+        return (System.nanoTime() - startedNs) / 1_000_000L;
     }
 }
 

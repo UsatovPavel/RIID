@@ -29,7 +29,7 @@ import riid.client.api.RegistryClient;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.TagList;
-import riid.dispatcher.DispatcherConfig;
+import riid.dispatcher.core.config.DispatcherConfig;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;

@@ -6,12 +6,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
-import riid.app.AppConfig;
+import riid.app.config.AppConfig;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
-import riid.dispatcher.DispatcherConfig;
+import riid.dispatcher.core.config.DispatcherConfig;
 import riid.p2p.DragonflyConfig;
 import riid.p2p.P2PConfig;
 import riid.runtime.OutputConfig;
