@@ -126,6 +126,23 @@ class DragonflyGrpcP2PExecutorTest {
     }
 
     @Test
+    void closesSharedPullerAndCreatesNewOneAfterClose() throws Exception {
+        RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry.example.com", -1, null);
+        HostFilesystem fs = new NioHostFilesystem();
+        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        RecordingPullerFactory factory = new RecordingPullerFactory(Path.of("/tmp/shared.bin"));
+        DragonflyGrpcP2PExecutor executor = new DragonflyGrpcP2PExecutor(endpoint, fs, config, factory);
+
+        executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
+        RecordingPuller firstPuller = factory.lastPuller;
+        executor.close();
+        executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
+
+        assertEquals(2, factory.createCount, "close should release shared puller");
+        assertEquals(1, firstPuller.closeCount, "shared puller must be closed once");
+    }
+
+    @Test
     void publishIsNoOp() {
         RegistryEndpoint endpoint = new RegistryEndpoint("https", "registry.example.com", -1, null);
         HostFilesystem fs = new NioHostFilesystem();
@@ -193,6 +210,7 @@ class DragonflyGrpcP2PExecutorTest {
         final Path returnPath;
         final DragonflyPullException throwOnPull;
         RegistryPullRequest lastRequest;
+        int closeCount;
 
         RecordingPuller(Path returnPath, DragonflyPullException throwOnPull) {
             this.returnPath = returnPath;
@@ -206,6 +224,11 @@ class DragonflyGrpcP2PExecutorTest {
                 return CompletableFuture.failedFuture(throwOnPull);
             }
             return CompletableFuture.completedFuture(new PullResult(returnPath != null ? returnPath : request.outputPath()));
+        }
+
+        @Override
+        public void close() {
+            closeCount++;
         }
     }
 }
