@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -169,13 +170,34 @@ public final class PullHttpHandler extends Handler.Abstract {
     }
 
     private String executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
-        Future<String> future = pullExecutor.submit(() ->
-                loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId()));
+        CountDownLatch taskTerminated = new CountDownLatch(1);
+        Future<String> future = pullExecutor.submit(() -> {
+            try {
+                return loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId());
+            } finally {
+                taskTerminated.countDown();
+            }
+        });
         try {
             return future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             future.cancel(true);
+            awaitTaskTermination(taskTerminated, future);
             throw new PullTimeoutException("Pull request timed out", e);
+        }
+    }
+
+    private static void awaitTaskTermination(CountDownLatch taskTerminated, Future<String> future)
+            throws PullTimeoutException {
+        while (true) {
+            try {
+                taskTerminated.await();
+                return;
+            } catch (InterruptedException ie) {
+                future.cancel(true);
+                Thread.currentThread().interrupt();
+                throw new PullTimeoutException("Interrupted while waiting for pull task cancellation", ie);
+            }
         }
     }
 

@@ -209,6 +209,9 @@ public final class BoundedCommandExecution {
     private static ShellResult get(CompletableFuture<ShellResult> future) throws IOException, InterruptedException {
         try {
             return future.get();
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            throw e;
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof RuntimeException re && re.getCause() != null) {

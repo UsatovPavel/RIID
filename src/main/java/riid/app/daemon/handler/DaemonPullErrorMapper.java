@@ -1,6 +1,9 @@
 package riid.app.daemon.handler;
 
 import java.util.Optional;
+import java.util.Set;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ExecutionException;
 
 import org.eclipse.jetty.http.HttpStatus;
@@ -66,15 +69,23 @@ public final class DaemonPullErrorMapper {
      * @return mapped client-facing error, or empty so the handler uses HTTP 500 pull_failed
      */
     public static Optional<MappedHttpError> map(Throwable throwable) {
-        Throwable t = unwrapExecution(throwable);
-        if (t instanceof AppException appException) {
-            Optional<MappedHttpError> fromApp = mapAppException(appException);
-            if (fromApp.isPresent()) {
-                return fromApp;
+        Throwable current = throwable;
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (current != null && seen.add(current)) {
+            Throwable candidate = unwrapExecution(current);
+            if (candidate instanceof AppException appException) {
+                Optional<MappedHttpError> fromApp = mapAppException(appException);
+                if (fromApp.isPresent()) {
+                    return fromApp;
+                }
             }
-        }
-        if (t instanceof ClientException clientException) {
-            return mapClientException(clientException);
+            if (candidate instanceof ClientException clientException) {
+                Optional<MappedHttpError> fromClient = mapClientException(clientException);
+                if (fromClient.isPresent()) {
+                    return fromClient;
+                }
+            }
+            current = candidate.getCause();
         }
         return Optional.empty();
     }
@@ -105,10 +116,11 @@ public final class DaemonPullErrorMapper {
     }
 
     private static Optional<MappedHttpError> mapClientException(ClientException e) {
-        if (!(e.error() instanceof ClientError.Http http) || http.status() == null) {
+        Integer status = extractClientStatus(e.error());
+        if (status == null) {
             return Optional.empty();
         }
-        int st = http.status();
+        int st = status;
         if (st == HttpStatus.NOT_FOUND_404) {
             return Optional.of(new MappedHttpError(
                     HttpStatus.NOT_FOUND_404,
@@ -134,6 +146,16 @@ public final class DaemonPullErrorMapper {
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         return Optional.empty();
+    }
+
+    private static Integer extractClientStatus(ClientError error) {
+        if (error instanceof ClientError.Http http) {
+            return http.status();
+        }
+        if (error instanceof ClientError.Auth auth) {
+            return auth.status();
+        }
+        return null;
     }
 
     private static String safeMessage(Throwable e) {
