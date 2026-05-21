@@ -4,8 +4,16 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -24,6 +32,7 @@ import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.RepositoryName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 /**
  * Builds an OCI archive from a manifest, pulling blobs via RequestDispatcher.
@@ -85,21 +94,34 @@ public final class OciArchiveBuilder {
         Path blobsDir = ociDir.resolve("blobs").resolve("sha256");
         fs.createDirectory(blobsDir);
 
-        // Config
+        String repository = imageId.name();
         var cfg = manifest.config();
-        pullLayer(imageId.name(),
-                ImageDigest.parse(cfg.digest()),
-                cfg.size(),
-                MediaType.from(cfg.mediaType()),
-                blobsDir);
-
-        // Layers
-        for (var layer : manifest.layers()) {
-            pullLayer(imageId.name(),
-                    ImageDigest.parse(layer.digest()),
-                    layer.size(),
-                    MediaType.from(layer.mediaType()),
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+        //1 is task for config blob
+        List<Callable<Void>> pullTasks = new ArrayList<>(1 + manifest.layers().size());
+        pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
+            pullLayer(repository,
+                    ImageDigest.parse(cfg.digest()),
+                    cfg.size(),
+                    MediaType.from(cfg.mediaType()),
                     blobsDir);
+        }));
+        for (var layer : manifest.layers()) {
+            final var layerRef = layer;
+            pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
+                pullLayer(repository,
+                        ImageDigest.parse(layerRef.digest()),
+                        layerRef.size(),
+                        MediaType.from(layerRef.mediaType()),
+                        blobsDir);
+            }));
+        }
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Void>> futures = executor.invokeAll(pullTasks);
+            for (Future<Void> future : futures) {
+                awaitPull(future);
+            }
         }
 
         // Manifest blob
@@ -125,6 +147,33 @@ public final class OciArchiveBuilder {
     @FunctionalInterface
     public interface ArchiveUser<T> {
         T use(Path archivePath) throws IOException, InterruptedException;
+    }
+
+    /**
+     * Virtual threads do not inherit SLF4J MDC; copy the caller map so dispatcher milestones keep trace_id.
+     */
+    private static Void runPullWithInheritedMdc(Map<String, String> snapshot, PullTask task) throws Exception {
+        Map<String, String> previous = MDC.getCopyOfContextMap();
+        if (snapshot != null) {
+            MDC.setContextMap(snapshot);
+        } else {
+            MDC.clear();
+        }
+        try {
+            task.run();
+            return null;
+        } finally {
+            if (previous != null) {
+                MDC.setContextMap(previous);
+            } else {
+                MDC.clear();
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface PullTask {
+        void run() throws IOException;
     }
 
     private void pullLayer(String repository,
@@ -168,6 +217,27 @@ public final class OciArchiveBuilder {
 
     private static long durationMs(long startedNs) {
         return (System.nanoTime() - startedNs) / 1_000_000L;
+    }
+
+    private static void awaitPull(Future<Void> future) throws IOException, InterruptedException {
+        try {
+            future.get();
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            if (cause instanceof InterruptedException ie) {
+                throw ie;
+            }
+            if (cause instanceof Error err) {
+                throw err;
+            }
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IOException(cause);
+        }
     }
 }
 

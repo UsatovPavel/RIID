@@ -3,6 +3,7 @@ package riid.app.core.config;
 import java.nio.file.Files;
 
 import riid.app.cli.CliApplication;
+import riid.app.cli.CliParser;
 import riid.app.core.model.ImageId;
 import riid.app.service.ImageLoadingFacade;
 import riid.client.core.config.RegistryEndpoint;
@@ -21,7 +22,7 @@ public final class ConfigResolvingLoaderProvider {
     private ConfigResolvingLoaderProvider() {
     }
 
-    public static CliApplication.ImageLoader create(CliApplication.CliOptions options) throws Exception {
+    public static CliApplication.ImageLoader create(CliParser.CliOptions options) throws Exception {
         if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
             RegistryEndpoint endpoint = options.credentials() == null
                     ? DEFAULT_REGISTRY_ENDPOINT

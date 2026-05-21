@@ -27,3 +27,13 @@ client:
 
 dispatcher:
   maxConcurrentRegistry: 4
+
+app:
+  daemon:
+    unixSocketPath: "/tmp/riid.sock"
+    metricsHost: "0.0.0.0"
+    metricsPort: 9090
+    maxConcurrentPulls: 32
+    maxRequestBodyBytes: 8192
+    requestTimeout: "PT30M"
+    overloadPolicy: REJECT

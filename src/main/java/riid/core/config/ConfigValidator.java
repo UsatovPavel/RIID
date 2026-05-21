@@ -3,6 +3,7 @@ package riid.core.config;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 
@@ -131,6 +132,43 @@ public final class ConfigValidator {
             if (reg == null || reg.isBlank()) {
                 throw new ConfigValidationException(ConfigValidationException.App.ALLOWED_REGISTRIES_BLANK.message());
             }
+        }
+        AppConfig.DaemonConfig daemon = app.daemon();
+        if (daemon == null) {
+            return;
+        }
+        String unixSocketPath = daemon.unixSocketPath();
+        if (unixSocketPath != null) {
+            if (unixSocketPath.isBlank()) {
+                throw new ConfigValidationException("app.daemon.unixSocketPath must not be blank");
+            }
+            if (unixSocketPath.getBytes(StandardCharsets.UTF_8).length >= 108) {
+                throw new ConfigValidationException("app.daemon.unixSocketPath must be shorter than 108 bytes");
+            }
+        }
+        String metricsHost = daemon.metricsHost();
+        if (metricsHost != null && metricsHost.isBlank()) {
+            throw new ConfigValidationException("app.daemon.metricsHost must not be blank");
+        }
+        Integer metricsPort = daemon.metricsPort();
+        if (metricsPort != null && (metricsPort < 1 || metricsPort > 65535)) {
+            throw new ConfigValidationException("app.daemon.metricsPort must be in range 1..65535");
+        }
+        Integer maxConcurrentPulls = daemon.maxConcurrentPulls();
+        if (maxConcurrentPulls != null && maxConcurrentPulls <= 0) {
+            throw new ConfigValidationException("app.daemon.maxConcurrentPulls must be positive");
+        }
+        Integer maxRequestBodyBytes = daemon.maxRequestBodyBytes();
+        if (maxRequestBodyBytes != null && maxRequestBodyBytes <= 0) {
+            throw new ConfigValidationException("app.daemon.maxRequestBodyBytes must be positive");
+        }
+        Duration requestTimeout = daemon.requestTimeout();
+        if (requestTimeout != null && (requestTimeout.isZero() || requestTimeout.isNegative())) {
+            throw new ConfigValidationException("app.daemon.requestTimeout must be positive");
+        }
+        AppConfig.OverloadPolicy overloadPolicy = daemon.overloadPolicy();
+        if (overloadPolicy != null && overloadPolicy != AppConfig.OverloadPolicy.REJECT) {
+            throw new ConfigValidationException("app.daemon.overloadPolicy supports only REJECT");
         }
     }
 

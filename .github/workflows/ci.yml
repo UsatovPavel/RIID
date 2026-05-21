@@ -39,7 +39,7 @@ jobs:
       - name: Unit tests 
         run: ./gradlew test -PdisableLocal
 
-  dragonfly-integration:
+  linux-integration-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -70,7 +70,10 @@ jobs:
             sleep 2
           done
           test -S /var/run/dragonfly/dfdaemon.sock || (echo "dfdaemon socket not found"; KUBECONFIG=$HOME/.kube/config kubectl get pods -n dragonfly-system -o wide; exit 1)
-      - name: Dragonfly integration test
+      - name: Linux integration tests (Dragonfly P2P + daemon UDS)
         run: |
           DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
-            ./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+            ./gradlew --no-daemon integrationTest \
+            --tests riid.integration.p2p.DragonflySingleP2PExecutorTest
+          ./gradlew --no-daemon moduledTest \
+            --tests riid.app.daemon.DaemonPullUnixSocketTest

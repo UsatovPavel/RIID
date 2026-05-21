@@ -3,6 +3,7 @@ package riid.core.config;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import riid.app.core.config.AppConfig;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;
@@ -410,6 +411,23 @@ class ConfigBranchTest {
         GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(ConfigValidationException.Auth.CERT_KEY_PAIR_REQUIRED.message(), ex.getMessage());
+    }
+
+    @Test
+    void throwsWhenDaemonMaxRequestBodyBytesNotPositive() {
+        AppConfig.DaemonConfig daemon = new AppConfig.DaemonConfig(
+                "/tmp/riid.sock",
+                "127.0.0.1",
+                9090,
+                8,
+                0,
+                Duration.ofSeconds(10),
+                AppConfig.OverloadPolicy.REJECT);
+        AppConfig app = new AppConfig(null, null, null, daemon);
+        GlobalConfig cfg = new GlobalConfig(validClient(), new DispatcherConfig(1), null, app, null);
+
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
+        assertEquals("app.daemon.maxRequestBodyBytes must be positive", ex.getMessage());
     }
 
     @Tag("filesystem")
