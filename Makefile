@@ -1,11 +1,13 @@
 SHELL := /bin/bash
 .PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop
-docker-build:
-	docker build -t riid-demo .
 
-docker-test:
-	docker build --target builder -t riid-test .
-	docker run --rm -v gradle-cache:/root/.gradle riid-test ./gradlew test -PdisableLocal
+# clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
+clean-dirs:
+	rm -rf bin  
+	rm -rf .dragonfly
+	rm -rf .cifuzz-corpus
+	rm -rf .vscode
+
 # prod configuration
 dragonfly-single:
 	docker rm -f dfdaemon >/dev/null 2>&1 || true
@@ -224,7 +226,7 @@ dragonfly-integration-test:
 	@test -S /var/run/dragonfly/dfdaemon.sock || (echo "Run ./scripts/minikube-dragonfly.sh first"; exit 1)
 	@sudo mkdir -p /var/run/dragonfly/output && sudo chmod 777 /var/run/dragonfly/output
 	@DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
-		./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+		./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
 
 # Dragonfly integration test (2 nodes, port-forward к dfdaemon pod)
 # Requires: make -C scripts minikube-2nodes
@@ -237,3 +239,8 @@ dragonfly-integration-test-2nodes:
 		sleep 2; \
 		DFDAEMON_ADDR=127.0.0.1:65001 DFDAEMON_OUTPUT_DIR=/tmp/riid-output \
 		./gradlew --no-daemon integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+
+
+moduled-execute-specific-test:
+	@test -n "$(TEST)" || (echo "Usage: make moduled-execute-specific-test TEST=riid.p2p.DragonflyGrpcP2PExecutorTest"; exit 1)
+	./gradlew moduledTest -PincludeLocal --tests "$(TEST)"

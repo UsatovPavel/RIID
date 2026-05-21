@@ -10,9 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import riid.app.ImageId;
-import riid.app.ImageLoadingFacade;
-import riid.app.RuntimeRegistry;
+import riid.app.core.model.ImageId;
+import riid.app.service.ImageLoadingFacade;
+import riid.app.service.RuntimeRegistry;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;

@@ -1,6 +1,7 @@
 package riid.client.core.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import ru.hse.dragonfly.puller.registry.RegistryAuth;
 
 import java.util.Optional;
 
@@ -41,5 +42,18 @@ public record Credentials(
 
     public Optional<String> identityTokenOpt() {
         return Optional.ofNullable(identityToken);
+    }
+
+    /**
+     * Converts RIID credentials into Dragonfly puller auth model.
+     */
+    public RegistryAuth toRegistryAuth() {
+        if (identityToken != null && !identityToken.isBlank()) {
+            return RegistryAuth.bearer(identityToken);
+        }
+        if (username != null && password != null) {
+            return RegistryAuth.basic(username, password);
+        }
+        return RegistryAuth.none();
     }
 }

@@ -1,6 +1,5 @@
 plugins {
     id("java")
-    id("com.google.protobuf") version "0.9.4"
     id("checkstyle")
     id("pmd")
     id("jacoco")
@@ -24,28 +23,19 @@ java {
 
 repositories {
     mavenCentral()
+    maven {
+        name = "GitHubPackagesDragonflyPuller"
+        val gprRepo = (findProperty("gpr.repo") as String?) ?: "UsatovPavel/java-dragonfly-image-puller"
+        url = uri("https://maven.pkg.github.com/$gprRepo")
+        credentials {
+            username = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
+            password = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_PACKAGES_TOKEN")
+        }
+    }
 }
 
 apply(from = "gradle/test-source-sets.gradle.kts")
 apply(from = "gradle/dependencies.gradle.kts")
-
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:4.27.2"
-    }
-    plugins {
-        create("grpc") {
-            artifact = "io.grpc:protoc-gen-grpc-java:1.79.0"
-        }
-    }
-    generateProtoTasks {
-        ofSourceSet("main").forEach {
-            it.plugins {
-                create("grpc")
-            }
-        }
-    }
-}
 apply(from = "gradle/tests-tasks.gradle.kts")
 apply(from = "gradle/docker.gradle.kts")
 
@@ -70,6 +60,6 @@ tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
     archiveFileName.set("riid.jar")
     manifest {
-        attributes("Main-Class" to "riid.app.CliApplication")
+        attributes("Main-Class" to "riid.app.cli.CliApplication")
     }
 }
