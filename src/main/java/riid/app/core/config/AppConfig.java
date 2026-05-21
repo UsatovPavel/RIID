@@ -46,7 +46,7 @@ public record AppConfig(
     }
 
     public DaemonConfig daemonOrDefault() {
-        return daemon == null ? new DaemonConfig(null, null, null, null, null, null) : daemon;
+        return daemon == null ? new DaemonConfig(null, null, null, null, null, null, null) : daemon;
     }
 
     public enum OverloadPolicy {
@@ -58,6 +58,7 @@ public record AppConfig(
             @JsonProperty("metricsHost") String metricsHost,
             @JsonProperty("metricsPort") Integer metricsPort,
             @JsonProperty("maxConcurrentPulls") Integer maxConcurrentPulls,
+            @JsonProperty("maxRequestBodyBytes") Integer maxRequestBodyBytes,
             @JsonProperty("requestTimeout") Duration requestTimeout,
             @JsonProperty("overloadPolicy") OverloadPolicy overloadPolicy
     ) {
@@ -65,6 +66,7 @@ public record AppConfig(
         private static final String DEFAULT_METRICS_HOST = "0.0.0.0";
         private static final int DEFAULT_METRICS_PORT = 9090;
         private static final int DEFAULT_MAX_CONCURRENT_PULLS = 32;
+        private static final int DEFAULT_MAX_REQUEST_BODY_BYTES = 8192;
         private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
         private static final OverloadPolicy DEFAULT_OVERLOAD_POLICY = OverloadPolicy.REJECT;
 
@@ -94,6 +96,13 @@ public record AppConfig(
                 return DEFAULT_MAX_CONCURRENT_PULLS;
             }
             return maxConcurrentPulls;
+        }
+
+        public int maxRequestBodyBytesOrDefault() {
+            if (maxRequestBodyBytes == null || maxRequestBodyBytes <= 0) {
+                return DEFAULT_MAX_REQUEST_BODY_BYTES;
+            }
+            return maxRequestBodyBytes;
         }
 
         public Duration requestTimeoutOrDefault() {

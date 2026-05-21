@@ -15,11 +15,11 @@ public final class DaemonSettingsResolver {
 
     public static AppConfig.DaemonConfig resolve(CliParser.CliOptions options) throws Exception {
         if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
-            return new AppConfig.DaemonConfig(null, null, null, null, null, null);
+            return new AppConfig.DaemonConfig(null, null, null, null, null, null, null);
         }
         GlobalConfig config = ConfigLoader.load(options.configPath());
         if (config.app() == null || config.app().daemon() == null) {
-            return new AppConfig.DaemonConfig(null, null, null, null, null, null);
+            return new AppConfig.DaemonConfig(null, null, null, null, null, null, null);
         }
         return config.app().daemon();
     }

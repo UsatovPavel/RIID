@@ -2,10 +2,12 @@ package riid.app.daemon.handler;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -34,6 +36,7 @@ public final class PullHttpHandler extends Handler.Abstract {
     private final CliApplication.ImageLoader loader;
     private final Set<String> availableRuntimes;
     private final PullConcurrencyGuard concurrencyGuard;
+    private final int maxRequestBodyBytes;
     private final Duration requestTimeout;
     private final ExecutorService pullExecutor;
 
@@ -41,12 +44,14 @@ public final class PullHttpHandler extends Handler.Abstract {
                     CliApplication.ImageLoader loader,
                     Set<String> availableRuntimes,
                     PullConcurrencyGuard concurrencyGuard,
+                    int maxRequestBodyBytes,
                     Duration requestTimeout,
                     ExecutorService pullExecutor) {
         this.controlConnectorName = Objects.requireNonNull(controlConnectorName, "controlConnectorName");
         this.loader = Objects.requireNonNull(loader, "loader");
         this.availableRuntimes = Objects.requireNonNull(availableRuntimes, "availableRuntimes");
         this.concurrencyGuard = Objects.requireNonNull(concurrencyGuard, "concurrencyGuard");
+        this.maxRequestBodyBytes = maxRequestBodyBytes;
         this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout");
         this.pullExecutor = Objects.requireNonNull(pullExecutor, "pullExecutor");
     }
@@ -66,8 +71,20 @@ public final class PullHttpHandler extends Handler.Abstract {
 
         DaemonPullRequest pullRequest;
         try {
-            String body = Content.Source.asString(request);
+            long declaredContentLength = request.getLength();
+            if (declaredContentLength > maxRequestBodyBytes) {
+                throw new RequestTooLargeException();
+            }
+            String body = readBodyWithLimit(request, maxRequestBodyBytes);
             pullRequest = mapper.readValue(body, DaemonPullRequest.class);
+        } catch (RequestTooLargeException e) {
+            writeJson(
+                    response,
+                    callback,
+                    HttpStatus.PAYLOAD_TOO_LARGE_413,
+                    new ErrorResponse("request_too_large", "Request body exceeds configured limit")
+            );
+            return true;
         } catch (Exception e) {
             writeJson(
                     response,
@@ -126,6 +143,23 @@ public final class PullHttpHandler extends Handler.Abstract {
         return true;
     }
 
+    private static String readBodyWithLimit(Request request, int maxRequestBodyBytes)
+            throws IOException, RequestTooLargeException {
+        try {
+            byte[] body = Content.Source.asByteArrayAsync(request, maxRequestBodyBytes).join();
+            return new String(body, StandardCharsets.UTF_8);
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IllegalArgumentException) {
+                throw new RequestTooLargeException();
+            }
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Failed to read request body", cause);
+        }
+    }
+
     private static Throwable unwrapExecution(Throwable e) {
         Throwable u = e;
         while (u instanceof ExecutionException && u.getCause() != null) {
@@ -175,5 +209,8 @@ public final class PullHttpHandler extends Handler.Abstract {
         private PullTimeoutException(String message, Throwable cause) {
             super(message, cause);
         }
+    }
+
+    private static final class RequestTooLargeException extends Exception {
     }
 }

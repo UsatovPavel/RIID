@@ -39,6 +39,7 @@ class PullHttpHandlerHttpStatusTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Set<String> RUNTIMES = Set.of("podman");
     private static final Duration LONG_TIMEOUT = Duration.ofSeconds(30);
+    private static final int MAX_REQUEST_BODY_BYTES = 8192;
 
     private Server server;
     private LocalConnector connector;
@@ -66,6 +67,7 @@ class PullHttpHandlerHttpStatusTest {
                 (repo, ref, rt) -> "/var/tmp/test-image.tar",
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor));
 
@@ -85,6 +87,7 @@ class PullHttpHandlerHttpStatusTest {
                 (repo, ref, rt) -> "ignored",
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor));
 
@@ -108,6 +111,33 @@ class PullHttpHandlerHttpStatusTest {
 
         assertEquals(HttpStatus.BAD_REQUEST_400, r.status());
         assertEquals("invalid_request", r.json().path("code").asText());
+    }
+
+    @Test
+    void requestBodyTooLargeReturns413() throws Exception {
+        pullExecutor = newPullExecutor();
+        PullHttpHandler handler = new PullHttpHandler(
+                CONTROL,
+                (repo, ref, rt) -> "ignored",
+                RUNTIMES,
+                new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                64,
+                LONG_TIMEOUT,
+                pullExecutor);
+        startServer(handler);
+
+        String oversizedBody = """
+                {
+                  "repository":"library/busybox",
+                  "reference":"latest",
+                  "runtimeId":"podman",
+                  "padding":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                }
+                """;
+        ParsedResponse r = postPull(oversizedBody);
+
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE_413, r.status());
+        assertEquals("request_too_large", r.json().path("code").asText());
     }
 
     @Test
@@ -141,6 +171,7 @@ class PullHttpHandlerHttpStatusTest {
                 (repo, ref, rt) -> "/ok",
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(0, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor));
 
@@ -174,6 +205,7 @@ class PullHttpHandlerHttpStatusTest {
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(2, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor),
                 2);
@@ -214,6 +246,7 @@ class PullHttpHandlerHttpStatusTest {
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 Duration.ofMillis(120),
                 pullExecutor));
 
@@ -331,6 +364,7 @@ class PullHttpHandlerHttpStatusTest {
                 loader,
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 exec);
     }

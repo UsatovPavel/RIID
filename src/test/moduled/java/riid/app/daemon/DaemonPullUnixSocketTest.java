@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.io.IOException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,6 +20,7 @@ import riid.core.fs.TestFilesystemSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -47,6 +49,7 @@ class DaemonPullUnixSocketTest {
                 (repo, ref, rt) -> "/var/tmp/riid-test.tar",
                 Set.of("podman"),
                 4,
+                8192,
                 Duration.ofSeconds(30),
                 AppConfig.OverloadPolicy.REJECT);
 
@@ -84,6 +87,45 @@ class DaemonPullUnixSocketTest {
             assertEquals("/var/tmp/riid-test.tar", node.path("imagePath").asText());
         } finally {
             daemon.stop();
+            TestFilesystemSupport.deleteRecursive(dir);
+        }
+    }
+
+    @Test
+    void startFailsWhenUnixSocketAlreadyOwnedByRunningDaemon() throws Exception {
+        assumeTrue(TestFilesystemSupport.curlAvailable(), "curl must be on PATH for HTTP over UDS");
+
+        Path dir = Files.createTempDirectory("riid-daemon-uds-owned");
+        Path socketPath = dir.resolve("riid.sock");
+
+        DaemonServer daemonA = new DaemonServer(
+                socketPath.toString(),
+                "127.0.0.1",
+                0,
+                (repo, ref, rt) -> "/var/tmp/riid-test-a.tar",
+                Set.of("podman"),
+                4,
+                8192,
+                Duration.ofSeconds(30),
+                AppConfig.OverloadPolicy.REJECT);
+
+        DaemonServer daemonB = new DaemonServer(
+                socketPath.toString(),
+                "127.0.0.1",
+                0,
+                (repo, ref, rt) -> "/var/tmp/riid-test-b.tar",
+                Set.of("podman"),
+                4,
+                8192,
+                Duration.ofSeconds(30),
+                AppConfig.OverloadPolicy.REJECT);
+
+        try {
+            daemonA.start();
+            IOException error = assertThrows(IOException.class, daemonB::start);
+            assertTrue(error.getMessage().contains("already in use"));
+        } finally {
+            daemonA.stop();
             TestFilesystemSupport.deleteRecursive(dir);
         }
     }
