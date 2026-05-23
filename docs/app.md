@@ -62,8 +62,8 @@ Long-lived process: embedded **Jetty** serves **HTTP over a Unix domain socket**
     - `riid_image_load_tar_size_category_total` — **Counter** per `category` (bucket label as above); increments once per successful load with a known tar byte size.
     - `riid_image_load_tar_size_by_category_*` — **DistributionSummary** (`_count` / `_sum` per `category`) recording raw tar bytes per bucket (useful for mean tar size per cohort).
     - `riid_image_load_tar_size_bytes_*` — global summary of tar sizes (all successful loads with known size).
-    - `riid_image_load_throughput_bps_*` — effective bytes/sec (tar size ÷ pipeline duration); histogram-style buckets when exported.
-    - `riid_image_load_throughput_slo_bps_*` — same, but only when tar size ≥ **10 MiB** (SLO cohort in code).  
+    - `riid_image_provide_throughput_bps_*` — effective bytes/sec (tar size ÷ pipeline duration); histogram-style buckets when exported.
+    - `riid_image_provide_throughput_slo_bps_*` — same, but only when tar size ≥ **10 MiB** (SLO cohort in code).  
     Grafana JSON for these names lives under `config/metrics/grafana/dashboards/`; a runnable VM + vmagent + Grafana layout is described in `config/metrics/README.md`.
   - **Dispatcher layer source (when using Micrometer in `ImageLoadingFacade`):** `riid_dispatcher_layer_fetches_total` — counter of **layer resolutions** tagged `source` (`cache`, `p2p`, `registry`); `riid_dispatcher_layer_bytes_total` — **payload bytes** attributed to the same `source` (for volume / `increase()` in PromQL, e.g. **`RIID main`** panel *Layer bytes by source (trailing 6h)*).
 - **Bind / firewall:** `metricsHost` controls the listen address (default `0.0.0.0` = all interfaces). Use `127.0.0.1` if the scrape agent runs on the same host and you want no remote access. Open the chosen **TCP port** in the host firewall for whatever runs the scraper; if the scraper is remote, it must reach `metricsHost:metricsPort` on the network path you configure in `vmagent-scrape.yaml` (or equivalent).

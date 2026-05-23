@@ -109,23 +109,27 @@ class DaemonPullUnixSocketTest {
                 socketPath.toString(),
                 "127.0.0.1",
                 0,
-                (repo, ref, rt) -> "/var/tmp/riid-test-a.tar",
+                (repo, ref, rt) ->
+                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
                 Set.of("podman"),
                 4,
                 8192,
                 Duration.ofSeconds(30),
-                AppConfig.OverloadPolicy.REJECT);
+                AppConfig.OverloadPolicy.REJECT,
+                new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         DaemonServer daemonB = new DaemonServer(
                 socketPath.toString(),
                 "127.0.0.1",
                 0,
-                (repo, ref, rt) -> "/var/tmp/riid-test-b.tar",
+                (repo, ref, rt) ->
+                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
                 Set.of("podman"),
                 4,
                 8192,
                 Duration.ofSeconds(30),
-                AppConfig.OverloadPolicy.REJECT);
+                AppConfig.OverloadPolicy.REJECT,
+                new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         try {
             daemonA.start();

@@ -58,6 +58,7 @@ class DaemonPullMetricsEndpointTest {
                         new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), MOCK_TAR_BYTES),
                 Set.of("podman"),
                 4,
+                8192,
                 Duration.ofSeconds(30),
                 AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));

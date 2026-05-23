@@ -24,8 +24,8 @@ public final class ImageLoadPipelineMetrics {
         /** Per-bucket tar samples (PromQL mean: sum/count on this name). */
         TAR_SIZE_BY_CATEGORY("riid.image.load.tar.size.by.category"),
         TAR_SIZE_BYTES("riid.image.load.tar.size.bytes"),
-        THROUGHPUT_BPS("riid.image.load.throughput.bps"),
-        THROUGHPUT_SLO_BPS("riid.image.load.throughput.slo.bps");
+        THROUGHPUT_BPS("riid.image.provide.throughput.bps"),
+        THROUGHPUT_SLO_BPS("riid.image.provide.throughput.slo.bps");
 
         private final String value;
 
@@ -96,10 +96,8 @@ public final class ImageLoadPipelineMetrics {
     private void recordTarDerived(long pipelineStartNanos, long tarBytes) {
         long elapsedNanos = System.nanoTime() - pipelineStartNanos;
         double seconds = elapsedNanos / 1_000_000_000.0;
-        double bps = seconds > 0.0 ? tarBytes / seconds : 0.0;
 
         tarSizeBytes.record(tarBytes);
-        throughputBps.record(bps);
 
         DistributionSummary.builder(MetricName.TAR_SIZE_BY_CATEGORY.value())
                 .description("Tar size in bytes per size bucket (for mean size vs latency dashboards)")
@@ -113,6 +111,11 @@ public final class ImageLoadPipelineMetrics {
                 .register(registry)
                 .increment();
 
+        if (seconds <= 0.0) {
+            return;
+        }
+        double bps = tarBytes / seconds;
+        throughputBps.record(bps);
         if (tarBytes >= MIN_SLO_TAR_BYTES) {
             throughputSloBps.record(bps);
         }

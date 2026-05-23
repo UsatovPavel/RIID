@@ -36,6 +36,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
+import riid.dispatcher.core.config.DispatcherConfig;
 import riid.dispatcher.metrics.DispatcherLayerSourceMetrics;
 import riid.dispatcher.metrics.MicrometerDispatcherLayerSourceMetrics;
 import riid.core.logging.MdcContext;
@@ -221,9 +222,27 @@ public final class ImageLoadingFacade implements AutoCloseable {
                                                    P2PExecutor p2p,
                                                    Map<String, RuntimeAdapter> runtimes,
                                                    HostFilesystem fs) {
+        return createDefault(endpoint, cache, p2p, runtimes, fs, null);
+    }
+
+    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint,
+                                                   CacheAdapter cache,
+                                                   P2PExecutor p2p,
+                                                   Map<String, RuntimeAdapter> runtimes,
+                                                   HostFilesystem fs,
+                                                   MeterRegistry meterRegistry) {
         HttpClientConfig httpConfig = new HttpClientConfig();
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig);
-        RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, fs);
+        DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
+                ? DispatcherLayerSourceMetrics.NOOP
+                : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
+        RequestDispatcher dispatcher = new SimpleRequestDispatcher(
+                client,
+                cache,
+                p2p,
+                new DispatcherConfig(),
+                fs,
+                layerMetrics);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
         return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null, null, p2p::close);
     }
