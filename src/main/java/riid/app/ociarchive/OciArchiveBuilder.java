@@ -26,6 +26,7 @@ import riid.core.fs.PathSupport;
 import riid.client.api.ManifestResult;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.MediaType;
+import riid.core.model.manifest.MediaTypes;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
 import riid.dispatcher.RequestDispatcher;
@@ -132,10 +133,11 @@ public final class OciArchiveBuilder {
         // oci-layout
         fs.writeString(ociDir.resolve("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}");
 
-        // index.json with ref name
+        // index.json: descriptor mediaType must match the manifest blob (Docker v2 vs OCI), or podman load fails.
         String template = readResource("oci/index/json.tpl");
-        String index = String.format(Locale.ROOT, template, manifestBytes.length, 
-            manifestDigest, imageId.referenceName());
+        String indexMediaType = indexManifestMediaType(manifestResult, manifest);
+        String index = String.format(Locale.ROOT, template, indexMediaType, manifestBytes.length,
+                manifestDigest, imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
         Path archive = PathSupport.temporaryPath(tempRoot, "oci-archive-", ".tar");
@@ -184,6 +186,21 @@ public final class OciArchiveBuilder {
         var fetched = dispatcher.fetchLayer(new RepositoryName(repository), digest, size, mediaType);
         File tmp = fetched.path().toFile();
         fs.copy(tmp.toPath(), blobsDir.resolve(fetched.digest().hex()));
+    }
+
+    /**
+     * OCI index manifest descriptor must use the same media type as the blob (e.g. Docker schema2 from Hub).
+     */
+    private static String indexManifestMediaType(ManifestResult manifestResult, Manifest manifest) {
+        String fromResult = manifestResult.mediaType();
+        if (fromResult != null && !fromResult.isBlank()) {
+            return fromResult;
+        }
+        String fromManifest = manifest.mediaType();
+        if (fromManifest != null && !fromManifest.isBlank()) {
+            return fromManifest;
+        }
+        return MediaTypes.OCI_IMAGE_MANIFEST;
     }
 
     private static void runTar(Path archive, Path ociDir) throws IOException, InterruptedException {

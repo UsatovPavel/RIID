@@ -1,6 +1,7 @@
 package riid.app.service;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,8 +32,13 @@ import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.core.config.ConfigLoader;
 import riid.core.config.GlobalConfig;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
+import riid.dispatcher.core.config.DispatcherConfig;
+import riid.dispatcher.metrics.DispatcherLayerSourceMetrics;
+import riid.dispatcher.metrics.MicrometerDispatcherLayerSourceMetrics;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
 import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
@@ -109,9 +115,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
     /**
      * High-level load: download/validate, assemble OCI, import into runtime.
      *
-     * @return resolved ImageId used for runtime
+     * @return resolved image and tar size (bytes) passed to the runtime
      */
-    public ImageId load(ImageId imageId, String runtimeId) {
+    public LoadOutcome load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
         String previousOperation = MdcContext.getOperation();
@@ -146,9 +152,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
     /**
      * Load using prepared manifest result and runtime.
      *
-     * @return resolved ImageId used for runtime
+     * @return resolved image and tar size (bytes) passed to the runtime
      */
-    public ImageId load(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId) {
+    public LoadOutcome load(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId) {
         Objects.requireNonNull(manifestResult, "manifestResult");
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(imageId, "imageId");
@@ -157,13 +163,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
         long engineStartedNs = System.nanoTime();
         try {
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
+                long tarBytes = Files.size(archivePath);
                 runtime.importImage(archivePath);
                 MilestoneEventLogger.info(LOGGER)
                         .addEvent("engine.import")
                         .addResult("success")
                         .addDurationMs(durationMs(engineStartedNs))
                         .log("Loaded " + imageId + " into runtime " + runtime.runtimeId() + " at " + archivePath);
-                return imageId;
+                return new LoadOutcome(imageId, tarBytes);
             });
         } catch (AppException e) {
             MilestoneEventLogger.error(LOGGER)
@@ -215,9 +222,27 @@ public final class ImageLoadingFacade implements AutoCloseable {
                                                    P2PExecutor p2p,
                                                    Map<String, RuntimeAdapter> runtimes,
                                                    HostFilesystem fs) {
+        return createDefault(endpoint, cache, p2p, runtimes, fs, null);
+    }
+
+    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint,
+                                                   CacheAdapter cache,
+                                                   P2PExecutor p2p,
+                                                   Map<String, RuntimeAdapter> runtimes,
+                                                   HostFilesystem fs,
+                                                   MeterRegistry meterRegistry) {
         HttpClientConfig httpConfig = new HttpClientConfig();
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig);
-        RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, fs);
+        DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
+                ? DispatcherLayerSourceMetrics.NOOP
+                : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
+        RequestDispatcher dispatcher = new SimpleRequestDispatcher(
+                client,
+                cache,
+                p2p,
+                new DispatcherConfig(),
+                fs,
+                layerMetrics);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
         return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null, null, p2p::close);
     }
@@ -226,12 +251,19 @@ public final class ImageLoadingFacade implements AutoCloseable {
      * Build ImageLoadingFacade from YAML config.
      */
     public static ImageLoadingFacade createFromConfig(Path configPath) throws Exception {
-        return createFromConfig(configPath, null);
+        return createFromConfig(configPath, null, null);
     }
 
     public static ImageLoadingFacade createFromConfig(
             Path configPath,
             Credentials credentialsOverride) throws Exception {
+        return createFromConfig(configPath, credentialsOverride, null);
+    }
+
+    public static ImageLoadingFacade createFromConfig(
+            Path configPath,
+            Credentials credentialsOverride,
+            MeterRegistry meterRegistry) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         GlobalConfig config = ConfigLoader.load(configPath);
 
@@ -283,8 +315,11 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 && config.p2p().dragonfly().enabledOrDefault()) {
             p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config.p2p().dragonfly());
         }
+        DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
+                ? DispatcherLayerSourceMetrics.NOOP
+                : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
         return new ImageLoadingFacade(
-                new SimpleRequestDispatcher(client, cache, p2p, fs),
+                new SimpleRequestDispatcher(client, cache, p2p, config.dispatcher(), fs, layerMetrics),
                 new RuntimeRegistry(runtimes),
                 client,
                 fs,

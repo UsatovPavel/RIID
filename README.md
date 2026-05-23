@@ -54,6 +54,14 @@ TLS/mTLS options (wired to HTTP client):
 ./gradlew testApp
 ```
 
+## Daemon mode and Grafana
+
+**Daemon** (`--daemon`): a long-lived process with **Jetty** — **Unix socket** control plane (`POST /pull` with JSON) and a **TCP** **Prometheus scrape** endpoint (`GET /metrics` on `metricsHost:metricsPort`). Options and defaults: [`docs/config.md`](docs/config.md) (`app.daemon`); endpoints, metric names, bind/firewall notes: [`docs/app.md`](docs/app.md) (Daemon mode).
+
+**Grafana / VictoriaMetrics (local example):** configs live under [`config/metrics/`](config/metrics/README.md). From the repo root with Make (bash): `make metrics-stack-create` starts VictoriaMetrics + vmagent + Grafana (Grafana on port **3000**, VM on **8428**); `make metrics-stack-update` restarts Grafana to pick up changed dashboard JSON; `make metrics-stack-down` removes the containers. See the root `Makefile` for smoke targets such as `make download_to_daemon_1MB` (expects daemon UDS at `/tmp/riid.sock` per your config).
+
+**Daemon quick loop:** `make daemon-new` runs `clean shadowJar` then `make daemon` (registry auth via optional `config/.env` and `DOCKERHUB_*` as in the `Makefile`).
+
 ## Local registry + integration smoke
 
 ### Start local registry (docker/podman)

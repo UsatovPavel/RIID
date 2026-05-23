@@ -1,10 +1,17 @@
 package riid.core.config;
 
+import java.util.Optional;
+
+import riid.client.core.config.Credentials;
+
 /**
  * Shared YAML snippets for integration tests.
  */
 @SuppressWarnings("PMD.TestClassWithoutTestCases")
 public final class TestConfigYaml {
+
+    private static final String ENV_DOCKERHUB_USER = "DOCKERHUB_USER";
+    private static final String ENV_DOCKERHUB_TOKEN = "DOCKERHUB_TOKEN";
     public static final String CERT_PEM = """
             -----BEGIN CERTIFICATE-----
             MIIDjTCCAnWgAwIBAgIEJA9kNDANBgkqhkiG9w0BAQsFADB3MQswCQYDVQQGEwJD
@@ -64,6 +71,23 @@ public final class TestConfigYaml {
     private TestConfigYaml() {
     }
 
+    /**
+     * Docker Hub basic auth from environment (e.g. GitHub Actions secrets), for rate limits / CI.
+     * Both DOCKERHUB_USER and DOCKERHUB_TOKEN must be non-blank.
+     */
+    public static Optional<Credentials> dockerHubCredentialsFromEnv() {
+        String user = System.getenv(ENV_DOCKERHUB_USER);
+        String token = System.getenv(ENV_DOCKERHUB_TOKEN);
+        if (user != null && !user.isBlank() && token != null && !token.isBlank()) {
+            return Optional.of(Credentials.basic(user.trim(), token.trim()));
+        }
+        return Optional.empty();
+    }
+
+    private static String yamlDoubleQuoted(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
     public static String minimalDockerHubConfigWithEmptyAuth(int maxConcurrentRegistry) {
         String scheme = TestRegistryConfig.scheme();
         String host = TestRegistryConfig.host();
@@ -86,6 +110,26 @@ public final class TestConfigYaml {
         String scheme = TestRegistryConfig.scheme();
         String host = TestRegistryConfig.host();
         int port = TestRegistryConfig.port();
+        Optional<Credentials> creds = dockerHubCredentialsFromEnv();
+        String registryYaml = creds.map(c -> """
+                    - scheme: %s
+                      host: %s
+                      port: %d
+                      credentials:
+                        username: %s
+                        password: %s
+                """.formatted(
+                        scheme,
+                        host,
+                        port,
+                        yamlDoubleQuoted(c.username()),
+                        yamlDoubleQuoted(c.password())))
+                .orElse("""
+                    - scheme: %s
+                      host: %s
+                      port: %d
+                      credentials: null
+                """.formatted(scheme, host, port));
         return """
                 client:
                   http:
@@ -100,13 +144,11 @@ public final class TestConfigYaml {
                   auth:
                     defaultTokenTtlSeconds: 600
                   registries:
-                    - scheme: %s
-                      host: %s
-                      port: %d
+                %s
                 dispatcher:
                   maxConcurrentRegistry: %d
                 app:
                   tempDirectory: "%s"
-                """.formatted(scheme, host, port, maxConcurrentRegistry, tempDirectory);
+                """.formatted(registryYaml, maxConcurrentRegistry, tempDirectory);
     }
 }

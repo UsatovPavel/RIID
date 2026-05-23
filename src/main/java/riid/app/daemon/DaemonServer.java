@@ -18,12 +18,16 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
 import org.eclipse.jetty.util.thread.VirtualThreadPool;
 
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+
 import riid.app.cli.CliApplication;
 import riid.app.core.config.AppConfig;
 import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
 import riid.app.daemon.handler.MetricsHttpHandler;
 import riid.app.daemon.handler.PullHttpHandler;
+import riid.app.daemon.metrics.DaemonPullHttpMetrics;
+import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 
 /**
  * Embedded Jetty daemon server for local IPC over HTTP.
@@ -43,13 +47,15 @@ public final class DaemonServer {
                         int maxConcurrentPulls,
                         int maxRequestBodyBytes,
                         Duration requestTimeout,
-                        AppConfig.OverloadPolicy overloadPolicy) {
+                        AppConfig.OverloadPolicy overloadPolicy,
+                        PrometheusMeterRegistry prometheusRegistry) {
         Objects.requireNonNull(unixSocketPath, "unixSocketPath");
         Objects.requireNonNull(metricsHost, "metricsHost");
         Objects.requireNonNull(loader, "loader");
         Objects.requireNonNull(availableRuntimes, "availableRuntimes");
         Objects.requireNonNull(requestTimeout, "requestTimeout");
         Objects.requireNonNull(overloadPolicy, "overloadPolicy");
+        Objects.requireNonNull(prometheusRegistry, "prometheusRegistry");
         if (maxRequestBodyBytes <= 0) {
             throw new IllegalArgumentException("maxRequestBodyBytes must be positive");
         }
@@ -82,10 +88,24 @@ public final class DaemonServer {
             pullConcurrencyGuard,
             maxRequestBodyBytes,
             requestTimeout,
-            pullExecutor
+            pullExecutor,
+            new DaemonPullHttpMetrics(prometheusRegistry),
+            new ImageLoadPipelineMetrics(prometheusRegistry)
         ));
-        root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME));
+        root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME, prometheusRegistry));
         server.setHandler(root);
+    }
+
+    /**
+     * TCP listen port for the metrics connector (after {@link #start()}). {@code -1} if not bound.
+     */
+    public int getMetricsListenPort() {
+        for (var connector : server.getConnectors()) {
+            if (METRICS_CONNECTOR_NAME.equals(connector.getName()) && connector instanceof ServerConnector sc) {
+                return sc.getLocalPort();
+            }
+        }
+        return -1;
     }
 
     /**

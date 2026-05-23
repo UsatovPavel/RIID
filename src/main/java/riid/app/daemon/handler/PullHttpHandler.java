@@ -27,10 +27,22 @@ import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 
 import riid.app.cli.CliApplication;
+import riid.app.service.LoadOutcome;
 import riid.app.daemon.guard.PullConcurrencyGuard;
+import riid.app.daemon.metrics.DaemonPullHttpMetrics;
+import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 
 public final class PullHttpHandler extends Handler.Abstract {
     private static final String PULL_PATH = "/pull";
+
+    /**
+     * Reserved repository name: if {@value #ENV_INTERNAL_ERROR_PROBE} is set (non-blank), POST /pull returns HTTP 500
+     * without loading (local metrics / Makefile smoke). Unset = normal behaviour.
+     */
+    public static final String INTERNAL_ERROR_PROBE_REPOSITORY = "__riid_daemon_internal_error_probe__";
+
+    /** When non-blank, enables {@link #INTERNAL_ERROR_PROBE_REPOSITORY} → HTTP 500. */
+    public static final String ENV_INTERNAL_ERROR_PROBE = "RIID_DAEMON_INTERNAL_ERROR_PROBE";
 
     private final String controlConnectorName;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -40,6 +52,8 @@ public final class PullHttpHandler extends Handler.Abstract {
     private final int maxRequestBodyBytes;
     private final Duration requestTimeout;
     private final ExecutorService pullExecutor;
+    private final DaemonPullHttpMetrics pullMetrics;
+    private final ImageLoadPipelineMetrics pipelineMetrics;
 
     public PullHttpHandler(String controlConnectorName,
                     CliApplication.ImageLoader loader,
@@ -47,7 +61,9 @@ public final class PullHttpHandler extends Handler.Abstract {
                     PullConcurrencyGuard concurrencyGuard,
                     int maxRequestBodyBytes,
                     Duration requestTimeout,
-                    ExecutorService pullExecutor) {
+                    ExecutorService pullExecutor,
+                    DaemonPullHttpMetrics pullMetrics,
+                    ImageLoadPipelineMetrics pipelineMetrics) {
         this.controlConnectorName = Objects.requireNonNull(controlConnectorName, "controlConnectorName");
         this.loader = Objects.requireNonNull(loader, "loader");
         this.availableRuntimes = Objects.requireNonNull(availableRuntimes, "availableRuntimes");
@@ -55,6 +71,8 @@ public final class PullHttpHandler extends Handler.Abstract {
         this.maxRequestBodyBytes = maxRequestBodyBytes;
         this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout");
         this.pullExecutor = Objects.requireNonNull(pullExecutor, "pullExecutor");
+        this.pullMetrics = Objects.requireNonNull(pullMetrics, "pullMetrics");
+        this.pipelineMetrics = Objects.requireNonNull(pipelineMetrics, "pipelineMetrics");
     }
 
     @Override
@@ -65,8 +83,10 @@ public final class PullHttpHandler extends Handler.Abstract {
         if (!PULL_PATH.equals(request.getHttpURI().getPath())) {
             return false;
         }
+        long t0 = System.nanoTime();
         if (!HttpMethod.POST.is(request.getMethod())) {
             Response.writeError(request, response, callback, HttpStatus.METHOD_NOT_ALLOWED_405);
+            pullMetrics.record(t0, HttpStatus.METHOD_NOT_ALLOWED_405, "method_not_allowed");
             return true;
         }
 
@@ -87,6 +107,7 @@ public final class PullHttpHandler extends Handler.Abstract {
             );
             return true;
         } catch (Exception e) {
+            pullMetrics.record(t0, HttpStatus.BAD_REQUEST_400, "invalid_request");
             writeJson(
                     response,
                     callback,
@@ -99,6 +120,7 @@ public final class PullHttpHandler extends Handler.Abstract {
         if (pullRequest.repository() == null || pullRequest.repository().isBlank()
                 || pullRequest.reference() == null || pullRequest.reference().isBlank()
                 || pullRequest.runtimeId() == null || pullRequest.runtimeId().isBlank()) {
+            pullMetrics.record(t0, HttpStatus.BAD_REQUEST_400, "invalid_request");
             writeJson(response, callback, HttpStatus.BAD_REQUEST_400, new ErrorResponse(
                     "invalid_request",
                     "repository, reference and runtimeId are required"
@@ -106,6 +128,7 @@ public final class PullHttpHandler extends Handler.Abstract {
             return true;
         }
         if (!availableRuntimes.contains(pullRequest.runtimeId())) {
+            pullMetrics.record(t0, HttpStatus.UNPROCESSABLE_ENTITY_422, "unknown_runtime");
             writeJson(response, callback, HttpStatus.UNPROCESSABLE_ENTITY_422, new ErrorResponse(
                     "unknown_runtime",
                     "Unknown runtime: " + pullRequest.runtimeId()
@@ -114,17 +137,25 @@ public final class PullHttpHandler extends Handler.Abstract {
         }
 
         try {
-            Optional<String> loadedPath = concurrencyGuard.tryExecute(() -> executePullWithTimeout(pullRequest));
-            if (loadedPath.isEmpty()) {
+            String probeEnv = System.getenv(ENV_INTERNAL_ERROR_PROBE);
+            if (probeEnv != null && !probeEnv.isBlank()
+                    && INTERNAL_ERROR_PROBE_REPOSITORY.equals(pullRequest.repository())) {
+                throw new IllegalStateException("daemon internal-error probe (intentional HTTP 500)");
+            }
+            Optional<LoadOutcome> loaded = concurrencyGuard.tryExecute(() -> executePullWithTimeout(pullRequest));
+            if (loaded.isEmpty()) {
+                pullMetrics.record(t0, HttpStatus.TOO_MANY_REQUESTS_429, "overloaded");
                 writeJson(response, callback, HttpStatus.TOO_MANY_REQUESTS_429, new ErrorResponse(
                         "overloaded",
                         "Too many concurrent pull requests"
                 ));
                 return true;
             }
+            pullMetrics.record(t0, HttpStatus.OK_200, "success");
             writeJson(response, callback, HttpStatus.OK_200,
-                    new DaemonPullResponse("success", loadedPath.orElse(null), null));
+                    new DaemonPullResponse("success", loaded.get().imageRef(), null));
         } catch (PullTimeoutException e) {
+            pullMetrics.record(t0, HttpStatus.GATEWAY_TIMEOUT_504, "timeout");
             writeJson(response, callback, HttpStatus.GATEWAY_TIMEOUT_504, new ErrorResponse(
                     "timeout",
                     safeMessage(e)
@@ -134,9 +165,11 @@ public final class PullHttpHandler extends Handler.Abstract {
             Optional<DaemonPullErrorMapper.MappedHttpError> mapped = DaemonPullErrorMapper.map(e);
             if (mapped.isPresent()) {
                 DaemonPullErrorMapper.MappedHttpError m = mapped.get();
+                pullMetrics.record(t0, m.httpStatus(), m.code().jsonValue());
                 writeJson(response, callback, m.httpStatus(),
                         new ErrorResponse(m.code().jsonValue(), m.message()));
             } else {
+                pullMetrics.record(t0, HttpStatus.INTERNAL_SERVER_ERROR_500, "pull_failed");
                 writeJson(response, callback, HttpStatus.INTERNAL_SERVER_ERROR_500,
                         new ErrorResponse("pull_failed", safeMessage(unwrapExecution(e))));
             }
@@ -169,9 +202,10 @@ public final class PullHttpHandler extends Handler.Abstract {
         return u;
     }
 
-    private String executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
+    private LoadOutcome executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
+        long start = System.nanoTime();
         CountDownLatch taskTerminated = new CountDownLatch(1);
-        Future<String> future = pullExecutor.submit(() -> {
+        Future<LoadOutcome> future = pullExecutor.submit(() -> {
             try {
                 return loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId());
             } finally {
@@ -179,15 +213,29 @@ public final class PullHttpHandler extends Handler.Abstract {
             }
         });
         try {
-            return future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            LoadOutcome result = future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            pipelineMetrics.recordSuccess(start, result.tarBytes());
+            return result;
         } catch (TimeoutException e) {
             future.cancel(true);
+            pipelineMetrics.recordTimeout(start);
             awaitTaskTermination(taskTerminated, future);
             throw new PullTimeoutException("Pull request timed out", e);
+        } catch (ExecutionException e) {
+            pipelineMetrics.recordFailure(start);
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception ex) {
+                throw ex;
+            }
+            throw e;
+        } catch (InterruptedException e) {
+            pipelineMetrics.recordFailure(start);
+            Thread.currentThread().interrupt();
+            throw e;
         }
     }
 
-    private static void awaitTaskTermination(CountDownLatch taskTerminated, Future<String> future)
+    private static void awaitTaskTermination(CountDownLatch taskTerminated, Future<LoadOutcome> future)
             throws PullTimeoutException {
         while (true) {
             try {

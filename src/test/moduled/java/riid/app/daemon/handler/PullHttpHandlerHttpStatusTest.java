@@ -13,14 +13,21 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.LocalConnector;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import riid.app.cli.CliApplication;
+import riid.app.core.model.ImageId;
+import riid.app.service.LoadOutcome;
+import riid.app.daemon.metrics.DaemonPullHttpMetrics;
+import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 import riid.app.core.error.AppError;
 import riid.app.core.error.AppException;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
@@ -36,6 +43,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PullHttpHandlerHttpStatusTest {
 
+    private static LoadOutcome okLoad(String repo, String ref, long tarBytes) {
+        return new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), tarBytes);
+    }
+
     private static final String CONTROL = "control";
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Set<String> RUNTIMES = Set.of("podman");
@@ -48,6 +59,20 @@ class PullHttpHandlerHttpStatusTest {
     private LocalConnector connectorB;
     private LocalConnector connectorC;
     private ExecutorService pullExecutor;
+    private PrometheusMeterRegistry meterRegistry;
+
+    @BeforeEach
+    void newMeterRegistry() {
+        meterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+    }
+
+    private DaemonPullHttpMetrics pullMetrics() {
+        return new DaemonPullHttpMetrics(meterRegistry);
+    }
+
+    private ImageLoadPipelineMetrics pipelineLoadMetrics() {
+        return new ImageLoadPipelineMetrics(meterRegistry);
+    }
 
     @AfterEach
     void tearDown() throws Exception {
@@ -65,19 +90,21 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         startServer(new PullHttpHandler(
                 CONTROL,
-                (repo, ref, rt) -> "/var/tmp/test-image.tar",
+                (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = postPull("{\"repository\":\"library/busybox\",\"reference\":\"latest\","
                 + "\"runtimeId\":\"podman\"}");
 
         assertEquals(HttpStatus.OK_200, r.status());
         assertEquals("success", r.json().path("status").asText());
-        assertEquals("/var/tmp/test-image.tar", r.json().path("imagePath").asText());
+        assertEquals("registry-1.docker.io/library/busybox:latest", r.json().path("imagePath").asText());
     }
 
     @Test
@@ -85,12 +112,14 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         startServer(new PullHttpHandler(
                 CONTROL,
-                (repo, ref, rt) -> "ignored",
+                (repo, ref, rt) -> okLoad("x", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = request("GET /pull HTTP/1.1\r\nHost: local\r\n\r\n");
 
@@ -100,7 +129,7 @@ class PullHttpHandlerHttpStatusTest {
     @Test
     void invalidJsonReturns400() throws Exception {
         pullExecutor = newPullExecutor();
-        startServer(newPullHandler((repo, ref, rt) -> "ignored", pullExecutor));
+        startServer(newPullHandler((repo, ref, rt) -> okLoad("x", "latest", -1), pullExecutor));
 
         ParsedResponse r = request(
                 "POST /pull HTTP/1.1\r\n"
@@ -119,12 +148,14 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         PullHttpHandler handler = new PullHttpHandler(
                 CONTROL,
-                (repo, ref, rt) -> "ignored",
+                (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 64,
                 LONG_TIMEOUT,
-                pullExecutor);
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics());
         startServer(handler);
 
         String oversizedBody = """
@@ -144,7 +175,7 @@ class PullHttpHandlerHttpStatusTest {
     @Test
     void missingRequiredFieldsReturns400() throws Exception {
         pullExecutor = newPullExecutor();
-        startServer(newPullHandler((repo, ref, rt) -> "ignored", pullExecutor));
+        startServer(newPullHandler((repo, ref, rt) -> okLoad("x", "latest", -1), pullExecutor));
 
         ParsedResponse r = postPull("{\"repository\":\"x\",\"reference\":\"\"}");
 
@@ -155,7 +186,7 @@ class PullHttpHandlerHttpStatusTest {
     @Test
     void unknownRuntimeReturns422() throws Exception {
         pullExecutor = newPullExecutor();
-        startServer(newPullHandler((repo, ref, rt) -> "ignored", pullExecutor));
+        startServer(newPullHandler((repo, ref, rt) -> okLoad("x", "latest", -1), pullExecutor));
 
         ParsedResponse r = postPull(
                 "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"unknown\"}");
@@ -169,12 +200,14 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         startServer(new PullHttpHandler(
                 CONTROL,
-                (repo, ref, rt) -> "/ok",
+                (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(0, true)),
                 MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = postPull(
                 "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}");
@@ -202,13 +235,15 @@ class PullHttpHandlerHttpStatusTest {
                         Thread.currentThread().interrupt();
                         throw new RuntimeException(e);
                     }
-                    return "/ok";
+                    return okLoad("library/busybox", "latest", -1);
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(2, true)),
                 MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
-                pullExecutor),
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()),
                 2);
 
         String body = "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}";
@@ -243,13 +278,15 @@ class PullHttpHandlerHttpStatusTest {
                         Thread.currentThread().interrupt();
                         throw new RuntimeException(e);
                     }
-                    return "never";
+                    return okLoad("library/busybox", "latest", -1);
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 MAX_REQUEST_BODY_BYTES,
                 Duration.ofMillis(120),
-                pullExecutor));
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()));
 
         ParsedResponse r = postPull(
                 "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}");
@@ -276,15 +313,17 @@ class PullHttpHandlerHttpStatusTest {
                                 // Simulates stubborn work that keeps running after cancel(true).
                             }
                         }
-                        return "/slow";
+                        return okLoad("library/busybox", "latest", -1);
                     }
-                    return "/fast";
+                    return okLoad("library/busybox", "latest", -1);
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(1, true)),
                 MAX_REQUEST_BODY_BYTES,
                 Duration.ofMillis(80),
-                pullExecutor),
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()),
                 1);
 
         String body = "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}";
@@ -424,7 +463,7 @@ class PullHttpHandlerHttpStatusTest {
         assertEquals(DaemonPullErrorMapper.REGISTRY_NOT_FOUND_MESSAGE, r.json().path("message").asText());
     }
 
-    private static PullHttpHandler newPullHandler(CliApplication.ImageLoader loader, ExecutorService exec) {
+    private PullHttpHandler newPullHandler(CliApplication.ImageLoader loader, ExecutorService exec) {
         return new PullHttpHandler(
                 CONTROL,
                 loader,
@@ -432,7 +471,9 @@ class PullHttpHandlerHttpStatusTest {
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
                 MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
-                exec);
+                exec,
+                pullMetrics(),
+                pipelineLoadMetrics());
     }
 
     private void startServer(Handler handler) throws Exception {

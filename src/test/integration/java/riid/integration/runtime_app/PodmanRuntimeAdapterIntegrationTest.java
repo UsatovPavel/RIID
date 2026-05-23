@@ -1,112 +1,67 @@
 package riid.integration.runtime_app;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import riid.app.core.model.ImageId;
 import riid.app.service.ImageLoadingFacade;
-import riid.app.service.RuntimeRegistry;
+import riid.app.service.LoadOutcome;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
-import riid.core.fs.TestPaths;
-import riid.cache.oci.TempFileCacheAdapter;
-import riid.client.http.HttpClientConfig;
-import riid.core.config.TestConfigYaml;
 import riid.core.config.TestRegistryConfig;
-import riid.dispatcher.RequestDispatcher;
-import riid.p2p.P2PExecutor;
-import riid.runtime.PodmanRuntimeAdapter;
 
 @Tag("filesystem")
 @Tag("local")
 class PodmanRuntimeAdapterIntegrationTest {
 
-    private static final String REPO = "library/alpine";
-    private static final String REF = "edge";
-    private static final String PODMAN = "podman";
-    @Test
-    void downloadsImageAndLoadsIntoPodman() throws Exception {
-        // Clean up image if already present
-        runIgnoreErrors(List.of(PODMAN, "rmi", "-f", "alpine:edge"));
-
-        // Use high-level service to fetch and import
-        ImageId loadedId;
-        HostFilesystem fs = new NioHostFilesystem();
-        Path configPath = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
-        fs.writeString(configPath, TestConfigYaml.dockerHubConfigWithRuntimeTempDir(3, "build/test-fs"));
-
-        try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
-        ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(), REPO, REF);
-            loadedId = app.load(imageId, PODMAN);
-        }
-
-        Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
-                .redirectErrorStream(true)
-                .start();
-        String images = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int code = p.waitFor();
-        assertEquals(0, code, "podman images failed: " + images);
-        boolean found = images.contains("alpine:edge")
-                || images.contains("docker.io/library/alpine:edge")
-                || images.contains(loadedId.toString());
-        assertTrue(found, "Expected alpine:edge in podman images, got: " + images);
-    }
-
     /**
-     * End-to-endOffsetBytes using App facade: load via dispatcher/runtime and then run with podman.
+     * Regression: OCI archive must match manifest mediaType for {@code podman load} (~10 MiB official image).
      */
     @Test
-    void oneShotLoadAndRun() throws Exception {
-        // Build app with podman runtime only; dispatcher falls back to registry
-        var endpoint = TestRegistryConfig.endpoint();
+    void loadsJobberIntoPodman() throws Exception {
+        PodmanRuntimeIntegrationSupport.rmiJobberIgnoreErrors();
         HostFilesystem fs = new NioHostFilesystem();
-        try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
-             riid.client.api.RegistryClientImpl client =
-                     new riid.client.api.RegistryClientImpl(endpoint, new HttpClientConfig())) {
-            RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
-                    client, cache, new P2PExecutor.NoOp(), fs);
-            RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(PODMAN, new PodmanRuntimeAdapter()));
-            try (ImageLoadingFacade app = new ImageLoadingFacade(
-                    dispatcher,
-                    registry,
-                    client,
-                    fs,
-                    TestPaths.DEFAULT_BASE_DIR,
-                    java.util.List.of())) {
-            ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
-            ImageId loadedId = app.load(imageId, "podman");
-            // Verify the image can run a trivial command
-            run(List.of(PODMAN, "run", "--rm", loadedId.toString(), "true"));
-            }
+        Path configPath = PodmanRuntimeIntegrationSupport.writeDockerHubConfig(fs);
+        ImageId imageId = ImageId.fromRegistry(
+                TestRegistryConfig.registryName(),
+                PodmanRuntimeIntegrationSupport.REPO_JOBBER,
+                PodmanRuntimeIntegrationSupport.REF_LATEST);
+        ImageId loadedId;
+        try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
+            LoadOutcome outcome = app.load(imageId, PodmanRuntimeIntegrationSupport.PODMAN);
+            loadedId = outcome.imageId();
         }
+        String images = PodmanRuntimeIntegrationSupport.podmanImages();
+        boolean found = images.contains(loadedId.toString())
+                || images.contains("jobber")
+                || images.contains("library/jobber");
+        assertTrue(found, "Expected jobber in podman images, got: " + images);
     }
 
-    private static void run(List<String> cmd) throws Exception {
-        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-        String out;
-        try (var in = p.getInputStream()) {
-            out = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    @Test
+    void loadsAlpineEdgeAndRuns() throws Exception {
+        PodmanRuntimeIntegrationSupport.rmiAlpineEdgeIgnoreErrors();
+        HostFilesystem fs = new NioHostFilesystem();
+        Path configPath = PodmanRuntimeIntegrationSupport.writeDockerHubConfig(fs);
+        ImageId imageId = ImageId.fromRegistry(
+                TestRegistryConfig.registryName(),
+                PodmanRuntimeIntegrationSupport.REPO_ALPINE,
+                PodmanRuntimeIntegrationSupport.REF_EDGE);
+        ImageId loadedId;
+        try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
+            LoadOutcome outcome = app.load(imageId, PodmanRuntimeIntegrationSupport.PODMAN);
+            loadedId = outcome.imageId();
         }
-        int code = p.waitFor();
-        if (code != 0) {
-            throw new IOException("Command failed: " + cmd + " -> " + code + " output: " + out);
-        }
-    }
-
-    private static void runIgnoreErrors(List<String> cmd) {
-        try {
-            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-            p.waitFor();
-        } catch (IOException | InterruptedException ignored) {
-            // ignore cleanup failures
-        }
+        String images = PodmanRuntimeIntegrationSupport.podmanImages();
+        boolean found = images.contains(loadedId.toString())
+                || images.contains("alpine:edge")
+                || images.contains("docker.io/library/alpine:edge")
+                || images.contains("library/alpine");
+        assertTrue(found, "Expected alpine:edge in podman images, got: " + images);
+        PodmanRuntimeIntegrationSupport.runTrivialContainer(loadedId.toString());
     }
 }
-
