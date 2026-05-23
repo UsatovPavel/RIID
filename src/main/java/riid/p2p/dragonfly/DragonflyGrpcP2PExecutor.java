@@ -111,6 +111,23 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         // Not supported
     }
 
+    @Override
+    public void close() throws IOException {
+        Puller toClose;
+        synchronized (this) {
+            toClose = sharedPuller;
+            sharedPuller = null;
+        }
+        if (toClose == null) {
+            return;
+        }
+        try {
+            toClose.close();
+        } catch (Exception e) {
+            throw new IOException("failed to close dragonfly puller", e);
+        }
+    }
+
     private Puller getOrCreatePuller() throws IOException {
         Puller current = sharedPuller;
         if (current != null) {
@@ -147,9 +164,12 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         Puller create(DragonflyConfig config) throws IOException;
     }
 
-    @FunctionalInterface
     public interface Puller {
         CompletableFuture<PullResult> pull(RegistryPullRequest request) throws DragonflyPullException;
+
+        default void close() throws Exception {
+            // no-op for non-owning/test pullers
+        }
     }
 
     private static final class ExternalDragonflyPuller implements Puller {
@@ -189,6 +209,13 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
                     DragonflyPullErrorKind.INTERNAL,
                     "unexpected pull result type: " + resultType
             );
+        }
+
+        @Override
+        public void close() throws Exception {
+            if (delegate instanceof AutoCloseable autoCloseable) {
+                autoCloseable.close();
+            }
         }
     }
 }
