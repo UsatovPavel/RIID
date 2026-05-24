@@ -2,6 +2,7 @@ package riid.app.daemon.handler;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -9,6 +10,8 @@ import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -60,6 +63,7 @@ public final class PullHttpHandler extends Handler.Abstract {
     private final CliApplication.ImageLoader loader;
     private final Set<String> availableRuntimes;
     private final PullConcurrencyGuard concurrencyGuard;
+    private final int maxRequestBodyBytes;
     private final Duration requestTimeout;
     private final ExecutorService pullExecutor;
     private final DaemonPullHttpMetrics pullMetrics;
@@ -69,6 +73,7 @@ public final class PullHttpHandler extends Handler.Abstract {
                     CliApplication.ImageLoader loader,
                     Set<String> availableRuntimes,
                     PullConcurrencyGuard concurrencyGuard,
+                    int maxRequestBodyBytes,
                     Duration requestTimeout,
                     ExecutorService pullExecutor,
                     DaemonPullHttpMetrics pullMetrics,
@@ -77,6 +82,7 @@ public final class PullHttpHandler extends Handler.Abstract {
         this.loader = Objects.requireNonNull(loader, "loader");
         this.availableRuntimes = Objects.requireNonNull(availableRuntimes, "availableRuntimes");
         this.concurrencyGuard = Objects.requireNonNull(concurrencyGuard, "concurrencyGuard");
+        this.maxRequestBodyBytes = maxRequestBodyBytes;
         this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout");
         this.pullExecutor = Objects.requireNonNull(pullExecutor, "pullExecutor");
         this.pullMetrics = Objects.requireNonNull(pullMetrics, "pullMetrics");
@@ -100,8 +106,20 @@ public final class PullHttpHandler extends Handler.Abstract {
 
         DaemonPullRequest pullRequest;
         try {
-            String body = Content.Source.asString(request);
+            long declaredContentLength = request.getLength();
+            if (declaredContentLength > maxRequestBodyBytes) {
+                throw new RequestTooLargeException();
+            }
+            String body = readBodyWithLimit(request, maxRequestBodyBytes);
             pullRequest = mapper.readValue(body, DaemonPullRequest.class);
+        } catch (RequestTooLargeException e) {
+            writeJson(
+                    response,
+                    callback,
+                    HttpStatus.PAYLOAD_TOO_LARGE_413,
+                    new ErrorResponse("request_too_large", "Request body exceeds configured limit")
+            );
+            return true;
         } catch (Exception e) {
             pullMetrics.record(t0, HttpStatus.BAD_REQUEST_400, "invalid_request");
             writeJson(
@@ -179,6 +197,23 @@ public final class PullHttpHandler extends Handler.Abstract {
         return true;
     }
 
+    private static String readBodyWithLimit(Request request, int maxRequestBodyBytes)
+            throws IOException, RequestTooLargeException {
+        try {
+            byte[] body = Content.Source.asByteArrayAsync(request, maxRequestBodyBytes).join();
+            return new String(body, StandardCharsets.UTF_8);
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IllegalArgumentException) {
+                throw new RequestTooLargeException();
+            }
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Failed to read request body", cause);
+        }
+    }
+
     private static Throwable unwrapExecution(Throwable e) {
         Throwable u = e;
         while (u instanceof ExecutionException && u.getCause() != null) {
@@ -190,8 +225,14 @@ public final class PullHttpHandler extends Handler.Abstract {
     private LoadOutcome executePullWithTimeout(DaemonPullRequest pullRequest) throws Exception {
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
         long start = System.nanoTime();
-        Future<LoadOutcome> future = pullExecutor.submit(
-                () -> runLoadWithMdc(mdcSnapshot, pullRequest));
+        CountDownLatch taskTerminated = new CountDownLatch(1);
+        Future<LoadOutcome> future = pullExecutor.submit(() -> {
+            try {
+                return runLoadWithMdc(mdcSnapshot, pullRequest);
+            } finally {
+                taskTerminated.countDown();
+            }
+        });
         try {
             LoadOutcome result = future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
             pipelineMetrics.recordSuccess(start, result.tarBytes());
@@ -199,6 +240,7 @@ public final class PullHttpHandler extends Handler.Abstract {
         } catch (TimeoutException e) {
             future.cancel(true);
             pipelineMetrics.recordTimeout(start);
+            awaitTaskTermination(taskTerminated, future);
             throw new PullTimeoutException("Pull request timed out", e);
         } catch (ExecutionException e) {
             pipelineMetrics.recordFailure(start);
@@ -231,6 +273,20 @@ public final class PullHttpHandler extends Handler.Abstract {
                 MDC.setContextMap(previous);
             } else {
                 MDC.clear();
+            }
+        }
+    }
+
+    private static void awaitTaskTermination(CountDownLatch taskTerminated, Future<LoadOutcome> future)
+            throws PullTimeoutException {
+        while (true) {
+            try {
+                taskTerminated.await();
+                return;
+            } catch (InterruptedException ie) {
+                future.cancel(true);
+                Thread.currentThread().interrupt();
+                throw new PullTimeoutException("Interrupted while waiting for pull task cancellation", ie);
             }
         }
     }
@@ -281,7 +337,6 @@ public final class PullHttpHandler extends Handler.Abstract {
         }
         return true;
     }
-
     private void writeJson(Response response, Callback callback, int status, Object payload)
             throws IOException {
         byte[] json = mapper.writeValueAsBytes(payload);
@@ -312,5 +367,8 @@ public final class PullHttpHandler extends Handler.Abstract {
         private PullTimeoutException(String message, Throwable cause) {
             super(message, cause);
         }
+    }
+
+    private static final class RequestTooLargeException extends Exception {
     }
 }

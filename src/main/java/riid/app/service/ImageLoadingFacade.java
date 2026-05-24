@@ -36,6 +36,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
+import riid.dispatcher.core.config.DispatcherConfig;
 import riid.dispatcher.metrics.DispatcherLayerSourceMetrics;
 import riid.dispatcher.metrics.MicrometerDispatcherLayerSourceMetrics;
 import riid.core.logging.MdcContext;
@@ -57,18 +58,21 @@ public final class ImageLoadingFacade implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadingFacade.class);
     private static final CacheCleaner NOOP_CACHE_CLEANER = () -> {
     };
+    private static final CacheCleaner NOOP_P2P_CLEANER = () -> {
+    };
 
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
     private final Set<String> allowedRegistries;
     private final CacheCleaner cacheCleaner;
+    private final CacheCleaner p2pCleaner;
 
     public ImageLoadingFacade(RequestDispatcher dispatcher,
                               RuntimeRegistry runtimeRegistry,
                               RegistryClient client,
                               HostFilesystem fs) {
-        this(dispatcher, runtimeRegistry, client, fs, null, null, null);
+        this(dispatcher, runtimeRegistry, client, fs, null, null, null, null);
     }
 
     public ImageLoadingFacade(RequestDispatcher dispatcher,
@@ -77,7 +81,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                               HostFilesystem fs,
                               Path tempRoot,
                               List<String> allowedRegistries) {
-        this(dispatcher, runtimeRegistry, client, fs, tempRoot, allowedRegistries, null);
+        this(dispatcher, runtimeRegistry, client, fs, tempRoot, allowedRegistries, null, null);
     }
 
     public ImageLoadingFacade(RequestDispatcher dispatcher,
@@ -87,6 +91,17 @@ public final class ImageLoadingFacade implements AutoCloseable {
                               Path tempRoot,
                               List<String> allowedRegistries,
                               CacheCleaner cacheCleaner) {
+        this(dispatcher, runtimeRegistry, client, fs, tempRoot, allowedRegistries, cacheCleaner, null);
+    }
+
+    public ImageLoadingFacade(RequestDispatcher dispatcher,
+                              RuntimeRegistry runtimeRegistry,
+                              RegistryClient client,
+                              HostFilesystem fs,
+                              Path tempRoot,
+                              List<String> allowedRegistries,
+                              CacheCleaner cacheCleaner,
+                              CacheCleaner p2pCleaner) {
         this.archiveBuilder = new OciArchiveBuilder(dispatcher, fs, tempRoot);
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.client = Objects.requireNonNull(client, "client");
@@ -94,6 +109,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 ? Set.of()
                 : Set.copyOf(new HashSet<>(allowedRegistries));
         this.cacheCleaner = cacheCleaner != null ? cacheCleaner : NOOP_CACHE_CLEANER;
+        this.p2pCleaner = p2pCleaner != null ? p2pCleaner : NOOP_P2P_CLEANER;
     }
 
     /**
@@ -219,11 +235,29 @@ public final class ImageLoadingFacade implements AutoCloseable {
                                                    P2PExecutor p2p,
                                                    Map<String, RuntimeAdapter> runtimes,
                                                    HostFilesystem fs) {
+        return createDefault(endpoint, cache, p2p, runtimes, fs, null);
+    }
+
+    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint,
+                                                   CacheAdapter cache,
+                                                   P2PExecutor p2p,
+                                                   Map<String, RuntimeAdapter> runtimes,
+                                                   HostFilesystem fs,
+                                                   MeterRegistry meterRegistry) {
         HttpClientConfig httpConfig = new HttpClientConfig();
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig);
-        RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, fs);
+        DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
+                ? DispatcherLayerSourceMetrics.NOOP
+                : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
+        RequestDispatcher dispatcher = new SimpleRequestDispatcher(
+                client,
+                cache,
+                p2p,
+                new DispatcherConfig(),
+                fs,
+                layerMetrics);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
-        return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null);
+        return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null, null, p2p::close);
     }
 
     /**
@@ -305,7 +339,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 fs,
                 tempDir,
                 allowedRegistries,
-                cache::close);
+                cache::close,
+                p2p::close);
     }
 
     private void ensureRegistryAllowed(String registry) {
@@ -323,21 +358,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
     @Override
     public void close() throws IOException {
         IOException error = null;
-        try {
-            client.close();
-        } catch (Exception e) {
-            error = new IOException("Failed to close registry client", e);
-        }
-        try {
-            cacheCleaner.close();
-        } catch (Exception e) {
-            IOException cacheError = new IOException("Failed to close cache adapter", e);
-            if (error == null) {
-                error = cacheError;
-            } else {
-                error.addSuppressed(cacheError);
-            }
-        }
+        error = closeResource(client::close, "Failed to close registry client", error);
+        error = closeResource(p2pCleaner, "Failed to close p2p executor", error);
+        error = closeResource(cacheCleaner, "Failed to close cache adapter", error);
         if (error != null) {
             throw error;
         }
@@ -357,6 +380,20 @@ public final class ImageLoadingFacade implements AutoCloseable {
     @FunctionalInterface
     public interface CacheCleaner {
         void close() throws Exception;
+    }
+
+    private static IOException closeResource(CacheCleaner closer, String errorMessage, IOException previousError) {
+        try {
+            closer.close();
+            return previousError;
+        } catch (Exception e) {
+            IOException closeError = new IOException(errorMessage, e);
+            if (previousError == null) {
+                return closeError;
+            }
+            previousError.addSuppressed(closeError);
+            return previousError;
+        }
     }
 
     private static long durationMs(long startedNs) {

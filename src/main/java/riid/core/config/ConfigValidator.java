@@ -158,6 +158,10 @@ public final class ConfigValidator {
         if (maxConcurrentPulls != null && maxConcurrentPulls <= 0) {
             throw new ConfigValidationException("app.daemon.maxConcurrentPulls must be positive");
         }
+        Integer maxRequestBodyBytes = daemon.maxRequestBodyBytes();
+        if (maxRequestBodyBytes != null && maxRequestBodyBytes <= 0) {
+            throw new ConfigValidationException("app.daemon.maxRequestBodyBytes must be positive");
+        }
         Duration requestTimeout = daemon.requestTimeout();
         if (requestTimeout != null && (requestTimeout.isZero() || requestTimeout.isNegative())) {
             throw new ConfigValidationException("app.daemon.requestTimeout must be positive");

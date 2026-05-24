@@ -37,7 +37,7 @@ public final class ConfigResolvingLoaderProvider {
                             DEFAULT_REGISTRY_ENDPOINT.host(),
                             DEFAULT_REGISTRY_ENDPOINT.port(),
                             options.credentials());
-            return defaultLoaderWithBuiltInConfig(endpoint);
+            return defaultLoaderWithBuiltInConfig(endpoint, meterRegistry);
         }
         GlobalConfig config = ConfigLoader.load(options.configPath());
         RegistryEndpoint endpoint = config.client().registries().getFirst();
@@ -65,7 +65,9 @@ public final class ConfigResolvingLoaderProvider {
         };
     }
 
-    private static CliApplication.ImageLoader defaultLoaderWithBuiltInConfig(RegistryEndpoint endpoint) {
+    private static CliApplication.ImageLoader defaultLoaderWithBuiltInConfig(
+            RegistryEndpoint endpoint,
+            MeterRegistry meterRegistry) {
         return (repository, reference, runtimeId) -> {
             var fs = new NioHostFilesystem();
             try (ImageLoadingFacade facade = ImageLoadingFacade.createDefault(
@@ -73,7 +75,8 @@ public final class ConfigResolvingLoaderProvider {
                     null,
                     new P2PExecutor.NoOp(),
                     ImageLoadingFacade.defaultRuntimes(),
-                    fs
+                    fs,
+                    meterRegistry
             )) {
                 return facade.load(
                         ImageId.fromRegistry(endpoint.registryName(), repository, reference),

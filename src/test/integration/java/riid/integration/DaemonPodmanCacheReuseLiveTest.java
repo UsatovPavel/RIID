@@ -84,6 +84,7 @@ class DaemonPodmanCacheReuseLiveTest {
                 loader,
                 Set.of(RUNTIME_ID),
                 4,
+                8192,
                 Duration.ofMinutes(10),
                 AppConfig.OverloadPolicy.REJECT,
                 prom

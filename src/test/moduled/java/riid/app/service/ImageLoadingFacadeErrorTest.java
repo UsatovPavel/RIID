@@ -3,6 +3,7 @@ package riid.app.service;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -75,6 +76,22 @@ class ImageLoadingFacadeErrorTest {
         assertTrue(Thread.currentThread().isInterrupted());
         Thread.interrupted(); // clear for other tests
         }
+    }
+
+    @Test
+    void closeCallsP2PCleaner() throws Exception {
+        AtomicBoolean p2pClosed = new AtomicBoolean(false);
+        try (ImageLoadingFacade ignored = new ImageLoadingFacade(
+                new NoopDispatcher(),
+                new RuntimeRegistry(java.util.Map.of()),
+                new NoopRegistryClient(),
+                new NioHostFilesystem(),
+                null,
+                List.of(),
+                null,
+                () -> p2pClosed.set(true))) {
+        }
+        assertTrue(p2pClosed.get(), "p2p cleaner should be called on facade close");
     }
 
     private static ManifestResult minimalManifestResult() {

@@ -9,6 +9,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,6 +51,7 @@ class PullHttpHandlerHttpStatusTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Set<String> RUNTIMES = Set.of("podman");
     private static final Duration LONG_TIMEOUT = Duration.ofSeconds(30);
+    private static final int MAX_REQUEST_BODY_BYTES = 8192;
 
     private Server server;
     private LocalConnector connector;
@@ -91,6 +93,7 @@ class PullHttpHandlerHttpStatusTest {
                 (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor,
                 pullMetrics(),
@@ -112,6 +115,7 @@ class PullHttpHandlerHttpStatusTest {
                 (repo, ref, rt) -> okLoad("x", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor,
                 pullMetrics(),
@@ -137,6 +141,35 @@ class PullHttpHandlerHttpStatusTest {
 
         assertEquals(HttpStatus.BAD_REQUEST_400, r.status());
         assertEquals("invalid_request", r.json().path("code").asText());
+    }
+
+    @Test
+    void requestBodyTooLargeReturns413() throws Exception {
+        pullExecutor = newPullExecutor();
+        PullHttpHandler handler = new PullHttpHandler(
+                CONTROL,
+                (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
+                RUNTIMES,
+                new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                64,
+                LONG_TIMEOUT,
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics());
+        startServer(handler);
+
+        String oversizedBody = """
+                {
+                  "repository":"library/busybox",
+                  "reference":"latest",
+                  "runtimeId":"podman",
+                  "padding":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                }
+                """;
+        ParsedResponse r = postPull(oversizedBody);
+
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE_413, r.status());
+        assertEquals("request_too_large", r.json().path("code").asText());
     }
 
     @Test
@@ -170,6 +203,7 @@ class PullHttpHandlerHttpStatusTest {
                 (repo, ref, rt) -> okLoad("library/busybox", "latest", -1),
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(0, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor,
                 pullMetrics(),
@@ -205,6 +239,7 @@ class PullHttpHandlerHttpStatusTest {
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(2, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 pullExecutor,
                 pullMetrics(),
@@ -247,6 +282,7 @@ class PullHttpHandlerHttpStatusTest {
                 },
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 Duration.ofMillis(120),
                 pullExecutor,
                 pullMetrics(),
@@ -258,6 +294,56 @@ class PullHttpHandlerHttpStatusTest {
         assertEquals(HttpStatus.GATEWAY_TIMEOUT_504, r.status());
         assertEquals("timeout", r.json().path("code").asText());
         hang.countDown();
+    }
+
+    @Test
+    void timeoutHoldsPermitUntilWorkerActuallyTerminates() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        pullExecutor = newPullExecutor();
+        startServer(new PullHttpHandler(
+                CONTROL,
+                (repo, ref, rt) -> {
+                    int n = calls.incrementAndGet();
+                    if (n == 1) {
+                        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(400);
+                        while (System.nanoTime() < deadline) {
+                            try {
+                                Thread.sleep(20);
+                            } catch (InterruptedException ignored) {
+                                // Simulates stubborn work that keeps running after cancel(true).
+                            }
+                        }
+                        return okLoad("library/busybox", "latest", -1);
+                    }
+                    return okLoad("library/busybox", "latest", -1);
+                },
+                RUNTIMES,
+                new SemaphorePullConcurrencyGuard(new Semaphore(1, true)),
+                MAX_REQUEST_BODY_BYTES,
+                Duration.ofMillis(80),
+                pullExecutor,
+                pullMetrics(),
+                pipelineLoadMetrics()),
+                1);
+
+        String body = "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}";
+        ExecutorService clients = Executors.newVirtualThreadPerTaskExecutor();
+        try {
+            Future<ParsedResponse> first = clients.submit(() -> postPull(body, connector));
+            Thread.sleep(120);
+            ParsedResponse second = postPull(body, connectorB);
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS_429, second.status());
+            assertEquals("overloaded", second.json().path("code").asText());
+
+            ParsedResponse firstResult = first.get(5, TimeUnit.SECONDS);
+            assertEquals(HttpStatus.GATEWAY_TIMEOUT_504, firstResult.status());
+
+            ParsedResponse third = postPull(body, connectorB);
+            assertEquals(HttpStatus.OK_200, third.status());
+        } finally {
+            clients.shutdown();
+            assertTrue(clients.awaitTermination(30, TimeUnit.SECONDS));
+        }
     }
 
     @Test
@@ -379,12 +465,30 @@ class PullHttpHandlerHttpStatusTest {
         assertEquals(DaemonPullErrorMapper.REGISTRY_NOT_FOUND_MESSAGE, r.json().path("message").asText());
     }
 
+    @Test
+    void registryAuth401Returns404WithUnauthorizedJsonCode() throws Exception {
+        pullExecutor = newPullExecutor();
+        startServer(newPullHandler((repo, ref, rt) -> {
+            throw new ClientException(
+                    new ClientError.Auth(ClientError.AuthKind.TOKEN_FAILED, 401, "token endpoint returned status 401"),
+                    "SECURITY:AUTH:TOKEN_ENDPOINT_FAILED: token endpoint returned status 401");
+        }, pullExecutor));
+
+        ParsedResponse r = postPull(
+                "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}");
+
+        assertEquals(HttpStatus.NOT_FOUND_404, r.status());
+        assertEquals(DaemonPullErrorMapper.PullErrorCode.REGISTRY_RESPONSE_UNAUTHORIZED.jsonValue(), r.json().path("code").asText());
+        assertEquals(DaemonPullErrorMapper.REGISTRY_NOT_FOUND_MESSAGE, r.json().path("message").asText());
+    }
+
     private PullHttpHandler newPullHandler(CliApplication.ImageLoader loader, ExecutorService exec) {
         return new PullHttpHandler(
                 CONTROL,
                 loader,
                 RUNTIMES,
                 new SemaphorePullConcurrencyGuard(new Semaphore(4, true)),
+                MAX_REQUEST_BODY_BYTES,
                 LONG_TIMEOUT,
                 exec,
                 pullMetrics(),

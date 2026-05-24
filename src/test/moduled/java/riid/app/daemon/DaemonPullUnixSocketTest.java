@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -31,6 +32,7 @@ import riid.core.logging.LogContextKeys;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -113,6 +115,7 @@ class DaemonPullUnixSocketTest {
                 },
                 Set.of("podman"),
                 4,
+                8192,
                 Duration.ofSeconds(30),
                 AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
@@ -154,5 +157,48 @@ class DaemonPullUnixSocketTest {
         assertTrue(finished, "curl did not finish: " + err);
         assertEquals(0, p.exitValue(), "curl stderr: " + err);
         assertEquals("200", httpCode);
+    }
+
+    @Test
+    void startFailsWhenUnixSocketAlreadyOwnedByRunningDaemon() throws Exception {
+        assumeTrue(TestFilesystemSupport.curlAvailable(), "curl must be on PATH for HTTP over UDS");
+
+        Path dir = Files.createTempDirectory("riid-daemon-uds-owned");
+        Path socketPath = dir.resolve("riid.sock");
+
+        DaemonServer daemonA = new DaemonServer(
+                socketPath.toString(),
+                "127.0.0.1",
+                0,
+                (repo, ref, rt) ->
+                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
+                Set.of("podman"),
+                4,
+                8192,
+                Duration.ofSeconds(30),
+                AppConfig.OverloadPolicy.REJECT,
+                new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
+
+        DaemonServer daemonB = new DaemonServer(
+                socketPath.toString(),
+                "127.0.0.1",
+                0,
+                (repo, ref, rt) ->
+                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
+                Set.of("podman"),
+                4,
+                8192,
+                Duration.ofSeconds(30),
+                AppConfig.OverloadPolicy.REJECT,
+                new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
+
+        try {
+            daemonA.start();
+            IOException error = assertThrows(IOException.class, daemonB::start);
+            assertTrue(error.getMessage().contains("already in use"));
+        } finally {
+            daemonA.stop();
+            TestFilesystemSupport.deleteRecursive(dir);
+        }
     }
 }

@@ -72,6 +72,7 @@ public final class CliApplication {
                     loader,
                     available,
                     daemonConfig.maxConcurrentPullsOrDefault(),
+                    daemonConfig.maxRequestBodyBytesOrDefault(),
                     daemonConfig.requestTimeoutOrDefault(),
                     daemonConfig.overloadPolicyOrDefault(),
                     prometheusRegistry

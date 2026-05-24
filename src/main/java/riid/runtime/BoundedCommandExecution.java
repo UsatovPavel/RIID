@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ public final class BoundedCommandExecution {
     public static final int DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
     public static final int DEFAULT_MAX_TASKS_COMMAND_EXECUTOR = 16;
     private static final int BUFFER_SIZE = 4096;
+    private static final long PROCESS_TERMINATION_TIMEOUT_MS = 200;
     private static final AtomicReference<ExecutorService> EXECUTOR_REF =
             new AtomicReference<>(newExecutor(DEFAULT_MAX_TASKS_COMMAND_EXECUTOR));
     private static final BoundedPipedCommandExecutor PIPED_EXECUTOR = new BoundedPipedCommandExecutor(
@@ -67,9 +69,11 @@ public final class BoundedCommandExecution {
             throw new IllegalArgumentException("maxOutputBytes must be positive");
         }
         ExecutorService localExecutor = EXECUTOR_REF.get();
-        return CompletableFuture.supplyAsync(() -> {
+        AtomicReference<Process> processRef = new AtomicReference<>();
+        CompletableFuture<ShellResult> future = CompletableFuture.supplyAsync(() -> {
             try {
                 Process process = new ProcessBuilder(command).start();
+                processRef.set(process);
                 Future<String> stdout = localExecutor.submit(streamReaderStrict(process.getInputStream(),
                         maxOutputBytes, "stdout"));
                 Future<String> stderr = localExecutor.submit(streamReaderStrict(process.getErrorStream(),
@@ -84,9 +88,16 @@ public final class BoundedCommandExecution {
                 throw new RuntimeException(e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                destroyProcess(processRef.get(), command);
                 throw new RuntimeException(e);
             }
         }, localExecutor);
+        future.whenComplete((result, error) -> {
+            if (future.isCancelled()) {
+                destroyProcess(processRef.get(), command);
+            }
+        });
+        return future;
     }
 
     public static CompletableFuture<ShellResult> run(List<String> command, OutputConfig outputConfig) {
@@ -95,9 +106,11 @@ public final class BoundedCommandExecution {
         outputConfig.validate();
 
         ExecutorService localExecutor = EXECUTOR_REF.get();
-        return CompletableFuture.supplyAsync(() -> {
+        AtomicReference<Process> processRef = new AtomicReference<>();
+        CompletableFuture<ShellResult> future = CompletableFuture.supplyAsync(() -> {
             try {
                 Process process = new ProcessBuilder(command).start();
+                processRef.set(process);
                 Future<String> stdout = localExecutor.submit(streamReaderTruncating(process.getInputStream(),
                         outputConfig.maxStdoutBytes(), "stdout", outputConfig.captureStdout()));
                 Future<String> stderr = localExecutor.submit(streamReaderTruncating(process.getErrorStream(),
@@ -108,9 +121,32 @@ public final class BoundedCommandExecution {
                 throw new RuntimeException(e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                destroyProcess(processRef.get(), command);
                 throw new RuntimeException(e);
             }
         }, localExecutor);
+        future.whenComplete((result, error) -> {
+            if (future.isCancelled()) {
+                destroyProcess(processRef.get(), command);
+            }
+        });
+        return future;
+    }
+
+    private static void destroyProcess(Process process, List<String> command) {
+        if (process == null || !process.isAlive()) {
+            return;
+        }
+        process.destroy();
+        try {
+            if (!process.waitFor(PROCESS_TERMINATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                LOGGER.warn("Forcefully destroying child process for command {}", command);
+                process.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            process.destroyForcibly();
+        }
     }
 
     private static Callable<String> streamReaderStrict(InputStream stream, int maxBytes, String name) {
@@ -195,6 +231,9 @@ public final class BoundedCommandExecution {
     private static ShellResult get(CompletableFuture<ShellResult> future) throws IOException, InterruptedException {
         try {
             return future.get();
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            throw e;
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof RuntimeException re && re.getCause() != null) {
