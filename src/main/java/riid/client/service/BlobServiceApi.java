@@ -20,16 +20,11 @@ public interface BlobServiceApi {
         try (BlobSink sink = new riid.client.api.FileBlobSink(target)) {
             return fetchBlob(endpoint, req, sink, scope);
         } catch (IOException e) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob IO error"),
-                    "Blob IO error",
-                    e);
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob IO error"),
+                    "Blob IO error", e);
         } catch (Exception e) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob sink error"),
-                    "Blob sink error",
-                    e);
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Blob sink error"),
+                    "Blob sink error", e);
         }
     }
 }
-

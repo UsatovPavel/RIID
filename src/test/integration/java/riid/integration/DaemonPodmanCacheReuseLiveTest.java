@@ -38,12 +38,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Live integration: daemon + podman + Docker Hub.
- *
- * Scenario:
- * 1) pull 10MB-class image via daemon
- * 2) remove podman containers (podman rm -af)
- * 3) pull the same image again
- * 4) assert dispatcher cache metric increases on second pull.
+ * <p>
+ * Scenario: 1) pull 10MB-class image via daemon 2) remove podman containers
+ * (podman rm -af) 3) pull the same image again 4) assert dispatcher cache
+ * metric increases on second pull.
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
@@ -51,8 +49,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("live")
 class DaemonPodmanCacheReuseLiveTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final Pattern CACHE_FETCHES = Pattern.compile(
-            "(?m)^riid_dispatcher_layer_fetches_total\\{[^}]*source=\"cache\"[^}]*}\\s+([0-9.eE+-]+)\\s*$");
+    private static final Pattern CACHE_FETCHES = Pattern
+            .compile("(?m)^riid_dispatcher_layer_fetches_total\\{[^}]*source=\"cache\"[^}]*}\\s+([0-9.eE+-]+)\\s*$");
     private static final String REPOSITORY = "library/jobber";
     private static final String REFERENCE = "latest";
     private static final String RUNTIME_ID = "podman";
@@ -74,21 +72,11 @@ class DaemonPodmanCacheReuseLiveTest {
         PrometheusMeterRegistry prom = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
         String registry = TestRegistryConfig.registryName();
         ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(configPath, null, prom);
-        CliApplication.ImageLoader loader = (repo, ref, runtimeId) ->
-                facade.load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
+        CliApplication.ImageLoader loader = (repo, ref, runtimeId) -> facade
+                .load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
 
-        DaemonServer daemon = new DaemonServer(
-                socketPath.toString(),
-                "127.0.0.1",
-                0,
-                loader,
-                Set.of(RUNTIME_ID),
-                4,
-                8192,
-                Duration.ofMinutes(10),
-                AppConfig.OverloadPolicy.REJECT,
-                prom
-        );
+        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RUNTIME_ID), 4,
+                8192, Duration.ofMinutes(10), AppConfig.OverloadPolicy.REJECT, prom);
 
         try {
             daemon.start();
@@ -105,14 +93,11 @@ class DaemonPodmanCacheReuseLiveTest {
             postPull(socketPath, body2, REPOSITORY, REFERENCE, RUNTIME_ID);
             double cacheAfterSecondPull = cacheFetches(metricsPort);
 
-            assertTrue(
-                    cacheAfterSecondPull > cacheAfterFirstPull,
-                    "second pull should increase dispatcher cache fetches; before="
-                            + cacheAfterFirstPull + ", after=" + cacheAfterSecondPull);
-            assertTrue(
-                    cacheAfterSecondPull > cacheBefore,
-                    "cache fetches should increase from baseline; before="
-                            + cacheBefore + ", after=" + cacheAfterSecondPull);
+            assertTrue(cacheAfterSecondPull > cacheAfterFirstPull,
+                    "second pull should increase dispatcher cache fetches; before=" + cacheAfterFirstPull + ", after="
+                            + cacheAfterSecondPull);
+            assertTrue(cacheAfterSecondPull > cacheBefore, "cache fetches should increase from baseline; before="
+                    + cacheBefore + ", after=" + cacheAfterSecondPull);
         } finally {
             daemon.stop();
             facade.close();
@@ -128,26 +113,11 @@ class DaemonPodmanCacheReuseLiveTest {
 
     private static void postPull(Path socketPath, Path bodyFile, String repository, String reference, String runtimeId)
             throws Exception {
-        String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + reference
-                + "\",\"runtimeId\":\"" + runtimeId + "\"}";
-        ProcessBuilder pb = new ProcessBuilder(
-                "curl",
-                "-sS",
-                "--fail-with-body",
-                "--unix-socket",
-                socketPath.toString(),
-                "-o",
-                bodyFile.toString(),
-                "-w",
-                "%{http_code}",
-                "-X",
-                "POST",
-                "http://localhost/pull",
-                "-H",
-                "Content-Type: application/json",
-                "-d",
-                json
-        );
+        String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + reference + "\",\"runtimeId\":\""
+                + runtimeId + "\"}";
+        ProcessBuilder pb = new ProcessBuilder("curl", "-sS", "--fail-with-body", "--unix-socket",
+                socketPath.toString(), "-o", bodyFile.toString(), "-w", "%{http_code}", "-X", "POST",
+                "http://localhost/pull", "-H", "Content-Type: application/json", "-d", json);
         pb.redirectError(ProcessBuilder.Redirect.PIPE);
         Process process = pb.start();
         String httpCode = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
@@ -160,13 +130,11 @@ class DaemonPodmanCacheReuseLiveTest {
         assertEquals("success", body.path("status").asText(), "pull body");
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     private static double cacheFetches(int metricsPort) throws Exception {
         HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:" + metricsPort + "/metrics"))
-                .timeout(Duration.ofSeconds(15))
-                .GET()
-                .build();
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + metricsPort + "/metrics"))
+                .timeout(Duration.ofSeconds(15)).GET().build();
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         assertEquals(200, resp.statusCode(), "metrics endpoint");
 

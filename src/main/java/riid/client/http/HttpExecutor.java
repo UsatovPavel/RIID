@@ -46,10 +46,8 @@ public class HttpExecutor {
         return new HttpResult<>(resp.statusCode(), resp.headers(), null, resp.uri());
     }
 
-    private HttpResult<InputStream> sendWithRetry(String method,
-                                                  URI uri,
-                                                  Map<String, String> headers,
-                                                  boolean idempotent) {
+    private HttpResult<InputStream> sendWithRetry(String method, URI uri, Map<String, String> headers,
+            boolean idempotent) {
         int attempts = 0;
         while (true) {
             attempts++;
@@ -70,16 +68,12 @@ public class HttpExecutor {
         }
     }
 
-    private HttpResult<InputStream> execute(String method,
-                                            URI uri,
-                                            Map<String, String> headers) throws IOException {
+    private HttpResult<InputStream> execute(String method, URI uri, Map<String, String> headers) throws IOException {
         if (METHOD_HEAD.equalsIgnoreCase(method)) {
             try {
-                Request req = client.newRequest(uri)
-                        .method(METHOD_HEAD)
+                Request req = client.newRequest(uri).method(METHOD_HEAD)
                         .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
-                        .followRedirects(config.followRedirects())
-                        .headers(h -> {
+                        .followRedirects(config.followRedirects()).headers(h -> {
                             headers.forEach(h::add);
                             applyUserAgent(h, headers);
                         });
@@ -96,11 +90,9 @@ public class HttpExecutor {
 
         @SuppressWarnings("PMD.CloseResource")
         InputStreamResponseListener listener = new InputStreamResponseListener();
-        Request request = client.newRequest(uri)
-                .method(method)
+        Request request = client.newRequest(uri).method(method)
                 .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
-                .followRedirects(config.followRedirects())
-                .headers(h -> {
+                .followRedirects(config.followRedirects()).headers(h -> {
                     headers.forEach(h::add);
                     applyUserAgent(h, headers);
                 });
@@ -185,4 +177,3 @@ public class HttpExecutor {
     }
 
 }
-

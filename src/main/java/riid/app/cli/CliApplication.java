@@ -27,6 +27,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
+import riid.core.logging.MilestoneEventLogger.EventType;
+import riid.core.logging.MilestoneEventLogger.ResultType;
 import riid.runtime.adapter.RuntimeAdapter;
 
 /**
@@ -35,12 +37,8 @@ import riid.runtime.adapter.RuntimeAdapter;
 public final class CliApplication {
     private static final Logger LOGGER = LoggerFactory.getLogger(CliApplication.class);
     private static final Path DEFAULT_CONFIG_PATH = CliParser.DEFAULT_CONFIG_PATH;
-
     enum ExitCode {
-        OK(0),
-        USAGE(64),
-        RUNTIME_NOT_FOUND(65),
-        FAILURE(1);
+        OK(0), USAGE(64), RUNTIME_NOT_FOUND(65), FAILURE(1);
 
         private final int exitCode;
 
@@ -59,33 +57,20 @@ public final class CliApplication {
     private final Set<String> availableRuntimes;
     private final DaemonRunner daemonRunner;
 
-    public CliApplication(ServiceFactory serviceFactory,
-                          Map<String, RuntimeAdapter> runtimes,
-                          PrintWriter out,
-                          PrintWriter err) {
+    public CliApplication(ServiceFactory serviceFactory, Map<String, RuntimeAdapter> runtimes, PrintWriter out,
+            PrintWriter err) {
         this(serviceFactory, runtimes, out, err, (options, loader, available, prometheusRegistry) -> {
             AppConfig.DaemonConfig daemonConfig = DaemonSettingsResolver.resolve(options);
-            DaemonServer server = new DaemonServer(
-                    daemonConfig.unixSocketPathOrDefault(),
-                    daemonConfig.metricsHostOrDefault(),
-                    daemonConfig.metricsPortOrDefault(),
-                    loader,
-                    available,
-                    daemonConfig.maxConcurrentPullsOrDefault(),
-                    daemonConfig.maxRequestBodyBytesOrDefault(),
-                    daemonConfig.requestTimeoutOrDefault(),
-                    daemonConfig.overloadPolicyOrDefault(),
-                    prometheusRegistry
-            );
+            DaemonServer server = new DaemonServer(daemonConfig.unixSocketPathOrDefault(),
+                    daemonConfig.metricsHostOrDefault(), daemonConfig.metricsPortOrDefault(), loader, available,
+                    daemonConfig.maxConcurrentPullsOrDefault(), daemonConfig.maxRequestBodyBytesOrDefault(),
+                    daemonConfig.requestTimeoutOrDefault(), daemonConfig.overloadPolicyOrDefault(), prometheusRegistry);
             server.startAndJoin();
         });
     }
 
-    public CliApplication(ServiceFactory serviceFactory,
-                          Map<String, RuntimeAdapter> runtimes,
-                          PrintWriter out,
-                          PrintWriter err,
-                          DaemonRunner daemonRunner) {
+    public CliApplication(ServiceFactory serviceFactory, Map<String, RuntimeAdapter> runtimes, PrintWriter out,
+            PrintWriter err, DaemonRunner daemonRunner) {
         this.serviceFactory = Objects.requireNonNull(serviceFactory, "serviceFactory");
         this.availableRuntimes = Set.copyOf(Objects.requireNonNull(runtimes, "runtimes").keySet());
         this.out = Objects.requireNonNull(out, "out");
@@ -94,12 +79,9 @@ public final class CliApplication {
     }
 
     public static CliApplication createDefault() {
-        return new CliApplication(
-                ConfigResolvingLoaderProvider::create,
-                ImageLoadingFacade.defaultRuntimes(),
+        return new CliApplication(ConfigResolvingLoaderProvider::create, ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true));
     }
 
     public static void main(String[] args) {
@@ -116,32 +98,22 @@ public final class CliApplication {
         MdcContext.putTraceId(traceId);
         MdcContext.putComponent("app");
         MdcContext.putOperation("request");
-        MilestoneEventLogger.info(LOGGER)
-                .addEvent("request.start")
-                .addResult("success")
-                .addDurationMs(0L)
-                .log("Request started");
+        MilestoneEventLogger.info(LOGGER).addEvent(EventType.REQUEST_START).addResult(ResultType.SUCCESS)
+                .addDurationMs(0L).log("Request started");
         try {
             CliParser.ParseResult result = CliParser.parse(args);
             if (result.errorMessage() != null) {
                 err.println("Error: " + result.errorMessage());
                 printUsage(err);
-                MilestoneEventLogger.warn(LOGGER)
-                        .addEvent("request.finish")
-                        .addResult("error")
-                        .addDurationFrom(requestStartedNs)
-                        .addErrorKind("VALIDATION")
-                        .addErrorCode("CLI_USAGE_ERROR")
+                MilestoneEventLogger.warn(LOGGER).addEvent(EventType.REQUEST_FINISH).addResult(ResultType.ERROR)
+                        .addDurationFrom(requestStartedNs).addErrorKind("VALIDATION").addErrorCode("CLI_USAGE_ERROR")
                         .log("Request failed with usage error");
                 return ExitCode.USAGE.code();
             }
             if (result.showHelp()) {
                 printUsage(out);
-                MilestoneEventLogger.info(LOGGER)
-                        .addEvent("request.finish")
-                        .addResult("success")
-                        .addDurationFrom(requestStartedNs)
-                        .log("Request finished (help)");
+                MilestoneEventLogger.info(LOGGER).addEvent(EventType.REQUEST_FINISH).addResult(ResultType.SUCCESS)
+                        .addDurationFrom(requestStartedNs).log("Request finished (help)");
                 return ExitCode.OK.code();
             }
             CliParser.CliOptions options = result.options();
@@ -152,25 +124,15 @@ public final class CliApplication {
                 new ProcessorMetrics().bindTo(prometheusRegistry);
                 ImageLoader loader = serviceFactory.create(options, prometheusRegistry);
                 daemonRunner.run(options, loader, availableRuntimes, prometheusRegistry);
-                MilestoneEventLogger.info(LOGGER)
-                        .addEvent("request.finish")
-                        .addResult("success")
-                        .addDurationFrom(requestStartedNs)
-                        .log("Request finished (daemon)");
+                MilestoneEventLogger.info(LOGGER).addEvent(EventType.REQUEST_FINISH).addResult(ResultType.SUCCESS)
+                        .addDurationFrom(requestStartedNs).log("Request finished (daemon)");
                 return ExitCode.OK.code();
             }
             if (!availableRuntimes.contains(options.runtimeId())) {
-                err.printf(
-                        "Unknown runtime '%s'. Available: %s%n",
-                        options.runtimeId(),
-                        String.join(", ", availableRuntimes)
-                );
-                MilestoneEventLogger.warn(LOGGER)
-                        .addEvent("request.finish")
-                        .addResult("error")
-                        .addDurationFrom(requestStartedNs)
-                        .addErrorKind("VALIDATION")
-                        .addErrorCode("RUNTIME_NOT_FOUND")
+                err.printf("Unknown runtime '%s'. Available: %s%n", options.runtimeId(),
+                        String.join(", ", availableRuntimes));
+                MilestoneEventLogger.warn(LOGGER).addEvent(EventType.REQUEST_FINISH).addResult(ResultType.ERROR)
+                        .addDurationFrom(requestStartedNs).addErrorKind("VALIDATION").addErrorCode("RUNTIME_NOT_FOUND")
                         .log("Request failed: unknown runtime");
                 return ExitCode.RUNTIME_NOT_FOUND.code();
             }
@@ -180,25 +142,20 @@ public final class CliApplication {
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
             }
-            MilestoneEventLogger.info(LOGGER)
-                    .addEvent("request.finish")
-                    .addResult("success")
-                    .addDurationFrom(requestStartedNs)
-                    .log("Request finished");
+            MilestoneEventLogger.info(LOGGER).addEvent(EventType.REQUEST_FINISH).addResult(ResultType.SUCCESS)
+                    .addDurationFrom(requestStartedNs).log("Request finished");
             return ExitCode.OK.code();
+        } catch (AppException e) {
+            err.println("Failed to load image: " + e.getMessage());
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.REQUEST_FINISH)
+                    .addResult(ResultType.ERROR).addDurationFrom(requestStartedNs).addErrorKind("INTERNAL")
+                    .addErrorCode(e.errorCode()).log("Request failed");
+            return ExitCode.FAILURE.code();
         } catch (Exception e) {
             err.println("Failed to load image: " + e.getMessage());
-            String errorCode = e instanceof AppException appException
-                    ? appException.errorCode()
-                    : "REQUEST_EXECUTION_FAILED";
-            MilestoneEventLogger.error(LOGGER)
-                    .addCause(e)
-                    .addEvent("request.finish")
-                    .addResult("error")
-                    .addDurationFrom(requestStartedNs)
-                    .addErrorKind("INTERNAL")
-                    .addErrorCode(errorCode)
-                    .log("Request failed");
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.REQUEST_FINISH)
+                    .addResult(ResultType.ERROR).addDurationFrom(requestStartedNs).addErrorKind("INTERNAL")
+                    .addErrorCode("REQUEST_EXECUTION_FAILED").log("Request failed");
             return ExitCode.FAILURE.code();
         } finally {
             MdcContext.clearRequestContext();
@@ -206,13 +163,10 @@ public final class CliApplication {
     }
 
     private void printUsage(PrintWriter writer) {
-        String usage = String.join("%n",
-                "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
-                "   or: riid --daemon",
-                "       [--config <path>] [--username <user>",
+        String usage = String.join("%n", "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
+                "   or: riid --daemon", "       [--config <path>] [--username <user>",
                 "        (--password <pwd>|--password-env <VAR>|--password-file <path>)]",
-                "       [--cert-path <path>] [--key-path <path>] [--ca-path <path>] [--help]",
-                "Flags:",
+                "       [--cert-path <path>] [--key-path <path>] [--ca-path <path>] [--help]", "Flags:",
                 "  --repo           Repository name (e.g., library/busybox)",
                 "  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided",
                 "  --digest         Digest to pull (format: sha256:...)",
@@ -228,8 +182,7 @@ public final class CliApplication {
                 "  --cert-path      Path to client certificate (validated to exist, not used yet)",
                 "  --key-path       Path to client private key (validated to exist, not used yet)",
                 "  --ca-path        Path to CA certificate (validated to exist, not used yet)",
-                "  --help           Show this message"
-        );
+                "  --help           Show this message");
         writer.println(usage);
         writer.flush();
     }
@@ -237,7 +190,9 @@ public final class CliApplication {
     @FunctionalInterface
     public interface ServiceFactory {
         /**
-         * @param meterRegistry optional; when non-null (e.g. daemon mode), wired into {@link ImageLoadingFacade}
+         * @param meterRegistry
+         *            optional; when non-null (e.g. daemon mode), wired into
+         *            {@link ImageLoadingFacade}
          */
         ImageLoader create(CliParser.CliOptions options, MeterRegistry meterRegistry) throws Exception;
     }
@@ -249,9 +204,7 @@ public final class CliApplication {
 
     @FunctionalInterface
     public interface DaemonRunner {
-        void run(CliParser.CliOptions options,
-                 ImageLoader loader,
-                 Set<String> availableRuntimes,
-                 PrometheusMeterRegistry prometheusRegistry) throws Exception;
+        void run(CliParser.CliOptions options, ImageLoader loader, Set<String> availableRuntimes,
+                PrometheusMeterRegistry prometheusRegistry) throws Exception;
     }
 }

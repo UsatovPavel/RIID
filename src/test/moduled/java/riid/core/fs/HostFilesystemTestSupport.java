@@ -9,7 +9,8 @@ import java.nio.file.Path;
 import java.util.stream.Stream;
 
 /**
- * HostFilesystem helper for tests that isolates temp files in a dedicated directory.
+ * HostFilesystem helper for tests that isolates temp files in a dedicated
+ * directory.
  */
 public final class HostFilesystemTestSupport implements HostFilesystem {
     private final InMemoryHostFilesystem delegate;
@@ -97,4 +98,3 @@ public final class HostFilesystemTestSupport implements HostFilesystem {
         delegate.deleteRecursively(root);
     }
 }
-

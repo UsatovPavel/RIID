@@ -29,19 +29,16 @@ final class BoundedPipedCommandExecutor {
 
     private final int defaultMaxOutputBytes;
     private final Semaphore concurrentPipesLimiter = new Semaphore(MAX_CONCURRENT_PIPE_OPERATIONS, true);
-    private final ExecutorService pipeIoExecutor = Executors.newFixedThreadPool(
-            MAX_PIPE_EXECUTOR_TASKS,
+    private final ExecutorService pipeIoExecutor = Executors.newFixedThreadPool(MAX_PIPE_EXECUTOR_TASKS,
             Thread.ofVirtual().name("cmd-pipe-io-", 0).factory());
 
     BoundedPipedCommandExecutor(int defaultMaxOutputBytes) {
         this.defaultMaxOutputBytes = defaultMaxOutputBytes;
     }
 
-    BoundedCommandExecution.PipedShellResult runWithStdoutPipedToStdin(
-            List<String> producerCommand,
-            List<String> consumerCommand,
-            int maxStderrBytes,
-            BoundedCommandExecution.ProcessStarter starter) throws IOException, InterruptedException {
+    BoundedCommandExecution.PipedShellResult runWithStdoutPipedToStdin(List<String> producerCommand,
+            List<String> consumerCommand, int maxStderrBytes, BoundedCommandExecution.ProcessStarter starter)
+            throws IOException, InterruptedException {
         Objects.requireNonNull(producerCommand, "producerCommand");
         Objects.requireNonNull(consumerCommand, "consumerCommand");
         Objects.requireNonNull(starter, "starter");
@@ -60,7 +57,8 @@ final class BoundedPipedCommandExecutor {
                 throw e;
             }
             try {
-                // Submit transfer first: without it producer/consumer can mutually block on pipe backpressure.
+                // Submit transfer first: without it producer/consumer can mutually block on
+                // pipe backpressure.
                 Future<Void> pipeTransfer = pipeIoExecutor.submit(() -> {
                     try (InputStream in = producer.getInputStream(); OutputStream out = consumer.getOutputStream()) {
                         in.transferTo(out);
@@ -79,8 +77,8 @@ final class BoundedPipedCommandExecutor {
                 }
                 int producerExit = producer.waitFor();
                 int consumerExit = consumer.waitFor();
-                return new BoundedCommandExecution.PipedShellResult(
-                        producerExit, consumerExit, get(producerStderr), get(consumerStderr));
+                return new BoundedCommandExecution.PipedShellResult(producerExit, consumerExit, get(producerStderr),
+                        get(consumerStderr));
             } finally {
                 if (producer.isAlive()) {
                     producer.destroyForcibly();

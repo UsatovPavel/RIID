@@ -2,17 +2,13 @@ package riid.client.core.config;
 
 import java.util.Objects;
 import java.util.Optional;
+
 import riid.client.http.HttpRequestBuilder;
 
 /**
  * Registry endpoint configuration.
  */
-public record RegistryEndpoint(
-        String scheme,
-        String host,
-        int port,
-        Credentials credentials
-) {
+public record RegistryEndpoint(String scheme, String host, int port, Credentials credentials) {
     public RegistryEndpoint {
         Objects.requireNonNull(scheme, "scheme");
         Objects.requireNonNull(host, "host");
@@ -47,4 +43,3 @@ public record RegistryEndpoint(
         return host;
     }
 }
-

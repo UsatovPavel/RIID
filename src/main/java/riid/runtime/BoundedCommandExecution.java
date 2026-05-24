@@ -27,13 +27,14 @@ public final class BoundedCommandExecution {
     public static final int DEFAULT_MAX_TASKS_COMMAND_EXECUTOR = 16;
     private static final int BUFFER_SIZE = 4096;
     private static final long PROCESS_TERMINATION_TIMEOUT_MS = 200;
-    private static final AtomicReference<ExecutorService> EXECUTOR_REF =
-            new AtomicReference<>(newExecutor(DEFAULT_MAX_TASKS_COMMAND_EXECUTOR));
+    private static final AtomicReference<ExecutorService> EXECUTOR_REF = new AtomicReference<>(
+            newExecutor(DEFAULT_MAX_TASKS_COMMAND_EXECUTOR));
     private static final BoundedPipedCommandExecutor PIPED_EXECUTOR = new BoundedPipedCommandExecutor(
             DEFAULT_MAX_OUTPUT_BYTES);
     private static volatile OutputConfig DEFAULT_OUTPUT_CONFIG = OutputConfig.defaults();
 
-    private BoundedCommandExecution() { }
+    private BoundedCommandExecution() {
+    }
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(BoundedCommandExecution::shutdownExecutor));
@@ -43,26 +44,22 @@ public final class BoundedCommandExecution {
         return get(run(command, DEFAULT_OUTPUT_CONFIG));
     }
 
-    public static PipedShellResult runWithStdoutPipedToStdin(
-            List<String> producerCommand,
-            List<String> consumerCommand,
-            int maxStderrBytes,
-            ProcessStarter starter) throws IOException, InterruptedException {
+    public static PipedShellResult runWithStdoutPipedToStdin(List<String> producerCommand, List<String> consumerCommand,
+            int maxStderrBytes, ProcessStarter starter) throws IOException, InterruptedException {
         return PIPED_EXECUTOR.runWithStdoutPipedToStdin(producerCommand, consumerCommand, maxStderrBytes, starter);
     }
 
     /**
-     * Same as {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)} with
-     * {@code cmd -> new ProcessBuilder(cmd).start()}.
+     * Same as {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)}
+     * with {@code cmd -> new ProcessBuilder(cmd).start()}.
      */
-    public static PipedShellResult runWithStdoutPipedToStdin(
-            List<String> producerCommand,
-            List<String> consumerCommand,
+    public static PipedShellResult runWithStdoutPipedToStdin(List<String> producerCommand, List<String> consumerCommand,
             int maxStderrBytes) throws IOException, InterruptedException {
-        return runWithStdoutPipedToStdin(
-                producerCommand, consumerCommand, maxStderrBytes, cmd -> new ProcessBuilder(cmd).start());
+        return runWithStdoutPipedToStdin(producerCommand, consumerCommand, maxStderrBytes,
+                cmd -> new ProcessBuilder(cmd).start());
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     public static CompletableFuture<ShellResult> run(List<String> command, int maxOutputBytes) {
         Objects.requireNonNull(command, "command");
         if (maxOutputBytes <= 0) {
@@ -74,15 +71,14 @@ public final class BoundedCommandExecution {
             try {
                 Process process = new ProcessBuilder(command).start();
                 processRef.set(process);
-                Future<String> stdout = localExecutor.submit(streamReaderStrict(process.getInputStream(),
-                        maxOutputBytes, "stdout"));
-                Future<String> stderr = localExecutor.submit(streamReaderStrict(process.getErrorStream(),
-                        maxOutputBytes, "stderr"));
+                Future<String> stdout = localExecutor
+                        .submit(streamReaderStrict(process.getInputStream(), maxOutputBytes, "stdout"));
+                Future<String> stderr = localExecutor
+                        .submit(streamReaderStrict(process.getErrorStream(), maxOutputBytes, "stderr"));
                 int exitCode = process.waitFor();
                 return new ShellResult(exitCode, get(stdout), get(stderr));
             } catch (OutputLimitExceededException e) {
-                LOGGER.warn("Process output exceeded maxOutputBytes={} for command {}",
-                        maxOutputBytes, command, e);
+                LOGGER.warn("Process output exceeded maxOutputBytes={} for command {}", maxOutputBytes, command, e);
                 throw new RuntimeException(e);
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -100,6 +96,7 @@ public final class BoundedCommandExecution {
         return future;
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     public static CompletableFuture<ShellResult> run(List<String> command, OutputConfig outputConfig) {
         Objects.requireNonNull(command, "command");
         Objects.requireNonNull(outputConfig, "outputConfig");
@@ -171,10 +168,8 @@ public final class BoundedCommandExecution {
         };
     }
 
-    private static Callable<String> streamReaderTruncating(InputStream stream,
-                                                           Integer maxBytes,
-                                                           String name,
-                                                           boolean capture) {
+    private static Callable<String> streamReaderTruncating(InputStream stream, Integer maxBytes, String name,
+            boolean capture) {
         return () -> {
             try (InputStream in = stream) {
                 if (!capture) {
@@ -266,6 +261,7 @@ public final class BoundedCommandExecution {
         DEFAULT_OUTPUT_CONFIG = outputConfig;
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     public static synchronized void setMaxTasksCommandExecutor(int value) {
         if (value <= 0) {
             throw new IllegalArgumentException("maxTasksCommandExecutor must be positive");
@@ -275,9 +271,7 @@ public final class BoundedCommandExecution {
     }
 
     private static ExecutorService newExecutor(int maxTasks) {
-        return Executors.newFixedThreadPool(
-                maxTasks,
-                Thread.ofVirtual().name("cmd-io-", 0).factory());
+        return Executors.newFixedThreadPool(maxTasks, Thread.ofVirtual().name("cmd-io-", 0).factory());
     }
 
     private static void shutdownExecutor() {
@@ -285,13 +279,14 @@ public final class BoundedCommandExecution {
         PIPED_EXECUTOR.shutdown();
     }
 
-    public record ShellResult(int exitCode, String stdout, String stderr) { }
+    public record ShellResult(int exitCode, String stdout, String stderr) {
+    }
 
-    /** Result of {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)}. */
-    public record PipedShellResult(
-            int producerExitCode,
-            int consumerExitCode,
-            String producerStderr,
+    /**
+     * Result of
+     * {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)}.
+     */
+    public record PipedShellResult(int producerExitCode, int consumerExitCode, String producerStderr,
             String consumerStderr) {
 
         public void throwIfFailed(String producerLabel, String consumerLabel) throws IOException {
@@ -317,4 +312,3 @@ public final class BoundedCommandExecution {
         }
     }
 }
-

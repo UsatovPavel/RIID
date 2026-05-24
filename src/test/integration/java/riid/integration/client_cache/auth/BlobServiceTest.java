@@ -38,15 +38,10 @@ import riid.core.fs.TestPaths;
 @SuppressWarnings("PMD.CloseResource")
 class BlobServiceTest {
     private final HostFilesystem fs = new NioHostFilesystem();
+
     private enum Strings {
-        HTTP_SCHEME("http"),
-        HOST("localhost"),
-        REPO("repo"),
-        SCOPE("scope"),
-        CONTENT_TYPE("Content-Type"),
-        OCTET("application/octet-stream"),
-        METHOD_HEAD("HEAD"),
-        METHOD_GET("GET");
+        HTTP_SCHEME("http"), HOST("localhost"), REPO("repo"), SCOPE("scope"), CONTENT_TYPE("Content-Type"), OCTET(
+                "application/octet-stream"), METHOD_HEAD("HEAD"), METHOD_GET("GET");
 
         private final String value;
 
@@ -88,11 +83,8 @@ class BlobServiceTest {
             }
             respond(exchange, 404, Map.of(), new byte[0]);
         });
-        RegistryEndpoint ep = new RegistryEndpoint(
-                Strings.HTTP_SCHEME.v(),
-                Strings.HOST.v(),
-                server.getAddress().getPort(),
-                null);
+        RegistryEndpoint ep = new RegistryEndpoint(Strings.HTTP_SCHEME.v(), Strings.HOST.v(),
+                server.getAddress().getPort(), null);
         HttpClientConfig cfg = new HttpClientConfig();
         HttpClient client = HttpClientFactory.create(cfg);
         HttpExecutor exec = new HttpExecutor(client, cfg);
@@ -107,11 +99,7 @@ class BlobServiceTest {
         // GET
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
-        BlobRequest req = new BlobRequest(
-                Strings.REPO.v(),
-                digest,
-                (long) data.length,
-                Strings.OCTET.v(),
+        BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, (long) data.length, Strings.OCTET.v(),
                 new BlobRequest.RangeSpec.All());
         BlobResult result = blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v());
         assertEquals(digest, result.digest());
@@ -131,11 +119,8 @@ class BlobServiceTest {
                 os.write(data);
             }
         });
-        RegistryEndpoint ep = new RegistryEndpoint(
-                Strings.HTTP_SCHEME.v(),
-                Strings.HOST.v(),
-                server.getAddress().getPort(),
-                null);
+        RegistryEndpoint ep = new RegistryEndpoint(Strings.HTTP_SCHEME.v(), Strings.HOST.v(),
+                server.getAddress().getPort(), null);
         HttpClientConfig cfg = new HttpClientConfig();
         HttpClient client = HttpClientFactory.create(cfg);
         HttpExecutor exec = new HttpExecutor(client, cfg);
@@ -144,11 +129,7 @@ class BlobServiceTest {
 
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
-        BlobRequest req = new BlobRequest(
-                Strings.REPO.v(),
-                digest,
-                null,
-                Strings.OCTET.v(),
+        BlobRequest req = new BlobRequest(Strings.REPO.v(), digest, null, Strings.OCTET.v(),
                 new BlobRequest.RangeSpec.All());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));
     }
@@ -162,22 +143,15 @@ class BlobServiceTest {
             exchange.getResponseHeaders().add(Strings.CONTENT_TYPE.v(), Strings.OCTET.v());
             respond(exchange, 200, Map.of(), data);
         });
-        RegistryEndpoint ep = new RegistryEndpoint(
-                Strings.HTTP_SCHEME.v(),
-                Strings.HOST.v(),
-                server.getAddress().getPort(),
-                null);
+        RegistryEndpoint ep = new RegistryEndpoint(Strings.HTTP_SCHEME.v(), Strings.HOST.v(),
+                server.getAddress().getPort(), null);
         HttpClientConfig cfg = new HttpClientConfig();
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
         BlobService blob = new BlobService(exec, auth);
         File tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "blob-", ".bin").toFile();
         tmp.deleteOnExit();
-        BlobRequest req = new BlobRequest(
-                Strings.REPO.v(),
-                expectedDigest,
-                (long) data.length,
-                Strings.OCTET.v(),
+        BlobRequest req = new BlobRequest(Strings.REPO.v(), expectedDigest, (long) data.length, Strings.OCTET.v(),
                 new BlobRequest.RangeSpec.All());
         assertThrows(RuntimeException.class, () -> blob.fetchBlob(ep, req, tmp, Strings.SCOPE.v()));
     }
@@ -185,11 +159,8 @@ class BlobServiceTest {
     @Test
     void headNotFoundIsEmpty() throws Exception {
         setupServer(exchange -> respond(exchange, 404, Map.of(), new byte[0]));
-        RegistryEndpoint ep = new RegistryEndpoint(
-                Strings.HTTP_SCHEME.v(),
-                Strings.HOST.v(),
-                server.getAddress().getPort(),
-                null);
+        RegistryEndpoint ep = new RegistryEndpoint(Strings.HTTP_SCHEME.v(), Strings.HOST.v(),
+                server.getAddress().getPort(), null);
         HttpClientConfig cfg = new HttpClientConfig();
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
         AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
@@ -200,18 +171,13 @@ class BlobServiceTest {
     @Test
     void headBadStatusFails() throws Exception {
         setupServer(exchange -> respond(exchange, 500, Map.of(), new byte[0]));
-        RegistryEndpoint ep = new RegistryEndpoint(
-                Strings.HTTP_SCHEME.v(),
-                Strings.HOST.v(),
-                server.getAddress().getPort(),
-                null);
+        RegistryEndpoint ep = new RegistryEndpoint(Strings.HTTP_SCHEME.v(), Strings.HOST.v(),
+                server.getAddress().getPort(), null);
         HttpClientConfig cfg = new HttpClientConfig();
         HttpExecutor exec = new HttpExecutor(HttpClientFactory.create(cfg), cfg);
-        AuthService auth =
-                new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
+        AuthService auth = new AuthService(exec, new com.fasterxml.jackson.databind.ObjectMapper(), new TokenCache());
         BlobService blob = new BlobService(exec, auth);
-        assertThrows(
-                RuntimeException.class,
+        assertThrows(RuntimeException.class,
                 () -> blob.headBlob(ep, Strings.REPO.v(), "sha256:zzz", Strings.SCOPE.v()));
     }
 
@@ -225,10 +191,8 @@ class BlobServiceTest {
         server.start();
     }
 
-    private void respond(HttpExchange exchange,
-                         int status,
-                         Map<String, String> headers,
-                         byte[] body) throws IOException {
+    private void respond(HttpExchange exchange, int status, Map<String, String> headers, byte[] body)
+            throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
         exchange.sendResponseHeaders(status, body.length);
         try (OutputStream os = exchange.getResponseBody()) {
@@ -249,4 +213,3 @@ class BlobServiceTest {
         return sb.toString();
     }
 }
-

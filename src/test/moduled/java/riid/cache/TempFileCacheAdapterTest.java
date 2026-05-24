@@ -50,9 +50,7 @@ class TempFileCacheAdapterTest {
         Path loadedPath = cache.resolve(loaded.key()).orElseThrow();
         assertEquals(cache.resolve(entry.key()).orElseThrow(), loadedPath);
         // media type is derived from probeContentType; just ensure not null
-        assertEquals(
-                CacheMediaType.from(fs.probeContentType(loadedPath)),
-                loaded.mediaType());
+        assertEquals(CacheMediaType.from(fs.probeContentType(loadedPath)), loaded.mediaType());
         assertEquals(fs.size(tmp), loaded.sizeBytes());
     }
 
@@ -102,4 +100,3 @@ class TempFileCacheAdapterTest {
         assertFalse(realFs.exists(root));
     }
 }
-

@@ -20,5 +20,3 @@ public final class NoOpP2PExecutor implements P2PExecutor {
         // no-op
     }
 }
-
-

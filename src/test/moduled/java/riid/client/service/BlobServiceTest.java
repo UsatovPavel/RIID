@@ -13,9 +13,11 @@ import java.util.Optional;
 
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpStatus;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import org.junit.jupiter.api.Test;
 
 import riid.cache.auth.TokenCache;
@@ -41,8 +43,8 @@ class BlobServiceTest {
     @Test
     void closesSinkOnIoFailure() {
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new FailingInputStream(), URI.create(TEST_URI));
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY, new FailingInputStream(),
+                URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
@@ -57,8 +59,8 @@ class BlobServiceTest {
     void succeedsAndClosesResources() {
         byte[] data = "abc".getBytes(StandardCharsets.UTF_8);
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new ByteArrayInputStream(data), URI.create(TEST_URI));
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY, new ByteArrayInputStream(data),
+                URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
@@ -75,13 +77,12 @@ class BlobServiceTest {
     void rangeHeaderIsSent() {
         byte[] data = "abc".getBytes(StandardCharsets.UTF_8);
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new ByteArrayInputStream(data), URI.create(TEST_URI));
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY, new ByteArrayInputStream(data),
+                URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
-                new BlobRequest.RangeSpec.Bounded(0L, 1L));
+        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE, new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         svc.fetchBlob(endpoint, req, sink, SCOPE);
         assertEquals("bytes=0-1", http.lastHeaders.get("Range"));
@@ -95,8 +96,8 @@ class BlobServiceTest {
         headers.add("Content-Length", "2");
 
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.PARTIAL_CONTENT_206, headers,
-                new ByteArrayInputStream(data), URI.create(TEST_URI));
+        http.nextGet = new HttpResult<>(HttpStatus.PARTIAL_CONTENT_206, headers, new ByteArrayInputStream(data),
+                URI.create(TEST_URI));
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
@@ -131,13 +132,12 @@ class BlobServiceTest {
         FakeHttp http = new FakeHttp();
         http.enqueue(new HttpResult<>(HttpStatus.RANGE_NOT_SATISFIABLE_416, HttpFields.EMPTY,
                 new ByteArrayInputStream(new byte[0]), URI.create(TEST_URI)));
-        http.enqueue(new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new ByteArrayInputStream(data), URI.create(TEST_URI)));
+        http.enqueue(new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY, new ByteArrayInputStream(data),
+                URI.create(TEST_URI)));
 
         BlobService svc = new BlobService(http, new NoAuth());
         RecordingSink sink = new RecordingSink();
-        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE,
-                new BlobRequest.RangeSpec.Bounded(0L, 1L));
+        BlobRequest req = new BlobRequest(REPO, null, 3L, MEDIA_TYPE, new BlobRequest.RangeSpec.Bounded(0L, 1L));
 
         BlobResult result = svc.fetchBlob(endpoint, req, sink, SCOPE);
         assertEquals(data.length, result.size());
@@ -197,7 +197,9 @@ class BlobServiceTest {
     }
 
     private static final class RecordingSink implements BlobSink {
-        enum State { OPENED, CLOSED }
+        enum State {
+            OPENED, CLOSED
+        }
 
         private final ByteArrayOutputStreamWithClose out = new ByteArrayOutputStreamWithClose();
         State state = null;
@@ -226,4 +228,3 @@ class BlobServiceTest {
         }
     }
 }
-

@@ -28,12 +28,12 @@ import riid.core.fs.TestPaths;
 
 /**
  * Stress/retry test (step 9.1).
- *
- * Not run in CI (tagged "stress"). Run locally:
- *   ./gradlew test --tests 'riid.client.integration.StressTest' -PincludeStress
- *
- * Scenarios:
- * - 100 мелких образов 740.2 kB (busybox:latest) скачиваются параллельно, проверка digest/size.
+ * <p>
+ * Not run in CI (tagged "stress"). Run locally: ./gradlew test --tests
+ * 'riid.client.integration.StressTest' -PincludeStress
+ * <p>
+ * Scenarios: - 100 мелких образов 740.2 kB (busybox:latest) скачиваются
+ * параллельно, проверка digest/size.
  */
 @Tag("stress")
 @Tag("filesystem")
@@ -48,10 +48,7 @@ public class StressTest {
     @BeforeAll
     static void setup() {
         RegistryEndpoint hub = TestRegistryConfig.endpoint();
-        HttpClientConfig cfg = HttpClientConfig.builder()
-                .maxRetries(2)
-                .retryIdempotentOnly(true)
-                .followRedirects(true)
+        HttpClientConfig cfg = HttpClientConfig.builder().maxRetries(2).retryIdempotentOnly(true).followRedirects(true)
                 .build();
         CLIENT = new RegistryClientImpl(hub, cfg);
     }
@@ -60,11 +57,7 @@ public class StressTest {
     void downloadManyInParallel() throws Exception {
         Manifest manifest = CLIENT.fetchManifest(REPO, REF).manifest();
         var layer = manifest.layers().getFirst(); // tiny layer in busybox
-        BlobRequest req = new BlobRequest(
-                REPO,
-                layer.digest(),
-                layer.size(),
-                layer.mediaType(),
+        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType(),
                 new BlobRequest.RangeSpec.All());
 
         int count = 1000;
@@ -73,12 +66,8 @@ public class StressTest {
             for (int i = 0; i < count; i++) {
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
-                        File tmp = TestPaths.tempFile(
-                                FS,
-                                TestPaths.DEFAULT_BASE_DIR,
-                                "busybox-layer-" + Thread.currentThread().getId() + "-",
-                                ".tar")
-                                .toFile();
+                        File tmp = TestPaths.tempFile(FS, TestPaths.DEFAULT_BASE_DIR,
+                                "busybox-layer-" + Thread.currentThread().getId() + "-", ".tar").toFile();
                         var res = CLIENT.fetchBlob(req, tmp);
                         assertEquals(layer.digest(), res.digest());
                         assertTrue(tmp.length() > 0);
@@ -91,13 +80,12 @@ public class StressTest {
             joinAndShutdown(futures, pool);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException(
-                    "Interrupted while awaiting executor termination", ie);
+            throw new RuntimeException("Interrupted while awaiting executor termination", ie);
         }
     }
 
-    private void joinAndShutdown(List<CompletableFuture<File>> futures,
-                                 ExecutorService pool) throws InterruptedException {
+    private void joinAndShutdown(List<CompletableFuture<File>> futures, ExecutorService pool)
+            throws InterruptedException {
         for (var f : futures) {
             f.join();
         }
@@ -107,4 +95,3 @@ public class StressTest {
         }
     }
 }
-

@@ -25,4 +25,3 @@ public class ClientException extends RuntimeException {
         return clientError;
     }
 }
-

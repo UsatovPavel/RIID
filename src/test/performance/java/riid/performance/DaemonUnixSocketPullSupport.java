@@ -17,48 +17,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * HTTP {@code POST /pull} over a RIID daemon Unix socket (same wire format as {@code curl} in docs).
+ * HTTP {@code POST /pull} over a RIID daemon Unix socket (same wire format as
+ * {@code curl} in docs).
  */
 public final class DaemonUnixSocketPullSupport {
 
-    /** @see TestConfigYaml#ENV_DAEMON_UNIX_SOCKET */
+    /**
+     * @see TestConfigYaml#ENV_DAEMON_UNIX_SOCKET
+     */
     public static final String ENV_DAEMON_UNIX_SOCKET = TestConfigYaml.ENV_DAEMON_UNIX_SOCKET;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private DaemonUnixSocketPullSupport() { }
+    private DaemonUnixSocketPullSupport() {
+    }
 
-    public static void postPull(
-            Path socketPath,
-            Path workDir,
-            String repository,
-            String reference,
-            String runtimeId) throws Exception {
+    public static void postPull(Path socketPath, Path workDir, String repository, String reference, String runtimeId)
+            throws Exception {
         Path bodyFile = workDir.resolve("body-" + repository.replace('/', '-') + ".json");
-        String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + reference
-                + "\",\"runtimeId\":\"" + runtimeId + "\"}";
+        String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + reference + "\",\"runtimeId\":\""
+                + runtimeId + "\"}";
         int maxSec = requestTimeoutSeconds();
-        ProcessBuilder pb = new ProcessBuilder(
-                "curl",
-                "-sS",
-                "--fail-with-body",
-                "--connect-timeout",
-                Integer.toString(Math.min(120, maxSec)),
-                "--max-time",
-                Integer.toString(maxSec),
-                "--unix-socket",
-                socketPath.toString(),
-                "-o",
-                bodyFile.toString(),
-                "-w",
-                "%{http_code}",
-                "-X",
-                "POST",
-                "http://localhost/pull",
-                "-H",
-                "Content-Type: application/json",
-                "-d",
-                json);
+        ProcessBuilder pb = new ProcessBuilder("curl", "-sS", "--fail-with-body", "--connect-timeout",
+                Integer.toString(Math.min(120, maxSec)), "--max-time", Integer.toString(maxSec), "--unix-socket",
+                socketPath.toString(), "-o", bodyFile.toString(), "-w", "%{http_code}", "-X", "POST",
+                "http://localhost/pull", "-H", "Content-Type: application/json", "-d", json);
         pb.redirectError(ProcessBuilder.Redirect.PIPE);
         Process proc = pb.start();
         AtomicReference<String> errRef = new AtomicReference<>("");

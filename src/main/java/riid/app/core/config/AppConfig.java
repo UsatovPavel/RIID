@@ -9,13 +9,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * Application-level configuration.
  */
-public record AppConfig(
-        @JsonProperty("tempDirectory") String tempDirectory,
+public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
         @JsonProperty("streamThreads") Integer streamThreads,
         @JsonProperty("allowedRegistries") List<String> allowedRegistries,
-        @JsonProperty("daemon") DaemonConfig daemon
-) {
-    //(EI_EXPOSE_REP*) by spotsbugs
+        @JsonProperty("daemon") DaemonConfig daemon) {
+    // (EI_EXPOSE_REP*) by spotsbugs
     public AppConfig {
         if (allowedRegistries != null) {
             allowedRegistries = List.copyOf(allowedRegistries);
@@ -53,15 +51,12 @@ public record AppConfig(
         REJECT
     }
 
-    public record DaemonConfig(
-            @JsonProperty("unixSocketPath") String unixSocketPath,
-            @JsonProperty("metricsHost") String metricsHost,
-            @JsonProperty("metricsPort") Integer metricsPort,
+    public record DaemonConfig(@JsonProperty("unixSocketPath") String unixSocketPath,
+            @JsonProperty("metricsHost") String metricsHost, @JsonProperty("metricsPort") Integer metricsPort,
             @JsonProperty("maxConcurrentPulls") Integer maxConcurrentPulls,
             @JsonProperty("maxRequestBodyBytes") Integer maxRequestBodyBytes,
             @JsonProperty("requestTimeout") Duration requestTimeout,
-            @JsonProperty("overloadPolicy") OverloadPolicy overloadPolicy
-    ) {
+            @JsonProperty("overloadPolicy") OverloadPolicy overloadPolicy) {
         private static final String DEFAULT_UNIX_SOCKET_PATH = "/tmp/riid.sock";
         private static final String DEFAULT_METRICS_HOST = "0.0.0.0";
         private static final int DEFAULT_METRICS_PORT = 9090;
@@ -117,4 +112,3 @@ public record AppConfig(
         }
     }
 }
-

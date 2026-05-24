@@ -18,12 +18,14 @@ public interface CacheAdapter {
     Optional<Path> resolve(String key);
 
     /**
-     * Store blob stream under digest. Implementation is responsible for closing the stream.
+     * Store blob stream under digest. Implementation is responsible for closing the
+     * stream.
      *
-     * @param payload   source of bytes
-     * @param mediaType blob media type (typed)
+     * @param payload
+     *            source of bytes
+     * @param mediaType
+     *            blob media type (typed)
      * @return cache entry/locator (if available)
      */
     CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException;
 }
-

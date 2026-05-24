@@ -5,12 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * Auth-related configuration.
  */
-public record AuthConfig(
-        @JsonProperty("defaultTokenTtlSeconds") long defaultTokenTtlSeconds,
-        @JsonProperty("certPath") String certPath,
-        @JsonProperty("keyPath") String keyPath,
-        @JsonProperty("caPath") String caPath
-) {
+public record AuthConfig(@JsonProperty("defaultTokenTtlSeconds") long defaultTokenTtlSeconds,
+        @JsonProperty("certPath") String certPath, @JsonProperty("keyPath") String keyPath,
+        @JsonProperty("caPath") String caPath) {
     public static final long DEFAULT_TTL_SECONDS = 300L;
 
     public AuthConfig() {
@@ -24,4 +21,3 @@ public record AuthConfig(
         this.caPath = caPath;
     }
 }
-

@@ -40,9 +40,7 @@ class FileCacheAdapterTest {
 
         Path tmp = TestPaths.tempFile(fs, "cache-file-", ".bin");
         fs.writeString(tmp, "hello");
-        CacheEntry entry = cache.put(
-                digest,
-                FilesystemCachePayload.of(fs, tmp, fs.size(tmp)),
+        CacheEntry entry = cache.put(digest, FilesystemCachePayload.of(fs, tmp, fs.size(tmp)),
                 CacheMediaType.OCI_LAYER);
 
         assertTrue(cache.has(digest));
@@ -84,4 +82,3 @@ class FileCacheAdapterTest {
         assertEquals(fs.size(tmp), entry.sizeBytes());
     }
 }
-

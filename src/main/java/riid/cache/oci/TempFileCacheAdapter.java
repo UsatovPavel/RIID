@@ -75,4 +75,3 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     }
 
 }
-

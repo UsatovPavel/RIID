@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Test;
 
 import riid.cache.oci.ImageDigest;
@@ -40,8 +41,7 @@ class ImageImportingFacadeTest {
     void failsWhenFileMissing() {
         Path missing = Path.of(System.getProperty("java.io.tmpdir"))
                 .resolve("riid-missing-" + java.util.UUID.randomUUID());
-        RecordingDispatcher dispatcher = new RecordingDispatcher(
-                new FetchResult(digestA(), media(), missing));
+        RecordingDispatcher dispatcher = new RecordingDispatcher(new FetchResult(digestA(), media(), missing));
         ImageImportingFacade integrator = new ImageImportingFacade(dispatcher, HostFilesystemTestSupport.create());
 
         DispatcherRuntimeException ex1 = assertThrows(DispatcherRuntimeException.class,
@@ -52,8 +52,7 @@ class ImageImportingFacadeTest {
     @Test
     void failsOnBlankFields() {
         ImageImportingFacade integrator = new ImageImportingFacade(
-                new RecordingDispatcher(new FetchResult(null, null, null)),
-                HostFilesystemTestSupport.create());
+                new RecordingDispatcher(new FetchResult(null, null, null)), HostFilesystemTestSupport.create());
         DispatcherRuntimeException ex2 = assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
         assertTrue(ex2.getMessage().contains("Missing"));
@@ -64,8 +63,7 @@ class ImageImportingFacadeTest {
         HostFilesystem fs = HostFilesystemTestSupport.create();
         Path dir = TestPaths.tempDir(fs, "not-file-");
         ImageImportingFacade integrator = new ImageImportingFacade(
-                new RecordingDispatcher(new FetchResult(digestB(), media(), dir)),
-                fs);
+                new RecordingDispatcher(new FetchResult(digestB(), media(), dir)), fs);
         DispatcherRuntimeException ex3 = assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
         assertTrue(ex3.getMessage().contains("not a regular file"));
@@ -76,8 +74,7 @@ class ImageImportingFacadeTest {
         HostFilesystem fs = HostFilesystemTestSupport.create();
         Path empty = TestPaths.tempFile(fs, "empty-", ".bin");
         ImageImportingFacade integrator = new ImageImportingFacade(
-                new RecordingDispatcher(new FetchResult(digestC(), media(), empty)),
-                fs);
+                new RecordingDispatcher(new FetchResult(digestC(), media(), empty)), fs);
         DispatcherRuntimeException ex4 = assertThrows(DispatcherRuntimeException.class,
                 () -> integrator.fetchAndLoad(new ImageRef("r", "t", null), new RecordingRuntimeAdapter()));
         assertTrue(ex4.getMessage().contains("empty"));
@@ -90,8 +87,8 @@ class ImageImportingFacadeTest {
         }
 
         @Override
-        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest,
-                                      long sizeBytes, MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes,
+                MediaType mediaType) {
             return result;
         }
     }
@@ -126,4 +123,3 @@ class ImageImportingFacadeTest {
         return MediaType.OCI_IMAGE_LAYER;
     }
 }
-

@@ -36,8 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Exercises {@link DaemonServer} with a real {@code UnixDomainServerConnector} (not {@code LocalConnector}).
- * Requires Linux, a filesystem path for the socket, and {@code curl} on {@code PATH}.
+ * Exercises {@link DaemonServer} with a real {@code UnixDomainServerConnector}
+ * (not {@code LocalConnector}). Requires Linux, a filesystem path for the
+ * socket, and {@code curl} on {@code PATH}.
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
@@ -46,8 +47,8 @@ class DaemonPullUnixSocketTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private static final Pattern UUID_RE =
-            Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
+    private static final Pattern UUID_RE = Pattern
+            .compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
 
     @Test
     void postPullOverUnixDomainSocketReturnsSuccess() throws Exception {
@@ -91,8 +92,7 @@ class DaemonPullUnixSocketTest {
         try {
             daemon.start();
             String json = "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}";
-            ProcessBuilder pb = curlPullBuilder(
-                    socketPath, bodyFile, json, List.of("X-Trace-Id: uds-corr-xyz"));
+            ProcessBuilder pb = curlPullBuilder(socketPath, bodyFile, json, List.of("X-Trace-Id: uds-corr-xyz"));
             runCurl(pb);
 
             JsonNode node = MAPPER.readTree(Files.readString(bodyFile));
@@ -105,39 +105,18 @@ class DaemonPullUnixSocketTest {
     }
 
     private static DaemonServer newDaemonServer(Path socketPath, AtomicReference<String> traceInLoader) {
-        return new DaemonServer(
-                socketPath.toString(),
-                "127.0.0.1",
-                0,
-                (repo, ref, rt) -> {
-                    traceInLoader.set(MDC.get(LogContextKeys.TRACE_ID));
-                    return new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L);
-                },
-                Set.of("podman"),
-                4,
-                8192,
-                Duration.ofSeconds(30),
-                AppConfig.OverloadPolicy.REJECT,
+        return new DaemonServer(socketPath.toString(), "127.0.0.1", 0, (repo, ref, rt) -> {
+            traceInLoader.set(MDC.get(LogContextKeys.TRACE_ID));
+            return new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L);
+        }, Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
     }
 
-    private static ProcessBuilder curlPullBuilder(
-            Path socketPath, Path bodyFile, String jsonBody, List<String> extraHeaders) {
+    private static ProcessBuilder curlPullBuilder(Path socketPath, Path bodyFile, String jsonBody,
+            List<String> extraHeaders) {
         List<String> cmd = new ArrayList<>();
-        cmd.addAll(
-                List.of(
-                        "curl",
-                        "-sS",
-                        "--fail-with-body",
-                        "--unix-socket",
-                        socketPath.toString(),
-                        "-o",
-                        bodyFile.toString(),
-                        "-w",
-                        "%{http_code}",
-                        "-X",
-                        "POST",
-                        "http://localhost/pull"));
+        cmd.addAll(List.of("curl", "-sS", "--fail-with-body", "--unix-socket", socketPath.toString(), "-o",
+                bodyFile.toString(), "-w", "%{http_code}", "-X", "POST", "http://localhost/pull"));
         for (String h : extraHeaders) {
             cmd.add("-H");
             cmd.add(h);
@@ -166,30 +145,14 @@ class DaemonPullUnixSocketTest {
         Path dir = Files.createTempDirectory("riid-daemon-uds-owned");
         Path socketPath = dir.resolve("riid.sock");
 
-        DaemonServer daemonA = new DaemonServer(
-                socketPath.toString(),
-                "127.0.0.1",
-                0,
-                (repo, ref, rt) ->
-                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
-                Set.of("podman"),
-                4,
-                8192,
-                Duration.ofSeconds(30),
-                AppConfig.OverloadPolicy.REJECT,
+        DaemonServer daemonA = new DaemonServer(socketPath.toString(), "127.0.0.1", 0,
+                (repo, ref, rt) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
+                Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
-        DaemonServer daemonB = new DaemonServer(
-                socketPath.toString(),
-                "127.0.0.1",
-                0,
-                (repo, ref, rt) ->
-                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
-                Set.of("podman"),
-                4,
-                8192,
-                Duration.ofSeconds(30),
-                AppConfig.OverloadPolicy.REJECT,
+        DaemonServer daemonB = new DaemonServer(socketPath.toString(), "127.0.0.1", 0,
+                (repo, ref, rt) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
+                Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         try {

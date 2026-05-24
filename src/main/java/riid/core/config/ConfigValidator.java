@@ -23,6 +23,7 @@ import riid.runtime.RuntimeConfig;
  */
 public final class ConfigValidator {
     private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
+    private static final int MAX_UNIX_SOCKET_PATH_BYTES = 108;
     private static final String AUTH_CERT_PATH = "client.auth.certPath";
     private static final String AUTH_KEY_PATH = "client.auth.keyPath";
     private static final String AUTH_CA_PATH = "client.auth.caPath";
@@ -93,9 +94,7 @@ public final class ConfigValidator {
             throw new ConfigValidationException(ConfigValidationException.Http.BACKOFF_INVERTED.message());
         }
         if (http.backoffExponentBase() < MIN_BACKOFF_EXPONENT_BASE) {
-            throw new ConfigValidationException(
-                ConfigValidationException.Http.BACKOFF_EXPONENT_BASE_MIN.message()
-            );
+            throw new ConfigValidationException(ConfigValidationException.Http.BACKOFF_EXPONENT_BASE_MIN.message());
         }
         String userAgent = http.userAgent();
         if (userAgent == null || userAgent.isBlank()) {
@@ -142,8 +141,9 @@ public final class ConfigValidator {
             if (unixSocketPath.isBlank()) {
                 throw new ConfigValidationException("app.daemon.unixSocketPath must not be blank");
             }
-            if (unixSocketPath.getBytes(StandardCharsets.UTF_8).length >= 108) {
-                throw new ConfigValidationException("app.daemon.unixSocketPath must be shorter than 108 bytes");
+            if (unixSocketPath.getBytes(StandardCharsets.UTF_8).length >= MAX_UNIX_SOCKET_PATH_BYTES) {
+                throw new ConfigValidationException(
+                        "app.daemon.unixSocketPath must be shorter than " + MAX_UNIX_SOCKET_PATH_BYTES + " bytes");
             }
         }
         String metricsHost = daemon.metricsHost();
@@ -256,8 +256,7 @@ public final class ConfigValidator {
                 throw new ConfigValidationException(message + ": " + value);
             }
             throw new ConfigValidationException(
-                ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value)
-            );
+                    ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value));
         }
         if (!Files.isRegularFile(p)) {
             String message = switch (field) {

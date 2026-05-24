@@ -16,8 +16,7 @@ import riid.core.fs.NioHostFilesystem;
  */
 public final class ConfigLoader {
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory())
-            .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            .registerModule(new JavaTimeModule()).disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private ConfigLoader() {
     }
@@ -58,4 +57,3 @@ public final class ConfigLoader {
         return new ConfigValidationException("Invalid configuration in " + path + ": " + msg, e);
     }
 }
-

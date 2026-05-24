@@ -8,11 +8,8 @@ import java.util.Optional;
 /**
  * Registry credentials (basic or identity token).
  */
-public record Credentials(
-        @JsonProperty("username") String username,
-        @JsonProperty("password") String password,
-        @JsonProperty("identityToken") String identityToken
-) {
+public record Credentials(@JsonProperty("username") String username, @JsonProperty("password") String password,
+        @JsonProperty("identityToken") String identityToken) {
     public Credentials {
         boolean hasBasic = username != null || password != null;
         boolean hasToken = identityToken != null;

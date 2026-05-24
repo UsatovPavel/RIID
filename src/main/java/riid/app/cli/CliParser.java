@@ -34,14 +34,8 @@ public final class CliParser {
             return new ParseResult(null, false, "No arguments provided");
         }
         Options parsedOptions = new Options();
-        parsedOptions.addOption(Option.builder("h")
-                .longOpt("help")
-                .desc("Show help")
-                .build());
-        parsedOptions.addOption(Option.builder()
-                .longOpt(OPTION_DAEMON)
-                .desc("Run as long-lived daemon")
-                .build());
+        parsedOptions.addOption(Option.builder("h").longOpt("help").desc("Show help").build());
+        parsedOptions.addOption(Option.builder().longOpt(OPTION_DAEMON).desc("Run as long-lived daemon").build());
         addOption(parsedOptions, OPTION_CONFIG, ARG_PATH);
         addOption(parsedOptions, "repo", "name");
         addOption(parsedOptions, "tag", "tag");
@@ -63,8 +57,7 @@ public final class CliParser {
         } catch (UnrecognizedOptionException e) {
             return new ParseResult(null, false, "Unknown option: " + e.getOption());
         } catch (MissingArgumentException e) {
-            return new ParseResult(null, false,
-                    "Missing value for " + formatOption(e.getOption()));
+            return new ParseResult(null, false, "Missing value for " + formatOption(e.getOption()));
         } catch (ParseException e) {
             return new ParseResult(null, false, e.getMessage());
         }
@@ -91,9 +84,7 @@ public final class CliParser {
         String username = cmd.getOptionValue("username");
         String password = cmd.getOptionValue("password");
         String passwordEnv = cmd.getOptionValue("password-env");
-        Path passwordFile = cmd.hasOption("password-file")
-                ? Paths.get(cmd.getOptionValue("password-file"))
-                : null;
+        Path passwordFile = cmd.hasOption("password-file") ? Paths.get(cmd.getOptionValue("password-file")) : null;
         Path certPath = cmd.hasOption("cert-path") ? Paths.get(cmd.getOptionValue("cert-path")) : null;
         Path keyPath = cmd.hasOption("key-path") ? Paths.get(cmd.getOptionValue("key-path")) : null;
         Path caPath = cmd.hasOption("ca-path") ? Paths.get(cmd.getOptionValue("ca-path")) : null;
@@ -143,22 +134,10 @@ public final class CliParser {
         if (caPath != null && !Files.exists(caPath)) {
             return new ParseResult(null, false, "ca-path does not exist: " + caPath);
         }
-        String reference = digest != null
-                ? digest
-                : (tag != null ? tag : (ref != null ? ref : "latest"));
+        String reference = digest != null ? digest : (tag != null ? tag : (ref != null ? ref : "latest"));
 
-        CliOptions cliOptions = new CliOptions(
-                configPath,
-                configProvidedByUser,
-                daemonMode,
-                repo,
-                reference,
-                runtimeId,
-                credentials,
-                certPath,
-                keyPath,
-                caPath
-        );
+        CliOptions cliOptions = new CliOptions(configPath, configProvidedByUser, daemonMode, repo, reference, runtimeId,
+                credentials, certPath, keyPath, caPath);
         return new ParseResult(cliOptions, false, null);
     }
 
@@ -174,11 +153,7 @@ public final class CliParser {
     }
 
     private static void addOption(Options options, String longOpt, String argName) {
-        options.addOption(Option.builder()
-                .longOpt(longOpt)
-                .hasArg()
-                .argName(argName)
-                .build());
+        options.addOption(Option.builder().longOpt(longOpt).hasArg().argName(argName).build());
     }
 
     private static String formatOption(Option option) {
@@ -191,16 +166,8 @@ public final class CliParser {
         return "-" + option.getOpt();
     }
 
-    public record CliOptions(Path configPath,
-                             boolean configProvidedByUser,
-                             boolean daemonMode,
-                             String repository,
-                             String reference,
-                             String runtimeId,
-                             Credentials credentials,
-                             Path certPath,
-                             Path keyPath,
-                             Path caPath) {
+    public record CliOptions(Path configPath, boolean configProvidedByUser, boolean daemonMode, String repository,
+            String reference, String runtimeId, Credentials credentials, Path certPath, Path keyPath, Path caPath) {
         public boolean hasCerts() {
             return certPath != null || keyPath != null || caPath != null;
         }

@@ -18,7 +18,8 @@ import riid.core.fs.PathSupport;
 import riid.runtime.BoundedCommandExecution;
 
 /**
- * Docker adapter: accepts OCI archive, rewrites to docker-save format, feeds to `docker load`.
+ * Docker adapter: accepts OCI archive, rewrites to docker-save format, feeds to
+ * `docker load`.
  */
 public class DockerRuntimeAdapter implements RuntimeAdapter {
     private static final String RUNTIME_ID = "docker";
@@ -102,12 +103,9 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         runDockerLoad(dockerArchive);
     }
 
-    private void writeDockerManifestJson(Path workDir,
-                                         JsonNode manifest,
-                                         String refName,
-                                         ObjectMapper mapper) throws IOException {
-        String configPath = "blobs/sha256/" + stripSha256(
-                manifest.path("config").path(DIGEST_FIELD).asText(""));
+    private void writeDockerManifestJson(Path workDir, JsonNode manifest, String refName, ObjectMapper mapper)
+            throws IOException {
+        String configPath = "blobs/sha256/" + stripSha256(manifest.path("config").path(DIGEST_FIELD).asText(""));
 
         List<String> layers = new ArrayList<>();
         Map<String, Object> layerSources = new LinkedHashMap<>();
@@ -134,10 +132,8 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         }
     }
 
-    private void writeDockerRepositories(Path workDir,
-                                         String refName,
-                                         JsonNode manifest,
-                                         ObjectMapper mapper) throws IOException {
+    private void writeDockerRepositories(Path workDir, String refName, JsonNode manifest, ObjectMapper mapper)
+            throws IOException {
         int sep = refName.lastIndexOf(':');
         String repoKey = sep > 0 ? refName.substring(0, sep) : refName;
         String tag = sep > 0 ? refName.substring(sep + 1) : "latest";
@@ -170,17 +166,11 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
     }
 
     private void runDockerLoad(Path dockerArchive) throws IOException, InterruptedException {
-        List<String> cmd = List.of(
-                dockerCmd,
-                "load",
-                "-q",
-                "-i",
-                dockerArchive.toAbsolutePath().toString()
-        );
+        List<String> cmd = List.of(dockerCmd, "load", "-q", "-i", dockerArchive.toAbsolutePath().toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         if (shellResult.exitCode() != 0) {
-            throw new IOException("docker load failed (exit " + shellResult.exitCode() + "): "
-                    + shellResult.stdout() + shellResult.stderr());
+            throw new IOException("docker load failed (exit " + shellResult.exitCode() + "): " + shellResult.stdout()
+                    + shellResult.stderr());
         }
     }
 

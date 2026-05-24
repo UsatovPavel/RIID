@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -44,10 +45,10 @@ class SimpleRequestDispatcherTest {
     private static final String TAG = "tag";
 
     @Test
-    void returnsCacheHit() {
-        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+    void returnsCacheHit() throws Exception {
+        try (RecordingRegistryClient registry = new RecordingRegistryClient();
+                RecordingP2PExecutor p2p = new RecordingP2PExecutor()) {
             RecordingCacheAdapter cache = new RecordingCacheAdapter();
-            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
             HostFilesystem fs = new NioHostFilesystem();
             cache.hasEntry = true;
             cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
@@ -59,16 +60,14 @@ class SimpleRequestDispatcherTest {
             assertEquals(1, registry.manifestCalls);
             assertEquals(0, registry.blobCalls);
             assertFalse(p2p.fetchCalled, "p2p should not be used on cache hit");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
         }
     }
 
     @Test
-    void returnsP2PWhenCacheMiss() {
-        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+    void returnsP2PWhenCacheMiss() throws Exception {
+        try (RecordingRegistryClient registry = new RecordingRegistryClient();
+                RecordingP2PExecutor p2p = new RecordingP2PExecutor()) {
             RecordingCacheAdapter cache = new RecordingCacheAdapter();
-            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
             HostFilesystem fs = new NioHostFilesystem();
             p2p.fetchResult = Optional.of(Path.of("/tmp/p2p-layer"));
 
@@ -81,22 +80,20 @@ class SimpleRequestDispatcherTest {
             assertEquals(0, registry.blobCalls);
             assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
             assertTrue(cache.putCalled, "cache should be populated after P2P fetch");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
         }
     }
 
     @Test
-    void downloadsFromRegistryAndPublishes() throws IOException {
-        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
+    void downloadsFromRegistryAndPublishes() throws Exception {
+        try (RecordingRegistryClient registry = new RecordingRegistryClient();
+                RecordingP2PExecutor p2p = new RecordingP2PExecutor()) {
             HostFilesystem fs = new NioHostFilesystem();
             Path cachedPath = TestPaths.tempFile(fs, "cache-", ".bin");
             fs.writeString(cachedPath, "cached");
             RecordingCacheAdapter cache = new RecordingCacheAdapter(cachedPath);
-            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
 
-            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
-                    registry, cache, p2p, new DispatcherConfig(1), fs);
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p,
+                    new DispatcherConfig(1), fs);
             FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
 
             assertEquals(cachedPath, result.path());
@@ -109,30 +106,29 @@ class SimpleRequestDispatcherTest {
     }
 
     @Test
-    void deletesTempAfterCacheWrite() throws IOException {
+    void deletesTempAfterCacheWrite() throws Exception {
         TrackingHostFilesystem trackingFs = new TrackingHostFilesystem();
-        try (RecordingRegistryClient registry = new RecordingRegistryClient()) {
-            RecordingP2PExecutor p2p = new RecordingP2PExecutor();
+        try (RecordingRegistryClient registry = new RecordingRegistryClient();
+                RecordingP2PExecutor p2p = new RecordingP2PExecutor()) {
             Path cachedPath = TestPaths.tempFile(trackingFs, "cache-", ".bin");
             trackingFs.writeString(cachedPath, "cached");
             RecordingCacheAdapter cache = new RecordingCacheAdapter(cachedPath);
 
-            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(
-                    registry, cache, p2p, new DispatcherConfig(1), trackingFs);
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p,
+                    new DispatcherConfig(1), trackingFs);
             FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
 
             assertEquals(cachedPath, result.path());
             assertTrue(cache.putCalled, "cache should be populated after registry download");
             assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
             assertNotNull(trackingFs.lastTemp.get(), "temp file should be created");
-            assertFalse(trackingFs.exists(trackingFs.lastTemp.get()),
-                    "temp file should be deleted after cache write");
+            assertFalse(trackingFs.exists(trackingFs.lastTemp.get()), "temp file should be deleted after cache write");
         }
     }
 
     /**
-    * Minimal in-memory registry stub that returns a manifest with one layer.
-    */
+     * Minimal in-memory registry stub that returns a manifest with one layer.
+     */
     private static final class RecordingRegistryClient implements RegistryClient {
         int manifestCalls;
         int blobCalls;
@@ -323,5 +319,3 @@ class SimpleRequestDispatcherTest {
         }
     }
 }
-
-

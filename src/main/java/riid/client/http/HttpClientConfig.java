@@ -7,18 +7,12 @@ import java.time.Duration;
 /**
  * HTTP client configuration for registry calls.
  */
-public record HttpClientConfig(
-        @JsonProperty("connectTimeout") Duration connectTimeout,
-        @JsonProperty("requestTimeout") Duration requestTimeout,
-        @JsonProperty("maxRetries") int maxRetries,
-        @JsonProperty("initialBackoff") Duration initialBackoff,
-        @JsonProperty("maxBackoff") Duration maxBackoff,
+public record HttpClientConfig(@JsonProperty("connectTimeout") Duration connectTimeout,
+        @JsonProperty("requestTimeout") Duration requestTimeout, @JsonProperty("maxRetries") int maxRetries,
+        @JsonProperty("initialBackoff") Duration initialBackoff, @JsonProperty("maxBackoff") Duration maxBackoff,
         @JsonProperty("backoffExponentBase") int backoffExponentBase,
-        @JsonProperty("retryIdempotentOnly") boolean retryIdempotentOnly,
-        @JsonProperty("userAgent") String userAgent,
-        @JsonProperty("followRedirects") boolean followRedirects,
-        @JsonProperty("maxRedirects") int maxRedirects
-) {
+        @JsonProperty("retryIdempotentOnly") boolean retryIdempotentOnly, @JsonProperty("userAgent") String userAgent,
+        @JsonProperty("followRedirects") boolean followRedirects, @JsonProperty("maxRedirects") int maxRedirects) {
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
     private static final int DEFAULT_MAX_RETRIES = 2;
@@ -32,23 +26,15 @@ public record HttpClientConfig(
     private static final int DEFAULT_MAX_REDIRECTS = 5;
 
     public HttpClientConfig() {
-        this(DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES,
-                DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_BACKOFF_EXPONENT_BASE,
-                DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT,
+        this(DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES, DEFAULT_INITIAL_BACKOFF,
+                DEFAULT_MAX_BACKOFF, DEFAULT_BACKOFF_EXPONENT_BASE, DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT,
                 DEFAULT_FOLLOW_REDIRECTS, DEFAULT_MAX_REDIRECTS);
     }
 
     @Deprecated
-    public HttpClientConfig(Duration connectTimeout,
-                            Duration requestTimeout,
-                            int maxRetries,
-                            Duration initialBackoff,
-                            Duration maxBackoff,
-                            int backoffExponentBase,
-                            boolean retryIdempotentOnly,
-                            String userAgent,
-                            boolean followRedirects,
-                            int maxRedirects) {
+    public HttpClientConfig(Duration connectTimeout, Duration requestTimeout, int maxRetries, Duration initialBackoff,
+            Duration maxBackoff, int backoffExponentBase, boolean retryIdempotentOnly, String userAgent,
+            boolean followRedirects, int maxRedirects) {
         this.connectTimeout = connectTimeout != null ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         this.requestTimeout = requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_TIMEOUT;
         this.maxRetries = maxRetries;
@@ -94,16 +80,9 @@ public record HttpClientConfig(
     }
 
     public Builder toBuilder() {
-        return new Builder()
-                .connectTimeout(connectTimeout)
-                .requestTimeout(requestTimeout)
-                .maxRetries(maxRetries)
-                .initialBackoff(initialBackoff)
-                .maxBackoff(maxBackoff)
-                .backoffExponentBase(backoffExponentBase)
-                .retryIdempotentOnly(retryIdempotentOnly)
-                .userAgent(userAgent)
-                .followRedirects(followRedirects)
+        return new Builder().connectTimeout(connectTimeout).requestTimeout(requestTimeout).maxRetries(maxRetries)
+                .initialBackoff(initialBackoff).maxBackoff(maxBackoff).backoffExponentBase(backoffExponentBase)
+                .retryIdempotentOnly(retryIdempotentOnly).userAgent(userAgent).followRedirects(followRedirects)
                 .maxRedirects(maxRedirects);
     }
 
@@ -173,8 +152,7 @@ public record HttpClientConfig(
         }
 
         public HttpClientConfig build() {
-            return new HttpClientConfig(
-                    connectTimeoutValue != null ? connectTimeoutValue : DEFAULT_CONNECT_TIMEOUT,
+            return new HttpClientConfig(connectTimeoutValue != null ? connectTimeoutValue : DEFAULT_CONNECT_TIMEOUT,
                     requestTimeoutValue != null ? requestTimeoutValue : DEFAULT_REQUEST_TIMEOUT,
                     maxRetriesValue != null ? maxRetriesValue : DEFAULT_MAX_RETRIES,
                     initialBackoffValue != null ? initialBackoffValue : DEFAULT_INITIAL_BACKOFF,
@@ -183,9 +161,7 @@ public record HttpClientConfig(
                     retryIdempotentOnlyValue != null ? retryIdempotentOnlyValue : DEFAULT_RETRY_IDEMPOTENT_ONLY,
                     userAgentValue != null ? userAgentValue : DEFAULT_USER_AGENT,
                     followRedirectsValue != null ? followRedirectsValue : DEFAULT_FOLLOW_REDIRECTS,
-                    maxRedirectsValue != null ? maxRedirectsValue : DEFAULT_MAX_REDIRECTS
-            );
+                    maxRedirectsValue != null ? maxRedirectsValue : DEFAULT_MAX_REDIRECTS);
         }
     }
 }
-

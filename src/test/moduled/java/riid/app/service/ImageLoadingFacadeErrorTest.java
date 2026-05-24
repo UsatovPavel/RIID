@@ -36,19 +36,17 @@ class ImageLoadingFacadeErrorTest {
 
     @Test
     void loadWrapsIOExceptionAsAppError() throws Exception {
-        riid.app.core.model.ImageId imageId = riid.app.core.model.ImageId.fromRegistry("registry.example", "repo/app", "latest");
+        riid.app.core.model.ImageId imageId = riid.app.core.model.ImageId.fromRegistry("registry.example", "repo/app",
+                "latest");
         ManifestResult manifestResult = minimalManifestResult();
 
         HostFilesystem fs = new FailingHostFilesystem(new IOException("boom"));
-        try (riid.app.service.ImageLoadingFacade facade = new riid.app.service.ImageLoadingFacade(
-                new NoopDispatcher(),
-                new riid.app.service.RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(),
-                fs)) {
-        AppException ex = assertThrows(AppException.class,
-                () -> facade.load(manifestResult, new NoopRuntime(), imageId));
-        assertTrue(ex.error() instanceof AppError.RuntimeError);
-        assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
+        try (riid.app.service.ImageLoadingFacade facade = new riid.app.service.ImageLoadingFacade(new NoopDispatcher(),
+                new riid.app.service.RuntimeRegistry(java.util.Map.of()), new NoopRegistryClient(), fs)) {
+            AppException ex = assertThrows(AppException.class,
+                    () -> facade.load(manifestResult, new NoopRuntime(), imageId));
+            assertTrue(ex.error() instanceof AppError.RuntimeError);
+            assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
         }
     }
 
@@ -60,36 +58,26 @@ class ImageLoadingFacadeErrorTest {
 
         HostFilesystem fs = new NioHostFilesystem();
         Path layer = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer", ".bin");
-        fs.write(layer, new byte[] {1, 2, 3});
+        fs.write(layer, new byte[]{1, 2, 3});
         RequestDispatcher dispatcher = new LayerDispatcher(layer.toString());
-        try (riid.app.service.ImageLoadingFacade facade = new ImageLoadingFacade(
-                dispatcher,
-                new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(),
-                fs,
-                TestPaths.DEFAULT_BASE_DIR,
+        try (riid.app.service.ImageLoadingFacade facade = new ImageLoadingFacade(dispatcher,
+                new RuntimeRegistry(java.util.Map.of()), new NoopRegistryClient(), fs, TestPaths.DEFAULT_BASE_DIR,
                 java.util.List.of())) {
-        AppException ex = assertThrows(AppException.class,
-                () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));
-        assertTrue(ex.error() instanceof AppError.RuntimeError);
-        assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
-        assertTrue(Thread.currentThread().isInterrupted());
-        Thread.interrupted(); // clear for other tests
+            AppException ex = assertThrows(AppException.class,
+                    () -> facade.load(manifestResult, new InterruptedRuntime(), imageId));
+            assertTrue(ex.error() instanceof AppError.RuntimeError);
+            assertEquals(AppError.RuntimeErrorKind.LOAD_FAILED, ((AppError.RuntimeError) ex.error()).kind());
+            assertTrue(Thread.currentThread().isInterrupted());
+            Thread.interrupted(); // clear for other tests
         }
     }
 
     @Test
     void closeCallsP2PCleaner() throws Exception {
         AtomicBoolean p2pClosed = new AtomicBoolean(false);
-        try (ImageLoadingFacade ignored = new ImageLoadingFacade(
-                new NoopDispatcher(),
-                new RuntimeRegistry(java.util.Map.of()),
-                new NoopRegistryClient(),
-                new NioHostFilesystem(),
-                null,
-                List.of(),
-                null,
-                () -> p2pClosed.set(true))) {
+        try (ImageLoadingFacade ignored = new ImageLoadingFacade(new NoopDispatcher(),
+                new RuntimeRegistry(java.util.Map.of()), new NoopRegistryClient(), new NioHostFilesystem(), null,
+                List.of(), null, () -> p2pClosed.set(true))) {
         }
         assertTrue(p2pClosed.get(), "p2p cleaner should be called on facade close");
     }
@@ -127,7 +115,8 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
-        public void close() { }
+        public void close() {
+        }
     }
 
     private static final class NoopDispatcher implements RequestDispatcher {
@@ -138,10 +127,8 @@ class ImageLoadingFacadeErrorTest {
 
         @Override
 
-        public FetchResult fetchLayer(RepositoryName repository,
-                                      ImageDigest digest,
-                                      long sizeBytes,
-                                      MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes,
+                MediaType mediaType) {
             throw new UnsupportedOperationException(NOT_USED);
         }
     }
@@ -160,10 +147,8 @@ class ImageLoadingFacadeErrorTest {
 
         @Override
 
-        public FetchResult fetchLayer(RepositoryName repository,
-                                      ImageDigest digest,
-                                      long sizeBytes,
-                                      MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes,
+                MediaType mediaType) {
             return new FetchResult(IMG_DIGEST, mediaType, Path.of(path));
         }
     }
@@ -175,7 +160,8 @@ class ImageLoadingFacadeErrorTest {
         }
 
         @Override
-        public void importImage(Path imagePath) { }
+        public void importImage(Path imagePath) {
+        }
     }
 
     private static final class InterruptedRuntime implements RuntimeAdapter {
@@ -263,4 +249,3 @@ class ImageLoadingFacadeErrorTest {
         }
     }
 }
-

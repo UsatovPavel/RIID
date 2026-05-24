@@ -49,10 +49,13 @@ import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
 import riid.runtime.adapter.RuntimeAdapter;
 import riid.runtime.RuntimeConfig;
+import riid.core.logging.MilestoneEventLogger.EventType;
+import riid.core.logging.MilestoneEventLogger.ResultType;
 
 /**
- * Application entrypoint/facade: load image (dispatcher -> OCI -> runtime), optionally run.
- * Not a god-class: it wires existing components and delegates real work to them.
+ * Application entrypoint/facade: load image (dispatcher -> OCI -> runtime),
+ * optionally run. Not a god-class: it wires existing components and delegates
+ * real work to them.
  */
 public final class ImageLoadingFacade implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageLoadingFacade.class);
@@ -60,7 +63,6 @@ public final class ImageLoadingFacade implements AutoCloseable {
     };
     private static final CacheCleaner NOOP_P2P_CLEANER = () -> {
     };
-
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
@@ -68,46 +70,28 @@ public final class ImageLoadingFacade implements AutoCloseable {
     private final CacheCleaner cacheCleaner;
     private final CacheCleaner p2pCleaner;
 
-    public ImageLoadingFacade(RequestDispatcher dispatcher,
-                              RuntimeRegistry runtimeRegistry,
-                              RegistryClient client,
-                              HostFilesystem fs) {
+    public ImageLoadingFacade(RequestDispatcher dispatcher, RuntimeRegistry runtimeRegistry, RegistryClient client,
+            HostFilesystem fs) {
         this(dispatcher, runtimeRegistry, client, fs, null, null, null, null);
     }
 
-    public ImageLoadingFacade(RequestDispatcher dispatcher,
-                              RuntimeRegistry runtimeRegistry,
-                              RegistryClient client,
-                              HostFilesystem fs,
-                              Path tempRoot,
-                              List<String> allowedRegistries) {
+    public ImageLoadingFacade(RequestDispatcher dispatcher, RuntimeRegistry runtimeRegistry, RegistryClient client,
+            HostFilesystem fs, Path tempRoot, List<String> allowedRegistries) {
         this(dispatcher, runtimeRegistry, client, fs, tempRoot, allowedRegistries, null, null);
     }
 
-    public ImageLoadingFacade(RequestDispatcher dispatcher,
-                              RuntimeRegistry runtimeRegistry,
-                              RegistryClient client,
-                              HostFilesystem fs,
-                              Path tempRoot,
-                              List<String> allowedRegistries,
-                              CacheCleaner cacheCleaner) {
+    public ImageLoadingFacade(RequestDispatcher dispatcher, RuntimeRegistry runtimeRegistry, RegistryClient client,
+            HostFilesystem fs, Path tempRoot, List<String> allowedRegistries, CacheCleaner cacheCleaner) {
         this(dispatcher, runtimeRegistry, client, fs, tempRoot, allowedRegistries, cacheCleaner, null);
     }
 
-    public ImageLoadingFacade(RequestDispatcher dispatcher,
-                              RuntimeRegistry runtimeRegistry,
-                              RegistryClient client,
-                              HostFilesystem fs,
-                              Path tempRoot,
-                              List<String> allowedRegistries,
-                              CacheCleaner cacheCleaner,
-                              CacheCleaner p2pCleaner) {
+    public ImageLoadingFacade(RequestDispatcher dispatcher, RuntimeRegistry runtimeRegistry, RegistryClient client,
+            HostFilesystem fs, Path tempRoot, List<String> allowedRegistries, CacheCleaner cacheCleaner,
+            CacheCleaner p2pCleaner) {
         this.archiveBuilder = new OciArchiveBuilder(dispatcher, fs, tempRoot);
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.client = Objects.requireNonNull(client, "client");
-        this.allowedRegistries = allowedRegistries == null
-                ? Set.of()
-                : Set.copyOf(new HashSet<>(allowedRegistries));
+        this.allowedRegistries = allowedRegistries == null ? Set.of() : Set.copyOf(new HashSet<>(allowedRegistries));
         this.cacheCleaner = cacheCleaner != null ? cacheCleaner : NOOP_CACHE_CLEANER;
         this.p2pCleaner = p2pCleaner != null ? p2pCleaner : NOOP_P2P_CLEANER;
     }
@@ -121,25 +105,17 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
         String previousOperation = MdcContext.getOperation();
-        MdcContext.putOperation("manifest.fetch");
+        MdcContext.putOperation(EventType.MANIFEST_FETCH.value());
         long manifestStartedNs = System.nanoTime();
         ManifestResult manifestResult;
         try {
             manifestResult = client.fetchManifest(imageId.name(), imageId.reference());
-            MilestoneEventLogger.info(LOGGER)
-                    .addEvent("manifest.fetch")
-                    .addResult("success")
-                    .addDurationMs(durationMs(manifestStartedNs))
-                    .log("Manifest fetched");
+            MilestoneEventLogger.info(LOGGER).addEvent(EventType.MANIFEST_FETCH).addResult(ResultType.SUCCESS)
+                    .addDurationMs(durationMs(manifestStartedNs)).log("Manifest fetched");
         } catch (Exception e) {
-            MilestoneEventLogger.error(LOGGER)
-                    .addCause(e)
-                    .addEvent("manifest.fetch")
-                    .addResult("error")
-                    .addDurationMs(durationMs(manifestStartedNs))
-                    .addErrorKind("NETWORK")
-                    .addErrorCode("MANIFEST_FETCH_FAILED")
-                    .log("Manifest fetch failed");
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.MANIFEST_FETCH)
+                    .addResult(ResultType.ERROR).addDurationMs(durationMs(manifestStartedNs)).addErrorKind("NETWORK")
+                    .addErrorCode("MANIFEST_FETCH_FAILED").log("Manifest fetch failed");
             throw e;
         } finally {
             MdcContext.restoreOperation(previousOperation);
@@ -159,16 +135,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(imageId, "imageId");
         String previousOperation = MdcContext.getOperation();
-        MdcContext.putOperation("engine.import");
+        MdcContext.putOperation(EventType.ENGINE_IMPORT.value());
         long engineStartedNs = System.nanoTime();
         try {
             if (runtime.prefersOciLayoutStreamImport()) {
                 return archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
                     long approxBytes = archiveBuilder.estimateLayoutFileBytes(ociDir);
                     runtime.importOciLayoutDirectory(ociDir);
-                    MilestoneEventLogger.info(LOGGER)
-                            .addEvent("engine.import")
-                            .addResult("success")
+                    MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
                             .addDurationMs(durationMs(engineStartedNs))
                             .log("Loaded " + imageId + " into runtime " + runtime.runtimeId()
                                     + " via OCI layout stream (~" + approxBytes + " B files under layout)");
@@ -178,83 +152,50 @@ public final class ImageLoadingFacade implements AutoCloseable {
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
                 long tarBytes = Files.size(archivePath);
                 runtime.importImage(archivePath);
-                MilestoneEventLogger.info(LOGGER)
-                        .addEvent("engine.import")
-                        .addResult("success")
+                MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
                         .addDurationMs(durationMs(engineStartedNs))
                         .log("Loaded " + imageId + " into runtime " + runtime.runtimeId() + " at " + archivePath);
                 return new LoadOutcome(imageId, tarBytes);
             });
         } catch (AppException e) {
-            MilestoneEventLogger.error(LOGGER)
-                    .addCause(e)
-                    .addEvent("engine.import")
-                    .addResult("error")
-                    .addDurationMs(durationMs(engineStartedNs))
-                    .addErrorKind("RUNTIME")
-                    .addErrorCode(e.errorCode())
-                    .log("App error while loading " + imageId + " into runtime " + runtime.runtimeId()
-                            + ": " + e.getMessage());
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.ERROR)
+                    .addDurationMs(durationMs(engineStartedNs)).addErrorKind("RUNTIME").addErrorCode(e.errorCode())
+                    .log("App error while loading " + imageId + " into runtime " + runtime.runtimeId() + ": "
+                            + e.getMessage());
             throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             AppError.RuntimeErrorKind errorKind = AppError.RuntimeErrorKind.LOAD_FAILED;
             String msg = errorKind.format(runtime.runtimeId());
-            MilestoneEventLogger.error(LOGGER)
-                    .addCause(e)
-                    .addEvent("engine.import")
-                    .addResult("error")
-                    .addDurationMs(durationMs(engineStartedNs))
-                    .addErrorKind("RUNTIME")
-                    .addErrorCode(errorKind.name())
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.ERROR)
+                    .addDurationMs(durationMs(engineStartedNs)).addErrorKind("RUNTIME").addErrorCode(errorKind.name())
                     .log("Runtime import interrupted");
-            throw new AppException(
-                    new AppError.RuntimeError(errorKind, msg),
-                    msg, e);
+            throw new AppException(new AppError.RuntimeError(errorKind, msg), msg, e);
         } catch (IOException e) {
             AppError.RuntimeErrorKind errorKind = AppError.RuntimeErrorKind.LOAD_FAILED;
             String msg = errorKind.format(runtime.runtimeId());
-            MilestoneEventLogger.error(LOGGER)
-                    .addCause(e)
-                    .addEvent("engine.import")
-                    .addResult("error")
-                    .addDurationMs(durationMs(engineStartedNs))
-                    .addErrorKind("RUNTIME")
-                    .addErrorCode(errorKind.name())
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.ERROR)
+                    .addDurationMs(durationMs(engineStartedNs)).addErrorKind("RUNTIME").addErrorCode(errorKind.name())
                     .log("Runtime import I/O error");
-            throw new AppException(
-                    new AppError.RuntimeError(errorKind, msg),
-                    msg, e);
+            throw new AppException(new AppError.RuntimeError(errorKind, msg), msg, e);
         } finally {
             MdcContext.restoreOperation(previousOperation);
         }
     }
 
-    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint,
-                                                   CacheAdapter cache,
-                                                   P2PExecutor p2p,
-                                                   Map<String, RuntimeAdapter> runtimes,
-                                                   HostFilesystem fs) {
+    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint, CacheAdapter cache, P2PExecutor p2p,
+            Map<String, RuntimeAdapter> runtimes, HostFilesystem fs) {
         return createDefault(endpoint, cache, p2p, runtimes, fs, null);
     }
 
-    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint,
-                                                   CacheAdapter cache,
-                                                   P2PExecutor p2p,
-                                                   Map<String, RuntimeAdapter> runtimes,
-                                                   HostFilesystem fs,
-                                                   MeterRegistry meterRegistry) {
+    public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint, CacheAdapter cache, P2PExecutor p2p,
+            Map<String, RuntimeAdapter> runtimes, HostFilesystem fs, MeterRegistry meterRegistry) {
         HttpClientConfig httpConfig = new HttpClientConfig();
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig);
         DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
                 ? DispatcherLayerSourceMetrics.NOOP
                 : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
-        RequestDispatcher dispatcher = new SimpleRequestDispatcher(
-                client,
-                cache,
-                p2p,
-                new DispatcherConfig(),
-                fs,
+        RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, p2p, new DispatcherConfig(), fs,
                 layerMetrics);
         RuntimeRegistry registry = new RuntimeRegistry(runtimes);
         return new ImageLoadingFacade(dispatcher, registry, client, fs, null, null, null, p2p::close);
@@ -267,27 +208,19 @@ public final class ImageLoadingFacade implements AutoCloseable {
         return createFromConfig(configPath, null, null);
     }
 
-    public static ImageLoadingFacade createFromConfig(
-            Path configPath,
-            Credentials credentialsOverride) throws Exception {
+    public static ImageLoadingFacade createFromConfig(Path configPath, Credentials credentialsOverride)
+            throws Exception {
         return createFromConfig(configPath, credentialsOverride, null);
     }
 
-    public static ImageLoadingFacade createFromConfig(
-            Path configPath,
-            Credentials credentialsOverride,
+    public static ImageLoadingFacade createFromConfig(Path configPath, Credentials credentialsOverride,
             MeterRegistry meterRegistry) throws Exception {
         LOGGER.info("Loading config from {}", configPath.toAbsolutePath());
         GlobalConfig config = ConfigLoader.load(configPath);
 
         RegistryEndpoint endpoint = config.client().registries().getFirst();
         if (credentialsOverride != null) {
-            endpoint = new RegistryEndpoint(
-                    endpoint.scheme(),
-                    endpoint.host(),
-                    endpoint.port(),
-                    credentialsOverride
-            );
+            endpoint = new RegistryEndpoint(endpoint.scheme(), endpoint.host(), endpoint.port(), credentialsOverride);
         }
         HostFilesystem fs = new NioHostFilesystem();
         TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
@@ -295,14 +228,10 @@ public final class ImageLoadingFacade implements AutoCloseable {
         AuthConfig authConfig = config.client() != null && config.client().auth() != null
                 ? config.client().auth()
                 : new AuthConfig();
-        BlobPartialDownloadConfig blobPartialDownloadConfig =
-                config.client() != null ?
-                        config.client().partialDownloadingOrDefault() : new BlobPartialDownloadConfig();
-        RegistryClient client = new RegistryClientImpl(
-                endpoint,
-                httpConfig,
-                authConfig,
-                blobPartialDownloadConfig,
+        BlobPartialDownloadConfig blobPartialDownloadConfig = config.client() != null
+                ? config.client().partialDownloadingOrDefault()
+                : new BlobPartialDownloadConfig();
+        RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, authConfig, blobPartialDownloadConfig,
                 config.client().platformOrHostDefault());
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
@@ -323,24 +252,16 @@ public final class ImageLoadingFacade implements AutoCloseable {
         }
         Path tempDir = appConfig != null ? appConfig.tempDirectoryPath() : null;
         List<String> allowedRegistries = appConfig != null ? appConfig.allowedRegistriesOrEmpty() : List.of();
-        P2PExecutor p2p = new P2PExecutor.NoOp();
-        if (config.p2p() != null
-                && config.p2p().dragonfly() != null
-                && config.p2p().dragonfly().enabledOrDefault()) {
-            p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config.p2p().dragonfly());
-        }
+        P2PExecutor p2p = config.p2p() != null && config.p2p().dragonfly() != null
+                && config.p2p().dragonfly().enabledOrDefault()
+                        ? new DragonflyGrpcP2PExecutor(endpoint, fs, config.p2p().dragonfly())
+                        : new P2PExecutor.NoOp();
         DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
                 ? DispatcherLayerSourceMetrics.NOOP
                 : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
         return new ImageLoadingFacade(
                 new SimpleRequestDispatcher(client, cache, p2p, config.dispatcher(), fs, layerMetrics),
-                new RuntimeRegistry(runtimes),
-                client,
-                fs,
-                tempDir,
-                allowedRegistries,
-                cache::close,
-                p2p::close);
+                new RuntimeRegistry(runtimes), client, fs, tempDir, allowedRegistries, cache::close, p2p::close);
     }
 
     private void ensureRegistryAllowed(String registry) {
@@ -349,9 +270,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         }
         if (!allowedRegistries.contains(registry)) {
             String msg = AppError.RuntimeErrorKind.REGISTRY_NOT_ALLOWED.format(registry);
-            throw new AppException(
-                    new AppError.RuntimeError(AppError.RuntimeErrorKind.REGISTRY_NOT_ALLOWED, msg),
-                    msg);
+            throw new AppException(new AppError.RuntimeError(AppError.RuntimeErrorKind.REGISTRY_NOT_ALLOWED, msg), msg);
         }
     }
 
@@ -401,5 +320,3 @@ public final class ImageLoadingFacade implements AutoCloseable {
     }
 
 }
-
-

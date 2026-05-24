@@ -25,25 +25,32 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * PR15 scenario b1 (moderate): same first 30 repositories as
- * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES}, sequential pulls.
- * Перед фазой (1) один вызов {@link PerformanceColdCacheHelper#clearAllCache()} (Podman + опционально RIID).
- * Далее:
- * (1) via an already running RIID daemon ({@code POST /pull}, {@code runtimeId: podman}),
- * (2) then native {@code podman pull} for each, after {@code podman system prune -af} immediately
- * before that Podman phase ({@link #coldPodmanCacheThenMeasuredPulls()}).
+ * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES},
+ * sequential pulls. Перед фазой (1) один вызов
+ * {@link PerformanceColdCacheHelper#clearAllCache()} (Podman + опционально
+ * RIID). Далее: (1) via an already running RIID daemon ({@code POST /pull},
+ * {@code runtimeId: podman}), (2) then native {@code podman pull} for each,
+ * after {@code podman system prune -af} immediately before that Podman phase
+ * ({@link #coldPodmanCacheThenMeasuredPulls()}).
  *
- * <p>{@link #podmanPhaseOnly()} — только шаг (2), без демона.
+ * <p>
+ * {@link #podmanPhaseOnly()} — только шаг (2), без демона.
  *
- * <p>Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()} для полного сценария.
+ * <p>
+ * Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()} для
+ * полного сценария.
  *
- * <p>Prints per-phase pull duration lists, sums, and wall times. A failed pull (daemon or podman) is logged
- * and skipped; the test does not fail on individual image errors.
+ * <p>
+ * Prints per-phase pull duration lists, sums, and wall times. A failed pull
+ * (daemon or podman) is logged and skipped; the test does not fail on
+ * individual image errors.
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
 @Tag("filesystem")
 class Daemon30ImagesSequentialPullTest {
 
+    private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";
     private static final String RUNTIME = "podman";
     private static final int N = PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES.size();
 
@@ -67,19 +74,15 @@ class Daemon30ImagesSequentialPullTest {
                 index++;
                 long t0 = System.nanoTime();
                 try {
-                    DaemonUnixSocketPullSupport.postPull(
-                            socketPath,
-                            workDir,
-                            repo,
-                            PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE,
-                            RUNTIME);
+                    DaemonUnixSocketPullSupport.postPull(socketPath, workDir, repo,
+                            PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE, RUNTIME);
                     long ms = (System.nanoTime() - t0) / 1_000_000L;
                     riidPullMsList.add(ms);
-                    System.out.println("[Daemon30ImagesSequentialPullTest] riid i=" + index + '/'
-                            + N + " repo=" + repo + " pull_ms=" + ms);
-                } catch (Throwable e) {
-                    System.err.println("[Daemon30ImagesSequentialPullTest] riid FAILED i=" + index + '/'
-                            + N + " repo=" + repo + ": " + e.getMessage());
+                    System.out.println("[Daemon30ImagesSequentialPullTest] riid i=" + index + '/' + N + " repo=" + repo
+                            + " pull_ms=" + ms);
+                } catch (Exception e) {
+                    System.err.println("[Daemon30ImagesSequentialPullTest] riid FAILED i=" + index + '/' + N + " repo="
+                            + repo + ": " + e.getMessage());
                     e.printStackTrace(System.err);
                 }
             }
@@ -102,15 +105,14 @@ class Daemon30ImagesSequentialPullTest {
                 + " podman_phase_wall_ms=" + podmanPhaseWallMs);
 
         long totalWallMs = (System.nanoTime() - testStartNs) / 1_000_000L;
-        System.out.println("[Daemon30ImagesSequentialPullTest] total_wall_ms=" + totalWallMs
-                + " riid_ok=" + riidPullMsList.size() + '/' + N
-                + " podman_ok=" + podmanPullMsList.size() + '/' + N);
+        System.out.println("[Daemon30ImagesSequentialPullTest] total_wall_ms=" + totalWallMs + " riid_ok="
+                + riidPullMsList.size() + '/' + N + " podman_ok=" + podmanPullMsList.size() + '/' + N);
     }
 
     /**
      * Только шаг (2) b1: такой же старт, как у полного сценария —
-     * {@link PerformanceColdCacheHelper#clearAllCache()}, затем {@link #coldPodmanCacheThenMeasuredPulls()}.
-     * UDS/демон не нужны.
+     * {@link PerformanceColdCacheHelper#clearAllCache()}, затем
+     * {@link #coldPodmanCacheThenMeasuredPulls()}. UDS/демон не нужны.
      */
     @Test
     void podmanPhaseOnly() throws Exception {
@@ -125,17 +127,22 @@ class Daemon30ImagesSequentialPullTest {
         System.out.println("[Daemon30ImagesSequentialPullTest] podman_sum_pull_ms=" + podmanSumPullMs
                 + " podman_phase_wall_ms=" + podmanPhaseWallMs);
         long totalWallMs = (System.nanoTime() - testStartNs) / 1_000_000L;
-        System.out.println("[Daemon30ImagesSequentialPullTest] podman_only_total_wall_ms=" + totalWallMs
-                + " podman_ok=" + podmanPullMsList.size() + '/' + N);
+        System.out.println("[Daemon30ImagesSequentialPullTest] podman_only_total_wall_ms=" + totalWallMs + " podman_ok="
+                + podmanPullMsList.size() + '/' + N);
     }
 
-    /** {@code podman system prune -af}, затем 30× измеренный {@code podman pull} (фаза Podman для b1). */
+    /**
+     * {@code podman system prune -af}, затем 30× измеренный {@code podman pull}
+     * (фаза Podman для b1).
+     */
     private static List<Long> coldPodmanCacheThenMeasuredPulls() throws Exception {
         PerformanceColdCacheHelper.clearPodmanCaches();
         return measuredPodmanPulls();
     }
 
-    /** 30 подряд измеренных {@code podman pull} (без предварительного prune). */
+    /**
+     * 30 подряд измеренных {@code podman pull} (без предварительного prune).
+     */
     private static List<Long> measuredPodmanPulls() throws Exception {
         List<Long> podmanPullMsList = new ArrayList<>();
         String ref = PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE;
@@ -147,14 +154,14 @@ class Daemon30ImagesSequentialPullTest {
             ProcessResult r = runProcess("podman", "pull", podmanRef);
             long ms = (System.nanoTime() - t0) / 1_000_000L;
             if (r.exitCode() != 0) {
-                System.err.println("[Daemon30ImagesSequentialPullTest] podman FAILED i=" + index + '/' + N
-                        + " repo=" + repo + " ref=" + podmanRef + " exit=" + r.exitCode() + " pull_wall_ms=" + ms
-                        + "\n" + r.output());
+                System.err.println("[Daemon30ImagesSequentialPullTest] podman FAILED i=" + index + '/' + N + " repo="
+                        + repo + " ref=" + podmanRef + " exit=" + r.exitCode() + " pull_wall_ms=" + ms + "\n"
+                        + r.output());
                 continue;
             }
             podmanPullMsList.add(ms);
-            System.out.println("[Daemon30ImagesSequentialPullTest] podman i=" + index + '/' + N
-                    + " repo=" + repo + " pull_ms=" + ms + " ref=" + podmanRef);
+            System.out.println("[Daemon30ImagesSequentialPullTest] podman i=" + index + '/' + N + " repo=" + repo
+                    + " pull_ms=" + ms + " ref=" + podmanRef);
         }
         return podmanPullMsList;
     }
@@ -169,7 +176,7 @@ class Daemon30ImagesSequentialPullTest {
 
     private static String podmanImageReference(String repository, String reference) {
         String reg = TestRegistryConfig.registryName();
-        if ("registry-1.docker.io".equals(reg)) {
+        if (DOCKER_HUB_REGISTRY.equals(reg)) {
             return "docker.io/" + repository + ":" + reference;
         }
         int port = TestRegistryConfig.port();

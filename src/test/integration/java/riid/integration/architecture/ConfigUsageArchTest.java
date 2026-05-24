@@ -6,6 +6,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 @Tag("Arch")
@@ -13,11 +14,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 class ConfigUsageArchTest {
 
     @ArchTest
-    static final ArchRule config_should_only_be_used_by_app =
-            noClasses()
-                    .that().resideOutsideOfPackage("riid.app..")
-                    .and().resideOutsideOfPackage("riid.integration..")
-                    .and().resideOutsideOfPackage("riid.core.config..")
-                    .should().dependOnClassesThat().resideInAPackage("riid.core.config..");
+    static final ArchRule config_should_only_be_used_by_app = noClasses().that().resideOutsideOfPackage("riid.app..")
+            .and().resideOutsideOfPackage("riid.integration..").and().resideOutsideOfPackage("riid.core.config..")
+            .should().dependOnClassesThat().resideInAPackage("riid.core.config..");
 }
-

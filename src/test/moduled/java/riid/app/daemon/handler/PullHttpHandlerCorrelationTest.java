@@ -18,8 +18,8 @@ import org.slf4j.MDC;
 
 class PullHttpHandlerCorrelationTest {
 
-    private static final Pattern UUID_RE =
-            Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
+    private static final Pattern UUID_RE = Pattern
+            .compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
 
     @Test
     void isValidClientTraceIdAcceptsSafeAscii() {

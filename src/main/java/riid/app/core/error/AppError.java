@@ -4,11 +4,11 @@ package riid.app.core.error;
  * Domain error hierarchy for the app module.
  */
 public sealed interface AppError permits AppError.OciError, AppError.RuntimeError {
-    record OciError(OciErrorKind kind, String message) implements AppError { }
+    record OciError(OciErrorKind kind, String message) implements AppError {
+    }
 
     enum OciErrorKind {
-        RESOURCE_NOT_FOUND("Resource not found: %s"),
-        RESOURCE_READ_FAILED("Failed to read resource: %s");
+        RESOURCE_NOT_FOUND("Resource not found: %s"), RESOURCE_READ_FAILED("Failed to read resource: %s");
 
         private final String template;
 
@@ -21,12 +21,12 @@ public sealed interface AppError permits AppError.OciError, AppError.RuntimeErro
         }
     }
 
-    record RuntimeError(RuntimeErrorKind kind, String message) implements AppError { }
+    record RuntimeError(RuntimeErrorKind kind, String message) implements AppError {
+    }
 
     enum RuntimeErrorKind {
-        ADAPTER_NOT_FOUND("Runtime adapter not found: %s"),
-        REGISTRY_NOT_ALLOWED("Registry not allowed: %s"),
-        LOAD_FAILED("Failed to load image into runtime %s");
+        ADAPTER_NOT_FOUND("Runtime adapter not found: %s"), REGISTRY_NOT_ALLOWED(
+                "Registry not allowed: %s"), LOAD_FAILED("Failed to load image into runtime %s");
 
         private final String template;
 
@@ -39,4 +39,3 @@ public sealed interface AppError permits AppError.OciError, AppError.RuntimeErro
         }
     }
 }
-

@@ -6,21 +6,21 @@ val sourceSets = the<SourceSetContainer>()
 sourceSets.create("integrationTest") {
     java.srcDir("src/test/integration/java")
     resources.srcDir("src/test/integration/resources")
-    compileClasspath += sourceSets["main"].output
+    compileClasspath += sourceSets["main"].output + sourceSets["testFixtures"].output
     runtimeClasspath += output + compileClasspath
 }
 
 sourceSets.create("performanceTest") {
     java.srcDir("src/test/performance/java")
     resources.srcDir("src/test/performance/resources")
-    compileClasspath += sourceSets["main"].output
+    compileClasspath += sourceSets["main"].output + sourceSets["testFixtures"].output
     runtimeClasspath += output + compileClasspath
 }
 
 sourceSets.create("moduledTest") {
     java.srcDir("src/test/moduled/java")
     resources.srcDir("src/test/moduled/resources")
-    compileClasspath += sourceSets["main"].output
+    compileClasspath += sourceSets["main"].output + sourceSets["testFixtures"].output
     runtimeClasspath += output + compileClasspath
 }
 

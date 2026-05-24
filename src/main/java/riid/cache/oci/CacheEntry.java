@@ -5,4 +5,3 @@ package riid.cache.oci;
  */
 public record CacheEntry(ImageDigest digest, long sizeBytes, CacheMediaType mediaType, String key) {
 }
-

@@ -31,8 +31,7 @@ final class PodmanRuntimeIntegrationSupport {
 
     static String podmanImages() throws Exception {
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
-                .redirectErrorStream(true)
-                .start();
+                .redirectErrorStream(true).start();
         String images = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
         if (code != 0) {

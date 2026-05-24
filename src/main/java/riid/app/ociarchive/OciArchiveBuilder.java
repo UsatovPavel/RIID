@@ -31,6 +31,8 @@ import riid.core.model.manifest.MediaType;
 import riid.core.model.manifest.MediaTypes;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
+import riid.core.logging.MilestoneEventLogger.EventType;
+import riid.core.logging.MilestoneEventLogger.ResultType;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.RepositoryName;
 import org.slf4j.Logger;
@@ -58,27 +60,18 @@ public final class OciArchiveBuilder {
         this.tempRoot = tempRoot;
     }
 
-    public <T> T withArchive(ImageId imageId,
-                             ManifestResult manifestResult,
-                             ArchiveUser<T> user) throws IOException, InterruptedException {
+    public <T> T withArchive(ImageId imageId, ManifestResult manifestResult, ArchiveUser<T> user)
+            throws IOException, InterruptedException {
         String previousOperation = MdcContext.getOperation();
-        MdcContext.putOperation("archive.build");
+        MdcContext.putOperation(EventType.ARCHIVE_BUILD.value());
         long startedNs = System.nanoTime();
         try (OciArchive archive = build(imageId, manifestResult)) {
-            MilestoneEventLogger.info(LOGGER)
-                    .addEvent("archive.build")
-                    .addResult("success")
-                    .addDurationMs(durationMs(startedNs))
-                    .log("OCI archive build completed");
+            MilestoneEventLogger.info(LOGGER).addEvent(EventType.ARCHIVE_BUILD).addResult(ResultType.SUCCESS)
+                    .addDurationMs(durationMs(startedNs)).log("OCI archive build completed");
             return user.use(archive.archivePath());
         } catch (IOException | InterruptedException | RuntimeException e) {
-            MilestoneEventLogger.error(LOGGER)
-                    .addCause(e)
-                    .addEvent("archive.build")
-                    .addResult("error")
-                    .addDurationMs(durationMs(startedNs))
-                    .addErrorKind("INTERNAL")
-                    .addErrorCode("ARCHIVE_BUILD_FAILED")
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ARCHIVE_BUILD).addResult(ResultType.ERROR)
+                    .addDurationMs(durationMs(startedNs)).addErrorKind("INTERNAL").addErrorCode("ARCHIVE_BUILD_FAILED")
                     .log("OCI archive build failed");
             throw e;
         } finally {
@@ -87,29 +80,22 @@ public final class OciArchiveBuilder {
     }
 
     /**
-     * Build OCI layout on disk, then consume it without creating an oci-archive tar file (for streaming import).
+     * Build OCI layout on disk, then consume it without creating an oci-archive tar
+     * file (for streaming import).
      */
-    public <T> T withOciLayout(ImageId imageId,
-                                ManifestResult manifestResult,
-                                LayoutUser<T> user) throws IOException, InterruptedException {
+    public <T> T withOciLayout(ImageId imageId, ManifestResult manifestResult, LayoutUser<T> user)
+            throws IOException, InterruptedException {
         String previousOperation = MdcContext.getOperation();
-        MdcContext.putOperation("archive.build");
+        MdcContext.putOperation(EventType.ARCHIVE_BUILD.value());
         long startedNs = System.nanoTime();
         try (OciArchive workspace = buildLayoutWorkspace(imageId, manifestResult)) {
-            MilestoneEventLogger.info(LOGGER)
-                    .addEvent("archive.build")
-                    .addResult("success")
+            MilestoneEventLogger.info(LOGGER).addEvent(EventType.ARCHIVE_BUILD).addResult(ResultType.SUCCESS)
                     .addDurationMs(durationMs(startedNs))
                     .log("OCI layout build completed (stream import, no tar file)");
             return user.use(workspace.ociDir());
         } catch (IOException | InterruptedException | RuntimeException e) {
-            MilestoneEventLogger.error(LOGGER)
-                    .addCause(e)
-                    .addEvent("archive.build")
-                    .addResult("error")
-                    .addDurationMs(durationMs(startedNs))
-                    .addErrorKind("INTERNAL")
-                    .addErrorCode("ARCHIVE_BUILD_FAILED")
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ARCHIVE_BUILD).addResult(ResultType.ERROR)
+                    .addDurationMs(durationMs(startedNs)).addErrorKind("INTERNAL").addErrorCode("ARCHIVE_BUILD_FAILED")
                     .log("OCI layout build failed");
             throw e;
         } finally {
@@ -118,25 +104,22 @@ public final class OciArchiveBuilder {
     }
 
     /**
-     * Sum of regular-file sizes under the layout (approximate payload; tar stream is slightly larger).
+     * Sum of regular-file sizes under the layout (approximate payload; tar stream
+     * is slightly larger).
      */
     public long estimateLayoutFileBytes(Path ociLayoutRoot) throws IOException {
         try (Stream<Path> paths = fs.walk(ociLayoutRoot)) {
-            return paths
-                    .filter(fs::isRegularFile)
-                    .mapToLong(p -> {
-                        try {
-                            return fs.size(p);
-                        } catch (IOException e) {
-                            throw new UncheckedIOException(e);
-                        }
-                    })
-                    .sum();
+            return paths.filter(fs::isRegularFile).mapToLong(p -> {
+                try {
+                    return fs.size(p);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }).sum();
         }
     }
 
-    private OciArchive build(ImageId imageId, ManifestResult manifestResult)
-            throws IOException, InterruptedException {
+    private OciArchive build(ImageId imageId, ManifestResult manifestResult) throws IOException, InterruptedException {
         Path ociDir = buildOciDirectory(imageId, manifestResult);
         Path archive = PathSupport.temporaryPath(tempRoot, "oci-archive-", ".tar");
         fs.createFile(archive);
@@ -164,23 +147,17 @@ public final class OciArchiveBuilder {
         String repository = imageId.name();
         var cfg = manifest.config();
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        //1 is task for config blob
+        // 1 is task for config blob
         List<Callable<Void>> pullTasks = new ArrayList<>(1 + manifest.layers().size());
         pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
-            pullLayer(repository,
-                    ImageDigest.parse(cfg.digest()),
-                    cfg.size(),
-                    MediaType.from(cfg.mediaType()),
+            pullLayer(repository, ImageDigest.parse(cfg.digest()), cfg.size(), MediaType.from(cfg.mediaType()),
                     blobsDir);
         }));
         for (var layer : manifest.layers()) {
             final var layerRef = layer;
             pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
-                pullLayer(repository,
-                        ImageDigest.parse(layerRef.digest()),
-                        layerRef.size(),
-                        MediaType.from(layerRef.mediaType()),
-                        blobsDir);
+                pullLayer(repository, ImageDigest.parse(layerRef.digest()), layerRef.size(),
+                        MediaType.from(layerRef.mediaType()), blobsDir);
             }));
         }
 
@@ -199,11 +176,12 @@ public final class OciArchiveBuilder {
         // oci-layout
         fs.writeString(ociDir.resolve("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}");
 
-        // index.json: descriptor mediaType must match the manifest blob (Docker v2 vs OCI), or podman load fails.
+        // index.json: descriptor mediaType must match the manifest blob (Docker v2 vs
+        // OCI), or podman load fails.
         String template = readResource("oci/index/json.tpl");
         String indexMediaType = indexManifestMediaType(manifestResult, manifest);
-        String index = String.format(Locale.ROOT, template, indexMediaType, manifestBytes.length,
-                manifestDigest, imageId.referenceName());
+        String index = String.format(Locale.ROOT, template, indexMediaType, manifestBytes.length, manifestDigest,
+                imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
         return ociDir;
@@ -220,7 +198,8 @@ public final class OciArchiveBuilder {
     }
 
     /**
-     * Virtual threads do not inherit SLF4J MDC; copy the caller map so dispatcher milestones keep trace_id.
+     * Virtual threads do not inherit SLF4J MDC; copy the caller map so dispatcher
+     * milestones keep trace_id.
      */
     private static Void runPullWithInheritedMdc(Map<String, String> snapshot, PullTask task) throws Exception {
         Map<String, String> previous = MDC.getCopyOfContextMap();
@@ -246,18 +225,16 @@ public final class OciArchiveBuilder {
         void run() throws IOException;
     }
 
-    private void pullLayer(String repository,
-                           ImageDigest digest,
-                           long size,
-                           MediaType mediaType,
-                           Path blobsDir) throws IOException {
+    private void pullLayer(String repository, ImageDigest digest, long size, MediaType mediaType, Path blobsDir)
+            throws IOException {
         var fetched = dispatcher.fetchLayer(new RepositoryName(repository), digest, size, mediaType);
         File tmp = fetched.path().toFile();
         fs.copy(tmp.toPath(), blobsDir.resolve(fetched.digest().hex()));
     }
 
     /**
-     * OCI index manifest descriptor must use the same media type as the blob (e.g. Docker schema2 from Hub).
+     * OCI index manifest descriptor must use the same media type as the blob (e.g.
+     * Docker schema2 from Hub).
      */
     private static String indexManifestMediaType(ManifestResult manifestResult, Manifest manifest) {
         String fromResult = manifestResult.mediaType();
@@ -274,29 +251,26 @@ public final class OciArchiveBuilder {
     private static void runTar(Path archive, Path ociDir) throws IOException, InterruptedException {
         // tar -c: create archive, -f: output file, -C: change dir before adding "."
         Process p = new ProcessBuilder("tar", "-cf", archive.toString(), "-C", ociDir.toString(), ".")
-                .redirectErrorStream(true)
-                .start();
+                .redirectErrorStream(true).start();
         int code = p.waitFor();
         if (code != 0) {
             throw new IOException("tar failed with exit " + code);
         }
     }
-    
+
     private static String readResource(String path) throws OciArchiveException {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         try (var in = loader.getResourceAsStream(path)) {
             if (in == null) {
                 String msg = AppError.OciErrorKind.RESOURCE_NOT_FOUND.format(path);
-                throw new OciArchiveException(
-                        new AppError.OciError(AppError.OciErrorKind.RESOURCE_NOT_FOUND, msg),
+                throw new OciArchiveException(new AppError.OciError(AppError.OciErrorKind.RESOURCE_NOT_FOUND, msg),
                         msg);
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             String msg = AppError.OciErrorKind.RESOURCE_READ_FAILED.format(path);
-            throw new OciArchiveException(
-                    new AppError.OciError(AppError.OciErrorKind.RESOURCE_READ_FAILED, msg),
-                    msg, e);
+            throw new OciArchiveException(new AppError.OciError(AppError.OciErrorKind.RESOURCE_READ_FAILED, msg), msg,
+                    e);
         }
     }
 
@@ -325,4 +299,3 @@ public final class OciArchiveBuilder {
         }
     }
 }
-

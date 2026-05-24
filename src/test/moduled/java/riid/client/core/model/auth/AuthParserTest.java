@@ -83,4 +83,3 @@ class AuthParserTest {
         assertTrue(AuthParser.parse("Basic foo").isEmpty());
     }
 }
-

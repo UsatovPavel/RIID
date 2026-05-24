@@ -14,9 +14,11 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -50,8 +52,8 @@ class DragonflyGrpcP2PExecutorTest {
     private static final String CONTENT_TYPE = "application/octet-stream";
     private static final String MEDIA_LAYER = "application/vnd.oci.image.layer.v1.tar";
     private static final String V2_PATH_PREFIX = "/v2/";
-    private static final String DFDAEMON_ADDR = System.getenv()
-            .getOrDefault("DFDAEMON_ADDR", "unix:///var/run/dragonfly/dfdaemon.sock");
+    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR",
+            "unix:///var/run/dragonfly/dfdaemon.sock");
 
     private HttpServer server;
 
@@ -76,23 +78,18 @@ class DragonflyGrpcP2PExecutorTest {
         String expectedAuthHeader = basicAuthHeader("riid-user", "riid-secret");
         startServer(payload, digest, blobRequests, expectedAuthHeader);
 
-        RegistryEndpoint endpoint = new RegistryEndpoint(
-                "http",
-                "127.0.0.1",
-                server.getAddress().getPort(),
-                Credentials.basic("riid-user", "riid-secret")
-        );
+        RegistryEndpoint endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(),
+                Credentials.basic("riid-user", "riid-secret"));
         HostFilesystem fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
-        DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
+        try (DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
+                TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
+                RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
+            var warmup = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
+            assertTrue(warmup.isPresent(), "warmup p2p fetch should succeed");
+            int seedRequests = blobRequests.get();
+            assertTrue(seedRequests > 0, "warmup should hit registry server at least once");
 
-        var warmup = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);
-        assertTrue(warmup.isPresent(), "warmup p2p fetch should succeed");
-        int seedRequests = blobRequests.get();
-        assertTrue(seedRequests > 0, "warmup should hit registry server at least once");
-
-        try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
-             RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
             FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, "tag", null));
 
@@ -135,8 +132,9 @@ class DragonflyGrpcP2PExecutorTest {
     }
 
     /**
-     * Skips test if dfdaemon is not available. For unix socket: skip when missing (single mode not running).
-     * For TCP: skip when unreachable (local multi-node env not running).
+     * Skips test if dfdaemon is not available. For unix socket: skip when missing
+     * (single mode not running). For TCP: skip when unreachable (local multi-node
+     * env not running).
      */
     private static void ensureDfdaemonAvailable(String dfdaemonAddr) {
         if (dfdaemonAddr == null || dfdaemonAddr.isBlank()) {
@@ -154,9 +152,8 @@ class DragonflyGrpcP2PExecutorTest {
                 try (Socket s = new Socket()) {
                     s.connect(new InetSocketAddress(host, port), 2000);
                 } catch (IOException e) {
-                    Assumptions.assumeTrue(false,
-                            () -> "dfdaemon gRPC not reachable at " + dfdaemonAddr
-                                    + " (start local multi-node Dragonfly env)");
+                    Assumptions.assumeTrue(false, () -> "dfdaemon gRPC not reachable at " + dfdaemonAddr
+                            + " (start local multi-node Dragonfly env)");
                 }
             }
         }

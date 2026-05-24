@@ -88,4 +88,3 @@ class ManifestParsingTest {
         assertEquals(0, idx.manifests().size());
     }
 }
-

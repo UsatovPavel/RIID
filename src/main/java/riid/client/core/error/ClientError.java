@@ -13,10 +13,15 @@ public sealed interface ClientError permits ClientError.Auth, ClientError.Http, 
     record Parse(ParseKind kind, String message) implements ClientError {
     }
 
-    enum AuthKind {UNEXPECTED_PING_STATUS, MISSING_CHALLENGE, TOKEN_FAILED, NO_TOKEN}
+    enum AuthKind {
+        UNEXPECTED_PING_STATUS, MISSING_CHALLENGE, TOKEN_FAILED, NO_TOKEN
+    }
 
-    enum HttpKind {RETRY_EXHAUSTED, BAD_STATUS}
+    enum HttpKind {
+        RETRY_EXHAUSTED, BAD_STATUS
+    }
 
-    enum ParseKind {MANIFEST, TOKEN, CONFIG, RANGE}
+    enum ParseKind {
+        MANIFEST, TOKEN, CONFIG, RANGE
+    }
 }
-
