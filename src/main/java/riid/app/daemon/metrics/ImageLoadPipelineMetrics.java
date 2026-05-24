@@ -35,10 +35,9 @@ public final class ImageLoadPipelineMetrics {
         /**
          * Per-bucket tar samples (PromQL mean: sum/count on this name).
          */
-        TAR_SIZE_BY_CATEGORY("riid.image.load.tar.size.by.category"), TAR_SIZE_BYTES(
-                "riid.image.load.tar.size.bytes"), THROUGHPUT_BPS(
-                        "riid.image.provide.throughput.bps"), THROUGHPUT_SLO_BPS(
-                                "riid.image.provide.throughput.slo.bps");
+        TAR_SIZE_BY_CATEGORY("riid.image.load.tar.size.by.category"), TAR_SIZE_BYTES("riid.image.load.tar.size.bytes"),
+        THROUGHPUT_BPS("riid.image.provide.throughput.bps"),
+        THROUGHPUT_SLO_BPS("riid.image.provide.throughput.slo.bps");
 
         private final String metricName;
 

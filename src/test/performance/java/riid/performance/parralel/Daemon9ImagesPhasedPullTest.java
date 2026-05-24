@@ -56,13 +56,13 @@ class Daemon9ImagesPhasedPullTest {
      * Rows 2,4,6,8,10 → odd 1-based positions 1,3,5,7,9 within lines 2–10.
      */
     private static final String[] PHASE_ODD_REPOS = {"library/hello-seattle", "library/cirros", "library/photon",
-            "library/eggdrop", "library/spiped", };
+            "library/eggdrop", "library/spiped",};
 
     /**
      * Rows 3,5,7,9 → even 1-based positions 2,4,6,8 within lines 2–10.
      */
     private static final String[] PHASE_EVEN_REPOS = {"library/hola-mundo", "library/jobber", "library/api-firewall",
-            "library/hitch", };
+            "library/hitch",};
 
     @Test
     void phasedPullsOddThenEvenWithMetricsPrinted() throws Exception {

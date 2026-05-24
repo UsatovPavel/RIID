@@ -4,10 +4,9 @@ package riid.cache.oci;
  * Limited media types for cached blobs.
  */
 public enum CacheMediaType {
-    OCTET_STREAM("application/octet-stream"), DOCKER_LAYER(
-            "application/vnd.docker.image.rootfs.diff.tar.gzip"), OCI_LAYER(
-                    "application/vnd.oci.image.layer.v1.tar"), CONFIG(
-                            "application/vnd.docker.container.image.v1+json"), UNKNOWN("");
+    OCTET_STREAM("application/octet-stream"), DOCKER_LAYER("application/vnd.docker.image.rootfs.diff.tar.gzip"),
+    OCI_LAYER("application/vnd.oci.image.layer.v1.tar"), CONFIG("application/vnd.docker.container.image.v1+json"),
+    UNKNOWN("");
 
     private final String rawValue;
 

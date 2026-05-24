@@ -13,9 +13,9 @@ public final class MilestoneEventLogger {
     }
 
     public enum EventType {
-        REQUEST_START("request.start"), REQUEST_FINISH("request.finish"), ENGINE_IMPORT("engine.import"), SOURCE_SELECT(
-                "source.select"), SOURCE_FETCH(
-                        "source.fetch"), ARCHIVE_BUILD("archive.build"), MANIFEST_FETCH("manifest.fetch");
+        REQUEST_START("request.start"), REQUEST_FINISH("request.finish"), ENGINE_IMPORT("engine.import"),
+        SOURCE_SELECT("source.select"), SOURCE_FETCH("source.fetch"), ARCHIVE_BUILD("archive.build"),
+        MANIFEST_FETCH("manifest.fetch");
 
         private final String wireValue;
 

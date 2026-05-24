@@ -124,9 +124,9 @@ class PullHttpHandlerHttpStatusTest {
     @Test
     void getPullReturns405() throws Exception {
         pullExecutor = newPullExecutor();
-        startServer(new PullHttpHandler(CONTROL, (repo, ref, rt) -> okLoad("x", PullRequest.LATEST_REFERENCE, -1), RUNTIMES,
-                new SemaphorePullConcurrencyGuard(new Semaphore(4, true)), MAX_REQUEST_BODY_BYTES, LONG_TIMEOUT,
-                pullExecutor, pullMetrics(), pipelineLoadMetrics()));
+        startServer(new PullHttpHandler(CONTROL, (repo, ref, rt) -> okLoad("x", PullRequest.LATEST_REFERENCE, -1),
+                RUNTIMES, new SemaphorePullConcurrencyGuard(new Semaphore(4, true)), MAX_REQUEST_BODY_BYTES,
+                LONG_TIMEOUT, pullExecutor, pullMetrics(), pipelineLoadMetrics()));
 
         ParsedResponse r = request("GET /pull HTTP/1.1\r\nHost: local\r\n\r\n");
 

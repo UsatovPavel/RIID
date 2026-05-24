@@ -82,8 +82,7 @@ class DragonflyGrpcP2PExecutorTest {
 
     @Test
     void mapsBasicCredentialsToRegistryAuth() throws IOException {
-        RegistryEndpoint endpoint = new RegistryEndpoint(HTTPS_SCHEME, REGISTRY_HOST, -1,
-                Credentials.basic("u", "p"));
+        RegistryEndpoint endpoint = new RegistryEndpoint(HTTPS_SCHEME, REGISTRY_HOST, -1, Credentials.basic("u", "p"));
         HostFilesystem fs = new NioHostFilesystem();
         riid.p2p.dragonfly.DragonflyConfig config = new riid.p2p.dragonfly.DragonflyConfig(true, DFDAEMON_ADDR, null,
                 null, null);

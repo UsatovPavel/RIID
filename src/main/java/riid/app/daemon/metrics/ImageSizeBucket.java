@@ -7,9 +7,9 @@ package riid.app.daemon.metrics;
  * with {@code config/metrics/prometheus-rules/riid-recording-rules.yaml}.
  */
 public enum ImageSizeBucket {
-    MIB_0_5("0-5mib", 0), MIB_5_10("5-10mib", 5), MIB_10_50("10-50mib", 10), MIB_50_100("50-100mib", 50), MIB_100_250(
-            "100-250mib", 100), MIB_250_500("250-500mib", 250), MIB_500_800("500-800mib", 500), MIB_800_2048(
-                    "800-2048mib", 800), MIB_2048_5120("2048-5120mib", 2048), GT_5120_MIB("gt-5120mib", 5120),
+    MIB_0_5("0-5mib", 0), MIB_5_10("5-10mib", 5), MIB_10_50("10-50mib", 10), MIB_50_100("50-100mib", 50),
+    MIB_100_250("100-250mib", 100), MIB_250_500("250-500mib", 250), MIB_500_800("500-800mib", 500),
+    MIB_800_2048("800-2048mib", 800), MIB_2048_5120("2048-5120mib", 2048), GT_5120_MIB("gt-5120mib", 5120),
 
     /**
      * Successful load, tar size not reported ({@code -1}).

@@ -40,8 +40,8 @@ class BlobServiceTest {
     private final HostFilesystem fs = new NioHostFilesystem();
 
     private enum Strings {
-        HTTP_SCHEME("http"), HOST("localhost"), REPO("repo"), SCOPE("scope"), CONTENT_TYPE("Content-Type"), OCTET(
-                "application/octet-stream"), METHOD_HEAD("HEAD"), METHOD_GET("GET");
+        HTTP_SCHEME("http"), HOST("localhost"), REPO("repo"), SCOPE("scope"), CONTENT_TYPE("Content-Type"),
+        OCTET("application/octet-stream"), METHOD_HEAD("HEAD"), METHOD_GET("GET");
 
         private final String value;
 
