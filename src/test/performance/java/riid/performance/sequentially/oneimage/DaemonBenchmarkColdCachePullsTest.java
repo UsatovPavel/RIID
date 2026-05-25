@@ -29,9 +29,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * and separate rounds for native {@code podman pull} of the same OCI ref.
  *
  * <p>
- * Per iteration (RIID block): {@code podman system prune -af}, optional wipe of
- * {@code RIID_PERF_CACHE_DIR}, then measuredaemon pull time → appended to
- * {@code riid_pull_ms}. Then Podman block: same iterations with prune before
+ * Per iteration (RIID block): {@code podman system prune -af}, wipe of RIID
+ * {@code riid-cache-tmp-*} under {@code java.io.tmpdir}, then daemon pull time
+ * → appended to {@code riid_pull_ms}. Then Podman block: same iterations with
+ * prune before
  * each {@code podman pull} → {@code podman_pull_ms}.
  *
  * <p>
@@ -44,11 +45,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class DaemonBenchmarkColdCachePullsTest {
     private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";
     private static final int ODD_REMAINDER = 1;
-
-    /**
-     * @see PerformanceColdCacheHelper#ENV_RIID_PERF_CACHE_DIR
-     */
-    public static final String ENV_RIID_PERF_CACHE_DIR = PerformanceColdCacheHelper.ENV_RIID_PERF_CACHE_DIR;
 
     private static final String RUNTIME = "podman";
     /**

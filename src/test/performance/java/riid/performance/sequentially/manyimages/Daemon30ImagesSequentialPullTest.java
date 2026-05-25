@@ -27,8 +27,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * PR15 scenario b1 (moderate): same first 30 repositories as
  * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES},
  * sequential pulls. Перед фазой (1) один вызов
- * {@link PerformanceColdCacheHelper#clearAllCache()} (Podman + опционально
- * RIID). Далее: (1) via an already running RIID daemon ({@code POST /pull},
+ * {@link PerformanceColdCacheHelper#clearAllCache()} (Podman + RIID). Далее: (1) via an already running RIID daemon ({@code POST /pull},
  * {@code runtimeId: podman}), (2) then native {@code podman pull} for each,
  * after {@code podman system prune -af} immediately before that Podman phase
  * ({@link #coldPodmanCacheThenMeasuredPulls()}).

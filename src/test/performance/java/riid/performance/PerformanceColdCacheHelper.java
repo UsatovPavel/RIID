@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import riid.core.fs.TestFilesystemSupport;
 
@@ -12,16 +14,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Shared cold-cache setup for performance scenarios: Podman storage prune and
- * optional wipe of {@link #ENV_RIID_PERF_CACHE_DIR} (when the env var is set to
- * an existing directory).
+ * wipe of RIID {@code TempFileCacheAdapter} dirs ({@value #RIID_CACHE_DIR_PREFIX}*
+ * under {@code java.io.tmpdir}).
  */
 public final class PerformanceColdCacheHelper {
 
     /**
-     * Directory to delete when set — daemon under test should use this as
-     * cache/temp root for cold iterations.
+     * Prefix of daemon {@link riid.cache.oci.TempFileCacheAdapter} roots under
+     * {@code java.io.tmpdir}.
      */
-    public static final String ENV_RIID_PERF_CACHE_DIR = "RIID_PERF_CACHE_DIR";
+    static final String RIID_CACHE_DIR_PREFIX = "riid-cache-tmp-";
 
     private PerformanceColdCacheHelper() {
     }
@@ -39,45 +41,52 @@ public final class PerformanceColdCacheHelper {
         }
     }
 
-    /**
-     * Runs {@code podman system prune -af}; fails the test if the command exits
-     * non-zero.
-     */
     public static void clearPodmanCaches() throws Exception {
         runOrFail("podman", "system", "prune", "-af");
     }
 
     /**
-     * If {@link #ENV_RIID_PERF_CACHE_DIR} points at a directory, deletes it
-     * recursively.
+     * Clears all files inside RIID cache dirs. Keeps the root directory so a
+     * running daemon can still write new blobs.
      */
-    public static void clearRiidCacheDirIfSet() throws Exception {
-        String cacheDir = System.getenv(ENV_RIID_PERF_CACHE_DIR);
-        if (cacheDir != null && !cacheDir.isBlank()) {
-            Path p = Path.of(cacheDir);
-            if (Files.isDirectory(p)) {
-                TestFilesystemSupport.deleteRecursive(p);
-            }
+    public static void clearRiidCacheDirs() throws IOException {
+        for (Path cacheDir : findRiidCacheDirs()) {
+            clearDirectoryContents(cacheDir);
         }
     }
 
-    /**
-     * Полная очистка перед perf-сценарием: {@code podman system prune -af}, затем
-     * каталог Т.к. в будущем будет протестирован docker возможно это НЕ то же самое
-     * что clearPodmanAndRiidCaches {@link #ENV_RIID_PERF_CACHE_DIR} если задан.
-     * Один вызов — весь «холодный» старт кэшей.
-     */
+    /** Podman prune + RIID cache wipe. */
     public static void clearAllCache() throws Exception {
         clearPodmanCaches();
-        clearRiidCacheDirIfSet();
+        clearRiidCacheDirs();
     }
 
-    /**
-     * То же, что {@link #clearAllCache()}.
-     */
+    /** @deprecated use {@link #clearAllCache()} */
+    @Deprecated
     public static void clearPodmanAndRiidCaches() throws Exception {
-        clearPodmanCaches();
-        clearRiidCacheDirIfSet();
+        clearAllCache();
+    }
+
+    static List<Path> findRiidCacheDirs() throws IOException {
+        Path tmp = Path.of(System.getProperty("java.io.tmpdir"));
+        if (!Files.isDirectory(tmp)) {
+            return List.of();
+        }
+        try (Stream<Path> entries = Files.list(tmp)) {
+            return entries.filter(Files::isDirectory)
+                    .filter(p -> p.getFileName().toString().startsWith(RIID_CACHE_DIR_PREFIX)).toList();
+        }
+    }
+
+    private static void clearDirectoryContents(Path dir) throws IOException {
+        if (!Files.isDirectory(dir)) {
+            return;
+        }
+        try (Stream<Path> entries = Files.list(dir)) {
+            for (Path entry : entries.toList()) {
+                TestFilesystemSupport.deleteRecursive(entry);
+            }
+        }
     }
 
     private static void runOrFail(String... command) throws Exception {

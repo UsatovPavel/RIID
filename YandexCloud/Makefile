@@ -4,7 +4,7 @@ YANDEX_CLOUD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ENV_FILE := $(YANDEX_CLOUD_DIR).env
 
 # С хоста (yc compute ssh). Переопределение: make bootstrap-on-server YC_INSTANCE_ID=...
-YC_INSTANCE_ID ?= fv4jo9irtdjgr0n048es
+YC_INSTANCE_ID ?= fv46q0don9ordq567fnf
 YC_IDENTITY ?= $(HOME)/.ssh/ssh-key-1775683235717
 YC_LOGIN ?= user
 # Домашний каталог на ВМ для push-secrets (переопредели, если не /home/<логин>).
