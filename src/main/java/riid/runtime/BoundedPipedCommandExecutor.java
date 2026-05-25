@@ -70,15 +70,30 @@ final class BoundedPipedCommandExecutor {
                 Future<String> consumerStderr = pipeIoExecutor.submit(
                         streamReaderTruncating(consumer.getErrorStream(), stderrLimit, "piped-consumer-stderr"));
 
+                Throwable primaryFailure = null;
+                boolean stderrCollected = false;
                 try {
-                    pipeTransfer.get();
-                } catch (ExecutionException e) {
-                    rethrowPipeTransferFailure(e);
+                    try {
+                        pipeTransfer.get();
+                    } catch (ExecutionException e) {
+                        rethrowPipeTransferFailure(e);
+                    }
+                    String producerStderrText = get(producerStderr);
+                    String consumerStderrText = get(consumerStderr);
+                    stderrCollected = true;
+                    int producerExit = producer.waitFor();
+                    int consumerExit = consumer.waitFor();
+                    return new BoundedCommandExecution.PipedShellResult(producerExit, consumerExit, producerStderrText,
+                            consumerStderrText);
+                } catch (Throwable t) {
+                    primaryFailure = t;
+                    throw t;
+                } finally {
+                    if (!stderrCollected && primaryFailure != null) {
+                        attachStderrDiagnostics(primaryFailure, producerStderr, "producer");
+                        attachStderrDiagnostics(primaryFailure, consumerStderr, "consumer");
+                    }
                 }
-                int producerExit = producer.waitFor();
-                int consumerExit = consumer.waitFor();
-                return new BoundedCommandExecution.PipedShellResult(producerExit, consumerExit, get(producerStderr),
-                        get(consumerStderr));
             } finally {
                 if (producer.isAlive()) {
                     producer.destroyForcibly();
@@ -161,5 +176,19 @@ final class BoundedPipedCommandExecutor {
             throw re;
         }
         throw new IOException(c);
+    }
+
+    private static void attachStderrDiagnostics(Throwable failure, Future<String> stderrFuture, String streamName) {
+        try {
+            String stderr = get(stderrFuture);
+            if (!stderr.isBlank()) {
+                failure.addSuppressed(new IOException(streamName + " stderr:\n" + stderr));
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            failure.addSuppressed(e);
+        } catch (IOException e) {
+            failure.addSuppressed(e);
+        }
     }
 }

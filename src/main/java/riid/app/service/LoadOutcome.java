@@ -7,28 +7,32 @@ import riid.app.core.model.ImageId;
 /**
  * Result of
  * {@link ImageLoadingFacade#load(riid.app.core.model.ImageId, String)}:
- * resolved image and size in bytes of the OCI tar passed to the runtime (for
- * metrics / dashboards).
+ * resolved image and logical payload size in bytes
+ * ({@code config + layers + manifest}) for metrics / dashboards.
  */
 public final class LoadOutcome {
 
     private final ImageId resolvedImageId;
-    /**
-     * Size of the tar archive in bytes, or {@code -1} if unknown (e.g. tests).
-     */
-    private final long archiveTarBytes;
+    private final long payloadBytes;
 
-    public LoadOutcome(ImageId imageId, long tarBytes) {
+    public LoadOutcome(ImageId imageId, long payloadBytes) {
         this.resolvedImageId = Objects.requireNonNull(imageId, "imageId");
-        this.archiveTarBytes = tarBytes;
+        this.payloadBytes = payloadBytes;
     }
 
     public ImageId imageId() {
         return resolvedImageId;
     }
 
+    public long payloadBytes() {
+        return payloadBytes;
+    }
+
+    /**
+     * Backward-compatible alias for historical API name.
+     */
     public long tarBytes() {
-        return archiveTarBytes;
+        return payloadBytes;
     }
 
     /**

@@ -8,6 +8,7 @@ import riid.cache.auth.TokenCache;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.Digests;
 import riid.core.model.manifest.MediaTypes;
@@ -47,7 +48,10 @@ class ManifestServiceTest {
 
         ManifestService svc = new ManifestService(http, new NoAuth(), mapper, ClientPlatformConfig.fromHost());
 
-        assertThrows(ClientException.class, () -> svc.fetchManifest(endpoint, "library/busybox", "latest", "scope"));
+        ClientException ex = assertThrows(ClientException.class,
+                () -> svc.fetchManifest(endpoint, "library/busybox", "latest", "scope"));
+        assertTrue(ex.error() instanceof ClientError.Parse parse
+                && parse.kind() == ClientError.ParseKind.MANIFEST_PLATFORM);
     }
 
     @Test
@@ -78,6 +82,8 @@ class ManifestServiceTest {
 
         ClientException ex = assertThrows(ClientException.class,
                 () -> svc.fetchManifest(endpoint, "library/x", "latest", "scope"));
+        assertTrue(ex.error() instanceof ClientError.Parse parse
+                && parse.kind() == ClientError.ParseKind.MANIFEST_PLATFORM);
         assertTrue(ex.getMessage().contains("No manifest list entry for platform linux/amd64"));
     }
 

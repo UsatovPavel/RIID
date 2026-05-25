@@ -82,6 +82,11 @@ public final class ConfigValidator {
         }
         checkDuration(http.connectTimeout(), "client.http.connectTimeout");
         checkDuration(http.requestTimeout(), "client.http.requestTimeout");
+        checkDuration(http.imageTimeoutMin(), "client.http.imageTimeoutMin");
+        checkDuration(http.imageTimeoutMax(), "client.http.imageTimeoutMax");
+        if (http.imageTimeoutMax().compareTo(http.imageTimeoutMin()) < 0) {
+            throw new ConfigValidationException(ConfigValidationException.Http.IMAGE_TIMEOUT_INVERTED.message());
+        }
         if (http.maxRetries() < 0) {
             throw new ConfigValidationException(ConfigValidationException.Http.MAX_RETRIES_NEGATIVE.message());
         }
@@ -229,6 +234,8 @@ public final class ConfigValidator {
             String message = switch (field) {
                 case "client.http.connectTimeout" -> ConfigValidationException.Http.CONNECT_TIMEOUT_POSITIVE.message();
                 case "client.http.requestTimeout" -> ConfigValidationException.Http.REQUEST_TIMEOUT_POSITIVE.message();
+                case "client.http.imageTimeoutMin" -> ConfigValidationException.Http.IMAGE_TIMEOUT_MIN_POSITIVE.message();
+                case "client.http.imageTimeoutMax" -> ConfigValidationException.Http.IMAGE_TIMEOUT_MAX_POSITIVE.message();
                 case "client.http.initialBackoff" -> ConfigValidationException.Http.INITIAL_BACKOFF_POSITIVE.message();
                 case "client.http.maxBackoff" -> ConfigValidationException.Http.MAX_BACKOFF_POSITIVE.message();
                 default -> null;

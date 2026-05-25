@@ -67,11 +67,6 @@ public final class ManifestService implements ManifestServiceApi {
             if (isIndex) {
                 ManifestIndex index = mapper.readValue(bytes, ManifestIndex.class);
                 ManifestRef selected = selectEntry(index);
-                if (selected == null) {
-                    throw new ClientException(
-                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Empty manifest list"),
-                            "Empty manifest list");
-                }
                 // Recursively fetch the referenced manifest by digest
                 return fetchManifest(endpoint, repository, selected.digest(), scope);
             }
@@ -149,18 +144,19 @@ public final class ManifestService implements ManifestServiceApi {
     }
 
     private ManifestRef selectEntry(ManifestIndex index) {
+        String platform = manifestPlatform.os() + "/" + manifestPlatform.architecture();
         if (index.manifests() == null || index.manifests().isEmpty()) {
-            return null;
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST_PLATFORM,
+                    "No manifest list entry for platform " + platform), "No manifest list entry for platform "
+                            + platform + " (manifest list is empty)");
         }
         return index.manifests().stream()
                 .filter(m -> m.platform() != null && manifestPlatform.os().equalsIgnoreCase(m.platform().os())
                         && manifestPlatform.architecture().equalsIgnoreCase(m.platform().architecture()))
                 .findFirst()
                 .orElseThrow(() -> new ClientException(
-                        new ClientError.Parse(ClientError.ParseKind.MANIFEST,
-                                "No manifest list entry for platform " + manifestPlatform.os() + "/"
-                                        + manifestPlatform.architecture()),
-                        "No manifest list entry for platform " + manifestPlatform.os() + "/"
-                                + manifestPlatform.architecture()));
+                        new ClientError.Parse(ClientError.ParseKind.MANIFEST_PLATFORM,
+                                "No manifest list entry for platform " + platform),
+                        "No manifest list entry for platform " + platform));
     }
 }

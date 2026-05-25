@@ -3,11 +3,9 @@ package riid.app.ociarchive;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -26,6 +24,7 @@ import riid.core.fs.HostFilesystem;
 import riid.cache.oci.ImageDigest;
 import riid.core.fs.PathSupport;
 import riid.client.api.ManifestResult;
+import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.MediaType;
 import riid.core.model.manifest.MediaTypes;
@@ -104,19 +103,17 @@ public final class OciArchiveBuilder {
     }
 
     /**
-     * Sum of regular-file sizes under the layout (approximate payload; tar stream
-     * is slightly larger).
+     * Logical payload bytes for load metrics and comparisons across import paths.
+     * This is not tar stream size: {@code config.size + sum(layer.size) +
+     * manifestBytes.length}.
      */
-    public long estimateLayoutFileBytes(Path ociLayoutRoot) throws IOException {
-        try (Stream<Path> paths = fs.walk(ociLayoutRoot)) {
-            return paths.filter(fs::isRegularFile).mapToLong(p -> {
-                try {
-                    return fs.size(p);
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }).sum();
-        }
+    public long estimatePayloadBytes(ManifestResult manifestResult) throws IOException {
+        Objects.requireNonNull(manifestResult, "manifestResult");
+        Manifest manifest = manifestResult.manifest();
+        long configBytes = manifest.config().size();
+        long layersBytes = manifest.layers().stream().mapToLong(Descriptor::size).sum();
+        long manifestBytes = OBJECT_MAPPER.writeValueAsBytes(manifest).length;
+        return configBytes + layersBytes + manifestBytes;
     }
 
     private OciArchive build(ImageId imageId, ManifestResult manifestResult) throws IOException, InterruptedException {

@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Tag("filesystem")
@@ -84,6 +85,12 @@ class RuntimeAdaptersTest {
         assertEquals("podman", new PodmanRuntimeAdapter().runtimeId());
         assertEquals("docker", new DockerRuntimeAdapter().runtimeId());
         assertEquals("porto", new PortoRuntimeAdapter().runtimeId());
+    }
+
+    @Test
+    void dockerKeepsArchiveImportPath() {
+        DockerRuntimeAdapter adapter = new DockerRuntimeAdapter();
+        assertFalse(adapter.prefersOciLayoutStreamImport());
     }
 
     @Test

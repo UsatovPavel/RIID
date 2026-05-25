@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Requires Linux, curl, podman, network to Docker Hub.
  */
 @EnabledOnOs(OS.LINUX)
-@Tag("local")
+@Tag("performance")
 @Tag("filesystem")
 class Daemon9ImagesPhasedPullTest {
 

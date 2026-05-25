@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * pulls for this fixture size.
  */
 @EnabledOnOs(OS.LINUX)
-@Tag("local")
+@Tag("performance")
 @Tag("filesystem")
 class Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest {
 

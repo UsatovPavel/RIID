@@ -22,6 +22,6 @@ public sealed interface ClientError permits ClientError.Auth, ClientError.Http, 
     }
 
     enum ParseKind {
-        MANIFEST, TOKEN, CONFIG, RANGE
+        MANIFEST, MANIFEST_PLATFORM, TOKEN, CONFIG, RANGE
     }
 }

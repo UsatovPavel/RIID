@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Linux, curl, podman, network. Daemon must accept {@code runtimeId: podman}.
  */
 @EnabledOnOs(OS.LINUX)
-@Tag("local")
+@Tag("performance")
 @Tag("filesystem")
 class DaemonBenchmarkColdCachePullsTest {
     private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";

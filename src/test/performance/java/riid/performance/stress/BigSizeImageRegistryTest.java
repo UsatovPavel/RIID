@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("stress")
-@Tag("local")
+@Tag("performance")
 @Tag("filesystem")
 class BigSizeImageRegistryTest {
 

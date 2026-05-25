@@ -93,6 +93,7 @@ Porto runtime adapters are wired the same way via `--runtime porto`; ensure Port
 - `./gradlew test` (unit + integration). Live/e2e tests that hit public registries may require network; disable/skip if offline.
 - For Podman integration end-to-end: run local registry as above, then `./gradlew test --tests "riid.integration.runtime_app.CliPodmanIntegrationTest"` (requires podman and network for base images).
 - For Porto: use analogous CLI invocation with `--runtime porto` after ensuring runtime availability.
+- Performance tests runned only on a dedicated Yandex server and are unsafe on shared hosts because they can execute destructive Podman cleanup commands (`podman rm -af`).
 - Registry endpoint for live tests is configurable via system properties:
   - `riid.test.registry.scheme` (default: `https`)
   - `riid.test.registry.host` (default: `registry-1.docker.io`)
@@ -114,6 +115,7 @@ for Dragonfly gRPC communication (`dfdaemon` DownloadTask, API v2).
 ## Supported runtimes
 - podman
 - docker
+OCI layout stream import optimization currently applies only to Podman; Docker and Porto still use archive materialization (`withArchive` path).
 If you need another inherit from runtime adapter in runtime module
 
 ## P2P (Dragonfly)

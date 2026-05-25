@@ -262,7 +262,7 @@ public final class PullHttpHandler extends Handler.Abstract {
         });
         try {
             LoadOutcome result = future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
-            pipelineMetrics.recordSuccess(start, result.tarBytes());
+            pipelineMetrics.recordSuccess(start, result.payloadBytes());
             return result;
         } catch (TimeoutException e) {
             future.cancel(true);

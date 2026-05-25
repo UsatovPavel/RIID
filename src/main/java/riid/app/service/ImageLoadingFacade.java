@@ -1,7 +1,6 @@
 package riid.app.service;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -99,7 +98,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
     /**
      * High-level load: download/validate, assemble OCI, import into runtime.
      *
-     * @return resolved image and tar size (bytes) passed to the runtime
+     * @return resolved image and payload size (bytes) passed to metrics
      */
     public LoadOutcome load(ImageId imageId, String runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
@@ -128,7 +127,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
     /**
      * Load using prepared manifest result and runtime.
      *
-     * @return resolved image and tar size (bytes) passed to the runtime
+     * @return resolved image and payload size (bytes) passed to metrics
      */
     public LoadOutcome load(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId) {
         Objects.requireNonNull(manifestResult, "manifestResult");
@@ -138,24 +137,23 @@ public final class ImageLoadingFacade implements AutoCloseable {
         MdcContext.putOperation(EventType.ENGINE_IMPORT.value());
         long engineStartedNs = System.nanoTime();
         try {
+            long payloadBytes = archiveBuilder.estimatePayloadBytes(manifestResult);
             if (runtime.prefersOciLayoutStreamImport()) {
                 return archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
-                    long approxBytes = archiveBuilder.estimateLayoutFileBytes(ociDir);
                     runtime.importOciLayoutDirectory(ociDir);
                     MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
                             .addDurationMs(durationMs(engineStartedNs))
                             .log("Loaded " + imageId + " into runtime " + runtime.runtimeId()
-                                    + " via OCI layout stream (~" + approxBytes + " B files under layout)");
-                    return new LoadOutcome(imageId, approxBytes);
+                                    + " via OCI layout stream (~" + payloadBytes + " B payload)");
+                    return new LoadOutcome(imageId, payloadBytes);
                 });
             }
             return archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
-                long tarBytes = Files.size(archivePath);
                 runtime.importImage(archivePath);
                 MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
                         .addDurationMs(durationMs(engineStartedNs))
                         .log("Loaded " + imageId + " into runtime " + runtime.runtimeId() + " at " + archivePath);
-                return new LoadOutcome(imageId, tarBytes);
+                return new LoadOutcome(imageId, payloadBytes);
             });
         } catch (AppException e) {
             MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.ERROR)

@@ -10,6 +10,7 @@ import riid.core.config.ConfigValidationException;
 import riid.core.config.TestRegistryConfig;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -175,6 +176,15 @@ class ConfigLoaderTest {
 
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
         assertEquals(ConfigValidationException.class, ex.getClass());
+    }
+
+    @Test
+    void loadsRepositoryConfigYaml() {
+        GlobalConfig cfg = ConfigLoader.load(Path.of("config", "config.yaml"));
+        assertEquals(Duration.ofMinutes(30), cfg.client().http().requestTimeout());
+        assertEquals(Duration.ofMinutes(5), cfg.client().http().imageTimeoutMin());
+        assertEquals(Duration.ofMinutes(30), cfg.client().http().imageTimeoutMax());
+        assertEquals(Duration.ofMinutes(30), cfg.app().daemonOrDefault().requestTimeoutOrDefault());
     }
 
     @Test

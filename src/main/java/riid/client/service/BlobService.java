@@ -94,7 +94,8 @@ public class BlobService implements BlobServiceApi {
         if (rangeValue != null) {
             HttpRequestBuilder.withRange(headers, rangeValue);
         }
-        HttpResult<InputStream> resp = http.get(uri, headers);
+        long layerSizeBytes = req.expectedSizeBytes() != null ? req.expectedSizeBytes() : -1L;
+        HttpResult<InputStream> resp = http.getBlob(uri, headers, layerSizeBytes);
         int status = resp.statusCode();
         if (status == HttpStatus.RANGE_NOT_SATISFIABLE_416 && req.isRangeRequest() && rangeEnabled) {
             closeQuietly(resp.body());

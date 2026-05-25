@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * concurrent pulls (see {@code app.daemon.maxConcurrentPulls}).
  */
 @EnabledOnOs(OS.LINUX)
-@Tag("local")
+@Tag("performance")
 @Tag("filesystem")
 class Daemon30ImagesConcurrentRiidPullTest {
 

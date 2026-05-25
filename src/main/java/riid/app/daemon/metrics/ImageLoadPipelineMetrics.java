@@ -12,8 +12,9 @@ import io.micrometer.core.instrument.Timer;
 /**
  * End-to-end timing for {@link riid.app.cli.CliApplication.ImageLoader#load}
  * inside the daemon (registry / P2P / cache / runtime import), independent of
- * HTTP framing. Also records tar size, size-category counters, and effective
- * throughput (tar bytes / pipeline duration).
+ * HTTP framing. Also records payload size ({@code config + layers + manifest}),
+ * size-category counters, and effective throughput (payload bytes / pipeline
+ * duration).
  */
 public final class ImageLoadPipelineMetrics {
 
@@ -72,14 +73,15 @@ public final class ImageLoadPipelineMetrics {
     }
 
     /**
-     * @param tarBytes
-     *            size of the OCI tar in bytes, or {@code -1} to skip tar-derived
+     * @param payloadBytes
+     *            payload size in bytes ({@code config + layers + manifest}), or
+     *            {@code -1} to skip payload-derived
      *            metrics
      */
-    public void recordSuccess(long startNanos, long tarBytes) {
-        if (tarBytes >= 0) {
-            record(startNanos, "success", ImageSizeBucket.fromTarBytes(tarBytes));
-            recordTarDerived(startNanos, tarBytes);
+    public void recordSuccess(long startNanos, long payloadBytes) {
+        if (payloadBytes >= 0) {
+            record(startNanos, "success", ImageSizeBucket.fromTarBytes(payloadBytes));
+            recordPayloadDerived(startNanos, payloadBytes);
         } else {
             record(startNanos, "success", ImageSizeBucket.UNKNOWN);
         }
@@ -100,27 +102,28 @@ public final class ImageLoadPipelineMetrics {
                 .maximumExpectedValue(LOAD_HISTOGRAM_MAX).register(registry).record(elapsedNanos, TimeUnit.NANOSECONDS);
     }
 
-    private void recordTarDerived(long pipelineStartNanos, long tarBytes) {
+    private void recordPayloadDerived(long pipelineStartNanos, long payloadBytes) {
         long elapsedNanos = System.nanoTime() - pipelineStartNanos;
         double seconds = elapsedNanos / 1_000_000_000.0;
 
-        tarSizeBytes.record(tarBytes);
+        tarSizeBytes.record(payloadBytes);
 
         DistributionSummary.builder(MetricName.TAR_SIZE_BY_CATEGORY.value())
                 .description("Tar size in bytes per size bucket (for mean size vs latency dashboards)")
-                .tag("category", ImageSizeBucket.fromTarBytes(tarBytes).metricLabel()).register(registry)
-                .record(tarBytes);
+                .tag("category", ImageSizeBucket.fromTarBytes(payloadBytes).metricLabel()).register(registry)
+                .record(payloadBytes);
 
         Counter.builder(MetricName.TAR_SIZE_CATEGORY.value())
                 .description("Count of successful loads by tar size category (MiB buckets)")
-                .tag("category", ImageSizeBucket.fromTarBytes(tarBytes).metricLabel()).register(registry).increment();
+                .tag("category", ImageSizeBucket.fromTarBytes(payloadBytes).metricLabel()).register(registry)
+                .increment();
 
         if (seconds <= ZERO_SECONDS) {
             return;
         }
-        double bps = tarBytes / seconds;
+        double bps = payloadBytes / seconds;
         throughputBps.record(bps);
-        if (tarBytes >= MIN_SLO_TAR_BYTES) {
+        if (payloadBytes >= MIN_SLO_TAR_BYTES) {
             throughputSloBps.record(bps);
         }
     }

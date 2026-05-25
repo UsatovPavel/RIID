@@ -374,7 +374,7 @@ class PullHttpHandlerHttpStatusTest {
         pullExecutor = newPullExecutor();
         startServer(newPullHandler((repo, ref, rt) -> {
             throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.MANIFEST,
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST_PLATFORM,
                             "No manifest list entry for platform linux/amd64"),
                     "No manifest list entry for platform linux/amd64");
         }, pullExecutor));
@@ -386,6 +386,22 @@ class PullHttpHandlerHttpStatusTest {
         assertEquals(DaemonPullErrorMapper.PullErrorCode.MANIFEST_NOT_SATISFIABLE.jsonValue(),
                 r.json().path(PullRequest.JSON_FIELD_CODE).asText());
         assertTrue(r.json().path(PullRequest.JSON_FIELD_MESSAGE).asText().contains("linux/amd64"));
+    }
+
+    @Test
+    void genericManifestParseFailureReturns500() throws Exception {
+        pullExecutor = newPullExecutor();
+        startServer(newPullHandler((repo, ref, rt) -> {
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Digest mismatch"),
+                    "Manifest digest mismatch: header=sha256:bad computed=sha256:good");
+        }, pullExecutor));
+
+        ParsedResponse r = postPull(
+                "{\"repository\":\"library/clefos\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}");
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR_500, r.status());
+        assertEquals("pull_failed", r.json().path(PullRequest.JSON_FIELD_CODE).asText());
+        assertTrue(r.json().path(PullRequest.JSON_FIELD_MESSAGE).asText().contains("mismatch"));
     }
 
     @Test
