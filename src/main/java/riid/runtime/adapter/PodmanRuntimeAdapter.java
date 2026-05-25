@@ -14,7 +14,7 @@ import java.util.Objects;
  * per {@code podman load --help}).
  */
 public class PodmanRuntimeAdapter implements RuntimeAdapter {
-    private static final String PODMAN_BIN = "podman";
+    public static final String PODMAN_BIN = "podman";
     private static final int MAX_PROC_STDERR = 64 * 1024;
 
     @Override

@@ -21,16 +21,16 @@ import riid.app.service.LoadOutcome;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
+import riid.core.config.TestRegistryConfig;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class CliApplicationTest {
-    private static final String RUNTIME_PODMAN = "podman";
+    private static final String RUNTIME_PODMAN = PodmanRuntimeAdapter.PODMAN_BIN;
     private static final String REPO_BUSYBOX = "library/busybox";
-    private static final String REGISTRY_DOCKER_IO = "registry-1.docker.io";
 
     private static LoadOutcome mockLoadOutcome(String repo, String ref) {
-        return new LoadOutcome(ImageId.fromRegistry(REGISTRY_DOCKER_IO, repo, ref), -1L);
+        return new LoadOutcome(ImageId.fromRegistry(TestRegistryConfig.registryName(), repo, ref), -1L);
     }
 
     @Test
@@ -307,4 +307,5 @@ class CliApplicationTest {
         assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Unknown option"));
     }
+
 }

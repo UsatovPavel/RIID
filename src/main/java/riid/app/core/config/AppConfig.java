@@ -44,7 +44,7 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
     }
 
     public DaemonConfig daemonOrDefault() {
-        return daemon == null ? new DaemonConfig(null, null, null, null, null, null, null) : daemon;
+        return daemon == null ? new DaemonConfig(null, null, null, null, null, null, null, null) : daemon;
     }
 
     public enum OverloadPolicy {
@@ -56,7 +56,8 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
             @JsonProperty("maxConcurrentPulls") Integer maxConcurrentPulls,
             @JsonProperty("maxRequestBodyBytes") Integer maxRequestBodyBytes,
             @JsonProperty("requestTimeout") Duration requestTimeout,
-            @JsonProperty("overloadPolicy") OverloadPolicy overloadPolicy) {
+            @JsonProperty("overloadPolicy") OverloadPolicy overloadPolicy,
+            @JsonProperty("maxCacheBytes") Long maxCacheBytes) {
         private static final String DEFAULT_UNIX_SOCKET_PATH = "/tmp/riid.sock";
         private static final String DEFAULT_METRICS_HOST = "0.0.0.0";
         private static final int DEFAULT_METRICS_PORT = 9090;
@@ -64,6 +65,7 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
         private static final int DEFAULT_MAX_REQUEST_BODY_BYTES = 8192;
         private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
         private static final OverloadPolicy DEFAULT_OVERLOAD_POLICY = OverloadPolicy.REJECT;
+        private static final long DEFAULT_MAX_CACHE_BYTES = 1_073_741_824L;
 
         public String unixSocketPathOrDefault() {
             if (unixSocketPath == null || unixSocketPath.isBlank()) {
@@ -109,6 +111,13 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
 
         public OverloadPolicy overloadPolicyOrDefault() {
             return overloadPolicy == null ? DEFAULT_OVERLOAD_POLICY : overloadPolicy;
+        }
+
+        public long maxCacheBytesOrDefault() {
+            if (maxCacheBytes == null || maxCacheBytes <= 0) {
+                return DEFAULT_MAX_CACHE_BYTES;
+            }
+            return maxCacheBytes;
         }
     }
 }

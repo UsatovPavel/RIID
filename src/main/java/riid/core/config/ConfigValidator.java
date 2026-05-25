@@ -114,6 +114,9 @@ public final class ConfigValidator {
         if (auth.defaultTokenTtlSeconds() <= 0) {
             throw new ConfigValidationException(ConfigValidationException.Auth.TTL_POSITIVE.message());
         }
+        if (auth.maxTokenCacheEntries() != null && auth.maxTokenCacheEntries() <= 0) {
+            throw new ConfigValidationException("client.auth.maxTokenCacheEntries must be positive");
+        }
         boolean hasCert = hasText(auth.certPath());
         boolean hasKey = hasText(auth.keyPath());
         if (hasCert != hasKey) {
@@ -175,6 +178,10 @@ public final class ConfigValidator {
         if (overloadPolicy != null && overloadPolicy != AppConfig.OverloadPolicy.REJECT) {
             throw new ConfigValidationException("app.daemon.overloadPolicy supports only REJECT");
         }
+        Long maxCacheBytes = daemon.maxCacheBytes();
+        if (maxCacheBytes != null && maxCacheBytes <= 0) {
+            throw new ConfigValidationException("app.daemon.maxCacheBytes must be positive");
+        }
     }
 
     private static void validateRuntime(RuntimeConfig runtime) {
@@ -234,8 +241,10 @@ public final class ConfigValidator {
             String message = switch (field) {
                 case "client.http.connectTimeout" -> ConfigValidationException.Http.CONNECT_TIMEOUT_POSITIVE.message();
                 case "client.http.requestTimeout" -> ConfigValidationException.Http.REQUEST_TIMEOUT_POSITIVE.message();
-                case "client.http.imageTimeoutMin" -> ConfigValidationException.Http.IMAGE_TIMEOUT_MIN_POSITIVE.message();
-                case "client.http.imageTimeoutMax" -> ConfigValidationException.Http.IMAGE_TIMEOUT_MAX_POSITIVE.message();
+                case "client.http.imageTimeoutMin" ->
+                    ConfigValidationException.Http.IMAGE_TIMEOUT_MIN_POSITIVE.message();
+                case "client.http.imageTimeoutMax" ->
+                    ConfigValidationException.Http.IMAGE_TIMEOUT_MAX_POSITIVE.message();
                 case "client.http.initialBackoff" -> ConfigValidationException.Http.INITIAL_BACKOFF_POSITIVE.message();
                 case "client.http.maxBackoff" -> ConfigValidationException.Http.MAX_BACKOFF_POSITIVE.message();
                 default -> null;

@@ -15,6 +15,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.core.fs.HostFilesystem;
@@ -98,5 +99,19 @@ class TempFileCacheAdapterTest {
         cache.cleanup();
         cache.cleanup(); // should not throw
         assertFalse(realFs.exists(root));
+    }
+
+    @Test
+    void putRejectsWhenCacheQuotaExceeded() throws Exception {
+        cache = new TempFileCacheAdapter(fs, 4);
+        ImageDigest digest = ImageDigest.parse("sha256:" + "d".repeat(64));
+
+        Path tmp = TestPaths.tempFile(fs, "cache-", ".bin");
+        fs.writeString(tmp, "12345");
+
+        CachePayload payload = FilesystemCachePayload.of(fs, tmp, fs.size(tmp));
+        IOException error = assertThrows(IOException.class, () -> cache.put(digest, payload, CacheMediaType.OCI_LAYER));
+        assertTrue(error.getMessage().contains("maxCacheBytes"));
+        assertFalse(cache.has(digest));
     }
 }

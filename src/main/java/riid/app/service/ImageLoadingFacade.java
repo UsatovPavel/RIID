@@ -142,9 +142,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 return archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
                     runtime.importOciLayoutDirectory(ociDir);
                     MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
-                            .addDurationMs(durationMs(engineStartedNs))
-                            .log("Loaded " + imageId + " into runtime " + runtime.runtimeId()
-                                    + " via OCI layout stream (~" + payloadBytes + " B payload)");
+                            .addDurationMs(durationMs(engineStartedNs)).log("Loaded " + imageId + " into runtime "
+                                    + runtime.runtimeId() + " via OCI layout stream (~" + payloadBytes + " B payload)");
                     return new LoadOutcome(imageId, payloadBytes);
                 });
             }
@@ -221,7 +220,10 @@ public final class ImageLoadingFacade implements AutoCloseable {
             endpoint = new RegistryEndpoint(endpoint.scheme(), endpoint.host(), endpoint.port(), credentialsOverride);
         }
         HostFilesystem fs = new NioHostFilesystem();
-        TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
+        AppConfig appConfig = config.app();
+        AppConfig.DaemonConfig daemonConfig = appConfig != null ? appConfig.daemonOrDefault() : null;
+        long maxCacheBytes = daemonConfig != null ? daemonConfig.maxCacheBytesOrDefault() : -1L;
+        TempFileCacheAdapter cache = new TempFileCacheAdapter(fs, maxCacheBytes);
         HttpClientConfig httpConfig = new HttpClientConfig();
         AuthConfig authConfig = config.client() != null && config.client().auth() != null
                 ? config.client().auth()
@@ -241,7 +243,6 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 : RuntimeConfig.DEFAULT_DOCKER_BIN;
         runtimes.put("docker", new DockerRuntimeAdapter(fs, null, dockerCmd));
 
-        AppConfig appConfig = config.app();
         if (runtimeConfig != null) {
             BoundedCommandExecution.setDefaultOutputConfig(runtimeConfig.outputConfigOrDefault());
             if (runtimeConfig.maxTasksCommandExecutor() != null) {
@@ -275,9 +276,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
     @Override
     public void close() throws IOException {
         IOException error = null;
-        error = closeResource(client::close, "Failed to close registry client", error);
         error = closeResource(p2pCleaner, "Failed to close p2p executor", error);
         error = closeResource(cacheCleaner, "Failed to close cache adapter", error);
+        error = closeResource(client::close, "Failed to close registry client", error);
         if (error != null) {
             throw error;
         }

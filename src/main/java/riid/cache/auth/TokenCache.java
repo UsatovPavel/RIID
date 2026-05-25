@@ -11,10 +11,17 @@ import java.util.concurrent.TimeUnit;
  * Token cache backed by Caffeine with per-entry TTL.
  */
 public final class TokenCache {
+    public static final long DEFAULT_MAX_ENTRIES = 4096L;
+
     private final Cache<String, Entry> cache;
 
     public TokenCache() {
-        this.cache = Caffeine.newBuilder().expireAfter(new Expiry<String, Entry>() {
+        this(DEFAULT_MAX_ENTRIES);
+    }
+
+    public TokenCache(long maxEntries) {
+        long boundedMaxEntries = maxEntries > 0 ? maxEntries : DEFAULT_MAX_ENTRIES;
+        this.cache = Caffeine.newBuilder().maximumSize(boundedMaxEntries).expireAfter(new Expiry<String, Entry>() {
             @Override
             public long expireAfterCreate(String key, Entry value, long currentTime) {
                 return ttlNanos(value);

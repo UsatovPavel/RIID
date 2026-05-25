@@ -76,8 +76,8 @@ public class HttpExecutor {
         }
     }
 
-    private HttpResult<InputStream> execute(String method, URI uri, Map<String, String> headers, Duration requestTimeout)
-            throws IOException {
+    private HttpResult<InputStream> execute(String method, URI uri, Map<String, String> headers,
+            Duration requestTimeout) throws IOException {
         long timeoutMillis = requestTimeout.toMillis();
         if (METHOD_HEAD.equalsIgnoreCase(method)) {
             try {

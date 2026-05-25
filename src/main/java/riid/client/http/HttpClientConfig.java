@@ -16,7 +16,7 @@ public record HttpClientConfig(@JsonProperty("connectTimeout") Duration connectT
         @JsonProperty("retryIdempotentOnly") boolean retryIdempotentOnly, @JsonProperty("userAgent") String userAgent,
         @JsonProperty("followRedirects") boolean followRedirects, @JsonProperty("maxRedirects") int maxRedirects) {
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
     private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(5);
     private static final Duration DEFAULT_IMAGE_TIMEOUT_MAX = Duration.ofMinutes(30);
     private static final long TIMEOUT_SCALE_BYTES = 15L * 1024L * 1024L * 1024L; // 15 GiB
@@ -32,16 +32,15 @@ public record HttpClientConfig(@JsonProperty("connectTimeout") Duration connectT
 
     public HttpClientConfig() {
         this(DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_IMAGE_TIMEOUT_MIN, DEFAULT_IMAGE_TIMEOUT_MAX,
-                DEFAULT_MAX_RETRIES,
-                DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_BACKOFF_EXPONENT_BASE,
+                DEFAULT_MAX_RETRIES, DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_BACKOFF_EXPONENT_BASE,
                 DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT, DEFAULT_FOLLOW_REDIRECTS, DEFAULT_MAX_REDIRECTS);
     }
 
     @Deprecated
     public HttpClientConfig(Duration connectTimeout, Duration requestTimeout, Duration imageTimeoutMin,
-            Duration imageTimeoutMax,
-            int maxRetries, Duration initialBackoff, Duration maxBackoff, int backoffExponentBase,
-            boolean retryIdempotentOnly, String userAgent, boolean followRedirects, int maxRedirects) {
+            Duration imageTimeoutMax, int maxRetries, Duration initialBackoff, Duration maxBackoff,
+            int backoffExponentBase, boolean retryIdempotentOnly, String userAgent, boolean followRedirects,
+            int maxRedirects) {
         this.connectTimeout = connectTimeout != null ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         this.requestTimeout = requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_TIMEOUT;
         this.imageTimeoutMin = imageTimeoutMin != null ? imageTimeoutMin : DEFAULT_IMAGE_TIMEOUT_MIN;

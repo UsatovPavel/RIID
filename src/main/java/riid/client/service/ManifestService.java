@@ -146,9 +146,10 @@ public final class ManifestService implements ManifestServiceApi {
     private ManifestRef selectEntry(ManifestIndex index) {
         String platform = manifestPlatform.os() + "/" + manifestPlatform.architecture();
         if (index.manifests() == null || index.manifests().isEmpty()) {
-            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST_PLATFORM,
-                    "No manifest list entry for platform " + platform), "No manifest list entry for platform "
-                            + platform + " (manifest list is empty)");
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST_PLATFORM,
+                            "No manifest list entry for platform " + platform),
+                    "No manifest list entry for platform " + platform + " (manifest list is empty)");
         }
         return index.manifests().stream()
                 .filter(m -> m.platform() != null && manifestPlatform.os().equalsIgnoreCase(m.platform().os())

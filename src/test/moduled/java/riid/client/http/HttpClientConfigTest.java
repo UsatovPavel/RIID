@@ -35,8 +35,7 @@ class HttpClientConfigTest {
     void builderPreservesValues() {
         HttpClientConfig cfg = HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(2))
                 .requestTimeout(Duration.ofSeconds(3)).imageTimeoutMin(Duration.ofSeconds(4))
-                .imageTimeoutMax(Duration.ofSeconds(10)).maxRetries(5)
-                .initialBackoff(Duration.ofMillis(150))
+                .imageTimeoutMax(Duration.ofSeconds(10)).maxRetries(5).initialBackoff(Duration.ofMillis(150))
                 .maxBackoff(Duration.ofMillis(900)).retryIdempotentOnly(false).userAgent("custom")
                 .followRedirects(false).build();
         HttpClientConfig copy = cfg.toBuilder().build();

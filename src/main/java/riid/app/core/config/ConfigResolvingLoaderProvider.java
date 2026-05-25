@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import riid.app.cli.CliApplication;
 import riid.app.cli.CliParser;
 import riid.app.core.model.ImageId;
+import riid.app.daemon.DaemonRuntimeContext;
 import riid.app.service.ImageLoadingFacade;
 import riid.client.core.config.RegistryEndpoint;
 import riid.core.config.ConfigLoader;
@@ -52,6 +53,34 @@ public final class ConfigResolvingLoaderProvider {
                 throw new RuntimeException("Failed to load image", e);
             }
         };
+    }
+
+    public static DaemonRuntimeContext createDaemonRuntime(CliParser.CliOptions options, MeterRegistry meterRegistry)
+            throws Exception {
+        if (!options.configProvidedByUser() && !Files.exists(options.configPath())) {
+            RegistryEndpoint endpoint = options.credentials() == null
+                    ? DEFAULT_REGISTRY_ENDPOINT
+                    : new RegistryEndpoint(DEFAULT_REGISTRY_ENDPOINT.scheme(), DEFAULT_REGISTRY_ENDPOINT.host(),
+                            DEFAULT_REGISTRY_ENDPOINT.port(), options.credentials());
+            var fs = new NioHostFilesystem();
+            ImageLoadingFacade facade = ImageLoadingFacade.createDefault(endpoint, null, new P2PExecutor.NoOp(),
+                    ImageLoadingFacade.defaultRuntimes(), fs, meterRegistry);
+            CliApplication.ImageLoader loader = (repository, reference, runtimeId) -> facade
+                    .load(ImageId.fromRegistry(endpoint.registryName(), repository, reference), runtimeId);
+            return new DaemonRuntimeContext(loader, facade);
+        }
+
+        GlobalConfig config = ConfigLoader.load(options.configPath());
+        RegistryEndpoint endpoint = config.client().registries().getFirst();
+        if (options.credentials() != null) {
+            endpoint = new RegistryEndpoint(endpoint.scheme(), endpoint.host(), endpoint.port(), options.credentials());
+        }
+        String registry = endpoint.registryName();
+        ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(options.configPath(), options.credentials(),
+                meterRegistry);
+        CliApplication.ImageLoader loader = (repository, reference, runtimeId) -> facade
+                .load(ImageId.fromRegistry(registry, repository, reference), runtimeId);
+        return new DaemonRuntimeContext(loader, facade);
     }
 
     private static CliApplication.ImageLoader defaultLoaderWithBuiltInConfig(RegistryEndpoint endpoint,

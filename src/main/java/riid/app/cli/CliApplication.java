@@ -4,6 +4,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -20,6 +21,7 @@ import riid.app.core.config.AppConfig;
 import riid.app.core.config.ConfigResolvingLoaderProvider;
 import riid.app.core.config.DaemonSettingsResolver;
 import riid.app.core.error.AppException;
+import riid.app.daemon.DaemonRuntimeContext;
 import riid.app.daemon.DaemonServer;
 import riid.app.service.ImageLoadingFacade;
 import riid.app.service.LoadOutcome;
@@ -51,7 +53,7 @@ public final class CliApplication {
         }
     }
 
-    private final ServiceFactory serviceFactory;
+    private final DaemonServiceFactory serviceFactory;
     private final PrintWriter out;
     private final PrintWriter err;
     private final Set<String> availableRuntimes;
@@ -59,17 +61,19 @@ public final class CliApplication {
 
     public CliApplication(ServiceFactory serviceFactory, Map<String, RuntimeAdapter> runtimes, PrintWriter out,
             PrintWriter err) {
-        this(serviceFactory, runtimes, out, err, (options, loader, available, prometheusRegistry) -> {
-            AppConfig.DaemonConfig daemonConfig = DaemonSettingsResolver.resolve(options);
-            DaemonServer server = new DaemonServer(daemonConfig.unixSocketPathOrDefault(),
-                    daemonConfig.metricsHostOrDefault(), daemonConfig.metricsPortOrDefault(), loader, available,
-                    daemonConfig.maxConcurrentPullsOrDefault(), daemonConfig.maxRequestBodyBytesOrDefault(),
-                    daemonConfig.requestTimeoutOrDefault(), daemonConfig.overloadPolicyOrDefault(), prometheusRegistry);
-            server.startAndJoin();
-        });
+        this(wrapAsDaemonServiceFactory(serviceFactory), runtimes, out, err,
+                (options, loader, available, prometheusRegistry) -> {
+                    AppConfig.DaemonConfig daemonConfig = DaemonSettingsResolver.resolve(options);
+                    DaemonServer server = new DaemonServer(daemonConfig.unixSocketPathOrDefault(),
+                            daemonConfig.metricsHostOrDefault(), daemonConfig.metricsPortOrDefault(), loader, available,
+                            daemonConfig.maxConcurrentPullsOrDefault(), daemonConfig.maxRequestBodyBytesOrDefault(),
+                            daemonConfig.requestTimeoutOrDefault(), daemonConfig.overloadPolicyOrDefault(),
+                            prometheusRegistry);
+                    server.startAndJoin();
+                });
     }
 
-    public CliApplication(ServiceFactory serviceFactory, Map<String, RuntimeAdapter> runtimes, PrintWriter out,
+    public CliApplication(DaemonServiceFactory serviceFactory, Map<String, RuntimeAdapter> runtimes, PrintWriter out,
             PrintWriter err, DaemonRunner daemonRunner) {
         this.serviceFactory = Objects.requireNonNull(serviceFactory, "serviceFactory");
         this.availableRuntimes = Set.copyOf(Objects.requireNonNull(runtimes, "runtimes").keySet());
@@ -79,7 +83,19 @@ public final class CliApplication {
     }
 
     public static CliApplication createDefault() {
-        return new CliApplication(ConfigResolvingLoaderProvider::create, ImageLoadingFacade.defaultRuntimes(),
+        DaemonServiceFactory factory = new DaemonServiceFactory() {
+            @Override
+            public ImageLoader create(CliParser.CliOptions options, MeterRegistry meterRegistry) throws Exception {
+                return ConfigResolvingLoaderProvider.create(options, meterRegistry);
+            }
+
+            @Override
+            public DaemonRuntimeContext createDaemonRuntime(CliParser.CliOptions options, MeterRegistry meterRegistry)
+                    throws Exception {
+                return ConfigResolvingLoaderProvider.createDaemonRuntime(options, meterRegistry);
+            }
+        };
+        return new CliApplication(factory, ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(System.err, StandardCharsets.UTF_8), true));
     }
@@ -122,8 +138,10 @@ public final class CliApplication {
                 new JvmMemoryMetrics().bindTo(prometheusRegistry);
                 new JvmGcMetrics().bindTo(prometheusRegistry);
                 new ProcessorMetrics().bindTo(prometheusRegistry);
-                ImageLoader loader = serviceFactory.create(options, prometheusRegistry);
-                daemonRunner.run(options, loader, availableRuntimes, prometheusRegistry);
+                try (DaemonRuntimeContext runtimeContext = serviceFactory.createDaemonRuntime(options,
+                        prometheusRegistry)) {
+                    daemonRunner.run(options, runtimeContext.imageLoader(), availableRuntimes, prometheusRegistry);
+                }
                 MilestoneEventLogger.info(LOGGER).addEvent(EventType.REQUEST_FINISH).addResult(ResultType.SUCCESS)
                         .addDurationFrom(requestStartedNs).log("Request finished (daemon)");
                 return ExitCode.OK.code();
@@ -195,6 +213,30 @@ public final class CliApplication {
          *            {@link ImageLoadingFacade}
          */
         ImageLoader create(CliParser.CliOptions options, MeterRegistry meterRegistry) throws Exception;
+    }
+
+    public interface DaemonServiceFactory extends ServiceFactory {
+        DaemonRuntimeContext createDaemonRuntime(CliParser.CliOptions options, MeterRegistry meterRegistry)
+                throws Exception;
+    }
+
+    private static DaemonServiceFactory wrapAsDaemonServiceFactory(ServiceFactory serviceFactory) {
+        Objects.requireNonNull(serviceFactory, "serviceFactory");
+        if (serviceFactory instanceof DaemonServiceFactory daemonServiceFactory) {
+            return daemonServiceFactory;
+        }
+        return new DaemonServiceFactory() {
+            @Override
+            public ImageLoader create(CliParser.CliOptions options, MeterRegistry meterRegistry) throws Exception {
+                return serviceFactory.create(options, meterRegistry);
+            }
+
+            @Override
+            public DaemonRuntimeContext createDaemonRuntime(CliParser.CliOptions options, MeterRegistry meterRegistry)
+                    throws Exception {
+                return new DaemonRuntimeContext(serviceFactory.create(options, meterRegistry), List.of());
+            }
+        };
     }
 
     @FunctionalInterface

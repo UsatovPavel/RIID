@@ -67,7 +67,8 @@ public final class RegistryClientImpl implements RegistryClient {
         AuthConfig effectiveAuthConfig = authConfig != null ? authConfig : new AuthConfig();
         this.jettyClient = HttpClientFactory.create(httpConfig, effectiveAuthConfig);
         this.http = new HttpExecutor(jettyClient, httpConfig);
-        this.authService = new AuthService(http, mapper, new TokenCache(),
+        this.authService = new AuthService(http, mapper,
+                new TokenCache(effectiveAuthConfig.maxTokenCacheEntriesOrDefault()),
                 effectiveAuthConfig.defaultTokenTtlSeconds());
         ClientPlatformConfig platform = manifestPlatform != null ? manifestPlatform : ClientPlatformConfig.fromHost();
         this.manifestService = new ManifestService(http, authService, mapper, platform);

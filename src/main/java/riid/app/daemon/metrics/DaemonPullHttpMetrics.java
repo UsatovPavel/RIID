@@ -2,6 +2,8 @@ package riid.app.daemon.metrics;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -22,6 +24,7 @@ public final class DaemonPullHttpMetrics {
     private static final Duration PULL_HISTOGRAM_MAX = Duration.ofMinutes(30);
 
     private final MeterRegistry registry;
+    private final ConcurrentMap<TimerKey, Timer> timers = new ConcurrentHashMap<>();
 
     public DaemonPullHttpMetrics(MeterRegistry registry) {
         this.registry = Objects.requireNonNull(registry, "registry");
@@ -43,10 +46,15 @@ public final class DaemonPullHttpMetrics {
     public void record(long startNanos, int httpStatus, String code) {
         long elapsedNanos = System.nanoTime() - startNanos;
         String statusClass = statusClass(httpStatus);
-        Timer.builder(METRIC).description("Daemon POST /pull handling duration")
-                .tag("status", Integer.toString(httpStatus)).tag("status_class", statusClass).tag("code", code)
-                .publishPercentileHistogram().maximumExpectedValue(PULL_HISTOGRAM_MAX).register(registry)
-                .record(elapsedNanos, TimeUnit.NANOSECONDS);
+        Timer timer = timers.computeIfAbsent(new TimerKey(httpStatus, statusClass, code), this::registerTimer);
+        timer.record(elapsedNanos, TimeUnit.NANOSECONDS);
+    }
+
+    private Timer registerTimer(TimerKey key) {
+        return Timer.builder(METRIC).description("Daemon POST /pull handling duration")
+                .tag("status", Integer.toString(key.httpStatus())).tag("status_class", key.statusClass())
+                .tag("code", key.code()).publishPercentileHistogram().maximumExpectedValue(PULL_HISTOGRAM_MAX)
+                .register(registry);
     }
 
     private static String statusClass(int status) {
@@ -63,5 +71,8 @@ public final class DaemonPullHttpMetrics {
             return "5xx";
         }
         return "other";
+    }
+
+    private record TimerKey(int httpStatus, String statusClass, String code) {
     }
 }

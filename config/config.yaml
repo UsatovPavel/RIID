@@ -18,6 +18,7 @@ client:
     retryWithoutRangeOnUnsatisfiableRange: true
   auth:
     defaultTokenTtlSeconds: 300
+    maxTokenCacheEntries: 4096
     certPath: null
     keyPath: null
     caPath: null
@@ -39,3 +40,4 @@ app:
     maxRequestBodyBytes: 8192
     requestTimeout: "PT30M"
     overloadPolicy: REJECT
+    maxCacheBytes: 10737418240 #10 GB

@@ -380,7 +380,7 @@ class ConfigBranchTest {
     @Test
     void throwsWhenDaemonMaxRequestBodyBytesNotPositive() {
         AppConfig.DaemonConfig daemon = new AppConfig.DaemonConfig("/tmp/riid.sock", "127.0.0.1", 9090, 8, 0,
-                Duration.ofSeconds(10), AppConfig.OverloadPolicy.REJECT);
+                Duration.ofSeconds(10), AppConfig.OverloadPolicy.REJECT, null);
         AppConfig app = new AppConfig(null, null, null, daemon);
         GlobalConfig cfg = new GlobalConfig(validClient(), new DispatcherConfig(1), null, app, null);
 

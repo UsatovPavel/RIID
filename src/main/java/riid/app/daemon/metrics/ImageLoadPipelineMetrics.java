@@ -2,6 +2,8 @@ package riid.app.daemon.metrics;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 import io.micrometer.core.instrument.Counter;
@@ -55,6 +57,9 @@ public final class ImageLoadPipelineMetrics {
     private final DistributionSummary tarSizeBytes;
     private final DistributionSummary throughputBps;
     private final DistributionSummary throughputSloBps;
+    private final ConcurrentMap<LoadTimerKey, Timer> loadTimers = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ImageSizeBucket, DistributionSummary> tarSizeByCategory = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ImageSizeBucket, Counter> tarSizeCategoryCounters = new ConcurrentHashMap<>();
 
     public ImageLoadPipelineMetrics(MeterRegistry registry) {
         this.registry = Objects.requireNonNull(registry, "registry");
@@ -75,8 +80,7 @@ public final class ImageLoadPipelineMetrics {
     /**
      * @param payloadBytes
      *            payload size in bytes ({@code config + layers + manifest}), or
-     *            {@code -1} to skip payload-derived
-     *            metrics
+     *            {@code -1} to skip payload-derived metrics
      */
     public void recordSuccess(long startNanos, long payloadBytes) {
         if (payloadBytes >= 0) {
@@ -97,26 +101,20 @@ public final class ImageLoadPipelineMetrics {
 
     private void record(long startNanos, String result, ImageSizeBucket sizeBucket) {
         long elapsedNanos = System.nanoTime() - startNanos;
-        Timer.builder(MetricName.LOAD.value()).description("End-to-end image load in daemon (loader pipeline)")
-                .tag("result", result).tag("category", sizeBucket.metricLabel()).publishPercentileHistogram()
-                .maximumExpectedValue(LOAD_HISTOGRAM_MAX).register(registry).record(elapsedNanos, TimeUnit.NANOSECONDS);
+        Timer timer = loadTimers.computeIfAbsent(new LoadTimerKey(result, sizeBucket), this::registerLoadTimer);
+        timer.record(elapsedNanos, TimeUnit.NANOSECONDS);
     }
 
     private void recordPayloadDerived(long pipelineStartNanos, long payloadBytes) {
         long elapsedNanos = System.nanoTime() - pipelineStartNanos;
         double seconds = elapsedNanos / 1_000_000_000.0;
+        ImageSizeBucket bucket = ImageSizeBucket.fromTarBytes(payloadBytes);
 
         tarSizeBytes.record(payloadBytes);
 
-        DistributionSummary.builder(MetricName.TAR_SIZE_BY_CATEGORY.value())
-                .description("Tar size in bytes per size bucket (for mean size vs latency dashboards)")
-                .tag("category", ImageSizeBucket.fromTarBytes(payloadBytes).metricLabel()).register(registry)
-                .record(payloadBytes);
+        tarSizeByCategory.computeIfAbsent(bucket, this::registerTarSizeByCategory).record(payloadBytes);
 
-        Counter.builder(MetricName.TAR_SIZE_CATEGORY.value())
-                .description("Count of successful loads by tar size category (MiB buckets)")
-                .tag("category", ImageSizeBucket.fromTarBytes(payloadBytes).metricLabel()).register(registry)
-                .increment();
+        tarSizeCategoryCounters.computeIfAbsent(bucket, this::registerTarSizeCategoryCounter).increment();
 
         if (seconds <= ZERO_SECONDS) {
             return;
@@ -126,5 +124,26 @@ public final class ImageLoadPipelineMetrics {
         if (payloadBytes >= MIN_SLO_TAR_BYTES) {
             throughputSloBps.record(bps);
         }
+    }
+
+    private Timer registerLoadTimer(LoadTimerKey key) {
+        return Timer.builder(MetricName.LOAD.value()).description("End-to-end image load in daemon (loader pipeline)")
+                .tag("result", key.result()).tag("category", key.bucket().metricLabel()).publishPercentileHistogram()
+                .maximumExpectedValue(LOAD_HISTOGRAM_MAX).register(registry);
+    }
+
+    private DistributionSummary registerTarSizeByCategory(ImageSizeBucket bucket) {
+        return DistributionSummary.builder(MetricName.TAR_SIZE_BY_CATEGORY.value())
+                .description("Tar size in bytes per size bucket (for mean size vs latency dashboards)")
+                .tag("category", bucket.metricLabel()).register(registry);
+    }
+
+    private Counter registerTarSizeCategoryCounter(ImageSizeBucket bucket) {
+        return Counter.builder(MetricName.TAR_SIZE_CATEGORY.value())
+                .description("Count of successful loads by tar size category (MiB buckets)")
+                .tag("category", bucket.metricLabel()).register(registry);
+    }
+
+    private record LoadTimerKey(String result, ImageSizeBucket bucket) {
     }
 }
