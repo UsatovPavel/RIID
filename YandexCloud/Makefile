@@ -132,3 +132,12 @@ test-scenario-c:
 		'set -a; [ -f config/.env ] && . config/.env; set +a' \
 		'./gradlew performanceTest --tests riid.performance.parrallel.cache.Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest' \
 		| $(YC_SSH) -- bash -s
+
+
+autonomic:
+	cd ~/RIID
+	set -a; [ -f config/.env ] && . config/.env; set +a; \
+	nohup ./gradlew performanceTest \
+  	--tests riid.performance.sequentially.manyimages.Daemon30ImagesSequentialPullTest \
+  	>> _scenario_sequential-30.txt 2>&1 &
+	echo $$!
