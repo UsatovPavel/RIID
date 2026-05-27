@@ -76,7 +76,7 @@ public final class DaemonServer {
 
         Handler.Sequence root = new Handler.Sequence();
         PullConcurrencyGuard pullConcurrencyGuard = new SemaphorePullConcurrencyGuard(
-                new Semaphore(maxConcurrentPulls, true));
+                new Semaphore(maxConcurrentPulls, true), maxConcurrentPulls);
         root.addHandler(new PullHttpHandler(CONTROL_CONNECTOR_NAME, loader, availableRuntimes, pullConcurrencyGuard,
                 maxRequestBodyBytes, requestTimeout, pullExecutor, new DaemonPullHttpMetrics(prometheusRegistry),
                 new ImageLoadPipelineMetrics(prometheusRegistry)));

@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -41,6 +44,11 @@ import riid.core.logging.MdcContext;
 
 public final class PullHttpHandler extends Handler.Abstract {
     private static final String PULL_PATH = "/pull";
+    private static final String COMMAND_PULL = "PULL";
+    private static final String COMMAND_CLEAN = "CLEAN";
+    private static final String RIID_CACHE_DIR_PREFIX = "riid-cache-tmp-";
+    private static final String OCI_LAYOUT_DIR_PREFIX = "oci-layout-";
+    private static final String OCI_ARCHIVE_FILE_PREFIX = "oci-archive-";
 
     /**
      * Optional: client-supplied correlation id for logs (validated; invalid → new
@@ -129,6 +137,27 @@ public final class PullHttpHandler extends Handler.Abstract {
             return true;
         }
 
+        String command = resolveCommand(pullRequest.command());
+        if (COMMAND_CLEAN.equals(command)) {
+            try {
+                boolean cleaned = concurrencyGuard.tryExecuteWhenIdle(PullHttpHandler::cleanDaemonArtifacts);
+                if (!cleaned) {
+                    pullMetrics.record(t0, HttpStatus.CONFLICT_409, "clean_busy");
+                    writeJson(response, callback, HttpStatus.CONFLICT_409,
+                            new ErrorResponse("clean_busy", "CLEAN is allowed only when active pull count is zero"));
+                    return true;
+                }
+                pullMetrics.record(t0, HttpStatus.OK_200, "clean_success");
+                writeJson(response, callback, HttpStatus.OK_200, new DaemonCommandResponse("success", COMMAND_CLEAN));
+                return true;
+            } catch (Exception e) {
+                pullMetrics.record(t0, HttpStatus.INTERNAL_SERVER_ERROR_500, "clean_failed");
+                writeJson(response, callback, HttpStatus.INTERNAL_SERVER_ERROR_500,
+                        new ErrorResponse("clean_failed", safeMessage(e)));
+                return true;
+            }
+        }
+
         if (pullRequest.repository() == null || pullRequest.repository().isBlank() || pullRequest.reference() == null
                 || pullRequest.reference().isBlank() || pullRequest.runtimeId() == null
                 || pullRequest.runtimeId().isBlank()) {
@@ -183,6 +212,41 @@ public final class PullHttpHandler extends Handler.Abstract {
             MdcContext.clearRequestContext();
         }
         return true;
+    }
+
+    private static String resolveCommand(String command) {
+        if (command == null || command.isBlank()) {
+            return COMMAND_PULL;
+        }
+        return command.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static void cleanDaemonArtifacts() throws IOException {
+        Path tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
+        if (!Files.isDirectory(tmpDir)) {
+            return;
+        }
+        try (var entries = Files.list(tmpDir)) {
+            for (Path entry : entries.toList()) {
+                String fileName = entry.getFileName().toString();
+                if (fileName.startsWith(RIID_CACHE_DIR_PREFIX) || fileName.startsWith(OCI_LAYOUT_DIR_PREFIX)
+                        || fileName.startsWith(OCI_ARCHIVE_FILE_PREFIX)) {
+                    deleteRecursively(entry);
+                }
+            }
+        }
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (Files.isDirectory(root)) {
+            try (var walk = Files.walk(root)) {
+                for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+            return;
+        }
+        Files.deleteIfExists(root);
     }
 
     private static String readBodyWithLimit(Request request, int maxRequestBodyBytes)
@@ -379,13 +443,16 @@ public final class PullHttpHandler extends Handler.Abstract {
         return message;
     }
 
-    record DaemonPullRequest(String repository, String reference, String runtimeId) {
+    record DaemonPullRequest(String repository, String reference, String runtimeId, String command) {
     }
 
     record DaemonPullResponse(String status, String imagePath, String error) {
     }
 
     record ErrorResponse(String code, String message) {
+    }
+
+    record DaemonCommandResponse(String status, String command) {
     }
 
     private static final class PullTimeoutException extends Exception {

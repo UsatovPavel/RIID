@@ -61,6 +61,16 @@ public final class PerformanceColdCacheHelper {
         clearRiidCacheDirs();
     }
 
+    /** Podman prune + RIID CLEAN command via daemon UDS. */
+    public static void clearAllCache(Path daemonSocketPath, Path workDir) throws Exception {
+        clearPodmanCaches();
+        clearRiidCacheViaDaemon(daemonSocketPath, workDir);
+    }
+
+    public static void clearRiidCacheViaDaemon(Path daemonSocketPath, Path workDir) throws Exception {
+        DaemonUnixSocketPullSupport.postClean(daemonSocketPath, workDir);
+    }
+
     /** @deprecated use {@link #clearAllCache()} */
     @Deprecated
     public static void clearPodmanAndRiidCaches() throws Exception {

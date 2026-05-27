@@ -134,10 +134,12 @@ test-scenario-c:
 		| $(YC_SSH) -- bash -s
 
 
-autonomic:
-	cd ~/RIID
-	set -a; [ -f config/.env ] && . config/.env; set +a; \
-	nohup ./gradlew performanceTest \
-  	--tests riid.performance.sequentially.manyimages.Daemon30ImagesSequentialPullTest \
-  	>> _scenario_sequential-30.txt 2>&1 &
-	echo $$!
+# С хоста: sequential-30 в фоне на VM (переживает обрыв SSH).
+test-sequential-30-bg:
+	printf '%s\n' \
+		'set -euo pipefail' \
+		'cd "$(YC_RIID_DIR)"' \
+		'set -a; [ -f config/.env ] && . config/.env; set +a' \
+		'nohup ./gradlew performanceTest --tests riid.performance.sequentially.manyimages.Daemon30ImagesSequentialPullTest >> _scenario_sequential-30.txt 2>&1 &' \
+		'echo "started gradlew pid=$$!"' \
+		| $(YC_SSH) -- bash -s

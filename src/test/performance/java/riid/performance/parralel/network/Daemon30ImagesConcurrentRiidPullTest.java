@@ -51,10 +51,10 @@ class Daemon30ImagesConcurrentRiidPullTest {
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
 
         assumeTrue(PerformanceColdCacheHelper.podmanAvailable(), "podman must be on PATH");
-        PerformanceColdCacheHelper.clearAllCache();
 
         Path workDir = Files.createTempDirectory("riid-perf-b2-concurrent");
         try {
+            PerformanceColdCacheHelper.clearAllCache(socketPath, workDir);
             List<String> repos = PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES;
             String ref = PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE;
 

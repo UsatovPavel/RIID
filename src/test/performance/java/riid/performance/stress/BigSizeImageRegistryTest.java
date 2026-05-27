@@ -59,10 +59,9 @@ class BigSizeImageRegistryTest {
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
 
-        PerformanceColdCacheHelper.clearAllCache();
-
         Path workDir = Files.createTempDirectory("riid-stress-big-image");
         try {
+            PerformanceColdCacheHelper.clearAllCache(socketPath, workDir);
             long t0 = System.nanoTime();
             DaemonUnixSocketPullSupport.postPull(socketPath, workDir, REPOSITORY, REFERENCE, RUNTIME);
             long wallMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0);
