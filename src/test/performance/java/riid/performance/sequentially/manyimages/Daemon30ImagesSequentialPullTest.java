@@ -61,13 +61,13 @@ class Daemon30ImagesSequentialPullTest {
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
 
         assumeTrue(commandAvailable("podman"), "podman must be on PATH");
+        PerformanceColdCacheHelper.clearAllCache();
 
         long testStartNs = System.nanoTime();
 
         List<Long> riidPullMsList = new ArrayList<>(N);
         Path workDir = Files.createTempDirectory("riid-perf-b1-seq");
         try {
-            PerformanceColdCacheHelper.clearAllCache(socketPath, workDir);
             int index = 0;
             for (String repo : PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES) {
                 index++;
@@ -117,7 +117,7 @@ class Daemon30ImagesSequentialPullTest {
     void podmanPhaseOnly() throws Exception {
         assumeTrue(commandAvailable("podman"), "podman must be on PATH");
         long testStartNs = System.nanoTime();
-        PerformanceColdCacheHelper.clearPodmanCaches();
+        PerformanceColdCacheHelper.clearAllCache();
         long podmanPhaseStart = System.nanoTime();
         List<Long> podmanPullMsList = coldPodmanCacheThenMeasuredPulls();
         long podmanPhaseWallMs = (System.nanoTime() - podmanPhaseStart) / 1_000_000L;

@@ -37,21 +37,6 @@ public final class DaemonUnixSocketPullSupport {
         Path bodyFile = workDir.resolve("body-" + repository.replace('/', '-') + ".json");
         String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + reference + "\",\"runtimeId\":\""
                 + runtimeId + "\"}";
-        postJson(socketPath, bodyFile, json, repository, "200");
-        JsonNode node = MAPPER.readTree(Files.readString(bodyFile));
-        assertEquals("success", node.path("status").asText(), "body for " + repository);
-    }
-
-    public static void postClean(Path socketPath, Path workDir) throws Exception {
-        Path bodyFile = workDir.resolve("body-clean.json");
-        String json = "{\"command\":\"CLEAN\"}";
-        postJson(socketPath, bodyFile, json, "CLEAN", "200");
-        JsonNode node = MAPPER.readTree(Files.readString(bodyFile));
-        assertEquals("success", node.path("status").asText(), "body for CLEAN");
-    }
-
-    private static void postJson(Path socketPath, Path bodyFile, String json, String operation, String expectedHttpCode)
-            throws Exception {
         int maxSec = requestTimeoutSeconds();
         ProcessBuilder pb = new ProcessBuilder("curl", "-sS", "--fail-with-body", "--connect-timeout",
                 Integer.toString(Math.min(120, maxSec)), "--max-time", Integer.toString(maxSec), "--unix-socket",
@@ -66,16 +51,18 @@ public final class DaemonUnixSocketPullSupport {
             } catch (IOException e) {
                 errRef.set(e.toString());
             }
-        }, "curl-stderr-" + operation.replace('/', '-'));
+        }, "curl-stderr-" + repository.replace('/', '-'));
         stderrDrainer.setDaemon(true);
         stderrDrainer.start();
         String httpCode = new String(proc.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
         stderrDrainer.join(TimeUnit.SECONDS.toMillis(maxSec + 60L));
         String err = errRef.get();
         boolean finished = proc.waitFor(2L, TimeUnit.MINUTES);
-        assertTrue(finished, "curl did not finish for " + operation + ": " + err);
-        assertEquals(0, proc.exitValue(), "curl stderr for " + operation + ": " + err);
-        assertEquals(expectedHttpCode, httpCode, "HTTP for " + operation);
+        assertTrue(finished, "curl did not finish for " + repository + ": " + err);
+        assertEquals(0, proc.exitValue(), "curl stderr for " + repository + ": " + err);
+        assertEquals("200", httpCode, "HTTP for " + repository);
+        JsonNode node = MAPPER.readTree(Files.readString(bodyFile));
+        assertEquals("success", node.path("status").asText(), "body for " + repository);
     }
 
     public static int requestTimeoutSeconds() {

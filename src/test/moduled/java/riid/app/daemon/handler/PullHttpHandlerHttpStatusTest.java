@@ -53,7 +53,6 @@ class PullHttpHandlerHttpStatusTest {
         private static final String LATEST_REFERENCE = "latest";
         private static final String PODMAN_RUNTIME_ID = "podman";
         private static final String BUSYBOX_PULL_BODY = "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}";
-        private static final String CLEAN_BODY = "{\"command\":\"CLEAN\"}";
         private static final String JSON_FIELD_CODE = "code";
         private static final String JSON_FIELD_MESSAGE = "message";
 
@@ -205,49 +204,6 @@ class PullHttpHandlerHttpStatusTest {
 
         assertEquals(HttpStatus.TOO_MANY_REQUESTS_429, r.status());
         assertEquals("overloaded", r.json().path(PullRequest.JSON_FIELD_CODE).asText());
-    }
-
-    @Test
-    void cleanReturns200WhenIdle() throws Exception {
-        pullExecutor = newPullExecutor();
-        startServer(new PullHttpHandler(CONTROL,
-                (repo, ref, rt) -> okLoad(PullRequest.BUSYBOX_REPOSITORY, PullRequest.LATEST_REFERENCE, -1), RUNTIMES,
-                new SemaphorePullConcurrencyGuard(new Semaphore(2, true), 2), MAX_REQUEST_BODY_BYTES, LONG_TIMEOUT,
-                pullExecutor, pullMetrics(), pipelineLoadMetrics()));
-
-        ParsedResponse r = postClean();
-
-        assertEquals(HttpStatus.OK_200, r.status());
-        assertEquals("success", r.json().path("status").asText());
-        assertEquals("CLEAN", r.json().path("command").asText());
-    }
-
-    @Test
-    void cleanReturns409WhenPullIsRunning() throws Exception {
-        CountDownLatch hold = new CountDownLatch(1);
-        CountDownLatch entered = new CountDownLatch(1);
-        pullExecutor = newPullExecutor();
-        startServer(new PullHttpHandler(CONTROL, (repo, ref, rt) -> {
-            entered.countDown();
-            try {
-                assertTrue(hold.await(5, TimeUnit.MINUTES));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
-            }
-            return okLoad(PullRequest.BUSYBOX_REPOSITORY, PullRequest.LATEST_REFERENCE, -1);
-        }, RUNTIMES, new SemaphorePullConcurrencyGuard(new Semaphore(1, true), 1), MAX_REQUEST_BODY_BYTES, LONG_TIMEOUT,
-                pullExecutor, pullMetrics(), pipelineLoadMetrics()), 1);
-
-        try (ExecutorService clients = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<ParsedResponse> pullFuture = clients.submit(() -> postPull(PullRequest.BUSYBOX_PULL_BODY, connector));
-            assertTrue(entered.await(10, TimeUnit.SECONDS), "pull should acquire permit before CLEAN");
-            ParsedResponse clean = postClean();
-            assertEquals(HttpStatus.CONFLICT_409, clean.status());
-            assertEquals("clean_busy", clean.json().path(PullRequest.JSON_FIELD_CODE).asText());
-            hold.countDown();
-            assertEquals(HttpStatus.OK_200, pullFuture.get(30, TimeUnit.SECONDS).status());
-        }
     }
 
     /**
@@ -546,10 +502,6 @@ class PullHttpHandlerHttpStatusTest {
 
     private ParsedResponse postPull(String jsonBody) throws Exception {
         return postPull(jsonBody, connector);
-    }
-
-    private ParsedResponse postClean() throws Exception {
-        return postPull(PullRequest.CLEAN_BODY, connector);
     }
 
     private ParsedResponse postPull(String jsonBody, LocalConnector conn) throws Exception {

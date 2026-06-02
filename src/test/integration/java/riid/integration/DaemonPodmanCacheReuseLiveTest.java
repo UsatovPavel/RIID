@@ -9,9 +9,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -57,9 +54,6 @@ class DaemonPodmanCacheReuseLiveTest {
     private static final String REPOSITORY = "library/jobber";
     private static final String REFERENCE = "latest";
     private static final String RUNTIME_ID = "podman";
-    private static final String RIID_CACHE_DIR_PREFIX = "riid-cache-tmp-";
-    private static final String OCI_LAYOUT_DIR_PREFIX = "oci-layout-";
-    private static final String OCI_ARCHIVE_FILE_PREFIX = "oci-archive-";
 
     @Test
     void secondPullUsesCacheAfterPodmanContainerCleanup() throws Exception {
@@ -117,73 +111,10 @@ class DaemonPodmanCacheReuseLiveTest {
         }
     }
 
-    @Test
-    void pullThenCleanClearsBlobAndOciArtifacts() throws Exception {
-        assumeTrue(TestFilesystemSupport.curlAvailable(), "curl must be on PATH for HTTP over UDS");
-        assumeTrue(commandAvailable("podman"), "podman must be on PATH");
-
-        Path workDir = Files.createTempDirectory("daemon-clean-");
-        Path configPath = Files.createTempFile("daemon-clean-", ".yaml");
-        Path tempDir = Files.createTempDirectory("daemon-clean-temp-");
-        Path socketPath = workDir.resolve("riid.sock");
-        Path pullBody = workDir.resolve("pull-body.json");
-        Path cleanBody = workDir.resolve("clean-body.json");
-
-        Files.writeString(configPath, TestConfigYaml.dockerHubConfigWithRuntimeTempDir(3, tempDir.toString()));
-
-        PrometheusMeterRegistry prom = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-        String registry = TestRegistryConfig.registryName();
-        ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(configPath, null, prom);
-        CliApplication.ImageLoader loader = (repo, ref, runtimeId) -> facade
-                .load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
-
-        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RUNTIME_ID), 4,
-                8192, Duration.ofMinutes(10), AppConfig.OverloadPolicy.REJECT, prom);
-
-        try {
-            daemon.start();
-            postPull(socketPath, pullBody, REPOSITORY, REFERENCE, RUNTIME_ID);
-
-            List<Path> blobAndOciArtifacts = listExistingBlobAndOciArtifacts();
-            assertTrue(blobAndOciArtifacts.stream().anyMatch(p -> p.getFileName().toString().startsWith(RIID_CACHE_DIR_PREFIX)),
-                    "after pull, expected non-empty blob cache artifacts under java.io.tmpdir");
-
-            postClean(socketPath, cleanBody);
-
-            for (Path artifact : blobAndOciArtifacts) {
-                assertTrue(isMissingOrEmpty(artifact),
-                        "artifact should be removed or emptied by CLEAN: " + artifact);
-            }
-        } finally {
-            daemon.stop();
-            facade.close();
-            TestFilesystemSupport.deleteRecursive(workDir);
-            TestFilesystemSupport.deleteRecursive(tempDir);
-            try {
-                Files.deleteIfExists(configPath);
-            } catch (IOException ignored) {
-                // best effort
-            }
-        }
-    }
-
     private static void postPull(Path socketPath, Path bodyFile, String repository, String reference, String runtimeId)
             throws Exception {
         String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + reference + "\",\"runtimeId\":\""
                 + runtimeId + "\"}";
-        postJson(socketPath, bodyFile, json);
-        JsonNode body = MAPPER.readTree(java.nio.file.Files.readString(bodyFile));
-        assertEquals("success", body.path("status").asText(), "pull body");
-    }
-
-    private static void postClean(Path socketPath, Path bodyFile) throws Exception {
-        postJson(socketPath, bodyFile, "{\"command\":\"CLEAN\"}");
-        JsonNode body = MAPPER.readTree(java.nio.file.Files.readString(bodyFile));
-        assertEquals("success", body.path("status").asText(), "clean body");
-        assertEquals("CLEAN", body.path("command").asText(), "clean command body");
-    }
-
-    private static void postJson(Path socketPath, Path bodyFile, String json) throws Exception {
         ProcessBuilder pb = new ProcessBuilder("curl", "-sS", "--fail-with-body", "--unix-socket",
                 socketPath.toString(), "-o", bodyFile.toString(), "-w", "%{http_code}", "-X", "POST",
                 "http://localhost/pull", "-H", "Content-Type: application/json", "-d", json);
@@ -194,39 +125,9 @@ class DaemonPodmanCacheReuseLiveTest {
         boolean finished = process.waitFor(600, TimeUnit.SECONDS);
         assertTrue(finished, "curl did not finish: " + err);
         assertEquals(0, process.exitValue(), "curl stderr: " + err);
-        assertEquals("200", httpCode, "request must return HTTP 200");
-    }
-
-    private static List<Path> listExistingBlobAndOciArtifacts() throws IOException {
-        Path tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
-        if (!Files.isDirectory(tmpDir)) {
-            return List.of();
-        }
-        List<Path> artifacts = new ArrayList<>();
-        try (Stream<Path> entries = Files.list(tmpDir)) {
-            for (Path entry : entries.toList()) {
-                String fileName = entry.getFileName().toString();
-                boolean matchesPrefix = fileName.startsWith(RIID_CACHE_DIR_PREFIX)
-                        || fileName.startsWith(OCI_LAYOUT_DIR_PREFIX)
-                        || fileName.startsWith(OCI_ARCHIVE_FILE_PREFIX);
-                if (matchesPrefix && !isMissingOrEmpty(entry)) {
-                    artifacts.add(entry);
-                }
-            }
-        }
-        return artifacts;
-    }
-
-    private static boolean isMissingOrEmpty(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return true;
-        }
-        if (Files.isDirectory(path)) {
-            try (Stream<Path> children = Files.list(path)) {
-                return children.findAny().isEmpty();
-            }
-        }
-        return Files.size(path) == 0L;
+        assertEquals("200", httpCode, "pull must return HTTP 200");
+        JsonNode body = MAPPER.readTree(java.nio.file.Files.readString(bodyFile));
+        assertEquals("success", body.path("status").asText(), "pull body");
     }
 
     @SuppressWarnings("PMD.CloseResource")

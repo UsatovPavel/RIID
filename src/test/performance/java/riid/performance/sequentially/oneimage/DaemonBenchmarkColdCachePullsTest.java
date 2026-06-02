@@ -29,8 +29,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * and separate rounds for native {@code podman pull} of the same OCI ref.
  *
  * <p>
- * Per iteration (RIID block): {@code podman system prune -af} and RIID daemon
- * restart (cold {@code TempFileCacheAdapter}), then daemon pull time
+ * Per iteration (RIID block): {@code podman system prune -af}, wipe of RIID
+ * {@code riid-cache-tmp-*} under {@code java.io.tmpdir}, then daemon pull time
  * → appended to {@code riid_pull_ms}. Then Podman block: same iterations with
  * prune before
  * each {@code podman pull} → {@code podman_pull_ms}.
@@ -63,13 +63,14 @@ class DaemonBenchmarkColdCachePullsTest {
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
         assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
 
+        PerformanceColdCacheHelper.clearAllCache();
+
         Path workDir = Files.createTempDirectory("riid-perf-scenario-a");
         try {
-            PerformanceColdCacheHelper.clearAllCache(socketPath, workDir);
             List<Long> riidPullMs = new ArrayList<>(ITERATIONS);
             long riidPhaseStart = System.nanoTime();
             for (int i = 1; i <= ITERATIONS; i++) {
-                coldCachesForRiidIteration(socketPath, workDir);
+                coldCachesForRiidIteration();
                 long t0 = System.nanoTime();
                 DaemonUnixSocketPullSupport.postPull(socketPath, workDir, REPOSITORY, REFERENCE, RUNTIME);
                 long ms = (System.nanoTime() - t0) / 1_000_000L;
@@ -109,8 +110,8 @@ class DaemonBenchmarkColdCachePullsTest {
         }
     }
 
-    private static void coldCachesForRiidIteration(Path socketPath, Path workDir) throws Exception {
-        PerformanceColdCacheHelper.clearAllCache(socketPath, workDir);
+    private static void coldCachesForRiidIteration() throws Exception {
+        PerformanceColdCacheHelper.clearAllCache();
     }
 
     private static String podmanImageReference(String repository, String reference) {
