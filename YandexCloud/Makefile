@@ -135,9 +135,9 @@ test-scenario-c:
 
 
 autonomic:
-	cd ~/RIID
+	cd ~/RIID && \
 	set -a; [ -f config/.env ] && . config/.env; set +a; \
 	nohup ./gradlew performanceTest \
-  	--tests riid.performance.sequentially.manyimages.Daemon30ImagesSequentialPullTest \
-  	>> _scenario_sequential-30.txt 2>&1 &
+		--tests riid.performance.sequentially.manyimages.Daemon30ImagesSequentialPullTest \
+		>> _scenario_sequential-30.txt 2>&1 & \
 	echo $$!

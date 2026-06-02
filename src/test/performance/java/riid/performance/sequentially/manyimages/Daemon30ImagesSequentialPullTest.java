@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * PR15 scenario b1 (moderate): same first 30 repositories as
  * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES},
- * sequential pulls. Перед фазой (1) один вызов
- * {@link PerformanceColdCacheHelper#clearAllCache()} (Podman + RIID). Далее: (1) via an already running RIID daemon ({@code POST /pull},
+ * sequential pulls. Перед фазой (1): {@code podman system prune -af} и restart
+ * RIID daemon (cold daemon process). Далее: (1) via an already running RIID daemon ({@code POST /pull},
  * {@code runtimeId: podman}), (2) then native {@code podman pull} for each,
  * after {@code podman system prune -af} immediately before that Podman phase
  * ({@link #coldPodmanCacheThenMeasuredPulls()}).
@@ -52,16 +52,17 @@ class Daemon30ImagesSequentialPullTest {
     private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";
     private static final String RUNTIME = "podman";
     private static final int N = PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES.size();
+    private static final int CLEFOS_INDEX = 17;
 
     @Test
     void daemonThenPodman() throws Exception {
         assumeTrue(TestFilesystemSupport.curlAvailable(), "curl must be on PATH for HTTP over UDS");
 
         Path socketPath = TestConfigYaml.resolveDaemonUnixSocketPath();
-        assumeTrue(Files.exists(socketPath), "daemon socket must exist: " + socketPath);
-
         assumeTrue(commandAvailable("podman"), "podman must be on PATH");
-        PerformanceColdCacheHelper.clearAllCache();
+        PerformanceColdCacheHelper.clearPodmanCaches();
+        PerformanceColdCacheHelper.restartRiidDaemon(socketPath);
+        assumeTrue(Files.exists(socketPath), "daemon socket must exist after restart: " + socketPath);
 
         long testStartNs = System.nanoTime();
 
@@ -73,12 +74,23 @@ class Daemon30ImagesSequentialPullTest {
                 index++;
                 long t0 = System.nanoTime();
                 try {
-                    DaemonUnixSocketPullSupport.postPull(socketPath, workDir, repo,
-                            PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE, RUNTIME);
+                    DaemonUnixSocketPullSupport.PullResult result = DaemonUnixSocketPullSupport.postPullCapture(socketPath,
+                            workDir, repo, PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE, RUNTIME);
                     long ms = (System.nanoTime() - t0) / 1_000_000L;
-                    riidPullMsList.add(ms);
-                    System.out.println("[Daemon30ImagesSequentialPullTest] riid i=" + index + '/' + N + " repo=" + repo
-                            + " pull_ms=" + ms);
+                    if (result.finished() && result.exitCode() == 0 && result.httpStatus() == 200) {
+                        riidPullMsList.add(ms);
+                        System.out.println("[Daemon30ImagesSequentialPullTest] riid i=" + index + '/' + N + " repo="
+                                + repo + " pull_ms=" + ms);
+                    } else {
+                        String bodyOneLine = result.body().replace('\n', ' ').trim();
+                        System.err.println("[Daemon30ImagesSequentialPullTest] riid FAILED i=" + index + '/' + N
+                                + " repo=" + repo + " exit=" + result.exitCode() + " http=" + result.httpStatus()
+                                + " pull_wall_ms=" + ms + " stderr=" + result.stderr() + " body=" + bodyOneLine);
+                        if (index == CLEFOS_INDEX) {
+                            System.err.println("[Daemon30ImagesSequentialPullTest] i=17 expected non-200 candidate: http="
+                                    + result.httpStatus() + " exit=" + result.exitCode());
+                        }
+                    }
                 } catch (Exception e) {
                     System.err.println("[Daemon30ImagesSequentialPullTest] riid FAILED i=" + index + '/' + N + " repo="
                             + repo + ": " + e.getMessage());
@@ -110,14 +122,14 @@ class Daemon30ImagesSequentialPullTest {
 
     /**
      * Только шаг (2) b1: такой же старт, как у полного сценария —
-     * {@link PerformanceColdCacheHelper#clearAllCache()}, затем
+     * {@link PerformanceColdCacheHelper#clearPodmanCaches()}, затем
      * {@link #coldPodmanCacheThenMeasuredPulls()}. UDS/демон не нужны.
      */
     @Test
     void podmanPhaseOnly() throws Exception {
         assumeTrue(commandAvailable("podman"), "podman must be on PATH");
         long testStartNs = System.nanoTime();
-        PerformanceColdCacheHelper.clearAllCache();
+        PerformanceColdCacheHelper.clearPodmanCaches();
         long podmanPhaseStart = System.nanoTime();
         List<Long> podmanPullMsList = coldPodmanCacheThenMeasuredPulls();
         long podmanPhaseWallMs = (System.nanoTime() - podmanPhaseStart) / 1_000_000L;
