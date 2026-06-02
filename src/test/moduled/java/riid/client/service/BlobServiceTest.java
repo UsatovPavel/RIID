@@ -165,6 +165,11 @@ class BlobServiceTest {
         }
 
         @Override
+        public HttpResult<InputStream> getBlob(URI uri, Map<String, String> headers, long layerSizeBytes) {
+            return get(uri, headers);
+        }
+
+        @Override
         public HttpResult<Void> head(URI uri, Map<String, String> headers) {
             throw new UnsupportedOperationException("head not used");
         }
