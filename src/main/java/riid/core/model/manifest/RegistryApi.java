@@ -24,4 +24,3 @@ public final class RegistryApi {
         return TAG_LIST.formatted(repository);
     }
 }
-

@@ -23,12 +23,8 @@ class ImageLoadingFacadeDefaultMetricsTest {
     void createDefaultWithMeterRegistryWiresDispatcherSourceMetrics() throws Exception {
         PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
         try (ImageLoadingFacade facade = ImageLoadingFacade.createDefault(
-                new RegistryEndpoint("https", "registry-1.docker.io", -1, null),
-                null,
-                new P2PExecutor.NoOp(),
-                ImageLoadingFacade.defaultRuntimes(),
-                new NioHostFilesystem(),
-                registry)) {
+                new RegistryEndpoint("https", "registry-1.docker.io", -1, null), null, new P2PExecutor.NoOp(),
+                ImageLoadingFacade.defaultRuntimes(), new NioHostFilesystem(), registry)) {
             DispatcherLayerSourceMetrics layerMetrics = extractLayerMetrics(facade);
             assertInstanceOf(MicrometerDispatcherLayerSourceMetrics.class, layerMetrics);
 
@@ -41,6 +37,7 @@ class ImageLoadingFacadeDefaultMetricsTest {
         }
     }
 
+    @SuppressWarnings("PMD.AvoidAccessibilityAlteration")
     private static DispatcherLayerSourceMetrics extractLayerMetrics(ImageLoadingFacade facade) throws Exception {
         Field archiveBuilderField = ImageLoadingFacade.class.getDeclaredField("archiveBuilder");
         archiveBuilderField.setAccessible(true);

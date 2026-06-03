@@ -8,7 +8,7 @@ import riid.app.service.ImageLoadingFacade;
 import riid.app.service.LoadOutcome;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.config.TestConfigYaml;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import riid.core.fs.TestPaths;
+
 /**
  * Smoke: CLI arg parsing -> ConfigLoader -> ImageLoadingFacade (no network).
  */
@@ -37,26 +39,19 @@ class CliToFactorySmokeTest {
 
         AtomicBoolean factoryCalled = new AtomicBoolean(false);
 
-        CliApplication cli = new CliApplication(
-                (opts, meterRegistry) -> {
-                    factoryCalled.set(true);
-                    try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(opts.configPath())) {
-                        Objects.requireNonNull(facade);
-                    }
-                    return (repo, ref, runtime) ->
-                            new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L);
-                },
-                Map.of("stub", new NoopRuntimeAdapter()),
+        CliApplication cli = new CliApplication((opts, meterRegistry) -> {
+            factoryCalled.set(true);
+            try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(opts.configPath())) {
+                Objects.requireNonNull(facade);
+            }
+            return (repo, ref, runtime) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref),
+                    -1L);
+        }, Map.of("stub", new NoopRuntimeAdapter()),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true));
 
-        int code = cli.run(new String[]{
-                "--config", config.toString(),
-                "--repo", "library/busybox",
-                "--tag", "latest",
-                "--runtime", "stub"
-        });
+        int code = cli.run(new String[]{"--config", config.toString(), "--repo", "library/busybox", "--tag", "latest",
+                "--runtime", "stub"});
 
         assertEquals(0, code);
         assertTrue(factoryCalled.get(), "Factory should be invoked from CLI flow");
@@ -74,4 +69,3 @@ class CliToFactorySmokeTest {
         }
     }
 }
-

@@ -10,14 +10,12 @@ import riid.client.http.HttpClientConfig;
 /**
  * Aggregated client module configuration.
  */
-public record ClientConfig(
-        @JsonProperty("http") HttpClientConfig http,
-        @JsonProperty("auth") AuthConfig auth,
+public record ClientConfig(@JsonProperty("http") HttpClientConfig http, @JsonProperty("auth") AuthConfig auth,
         @JsonProperty("registries") List<RegistryEndpoint> registries,
-        @JsonProperty("partialDownloading") BlobPartialDownloadConfig partialDownloading
-) {
+        @JsonProperty("partialDownloading") BlobPartialDownloadConfig partialDownloading,
+        @JsonProperty("platform") ClientPlatformConfig platform) {
     public ClientConfig(HttpClientConfig http, AuthConfig auth, List<RegistryEndpoint> registries) {
-        this(http, auth, registries, null);
+        this(http, auth, registries, null, null);
     }
 
     public ClientConfig {
@@ -40,5 +38,17 @@ public record ClientConfig(
 
     public BlobPartialDownloadConfig partialDownloadingOrDefault() {
         return partialDownloading != null ? partialDownloading : new BlobPartialDownloadConfig();
+    }
+
+    /**
+     * Effective platform for manifest list entry selection: YAML
+     * {@code client.platform} per-field override, otherwise JVM host
+     * ({@link ClientPlatformConfig#fromHost()}).
+     */
+    public ClientPlatformConfig platformOrHostDefault() {
+        if (platform == null) {
+            return ClientPlatformConfig.fromHost();
+        }
+        return platform.withHostFallback();
     }
 }

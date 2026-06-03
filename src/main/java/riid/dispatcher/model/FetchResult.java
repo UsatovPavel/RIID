@@ -10,5 +10,3 @@ import riid.core.model.manifest.MediaType;
  */
 public record FetchResult(ImageDigest digest, MediaType mediaType, Path path) {
 }
-
-

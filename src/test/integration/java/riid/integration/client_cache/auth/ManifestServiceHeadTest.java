@@ -8,8 +8,10 @@ import java.util.Map;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.AfterEach;
+
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +20,7 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import riid.cache.auth.TokenCache;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
@@ -58,13 +61,7 @@ class ManifestServiceHeadTest {
     @Test
     void headSuccess() throws Exception {
         setupServer(exchange -> {
-            respond(
-                    exchange,
-                    200,
-                    Map.of(
-                            "Docker-Content-Digest", "sha256:abc",
-                            "Content-Length", "5"),
-                    "");
+            respond(exchange, 200, Map.of("Docker-Content-Digest", "sha256:abc", "Content-Length", "5"), "");
         });
         ManifestService svc = manifestService();
         assertTrue(svc.headManifest(endpoint(), "repo", "latest", "scope").isPresent());
@@ -75,7 +72,7 @@ class ManifestServiceHeadTest {
         HttpClient client = HttpClientFactory.create(cfg);
         HttpExecutor exec = new HttpExecutor(client, cfg);
         AuthService auth = new AuthService(exec, new ObjectMapper(), new TokenCache());
-        return new ManifestService(exec, auth, new ObjectMapper());
+        return new ManifestService(exec, auth, new ObjectMapper(), ClientPlatformConfig.fromHost());
     }
 
     private RegistryEndpoint endpoint() {
@@ -99,4 +96,3 @@ class ManifestServiceHeadTest {
         }
     }
 }
-

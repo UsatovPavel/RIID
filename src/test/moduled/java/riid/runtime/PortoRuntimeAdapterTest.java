@@ -2,6 +2,7 @@ package riid.runtime;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
@@ -15,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
+import riid.runtime.adapter.PortoRuntimeAdapter;
 
 @Tag("filesystem")
 class PortoRuntimeAdapterTest {
@@ -46,9 +48,7 @@ class PortoRuntimeAdapterTest {
         PortoRuntimeAdapter adapter = new PortoRuntimeAdapter();
         adapter.importImage(archive);
 
-        Process p = new ProcessBuilder("portoctl", "layer", "-L")
-                .redirectErrorStream(true)
-                .start();
+        Process p = new ProcessBuilder("portoctl", "layer", "-L").redirectErrorStream(true).start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
         assertEquals(0, code, "portoctl layer -L failed: " + out);
@@ -64,4 +64,3 @@ class PortoRuntimeAdapterTest {
         }
     }
 }
-

@@ -6,6 +6,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import riid.client.api.ManifestResult;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
@@ -31,30 +32,27 @@ import java.util.Optional;
  */
 public final class ManifestService implements ManifestServiceApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(ManifestService.class);
-    private static final List<String> ACCEPT = List.of(
-            MediaTypes.OCI_IMAGE_MANIFEST,
-            MediaTypes.DOCKER_MANIFEST_V2,
-            MediaTypes.OCI_IMAGE_INDEX,
-            MediaTypes.DOCKER_MANIFEST_LIST
-    );
+    private static final List<String> ACCEPT = List.of(MediaTypes.OCI_IMAGE_MANIFEST, MediaTypes.DOCKER_MANIFEST_V2,
+            MediaTypes.OCI_IMAGE_INDEX, MediaTypes.DOCKER_MANIFEST_LIST);
 
     private final HttpExecutor http;
     private final AuthService authService;
     private final ObjectMapper mapper;
+    private final ClientPlatformConfig manifestPlatform;
 
-    public ManifestService(HttpExecutor http, AuthService authService, ObjectMapper mapper) {
+    public ManifestService(HttpExecutor http, AuthService authService, ObjectMapper mapper,
+            ClientPlatformConfig manifestPlatform) {
         this.http = Objects.requireNonNull(http);
         this.authService = Objects.requireNonNull(authService);
-        this.mapper = Objects.requireNonNull(mapper).copy(); //M V EI2  may expose internal 
+        this.mapper = Objects.requireNonNull(mapper).copy(); // M V EI2 may expose internal
+        this.manifestPlatform = Objects.requireNonNull(manifestPlatform, "manifestPlatform");
     }
 
     @Override
-    public ManifestResult fetchManifest(
-            RegistryEndpoint endpoint, String repository, String reference, String scope) {
+    public ManifestResult fetchManifest(RegistryEndpoint endpoint, String repository, String reference, String scope) {
         URI uri = endpoint.uri(RegistryApi.manifestPath(repository, reference));
         Map<String, String> headers = defaultHeaders();
-        authService.getAuthHeader(endpoint, repository, scope)
-                .ifPresent(v -> headers.put("Authorization", v));
+        authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResult<java.io.InputStream> resp = http.get(uri, headers);
         if (resp.statusCode() != HttpStatus.OK_200) {
             throw new ClientException(
@@ -69,37 +67,28 @@ public final class ManifestService implements ManifestServiceApi {
             if (isIndex) {
                 ManifestIndex index = mapper.readValue(bytes, ManifestIndex.class);
                 ManifestRef selected = selectEntry(index);
-                if (selected == null) {
-                    throw new ClientException(
-                            new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Empty manifest list"),
-                            "Empty manifest list");
-                }
                 // Recursively fetch the referenced manifest by digest
                 return fetchManifest(endpoint, repository, selected.digest(), scope);
             }
 
             String computedDigest = "sha256:" + Digests.sha256Hex(bytes);
             Manifest manifest = mapper.readValue(bytes, Manifest.class);
-            String mediaType = Optional.ofNullable(contentType)
-                    .orElse(manifest.mediaType());
+            String mediaType = Optional.ofNullable(contentType).orElse(manifest.mediaType());
             long len = bytes.length;
             validateDigestHeader(resp.headers(), computedDigest);
             return new ManifestResult(computedDigest, mediaType, len, manifest);
         } catch (IOException e) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Failed to parse manifest"),
-                    "Failed to parse manifest",
-                    e);
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Failed to parse manifest"),
+                    "Failed to parse manifest", e);
         }
     }
 
     @Override
-    public Optional<ManifestResult> headManifest(
-            RegistryEndpoint endpoint, String repository, String reference, String scope) {
+    public Optional<ManifestResult> headManifest(RegistryEndpoint endpoint, String repository, String reference,
+            String scope) {
         URI uri = endpoint.uri(RegistryApi.manifestPath(repository, reference));
         Map<String, String> headers = defaultHeaders();
-        authService.getAuthHeader(endpoint, repository, scope)
-                .ifPresent(v -> headers.put("Authorization", v));
+        authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         HttpResult<Void> resp = http.head(uri, headers);
         if (resp.statusCode() == HttpStatus.NOT_FOUND_404) {
             return Optional.empty();
@@ -113,8 +102,7 @@ public final class ManifestService implements ManifestServiceApi {
         if (dcd == null || dcd.isBlank()) {
             LOGGER.warn("Manifest HEAD missing Docker-Content-Digest for {}/{}", repository, reference);
             throw new ClientException(
-                    new ClientError.Parse(
-                            ClientError.ParseKind.MANIFEST,
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST,
                             "Missing Docker-Content-Digest on manifest HEAD"),
                     "Missing Docker-Content-Digest on manifest HEAD");
         }
@@ -138,8 +126,7 @@ public final class ManifestService implements ManifestServiceApi {
     private void validateDigestHeader(HttpFields headers, String computed) {
         String header = headers.get(HttpResult.HeaderName.DOCKER_CONTENT_DIGEST.value());
         if (header != null && !header.equals(computed)) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Digest mismatch"),
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Digest mismatch"),
                     "Manifest digest mismatch: header=%s computed=%s".formatted(header, computed));
         }
     }
@@ -148,8 +135,7 @@ public final class ManifestService implements ManifestServiceApi {
         if (mediaType == null) {
             return false;
         }
-        return mediaType.contains(MediaTypes.OCI_IMAGE_INDEX)
-                || mediaType.contains(MediaTypes.DOCKER_MANIFEST_LIST);
+        return mediaType.contains(MediaTypes.OCI_IMAGE_INDEX) || mediaType.contains(MediaTypes.DOCKER_MANIFEST_LIST);
     }
 
     private boolean looksLikeIndex(byte[] bytes) {
@@ -158,15 +144,20 @@ public final class ManifestService implements ManifestServiceApi {
     }
 
     private ManifestRef selectEntry(ManifestIndex index) {
+        String platform = manifestPlatform.os() + "/" + manifestPlatform.architecture();
         if (index.manifests() == null || index.manifests().isEmpty()) {
-            return null;
+            throw new ClientException(
+                    new ClientError.Parse(ClientError.ParseKind.MANIFEST_PLATFORM,
+                            "No manifest list entry for platform " + platform),
+                    "No manifest list entry for platform " + platform + " (manifest list is empty)");
         }
         return index.manifests().stream()
-                .filter(m -> m.platform() != null
-                        && "linux".equalsIgnoreCase(m.platform().os())
-                        && "amd64".equalsIgnoreCase(m.platform().architecture()))
+                .filter(m -> m.platform() != null && manifestPlatform.os().equalsIgnoreCase(m.platform().os())
+                        && manifestPlatform.architecture().equalsIgnoreCase(m.platform().architecture()))
                 .findFirst()
-                .orElse(index.manifests().getFirst());
+                .orElseThrow(() -> new ClientException(
+                        new ClientError.Parse(ClientError.ParseKind.MANIFEST_PLATFORM,
+                                "No manifest list entry for platform " + platform),
+                        "No manifest list entry for platform " + platform));
     }
 }
-

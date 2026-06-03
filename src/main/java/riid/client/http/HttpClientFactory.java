@@ -47,14 +47,14 @@ public final class HttpClientFactory {
         try {
             HttpClient client = createClient(authConfig);
             client.setConnectTimeout(config.connectTimeout().toMillis());
+            client.setIdleTimeout(config.requestTimeout().toMillis());
             client.setFollowRedirects(config.followRedirects());
             client.setMaxRedirects(config.maxRedirects());
             client.start();
             return client;
         } catch (Exception e) {
             throw new IllegalStateException(
-                    tlsMessage("HTTP_CLIENT_INIT_FAILED", "failed to initialize Jetty HttpClient"),
-                    e);
+                    tlsMessage("HTTP_CLIENT_INIT_FAILED", "failed to initialize Jetty HttpClient"), e);
         }
     }
 
@@ -87,14 +87,13 @@ public final class HttpClientFactory {
             throw new IllegalArgumentException(
                     tlsMessage("CERT_KEY_PAIR_INVALID", "certPath and keyPath must be set together for mTLS"));
         }
-        KeyManagerFactory keyManagerFactory = hasCert ?
-         createKeyManagerFactory(Path.of(certPath), Path.of(keyPath)) : null;
+        KeyManagerFactory keyManagerFactory = hasCert
+                ? createKeyManagerFactory(Path.of(certPath), Path.of(keyPath))
+                : null;
         TrustManagerFactory trustManagerFactory = hasCa ? createTrustManagerFactory(Path.of(caPath)) : null;
         SSLContext sslContext = SSLContext.getInstance(TLS_PROTOCOL);
-        sslContext.init(
-                keyManagerFactory == null ? null : keyManagerFactory.getKeyManagers(),
-                trustManagerFactory == null ? null : trustManagerFactory.getTrustManagers(),
-                new SecureRandom());
+        sslContext.init(keyManagerFactory == null ? null : keyManagerFactory.getKeyManagers(),
+                trustManagerFactory == null ? null : trustManagerFactory.getTrustManagers(), new SecureRandom());
         return sslContext;
     }
 
@@ -119,8 +118,8 @@ public final class HttpClientFactory {
         for (int i = 0; i < certificates.size(); i++) {
             trustStore.setCertificateEntry("riid-ca-" + i, certificates.get(i));
         }
-        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(
-                TrustManagerFactory.getDefaultAlgorithm());
+        TrustManagerFactory trustManagerFactory = TrustManagerFactory
+                .getInstance(TrustManagerFactory.getDefaultAlgorithm());
         trustManagerFactory.init(trustStore);
         return trustManagerFactory;
     }
@@ -162,8 +161,7 @@ public final class HttpClientFactory {
                 // Try next algorithm until one matches.
             } catch (GeneralSecurityException e) {
                 throw new IllegalStateException(
-                        tlsMessage("KEY_FACTORY_INIT_FAILED", "failed to initialize key factory for " + algorithm),
-                        e);
+                        tlsMessage("KEY_FACTORY_INIT_FAILED", "failed to initialize key factory for " + algorithm), e);
             }
         }
         throw new IllegalArgumentException(
@@ -193,4 +191,3 @@ public final class HttpClientFactory {
         return TLS_PREFIX + kind + ": " + details;
     }
 }
-

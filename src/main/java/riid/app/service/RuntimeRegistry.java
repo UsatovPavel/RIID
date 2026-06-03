@@ -2,7 +2,7 @@ package riid.app.service;
 
 import riid.app.core.error.AppError;
 import riid.app.core.error.AppException;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 import java.util.Map;
 import java.util.Objects;
@@ -21,13 +21,9 @@ public final class RuntimeRegistry {
         RuntimeAdapter adapter = runtimes.get(runtimeId);
         if (adapter == null) {
             String msg = AppError.RuntimeErrorKind.ADAPTER_NOT_FOUND.format(runtimeId);
-            throw new AppException(
-                    new AppError.RuntimeError(AppError.RuntimeErrorKind.ADAPTER_NOT_FOUND, msg),
-                    msg);
+            throw new AppException(new AppError.RuntimeError(AppError.RuntimeErrorKind.ADAPTER_NOT_FOUND, msg), msg);
         }
         return adapter;
     }
 
 }
-
-

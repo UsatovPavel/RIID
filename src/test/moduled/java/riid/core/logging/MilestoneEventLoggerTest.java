@@ -6,7 +6,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -14,15 +13,18 @@ import org.slf4j.Marker;
 import org.slf4j.spi.LoggingEventBuilder;
 
 class MilestoneEventLoggerTest {
+    private static final String METHOD_AT_INFO = "atInfo";
+    private static final String METHOD_AT_WARN = "atWarn";
+    private static final String METHOD_AT_ERROR = "atError";
+    private static final String METHOD_IS_ENABLED_FOR_LEVEL = "isEnabledForLevel";
+    private static final String METHOD_GET_NAME = "getName";
+
     @Test
     void stepSuccessContainsEventResultAndDuration() {
         CapturingBuilder builder = new CapturingBuilder();
         Logger logger = loggerWithBuilder(builder);
 
-        MilestoneEventLogger.info(logger)
-                .addEvent("manifest.fetch")
-                .addResult("success")
-                .addDurationMs(42L)
+        MilestoneEventLogger.info(logger).addEvent("manifest.fetch").addResult("success").addDurationMs(42L)
                 .log("Manifest fetched");
 
         assertEquals("manifest.fetch", builder.keyValues.get(LogContextKeys.EVENT));
@@ -37,14 +39,8 @@ class MilestoneEventLoggerTest {
         Logger logger = loggerWithBuilder(builder);
         RuntimeException failure = new RuntimeException("boom");
 
-        MilestoneEventLogger.error(logger)
-                .addCause(failure)
-                .addEvent("engine.import")
-                .addResult("error")
-                .addDurationMs(5L)
-                .addErrorKind("RUNTIME")
-                .addErrorCode("LOAD_FAILED")
-                .log("Runtime import failed");
+        MilestoneEventLogger.error(logger).addCause(failure).addEvent("engine.import").addResult("error")
+                .addDurationMs(5L).addErrorKind("RUNTIME").addErrorCode("LOAD_FAILED").log("Runtime import failed");
 
         assertEquals("engine.import", builder.keyValues.get(LogContextKeys.EVENT));
         assertEquals("error", builder.keyValues.get(LogContextKeys.RESULT));
@@ -56,18 +52,17 @@ class MilestoneEventLoggerTest {
     }
 
     private static Logger loggerWithBuilder(CapturingBuilder builder) {
-        return (Logger) Proxy.newProxyInstance(
-                Logger.class.getClassLoader(),
-                new Class<?>[]{Logger.class},
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        return (Logger) Proxy.newProxyInstance(contextClassLoader, new Class<?>[]{Logger.class},
                 (proxy, method, args) -> {
                     String name = method.getName();
-                    if ("atInfo".equals(name) || "atWarn".equals(name) || "atError".equals(name)) {
+                    if (METHOD_AT_INFO.equals(name) || METHOD_AT_WARN.equals(name) || METHOD_AT_ERROR.equals(name)) {
                         return builder;
                     }
-                    if ("isEnabledForLevel".equals(name)) {
+                    if (METHOD_IS_ENABLED_FOR_LEVEL.equals(name)) {
                         return true;
                     }
-                    if ("getName".equals(name)) {
+                    if (METHOD_GET_NAME.equals(name)) {
                         return "test-logger";
                     }
                     Class<?> returnType = method.getReturnType();

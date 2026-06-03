@@ -19,25 +19,23 @@ import riid.core.config.TestRegistryConfig;
 class PodmanRuntimeAdapterIntegrationTest {
 
     /**
-     * Regression: OCI archive must match manifest mediaType for {@code podman load} (~10 MiB official image).
+     * Regression: OCI archive must match manifest mediaType for {@code podman load}
+     * (~10 MiB official image).
      */
     @Test
     void loadsJobberIntoPodman() throws Exception {
         PodmanRuntimeIntegrationSupport.rmiJobberIgnoreErrors();
         HostFilesystem fs = new NioHostFilesystem();
         Path configPath = PodmanRuntimeIntegrationSupport.writeDockerHubConfig(fs);
-        ImageId imageId = ImageId.fromRegistry(
-                TestRegistryConfig.registryName(),
-                PodmanRuntimeIntegrationSupport.REPO_JOBBER,
-                PodmanRuntimeIntegrationSupport.REF_LATEST);
+        ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(),
+                PodmanRuntimeIntegrationSupport.REPO_JOBBER, PodmanRuntimeIntegrationSupport.REF_LATEST);
         ImageId loadedId;
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
             LoadOutcome outcome = app.load(imageId, PodmanRuntimeIntegrationSupport.PODMAN);
             loadedId = outcome.imageId();
         }
         String images = PodmanRuntimeIntegrationSupport.podmanImages();
-        boolean found = images.contains(loadedId.toString())
-                || images.contains("jobber")
+        boolean found = images.contains(loadedId.toString()) || images.contains("jobber")
                 || images.contains("library/jobber");
         assertTrue(found, "Expected jobber in podman images, got: " + images);
     }
@@ -47,20 +45,16 @@ class PodmanRuntimeAdapterIntegrationTest {
         PodmanRuntimeIntegrationSupport.rmiAlpineEdgeIgnoreErrors();
         HostFilesystem fs = new NioHostFilesystem();
         Path configPath = PodmanRuntimeIntegrationSupport.writeDockerHubConfig(fs);
-        ImageId imageId = ImageId.fromRegistry(
-                TestRegistryConfig.registryName(),
-                PodmanRuntimeIntegrationSupport.REPO_ALPINE,
-                PodmanRuntimeIntegrationSupport.REF_EDGE);
+        ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(),
+                PodmanRuntimeIntegrationSupport.REPO_ALPINE, PodmanRuntimeIntegrationSupport.REF_EDGE);
         ImageId loadedId;
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
             LoadOutcome outcome = app.load(imageId, PodmanRuntimeIntegrationSupport.PODMAN);
             loadedId = outcome.imageId();
         }
         String images = PodmanRuntimeIntegrationSupport.podmanImages();
-        boolean found = images.contains(loadedId.toString())
-                || images.contains("alpine:edge")
-                || images.contains("docker.io/library/alpine:edge")
-                || images.contains("library/alpine");
+        boolean found = images.contains(loadedId.toString()) || images.contains("alpine:edge")
+                || images.contains("docker.io/library/alpine:edge") || images.contains("library/alpine");
         assertTrue(found, "Expected alpine:edge in podman images, got: " + images);
         PodmanRuntimeIntegrationSupport.runTrivialContainer(loadedId.toString());
     }

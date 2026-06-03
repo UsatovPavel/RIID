@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new download_to_daemon download_to_daemon_1MB download_to_daemon_10MB download_to_daemon_50MB download_to_daemon_150MB grafana_demo_load
+.PHONY: docker-build docker-test dragonfly-single dragonfly-stop dragonfly-multi dragonfly-multi-stop dragonfly-cluster-single dragonfly-cluster-single-stop testing_prompt moduled-test-out integration-test-out quality-check-out victoriametrics victoriametrics-stop vmagent vmagent-d vmalert-d grafana metrics-stack-create metrics-stack-update metrics-stack-down stack-up daemon daemon-new daemon-profile daemon-jfr download_bench_daemon download_bench_podman download_bench_podman_warm download_bench_podman_cold_root download_to_daemon download_to_daemon_1MB download_to_daemon_10MB  download_to_daemon_50MB download_to_podman_50MB download_to_podman_50MB_warm download_to_podman_50MB_cold_root download_to_daemon_150MB grafana_demo_load bench_podman_4_pulls_seq bench_riid_4_pulls_seq perf_scenario_a shapki shapki_unpack
 
 # clean build artifacts(for dev): Eclipse, Dragonfly, CIFuzz, VSCode
 clean-dirs:
@@ -74,6 +74,9 @@ daemon:
 	else \
 	  java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml; \
 	fi
+
+daemon-kill:
+	pkill -f '[r]iid.jar.*--daemon'
 # Single-node VictoriaMetrics (Docker). Prometheus remote_write + query API: http://127.0.0.1:8428. In medium cluster one in claster.
 # Run before: make vmagent (same host). Stop: make victoriametrics-stop
 victoria-metrics:
@@ -93,9 +96,19 @@ vmagent-d:
 		-promscrape.config=/etc/vmagent/vmagent-scrape.yaml \
 		-remoteWrite.url=http://host.docker.internal:8428/api/v1/write
 
-# VictoriaMetrics + Grafana + vmagent (background). Then run RIID: `make daemon` in another terminal.
+# Recording rules (e.g. riid:image_load:tar_category_sortidx for Grafana bucket order). Stop/remove: docker rm -f vmalert
+vmalert-d:
+	docker run -d --name vmalert \
+		--add-host=host.docker.internal:host-gateway \
+		-v "$(CURDIR)/config/metrics/prometheus-rules:/rules:ro" \
+		victoriametrics/vmalert:latest \
+		-datasource.url=http://host.docker.internal:8428 \
+		-remoteWrite.url=http://host.docker.internal:8428/api/v1/write \
+		-rule=/rules/riid-recording-rules.yaml
+
+# VictoriaMetrics + Grafana + vmagent + vmalert (background). Then run RIID: `make daemon` in another terminal.
 # If docker run fails (name already in use): `make metrics-stack-down` and retry.
-metrics-stack-create: metrics-stack-down victoria-metrics grafana vmagent-d
+metrics-stack-create: metrics-stack-down victoria-metrics grafana vmagent-d vmalert-d
 	@echo "Grafana: host port 3000 — http://127.0.0.1:3000 (default login admin/admin on first setup)"
 
 # те же метрики, но json подставить новые
@@ -103,7 +116,7 @@ metrics-stack-update:
 	docker restart grafana
 
 metrics-stack-down:
-	docker rm -f vmagent grafana victoria-metrics 2>/dev/null || true
+	docker rm -f vmalert vmagent grafana victoria-metrics 2>/dev/null || true
 
 # Grafana: VictoriaMetrics on host — datasource uses host.docker.internal:8428; --add-host gives Linux Docker the same hostname (Docker Desktop already resolves it).
 # Default home dashboard: JSON mount + GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH (see config/metrics/grafana/home/riid-home.json).
@@ -129,15 +142,121 @@ download_to_daemon_10MB:
 
 # Official https://hub.docker.com/_/irssi (~50 of MiB; size label approximate)
 download_to_daemon_50MB:
-	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+	time curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/irssi","reference":"latest","runtimeId":"podman"}'
+
+# PR15 scenario (a): library/irssi, 5× холодный кэш (RIID + podman), в stdout — списки ms и riid_median_pull_ms / podman_median_pull_ms.
+# Нужны: демон на UDS из config, curl, podman; опционально config/.env (см. DaemonBenchmarkColdCachePullsTest).
+perf_scenario_a:
+	set -a; [ -f config/.env ] && . ./config/.env; set +a; \
+	./gradlew performanceTest --tests riid.performance.sequentially.oneimage.DaemonBenchmarkColdCachePullsTest
+
+# Четыре последовательных pull в отдельном store (PopularDockerImagesSizes.txt ~7–17 MiB).
+# Перед rm — podman system reset, иначе overlay от root и Permission denied на rm -rf.
+bench_podman_4_pulls_seq:
+	@echo "=== Podman (дефолтный store): все контейнеры и образы ==="
+	-podman rm -af 2>/dev/null || true
+	-imgs=$$(podman images -aq); if [ -n "$$imgs" ]; then podman rmi -af $$imgs || true; fi
+	@if [ -d /tmp/riid-podman-bench/root ]; then \
+		podman --root /tmp/riid-podman-bench/root --runroot /tmp/riid-podman-bench/runroot system reset -f || true; \
+	fi
+	rm -rf /tmp/riid-podman-bench || podman unshare rm -rf /tmp/riid-podman-bench
+	mkdir -p /tmp/riid-podman-bench/root /tmp/riid-podman-bench/runroot
+	R="--root /tmp/riid-podman-bench/root --runroot /tmp/riid-podman-bench/runroot"; \
+	time podman $$R pull docker.io/library/cirros:latest && \
+	time podman $$R pull docker.io/library/jobber:latest && \
+	time podman $$R pull docker.io/library/photon:latest && \
+	time podman $$R pull docker.io/library/api-firewall:latest
+
+# Те же 4 образа через RIID daemon: холодный TempFileCacheAdapter (pkill + rm riid-cache-tmp-*),
+# подъём daemon в фоне, прогрев — один pull library/irssi (~50 MiB) до ответа, затем 4× POST /pull с паузой 10 с.
+RIID_SOCK_BENCH ?= /tmp/riid.sock
+bench_riid_4_pulls_seq:
+	podman rmi -a
+	@echo "=== Остановка riid daemon, очистка кэша /tmp/riid-cache-tmp-*, удаление образов в podman ==="
+	-pkill -f '[r]iid.jar.*--daemon' || true
+	@sleep 2
+	rm -rf /tmp/riid-cache-tmp-* 2>/dev/null || true
+	@test -f build/libs/riid.jar || (echo "Сначала: ./gradlew shadowJar"; exit 1)
+	@echo "=== Запуск daemon в фоне (лог: /tmp/riid-daemon-bench.log) ==="
+	@(set -a; [ -f config/.env ] && . ./config/.env; set +a; \
+	if [ -n "$$DOCKERHUB_USER" ] && [ -n "$$DOCKERHUB_TOKEN" ]; then \
+	  nohup java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml \
+	    --username "$$DOCKERHUB_USER" --password-env DOCKERHUB_TOKEN \
+	    >> /tmp/riid-daemon-bench.log 2>&1 & \
+	else \
+	  nohup java $(DEV_REGISTRY_LOGS) -jar build/libs/riid.jar --daemon --config ./config/config.yaml \
+	    >> /tmp/riid-daemon-bench.log 2>&1 & \
+	fi; \
+	echo $$! > /tmp/riid-daemon-bench.pid)
+	@echo "=== Ожидание UDS $(RIID_SOCK_BENCH) (до 45 с) ==="
+	@ok=0; for i in $$(seq 1 45); do [ -S $(RIID_SOCK_BENCH) ] && ok=1 && break; sleep 1; done; \
+	if [ "$$ok" != 1 ]; then echo "Таймаут. См. /tmp/riid-daemon-bench.log"; exit 1; fi
+	@echo "=== Прогрев: один pull library/irssi (~50 MiB), ждём ответа daemon ==="
+	$(MAKE) download_to_daemon_150MB
+	$(MAKE) download_to_daemon_50MB
+	$(MAKE) download_to_daemon_50MB
+	$(MAKE) download_to_daemon_50MB
+	echo
+	@SC="$(RIID_SOCK_BENCH)"; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/cirros","reference":"latest","runtimeId":"podman"}'; \
+	echo; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/jobber","reference":"latest","runtimeId":"podman"}'; \
+	echo; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/photon","reference":"latest","runtimeId":"podman"}'; \
+	echo; \
+	time curl --unix-socket $$SC -sS -X POST "http://localhost/pull" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"repository":"library/api-firewall","reference":"latest","runtimeId":"podman"}'; \
+	echo
+
+# CPU 30 с → ASPROF_OUT; удобный алиас (раньше в .PHONY был только daemon-profile без рецепта → «Nothing to be done»).
+ASPROF_OUT ?= /tmp/riid-cpu.html
+daemon-profile: daemon-profile_40s
+
+daemon-profile_40s:
+	@pid=$$(pgrep -f '[r]iid\.jar.*--daemon' | head -n1); \
+	if [ -z "$$pid" ]; then echo "Нет процесса: riid.jar --daemon"; exit 1; fi; \
+	echo "PID=$$pid"; \
+	pgrep -af 'riid.jar.*--daemon' || true; \
+	asprof -e wall -d 40 -f $(ASPROF_OUT) $$pid; \
+	echo "Готово: $(ASPROF_OUT)"
+
+# JFR на daemon: jcmd из того же JDK; пока sleep — нагрузка; .jfr открыть в JMC.
+JFR_OUT ?= $(CURDIR)/mem/riid.jfr
+JFR_SEC ?= 60
+daemon-jfr:
+	@pid=$$(pgrep -f '[r]iid\.jar.*--daemon' | head -n1); \
+	test -n "$$pid" || { echo "Нет riid.jar --daemon"; exit 1; }; \
+	f='$(abspath $(JFR_OUT))'; mkdir -p "$$(dirname "$$f")"; \
+	jcmd $$pid JFR.start name=riid_$$(date +%s) settings=profile duration=$(JFR_SEC)s filename="$$f"; \
+	sleep $(JFR_SEC); \
+	ls -la "$$f"
 
 download_to_daemon_150MB:
 	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
   	-H 'Content-Type: application/json' \
   	-d '{"repository":"library/postgres","reference":"latest","runtimeId":"podman"}'
 
+# Распаковать prefix-сжатый cpool в копии профиля (исходник mem/riid-cpu.html не трогаем).
+shapki_unpack:
+	@test -f mem/riid-cpu.html || (echo "Нет mem/riid-cpu.html — положите flame HTML в mem/"; exit 1)
+	cp mem/riid-cpu.html mem/riid-cpu-unpack-test.html
+	node scripts/unpack-flame-cpool.mjs mem/riid-cpu-unpack-test.html
+
+shapki:
+	node scripts/flame-self-extract.mjs mem/riid-cpu.html mem/Шапки.md
+
+shapki_wall:
+	mv /tmp/riid-cpu.html ./mem/riid-cpu-wall.html
+	node scripts/flame-self-extract.mjs mem/riid-cpu-wall.html mem/Шапки-wall.md
 # Deliberate 4xx for metrics/tests: 422 unknown_runtime (not in daemon --runtime list).
 download_to_daemon_error:
 	curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \

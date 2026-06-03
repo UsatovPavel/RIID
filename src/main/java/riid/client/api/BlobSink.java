@@ -22,4 +22,3 @@ public interface BlobSink extends AutoCloseable {
         // no-op by default
     }
 }
-

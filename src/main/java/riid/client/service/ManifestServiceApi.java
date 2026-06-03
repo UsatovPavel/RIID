@@ -13,4 +13,3 @@ public interface ManifestServiceApi {
 
     Optional<ManifestResult> headManifest(RegistryEndpoint endpoint, String repository, String reference, String scope);
 }
-

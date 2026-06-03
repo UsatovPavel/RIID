@@ -4,8 +4,11 @@ import java.nio.file.Path;
 import java.time.Duration;
 
 import org.eclipse.jetty.client.HttpClient;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Test;
 
 import riid.client.core.config.AuthConfig;
@@ -25,9 +28,11 @@ class HttpClientFactoryTest {
         fs.writeString(caPath, TestConfigYaml.CERT_PEM);
         AuthConfig auth = new AuthConfig(300, null, null, caPath.toString());
 
-        HttpClient client = HttpClientFactory.create(defaultConfig(), auth);
+        HttpClientConfig cfg = defaultConfig();
+        HttpClient client = HttpClientFactory.create(cfg, auth);
         try {
             assertTrue(client.isStarted());
+            assertEquals(cfg.requestTimeout().toMillis(), client.getIdleTimeout());
         } finally {
             client.stop();
         }
@@ -53,8 +58,7 @@ class HttpClientFactoryTest {
     void failsFastWhenMtlsPairIncomplete() {
         AuthConfig auth = new AuthConfig(300, "cert.pem", null, null);
 
-        IllegalStateException ex = assertThrows(
-                IllegalStateException.class,
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> HttpClientFactory.create(defaultConfig(), auth));
         assertTrue(ex.getMessage().contains("SECURITY:TLS:HTTP_CLIENT_INIT_FAILED"));
         assertTrue(ex.getCause() instanceof IllegalArgumentException);
@@ -62,15 +66,8 @@ class HttpClientFactoryTest {
     }
 
     private static HttpClientConfig defaultConfig() {
-        return HttpClientConfig.builder()
-                .connectTimeout(Duration.ofSeconds(1))
-                .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(1)
-                .initialBackoff(Duration.ofMillis(100))
-                .maxBackoff(Duration.ofMillis(200))
-                .retryIdempotentOnly(true)
-                .userAgent("ua")
-                .followRedirects(true)
-                .build();
+        return HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(1)).requestTimeout(Duration.ofSeconds(1))
+                .maxRetries(1).initialBackoff(Duration.ofMillis(100)).maxBackoff(Duration.ofMillis(200))
+                .retryIdempotentOnly(true).userAgent("ua").followRedirects(true).build();
     }
 }

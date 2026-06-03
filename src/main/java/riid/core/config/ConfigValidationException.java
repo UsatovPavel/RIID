@@ -41,8 +41,7 @@ public class ConfigValidationException extends RuntimeException {
         MISSING_REGISTRIES("REGISTRY: client.registries is required"),
         NO_REGISTRIES("REGISTRY: at least one registry must be configured"),
         NULL_REGISTRY("REGISTRY: registry entry must not be null"),
-        MISSING_SCHEME("REGISTRY: registry.scheme is required"),
-        MISSING_HOST("REGISTRY: registry.host is required");
+        MISSING_SCHEME("REGISTRY: registry.scheme is required"), MISSING_HOST("REGISTRY: registry.host is required");
 
         private final String reasonMessage;
 
@@ -56,11 +55,13 @@ public class ConfigValidationException extends RuntimeException {
     }
 
     public enum Http {
-        REQUIRED("HTTP: client.http is required"),
-        MAX_RETRIES_NEGATIVE("HTTP: client.http.maxRetries must be >= 0"),
+        REQUIRED("HTTP: client.http is required"), MAX_RETRIES_NEGATIVE("HTTP: client.http.maxRetries must be >= 0"),
         MAX_REDIRECTS_NEGATIVE("HTTP: client.http.maxRedirects must be >= 0"),
         CONNECT_TIMEOUT_POSITIVE("HTTP: client.http.connectTimeout must be positive"),
         REQUEST_TIMEOUT_POSITIVE("HTTP: client.http.requestTimeout must be positive"),
+        IMAGE_TIMEOUT_MIN_POSITIVE("HTTP: client.http.imageTimeoutMin must be positive"),
+        IMAGE_TIMEOUT_MAX_POSITIVE("HTTP: client.http.imageTimeoutMax must be positive"),
+        IMAGE_TIMEOUT_INVERTED("HTTP: client.http.imageTimeoutMax must be >= imageTimeoutMin"),
         BACKOFF_EXPONENT_BASE_MIN("HTTP: client.http.backoffExponentBase must be >= 2"),
         INITIAL_BACKOFF_POSITIVE("HTTP: client.http.initialBackoff must be positive"),
         MAX_BACKOFF_POSITIVE("HTTP: client.http.maxBackoff must be positive"),
@@ -79,8 +80,7 @@ public class ConfigValidationException extends RuntimeException {
     }
 
     public enum Auth {
-        MISSING("AUTH: client.auth is required"),
-        TTL_POSITIVE("AUTH: auth.defaultTokenTtlSeconds must be > 0"),
+        MISSING("AUTH: client.auth is required"), TTL_POSITIVE("AUTH: auth.defaultTokenTtlSeconds must be > 0"),
         CERT_MISSING("AUTH: client.auth.certPath must point to existing file"),
         KEY_MISSING("AUTH: client.auth.keyPath must point to existing file"),
         CA_MISSING("AUTH: client.auth.caPath must point to existing file"),
@@ -154,8 +154,7 @@ public class ConfigValidationException extends RuntimeException {
     }
 
     public enum Common {
-        FIELD_POSITIVE("%s must be positive"),
-        FIELD_PATH_EXISTS("%s must point to existing file: %s");
+        FIELD_POSITIVE("%s must be positive"), FIELD_PATH_EXISTS("%s must point to existing file: %s");
 
         private final String template;
 

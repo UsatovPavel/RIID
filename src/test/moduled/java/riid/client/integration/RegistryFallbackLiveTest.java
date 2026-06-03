@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Live fallback check: if first registry is unreachable, client can fetch from a second one.
- * Uses public Docker Hub as the reachable endpoint.
+ * Live fallback check: if first registry is unreachable, client can fetch from
+ * a second one. Uses public Docker Hub as the reachable endpoint.
  */
 class RegistryFallbackLiveTest {
 
@@ -28,21 +28,15 @@ class RegistryFallbackLiveTest {
     private static final String REPO = "library/busybox";
     private static final String REF = "latest";
 
-    private static final HttpClientConfig CFG = HttpClientConfig.builder()
-            .connectTimeout(Duration.ofSeconds(1))
-            .requestTimeout(Duration.ofSeconds(8))
-            .maxRetries(1)
-            .initialBackoff(Duration.ofMillis(100))
-            .maxBackoff(Duration.ofMillis(200))
-            .retryIdempotentOnly(true)
-            .userAgent("riid-fallback-test")
-            .followRedirects(true)
-            .build();
+    private static final HttpClientConfig CFG = HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(1))
+            .requestTimeout(Duration.ofSeconds(8)).maxRetries(1).initialBackoff(Duration.ofMillis(100))
+            .maxBackoff(Duration.ofMillis(200)).retryIdempotentOnly(true).userAgent("riid-fallback-test")
+            .followRedirects(true).build();
 
     @Test
     void fallsBackWhenFirstRegistryUnavailable() throws Exception {
         try (RegistryClient badClient = new RegistryClientImpl(BAD, CFG);
-             RegistryClient hubClient = new RegistryClientImpl(HUB, CFG)) {
+                RegistryClient hubClient = new RegistryClientImpl(HUB, CFG)) {
             RuntimeException ex = assertThrows(RuntimeException.class, () -> badClient.fetchManifest(REPO, REF));
             LOGGER.info("Fallback: first registry failed with {}: {}", ex.getClass().getSimpleName(), ex.getMessage());
             Throwable root = rootCause(ex);
@@ -61,5 +55,3 @@ class RegistryFallbackLiveTest {
         return cur;
     }
 }
-
-

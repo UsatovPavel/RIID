@@ -108,10 +108,7 @@ public class InMemoryHostFilesystem implements HostFilesystem {
     @Override
     public Stream<Path> walk(Path root) {
         Path normalized = normalize(root);
-        return Stream.concat(
-                directories.stream(),
-                files.keySet().stream())
-                .filter(p -> p.startsWith(normalized));
+        return Stream.concat(directories.stream(), files.keySet().stream()).filter(p -> p.startsWith(normalized));
     }
 
     @Override
@@ -152,4 +149,3 @@ public class InMemoryHostFilesystem implements HostFilesystem {
         return path.toAbsolutePath().normalize();
     }
 }
-

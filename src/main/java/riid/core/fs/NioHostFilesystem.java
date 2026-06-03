@@ -82,12 +82,9 @@ public final class NioHostFilesystem implements HostFilesystem {
     @Override
     public Path atomicMove(Path source, Path target) throws IOException {
         try {
-            return Files.move(source, target,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
+            return Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException e) {
             return Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 }
-

@@ -8,6 +8,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -18,8 +19,8 @@ import riid.core.fs.TestPaths;
 import riid.core.config.TestConfigYaml;
 
 /**
- * End-to-endOffsetBytes via CLI with real podman runtime.
- * Requires podman and network access to Docker Hub.
+ * End-to-endOffsetBytes via CLI with real podman runtime. Requires podman and
+ * network access to Docker Hub.
  */
 @Tag("filesystem")
 @Tag("local")
@@ -44,17 +45,13 @@ class CliPodmanIntegrationTest {
 
         int code;
         try (PrintStream testOut = new PrintStream(outBuf, true, StandardCharsets.UTF_8);
-             PrintStream testErr = new PrintStream(errBuf, true, StandardCharsets.UTF_8)) {
+                PrintStream testErr = new PrintStream(errBuf, true, StandardCharsets.UTF_8)) {
             System.setOut(testOut);
             System.setErr(testErr);
 
-        CliApplication cli = CliApplication.createDefault();
-            code = cli.run(new String[]{
-                "--config", config.toString(),
-                "--repo", "library/busybox",
-                "--tag", "latest",
-                "--runtime", PODMAN
-        });
+            CliApplication cli = CliApplication.createDefault();
+            code = cli.run(new String[]{"--config", config.toString(), "--repo", "library/busybox", "--tag", "latest",
+                    "--runtime", PODMAN});
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);
@@ -63,16 +60,12 @@ class CliPodmanIntegrationTest {
         if (code != 0) {
             String podmanVersion = runCapture(PODMAN, "--version");
             String podmanInfo = runCapture(PODMAN, "info");
-            throw new AssertionError("CLI exit " + code
-                    + "\nSTDOUT:\n" + outBuf
-                    + "\nSTDERR:\n" + errBuf
-                    + "\nPODMAN VERSION:\n" + podmanVersion
-                    + "\nPODMAN INFO:\n" + podmanInfo);
+            throw new AssertionError("CLI exit " + code + "\nSTDOUT:\n" + outBuf + "\nSTDERR:\n" + errBuf
+                    + "\nPODMAN VERSION:\n" + podmanVersion + "\nPODMAN INFO:\n" + podmanInfo);
         }
 
         Process p = new ProcessBuilder(PODMAN, "images", "--format", "{{.Repository}}:{{.Tag}}")
-                .redirectErrorStream(true)
-                .start();
+                .redirectErrorStream(true).start();
         String images = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int imagesCode = p.waitFor();
         assertEquals(0, imagesCode, "podman images failed: " + images);
@@ -100,4 +93,3 @@ class CliPodmanIntegrationTest {
         }
     }
 }
-

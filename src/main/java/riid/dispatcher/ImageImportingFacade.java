@@ -11,11 +11,12 @@ import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 /**
- * Connects RequestDispatcher (download/validate) with a RuntimeAdapter (import).
- * 7.0/7.1/7.2 from Plan PR 3: fetch -> validate -> pass to runtime, with clear errors.
+ * Connects RequestDispatcher (download/validate) with a RuntimeAdapter
+ * (import). 7.0/7.1/7.2 from Plan PR 3: fetch -> validate -> pass to runtime,
+ * with clear errors.
  */
 public final class ImageImportingFacade {
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageImportingFacade.class);
@@ -33,10 +34,12 @@ public final class ImageImportingFacade {
     }
 
     /**
-     * Fetches image layers via dispatcher, validates the result, then imports into the given runtime.
+     * Fetches image layers via dispatcher, validates the result, then imports into
+     * the given runtime.
      *
      * @return FetchResult that was handed to the runtime.
-     * @throws DispatcherRuntimeException when validation or runtime import fails.
+     * @throws DispatcherRuntimeException
+     *             when validation or runtime import fails.
      */
     public FetchResult fetchAndLoad(ImageRef ref, RuntimeAdapter runtime) {
         Objects.requireNonNull(ref, "ref");
@@ -51,8 +54,7 @@ public final class ImageImportingFacade {
             runtime.importImage(imagePath);
             return result;
         } catch (IOException e) {
-            throw new DispatcherRuntimeException(
-                    "Failed to import image into runtime " + runtime.runtimeId(), e);
+            throw new DispatcherRuntimeException("Failed to import image into runtime " + runtime.runtimeId(), e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new DispatcherRuntimeException(
@@ -91,5 +93,3 @@ public final class ImageImportingFacade {
     }
 
 }
-
-

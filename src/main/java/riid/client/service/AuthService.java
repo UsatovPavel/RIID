@@ -66,37 +66,24 @@ public class AuthService {
         }
 
         // Ping to get challenge
-        URI pingUri = HttpRequestBuilder.buildUri(
-                endpoint.scheme(),
-                endpoint.host(),
-                endpoint.port(),
+        URI pingUri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(),
                 RegistryApi.V2_PING);
         HttpResult<Void> pingResp = http.head(pingUri, Map.of());
         if (pingResp.statusCode() == HttpStatus.OK_200) {
             return Optional.empty(); // no auth needed
         }
         if (pingResp.statusCode() != HttpStatus.UNAUTHORIZED_401) {
-            String message = authMessage(
-                    "UNEXPECTED_PING_STATUS",
+            String message = authMessage("UNEXPECTED_PING_STATUS",
                     "registry ping returned status " + pingResp.statusCode());
             throw new ClientException(
-                    new ClientError.Auth(
-                            ClientError.AuthKind.UNEXPECTED_PING_STATUS,
-                            pingResp.statusCode(),
-                            message),
-                    message
-            );
+                    new ClientError.Auth(ClientError.AuthKind.UNEXPECTED_PING_STATUS, pingResp.statusCode(), message),
+                    message);
         }
         Optional<AuthChallenge> ch = extractChallenge(pingResp.headers());
         if (ch.isEmpty()) {
-            String message = authMessage(
-                    "MISSING_CHALLENGE",
-                    "WWW-Authenticate challenge is missing");
+            String message = authMessage("MISSING_CHALLENGE", "WWW-Authenticate challenge is missing");
             throw new ClientException(
-                    new ClientError.Auth(
-                            ClientError.AuthKind.MISSING_CHALLENGE,
-                            pingResp.statusCode(),
-                            message),
+                    new ClientError.Auth(ClientError.AuthKind.MISSING_CHALLENGE, pingResp.statusCode(), message),
                     message);
         }
         AuthChallenge c = ch.get();
@@ -111,9 +98,7 @@ public class AuthService {
     }
 
     private Optional<AuthChallenge> extractChallenge(HttpFields headers) {
-        return headers.getValuesList("WWW-Authenticate").stream()
-                .map(AuthParser::parse)
-                .flatMap(Optional::stream)
+        return headers.getValuesList("WWW-Authenticate").stream().map(AuthParser::parse).flatMap(Optional::stream)
                 .findFirst();
     }
 
@@ -121,8 +106,7 @@ public class AuthService {
         try {
             StringBuilder url = new StringBuilder(challenge.realm());
             if (challenge.service() != null) {
-                url.append("?service=")
-                        .append(URLEncoder.encode(challenge.service(), StandardCharsets.UTF_8));
+                url.append("?service=").append(URLEncoder.encode(challenge.service(), StandardCharsets.UTF_8));
             }
             if (scope != null && !scope.isBlank()) {
                 if (!url.toString().contains("?")) {
@@ -130,8 +114,7 @@ public class AuthService {
                 } else {
                     url.append("&");
                 }
-                url.append("scope=")
-                        .append(URLEncoder.encode(scope, StandardCharsets.UTF_8));
+                url.append("scope=").append(URLEncoder.encode(scope, StandardCharsets.UTF_8));
             }
             var headers = new HashMap<String, String>();
             if (creds != null) {
@@ -141,31 +124,22 @@ public class AuthService {
                     boolean hasPass = creds.passwordOpt().filter(s -> !s.isBlank()).isPresent();
                     if (hasUser && hasPass) {
                         String basic = creds.usernameOpt().orElse("") + ":" + creds.passwordOpt().orElse("");
-                        String enc = getEncoder()
-                                .encodeToString(basic.getBytes(StandardCharsets.UTF_8));
+                        String enc = getEncoder().encodeToString(basic.getBytes(StandardCharsets.UTF_8));
                         headers.put("Authorization", "Basic " + enc);
                     }
                 }
             }
             HttpResult<java.io.InputStream> resp = http.get(URI.create(url.toString()), headers);
             if (resp.statusCode() != HttpStatus.OK_200) {
-                String message = authMessage(
-                        "TOKEN_ENDPOINT_FAILED",
+                String message = authMessage("TOKEN_ENDPOINT_FAILED",
                         "token endpoint returned status " + resp.statusCode());
                 throw new ClientException(
-                        new ClientError.Auth(
-                                ClientError.AuthKind.TOKEN_FAILED,
-                                resp.statusCode(),
-                                message),
-                        message
-                );
+                        new ClientError.Auth(ClientError.AuthKind.TOKEN_FAILED, resp.statusCode(), message), message);
             }
             TokenResponse tr = mapper.readValue(resp.body(), TokenResponse.class);
             String token = Optional.ofNullable(tr.effectiveToken())
                     .orElseThrow(() -> new ClientException(
-                            new ClientError.Auth(
-                                    ClientError.AuthKind.NO_TOKEN,
-                                    resp.statusCode(),
+                            new ClientError.Auth(ClientError.AuthKind.NO_TOKEN, resp.statusCode(),
                                     authMessage("TOKEN_MISSING", "token is absent in auth response")),
                             authMessage("TOKEN_MISSING", "token is absent in auth response")));
             long ttl = Optional.ofNullable(tr.expiresInSeconds()).orElse(defaultTokenTtlSeconds);
@@ -175,17 +149,9 @@ public class AuthService {
             cache.put(cacheKeyFromChallenge(challenge, scope, creds), token, ttl);
             return token;
         } catch (IOException e) {
-            String message = authMessage(
-                    "TOKEN_ENDPOINT_IO_ERROR",
-                    "I/O error while requesting auth token");
-            throw new ClientException(
-                            new ClientError.Auth(
-                            ClientError.AuthKind.TOKEN_FAILED,
-                            null,
-                            message),
-                    message,
-                    e
-            );
+            String message = authMessage("TOKEN_ENDPOINT_IO_ERROR", "I/O error while requesting auth token");
+            throw new ClientException(new ClientError.Auth(ClientError.AuthKind.TOKEN_FAILED, null, message), message,
+                    e);
         }
     }
 
@@ -213,4 +179,3 @@ public class AuthService {
         return AUTH_PREFIX + kind + ": " + details;
     }
 }
-

@@ -8,6 +8,7 @@ import riid.cache.auth.TokenCache;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.http.HttpClientConfig;
 import riid.client.http.HttpClientFactory;
@@ -29,15 +30,14 @@ import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 
 /**
- * Live smoke against Docker Hub for alpine:edge.
- * Requires internet access; no docker-compose.
+ * Live smoke against Docker Hub for alpine:edge. Requires internet access; no
+ * docker-compose.
  */
 @Tag("filesystem")
 @Tag("live")
 public class RegistryLiveTest {
 
-    private static final RegistryEndpoint DOCKER_HUB =
-            TestRegistryConfig.endpoint();
+    private static final RegistryEndpoint DOCKER_HUB = TestRegistryConfig.endpoint();
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final String SCOPE = "repository:library/alpine:pull";
@@ -48,7 +48,8 @@ public class RegistryLiveTest {
     private final HttpClient httpClient = HttpClientFactory.create(httpConfig);
     private final HttpExecutor http = new HttpExecutor(httpClient, httpConfig);
     private final AuthService authService = new AuthService(http, mapper, new TokenCache());
-    private final ManifestService manifestService = new ManifestService(http, authService, mapper);
+    private final ManifestService manifestService = new ManifestService(http, authService, mapper,
+            ClientPlatformConfig.fromHost());
     private final BlobService blobService = new BlobService(http, authService);
 
     @Test
@@ -58,11 +59,7 @@ public class RegistryLiveTest {
         assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(
-                REPO,
-                layer.digest(),
-                layer.size(),
-                layer.mediaType(),
+        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType(),
                 new BlobRequest.RangeSpec.All());
 
         // HEAD
@@ -79,5 +76,3 @@ public class RegistryLiveTest {
         assertTrue(tmp.length() > 0, "downloaded file should not be empty");
     }
 }
-
-

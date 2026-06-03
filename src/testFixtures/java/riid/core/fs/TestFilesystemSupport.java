@@ -10,7 +10,8 @@ import java.util.stream.Stream;
 import riid.runtime.BoundedCommandExecution;
 
 /**
- * Shared helpers for integration tests that touch the real filesystem or external CLI tools.
+ * Shared helpers for integration tests that touch the real filesystem or
+ * external CLI tools.
  */
 @SuppressWarnings("PMD.TestClassWithoutTestCases")
 public final class TestFilesystemSupport {
@@ -20,7 +21,8 @@ public final class TestFilesystemSupport {
 
     /**
      * Whether {@code curl} is on {@code PATH} and responds to {@code --version}.
-     * Uses {@link BoundedCommandExecution} for bounded stdout/stderr capture (same as runtime adapters).
+     * Uses {@link BoundedCommandExecution} for bounded stdout/stderr capture (same
+     * as runtime adapters).
      */
     public static boolean curlAvailable() {
         try {
@@ -35,7 +37,8 @@ public final class TestFilesystemSupport {
     }
 
     /**
-     * Deletes a file or directory tree (deepest paths first). Best-effort: ignores per-path failures.
+     * Deletes a file or directory tree (deepest paths first). Best-effort: ignores
+     * per-path failures.
      */
     public static void deleteRecursive(Path root) {
         if (root == null || !Files.exists(root)) {

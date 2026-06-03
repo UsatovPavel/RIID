@@ -74,7 +74,9 @@ p2p:
 
 ### Defaults (from smoke test)
 - client.http.connectTimeout = PT5S
-- client.http.requestTimeout = PT30S
+- client.http.requestTimeout = PT30M
+- client.http.imageTimeoutMin = PT5M
+- client.http.imageTimeoutMax = PT30M
 - client.http.maxRetries = 2
 - client.http.initialBackoff = PT0.2S
 - client.http.maxBackoff = PT2S

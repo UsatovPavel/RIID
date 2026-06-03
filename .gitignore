@@ -45,9 +45,10 @@ bin/
 *.txt
 
 ### Local Docker Hub token ###
-config/.env
+*/.env
 
 ###Internal artifacts###
 План*
 Презентация.md
 Исправления*
+external_utils/*

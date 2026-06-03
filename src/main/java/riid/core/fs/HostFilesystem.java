@@ -72,13 +72,8 @@ public interface HostFilesystem {
         Path temp = PathSupport.temporaryPath(dir, prefix + "-", ".tmp");
         createFile(temp);
         OpenOption[] effective = options.length == 0
-                ? new OpenOption[] {
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.DSYNC,
-                    StandardOpenOption.SYNC,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE
-                }
+                ? new OpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.DSYNC, StandardOpenOption.SYNC,
+                        StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE}
                 : options;
         atomicWrite(path, bytes, temp, effective);
     }
@@ -114,4 +109,3 @@ public interface HostFilesystem {
         });
     }
 }
-

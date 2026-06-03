@@ -1,8 +1,8 @@
 package riid.dispatcher.model;
 
 /**
- * Image reference for dispatcher/registry layer: repository with tag or digest (no registry).
- * Usage: fetch/validate via RequestDispatcher.
+ * Image reference for dispatcher/registry layer: repository with tag or digest
+ * (no registry). Usage: fetch/validate via RequestDispatcher.
  */
 public record ImageRef(String repository, String tag, String digest) {
     public ImageRef {
@@ -14,4 +14,3 @@ public record ImageRef(String repository, String tag, String digest) {
         }
     }
 }
- 

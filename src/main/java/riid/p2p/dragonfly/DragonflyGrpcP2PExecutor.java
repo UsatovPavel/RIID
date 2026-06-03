@@ -3,7 +3,6 @@ package riid.p2p.dragonfly;
 import riid.p2p.P2PExecutor;
 import ru.hse.dragonfly.puller.DragonflyImagePuller;
 import ru.hse.dragonfly.puller.blobpuller.PullResult;
-import ru.hse.dragonfly.puller.error.DragonflyPullErrorKind;
 import ru.hse.dragonfly.puller.error.DragonflyPullException;
 import ru.hse.dragonfly.puller.registry.RegistryPullRequest;
 
@@ -23,11 +22,11 @@ import riid.core.fs.HostFilesystem;
 import riid.core.fs.PathSupport;
 
 /**
- * P2P executor via gRPC to dfdaemon (v2 API). Fetch-only: returns path to downloaded file.
- * Dispatcher is responsible for cache.put().
+ * P2P executor via gRPC to dfdaemon (v2 API). Fetch-only: returns path to
+ * downloaded file. Dispatcher is responsible for cache.put().
  * <p>
- * Uses dfdaemonAddr from config (unix socket or tcp).
- * For unix socket (e.g. unix:///var/run/dragonfly/dfdaemon.sock), output goes to parent/output
+ * Uses dfdaemonAddr from config (unix socket or tcp). For unix socket (e.g.
+ * unix:///var/run/dragonfly/dfdaemon.sock), output goes to parent/output
  * (hostPath mount) so dfdaemon can write and RIID can read on host.
  */
 public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
@@ -35,18 +34,14 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final DragonflyConfig config;
     private final PullerFactory pullerFactory;
     private volatile Puller sharedPuller;
+    private volatile boolean closed;
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    HostFilesystem fs,
-                                    DragonflyConfig config) {
-        this(endpoint, fs, config,
-                cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, HostFilesystem fs, DragonflyConfig config) {
+        this(endpoint, fs, config, cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
     }
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    HostFilesystem fs,
-                                    DragonflyConfig config,
-                                    PullerFactory pullerFactory) {
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, HostFilesystem fs, DragonflyConfig config,
+            PullerFactory pullerFactory) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
@@ -78,7 +73,8 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         } catch (CompletionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof DragonflyPullException dragonflyPullException) {
-                throw new IOException("dragonfly pull failed: " + dragonflyPullException.getMessage(), dragonflyPullException);
+                throw new IOException("dragonfly pull failed: " + dragonflyPullException.getMessage(),
+                        dragonflyPullException);
             }
             throw new IOException("dragonfly pull failed: " + cause.getMessage(), cause);
         } catch (DragonflyPullException e) {
@@ -87,9 +83,10 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     }
 
     /**
-     * For unix socket (e.g. unix:///var/run/dragonfly/dfdaemon.sock), returns host output dir
-     * (parent of socket + /output). dfdaemon writes there via hostPath mount.
-     * For TCP proxy (e.g. 127.0.0.1:50051 via socat), use DFDAEMON_OUTPUT_DIR if set.
+     * For unix socket (e.g. unix:///var/run/dragonfly/dfdaemon.sock), returns host
+     * output dir (parent of socket + /output). dfdaemon writes there via hostPath
+     * mount. For TCP proxy (e.g. 127.0.0.1:50051 via socat), use
+     * DFDAEMON_OUTPUT_DIR if set.
      */
     private static Path unixSocketHostOutputDir(String addr) {
         if (addr != null && addr.trim().startsWith("unix://")) {
@@ -116,7 +113,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         Puller toClose;
         synchronized (this) {
             toClose = sharedPuller;
-            sharedPuller = null;
+            closed = true;
         }
         if (toClose == null) {
             return;
@@ -129,11 +126,17 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     }
 
     private Puller getOrCreatePuller() throws IOException {
+        if (closed) {
+            throw new IOException("dragonfly puller is already closed");
+        }
         Puller current = sharedPuller;
         if (current != null) {
             return current;
         }
         synchronized (this) {
+            if (closed) {
+                throw new IOException("dragonfly puller is already closed");
+            }
             if (sharedPuller == null) {
                 sharedPuller = pullerFactory.create(config);
             }
@@ -145,8 +148,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         Duration timeout = cfg.requestTimeout();
         Integer retries = cfg.maxRetries();
         try {
-            DragonflyImagePuller.Builder builder = DragonflyImagePuller.builder()
-                    .withAddress(cfg.dfdaemonAddr());
+            DragonflyImagePuller.Builder builder = DragonflyImagePuller.builder().withAddress(cfg.dfdaemonAddr());
             if (timeout != null) {
                 builder = builder.withRequestTimeout(timeout);
             }
@@ -181,41 +183,12 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
 
         @Override
         public CompletableFuture<PullResult> pull(RegistryPullRequest request) throws DragonflyPullException {
-            Object result = delegate.pull(request);
-            if (result instanceof CompletableFuture<?> futureResult) {
-                CompletableFuture<PullResult> converted = new CompletableFuture<>();
-                futureResult.whenComplete((value, error) -> {
-                    if (error != null) {
-                        converted.completeExceptionally(error);
-                        return;
-                    }
-                    if (value instanceof PullResult pullResult) {
-                        converted.complete(pullResult);
-                        return;
-                    }
-                    String valueType = value == null ? "null" : value.getClass().getName();
-                    converted.completeExceptionally(new DragonflyPullException(
-                            DragonflyPullErrorKind.INTERNAL,
-                            "unexpected future pull result type: " + valueType
-                    ));
-                });
-                return converted;
-            }
-            if (result instanceof PullResult pullResult) {
-                return CompletableFuture.completedFuture(pullResult);
-            }
-            String resultType = result == null ? "null" : result.getClass().getName();
-            throw new DragonflyPullException(
-                    DragonflyPullErrorKind.INTERNAL,
-                    "unexpected pull result type: " + resultType
-            );
+            return delegate.pull(request);
         }
 
         @Override
         public void close() throws Exception {
-            if (delegate instanceof AutoCloseable autoCloseable) {
-                autoCloseable.close();
-            }
+            delegate.close();
         }
     }
 }

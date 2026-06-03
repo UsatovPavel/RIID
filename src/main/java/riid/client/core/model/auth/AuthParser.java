@@ -12,7 +12,8 @@ import java.util.Locale;
 import java.util.Optional;
 
 public final class AuthParser {
-    private AuthParser() {}
+    private AuthParser() {
+    }
 
     public static Optional<riid.client.core.model.auth.AuthChallenge> parse(String header) {
         if (header == null || header.isBlank()) {
@@ -45,7 +46,8 @@ public final class AuthParser {
                             case "realm" -> realm = val;
                             case "service" -> service = val;
                             case "scope" -> scope = val;
-                            default -> { }
+                            default -> {
+                            }
                         }
                     }
                 }

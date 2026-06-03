@@ -7,6 +7,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +25,7 @@ import riid.core.config.TestConfigYaml;
 import riid.core.config.TestRegistryConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
-import riid.runtime.DockerRuntimeAdapter;
+import riid.runtime.adapter.DockerRuntimeAdapter;
 
 @Tag("filesystem")
 @Tag("local")
@@ -50,13 +51,11 @@ class DockerRuntimeAdapterIntegrationTest {
         }
 
         Process p = new ProcessBuilder(DOCKER, "images", "--format", "{{.Repository}}:{{.Tag}}")
-                .redirectErrorStream(true)
-                .start();
+                .redirectErrorStream(true).start();
         String images = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
         assertEquals(0, code, "docker images failed: " + images);
-        boolean found = images.contains("alpine:edge")
-                || images.contains("docker.io/library/alpine:edge")
+        boolean found = images.contains("alpine:edge") || images.contains("docker.io/library/alpine:edge")
                 || images.contains(loadedId.toString());
         assertTrue(found, "Expected alpine:edge in docker images, got: " + images);
     }
@@ -66,18 +65,12 @@ class DockerRuntimeAdapterIntegrationTest {
         var endpoint = TestRegistryConfig.endpoint();
         HostFilesystem fs = new NioHostFilesystem();
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
-             RegistryClientImpl client =
-                     new RegistryClientImpl(endpoint, new HttpClientConfig())) {
-            RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(
-                    client, cache, new P2PExecutor.NoOp(), fs);
+                RegistryClientImpl client = new RegistryClientImpl(endpoint, new HttpClientConfig())) {
+            RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(client, cache,
+                    new P2PExecutor.NoOp(), fs);
             RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(DOCKER, new DockerRuntimeAdapter()));
-            try (ImageLoadingFacade app = new ImageLoadingFacade(
-                    dispatcher,
-                    registry,
-                    client,
-                    fs,
-                    TestPaths.DEFAULT_BASE_DIR,
-                    java.util.List.of())) {
+            try (ImageLoadingFacade app = new ImageLoadingFacade(dispatcher, registry, client, fs,
+                    TestPaths.DEFAULT_BASE_DIR, java.util.List.of())) {
                 ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
                 ImageId loadedId = app.load(imageId, DOCKER).imageId();
                 run(List.of(DOCKER, "run", "--rm", loadedId.toString(), "true"));

@@ -1,4 +1,6 @@
-package riid.runtime;
+package riid.runtime.adapter;
+
+import riid.runtime.BoundedCommandExecution;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -6,14 +8,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Podman adapter (WSL2-friendly) using CLI `podman load -q -i <tar|oci-archive>`.
+ * Porto adapter using portoctl CLI to import an OCI archive. Requires portoctl
+ * available and portod socket (/run/portod.socket) accessible.
  */
-public class PodmanRuntimeAdapter implements RuntimeAdapter {
-    private static final String PODMAN_BIN = "podman";
+public class PortoRuntimeAdapter implements RuntimeAdapter {
+    private static final String PORTOCTL_BIN = "portoctl";
 
     @Override
     public String runtimeId() {
-        return "podman";
+        return "porto";
     }
 
     @Override
@@ -23,16 +26,10 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
             throw new IOException("Image file not found: " + imagePath);
         }
 
-        List<String> cmd = List.of(
-                PODMAN_BIN,
-                "load",
-                "-q",
-                "-i",
-                imagePath.toAbsolutePath().toString()
-        );
+        List<String> cmd = List.of(PORTOCTL_BIN, "layer", "-I", imagePath.toAbsolutePath().toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         if (shellResult.exitCode() != 0) {
-            throw new IOException("podman load failed (exit " + shellResult.exitCode() + "): "
+            throw new IOException("portoctl layer import failed (exit " + shellResult.exitCode() + "): "
                     + shellResult.stdout() + shellResult.stderr());
         }
     }
@@ -49,5 +46,3 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         return BoundedCommandExecution.run(command);
     }
 }
-
-

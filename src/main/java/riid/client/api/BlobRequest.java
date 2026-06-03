@@ -6,13 +6,8 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 
-public record BlobRequest(
-        String repository,
-        String digest,
-        Long expectedSizeBytes,
-        String mediaType,
-        @NonNull RangeSpec range
-) {
+public record BlobRequest(String repository, String digest, Long expectedSizeBytes, String mediaType,
+        @NonNull RangeSpec range) {
     private static final String RANGE_START_MUST_BE_NON_NEGATIVE = "Range startOffsetBytes must be >= 0";
 
     public BlobRequest {
@@ -28,8 +23,8 @@ public record BlobRequest(
     }
 
     /**
-     * Byte range request according to RFC 7233.
-     * Implementations represent all supported single-range forms.
+     * Byte range request according to RFC 7233. Implementations represent all
+     * supported single-range forms.
      */
     public sealed interface RangeSpec permits RangeSpec.All, RangeSpec.From, RangeSpec.Bounded, RangeSpec.Suffix {
         String toHeaderValue();
@@ -79,10 +74,8 @@ public record BlobRequest(
                 }
                 if (endOffsetBytes < startOffsetBytes) {
                     throw new ClientException(
-                            new ClientError.Parse(
-                                ClientError.ParseKind.RANGE,
-                                "Range endOffsetBytes must be >= startOffsetBytes"
-                            ),
+                            new ClientError.Parse(ClientError.ParseKind.RANGE,
+                                    "Range endOffsetBytes must be >= startOffsetBytes"),
                             "Range endOffsetBytes must be >= startOffsetBytes");
                 }
             }
@@ -112,4 +105,3 @@ public record BlobRequest(
         }
     }
 }
-

@@ -14,25 +14,39 @@ import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 
 /**
- * Turns pull failures from the image loading path and registry client into HTTP status and JSON for the daemon POST /pull endpoint.
+ * Turns pull failures from the image loading path and registry client into HTTP
+ * status and JSON for the daemon POST /pull endpoint.
+ * <p>
+ * Registry HTTP 404 on manifest or blob becomes HTTP 404 with code
+ * registry_not_found and a single fixed user-facing message.
+ * <p>
+ * Other registry 4xx (401, 403, 409, …) still become HTTP 404 with that same
+ * message, but a different JSON code (registry_response_unauthorized,
+ * registry_response_forbidden, registry_response_other) so callers can tell
+ * cases apart without exposing the registry line status.
+ * <p>
+ * Registry blocked by allowedRegistries becomes HTTP 403 with
+ * registry_not_allowed. Missing runtime adapter becomes HTTP 422 with
+ * adapter_not_found.
  *
- * Registry HTTP 404 on manifest or blob becomes HTTP 404 with code registry_not_found and a single fixed user-facing message.
- *
- * Other registry 4xx (401, 403, 409, …) still become HTTP 404 with that same message, but a different JSON code
- * (registry_response_unauthorized, registry_response_forbidden, registry_response_other) so callers can tell cases apart
- * without exposing the registry line status.
- *
- * Registry blocked by allowedRegistries becomes HTTP 403 with registry_not_allowed. Missing runtime adapter becomes HTTP 422 with adapter_not_found.
- *
- * Registry 5xx is not handled here; the handler responds with HTTP 500 and pull_failed.
+ * <p>
+ * Manifest list resolution that cannot satisfy the configured platform becomes
+ * HTTP 422 with manifest_not_satisfiable.
+ * <p>
+ * Registry 5xx is not handled here; the handler responds with HTTP 500 and
+ * pull_failed.
  */
 public final class DaemonPullErrorMapper {
 
-    /** Same message for true registry miss and for other registry 4xx that are mapped to HTTP 404. */
+    /**
+     * Same message for true registry miss and for other registry 4xx that are
+     * mapped to HTTP 404.
+     */
     public static final String REGISTRY_NOT_FOUND_MESSAGE = "Image, tag or digest not found in registry";
 
     /**
-     * JSON "code" values for mapped POST /pull errors. Nested here so the wire contract stays next to the mapper.
+     * JSON "code" values for mapped POST /pull errors. Nested here so the wire
+     * contract stays next to the mapper.
      */
     public enum PullErrorCode {
 
@@ -46,16 +60,21 @@ public final class DaemonPullErrorMapper {
 
         REGISTRY_RESPONSE_FORBIDDEN("registry_response_forbidden"),
 
-        REGISTRY_RESPONSE_OTHER("registry_response_other");
+        REGISTRY_RESPONSE_OTHER("registry_response_other"),
 
-        private final String jsonValue;
+        /**
+         * Manifest list/index cannot supply an image for the client platform.
+         */
+        MANIFEST_NOT_SATISFIABLE("manifest_not_satisfiable");
+
+        private final String jsonCode;
 
         PullErrorCode(String jsonValue) {
-            this.jsonValue = jsonValue;
+            this.jsonCode = jsonValue;
         }
 
         public String jsonValue() {
-            return jsonValue;
+            return jsonCode;
         }
     }
 
@@ -66,7 +85,8 @@ public final class DaemonPullErrorMapper {
     }
 
     /**
-     * @return mapped client-facing error, or empty so the handler uses HTTP 500 pull_failed
+     * @return mapped client-facing error, or empty so the handler uses HTTP 500
+     *         pull_failed
      */
     public static Optional<MappedHttpError> map(Throwable throwable) {
         Throwable current = throwable;
@@ -103,46 +123,38 @@ public final class DaemonPullErrorMapper {
             return Optional.empty();
         }
         return switch (runtimeError.kind()) {
-            case REGISTRY_NOT_ALLOWED -> Optional.of(new MappedHttpError(
-                    HttpStatus.FORBIDDEN_403,
-                    PullErrorCode.REGISTRY_NOT_ALLOWED,
-                    safeMessage(e)));
-            case ADAPTER_NOT_FOUND -> Optional.of(new MappedHttpError(
-                    HttpStatus.UNPROCESSABLE_ENTITY_422,
-                    PullErrorCode.ADAPTER_NOT_FOUND,
-                    safeMessage(e)));
+            case REGISTRY_NOT_ALLOWED -> Optional.of(
+                    new MappedHttpError(HttpStatus.FORBIDDEN_403, PullErrorCode.REGISTRY_NOT_ALLOWED, safeMessage(e)));
+            case ADAPTER_NOT_FOUND -> Optional.of(new MappedHttpError(HttpStatus.UNPROCESSABLE_ENTITY_422,
+                    PullErrorCode.ADAPTER_NOT_FOUND, safeMessage(e)));
             case LOAD_FAILED -> Optional.empty();
         };
     }
 
     private static Optional<MappedHttpError> mapClientException(ClientException e) {
+        if (e.error() instanceof ClientError.Parse parse && parse.kind() == ClientError.ParseKind.MANIFEST_PLATFORM) {
+            return Optional.of(new MappedHttpError(HttpStatus.UNPROCESSABLE_ENTITY_422,
+                    PullErrorCode.MANIFEST_NOT_SATISFIABLE, safeMessage(e)));
+        }
         Integer status = extractClientStatus(e.error());
         if (status == null) {
             return Optional.empty();
         }
         int st = status;
         if (st == HttpStatus.NOT_FOUND_404) {
-            return Optional.of(new MappedHttpError(
-                    HttpStatus.NOT_FOUND_404,
-                    PullErrorCode.REGISTRY_NOT_FOUND,
+            return Optional.of(new MappedHttpError(HttpStatus.NOT_FOUND_404, PullErrorCode.REGISTRY_NOT_FOUND,
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         if (st == HttpStatus.UNAUTHORIZED_401) {
-            return Optional.of(new MappedHttpError(
-                    HttpStatus.NOT_FOUND_404,
-                    PullErrorCode.REGISTRY_RESPONSE_UNAUTHORIZED,
-                    REGISTRY_NOT_FOUND_MESSAGE));
+            return Optional.of(new MappedHttpError(HttpStatus.NOT_FOUND_404,
+                    PullErrorCode.REGISTRY_RESPONSE_UNAUTHORIZED, REGISTRY_NOT_FOUND_MESSAGE));
         }
         if (st == HttpStatus.FORBIDDEN_403) {
-            return Optional.of(new MappedHttpError(
-                    HttpStatus.NOT_FOUND_404,
-                    PullErrorCode.REGISTRY_RESPONSE_FORBIDDEN,
+            return Optional.of(new MappedHttpError(HttpStatus.NOT_FOUND_404, PullErrorCode.REGISTRY_RESPONSE_FORBIDDEN,
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         if (st >= 400 && st < 500) {
-            return Optional.of(new MappedHttpError(
-                    HttpStatus.NOT_FOUND_404,
-                    PullErrorCode.REGISTRY_RESPONSE_OTHER,
+            return Optional.of(new MappedHttpError(HttpStatus.NOT_FOUND_404, PullErrorCode.REGISTRY_RESPONSE_OTHER,
                     REGISTRY_NOT_FOUND_MESSAGE));
         }
         return Optional.empty();

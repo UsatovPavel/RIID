@@ -42,7 +42,8 @@ public final class TestRegistryConfig {
     }
 
     /**
-     * Same as {@link #endpoint()} but attaches {@link TestConfigYaml#dockerHubCredentialsFromEnv()} when set.
+     * Same as {@link #endpoint()} but attaches
+     * {@link TestConfigYaml#dockerHubCredentialsFromEnv()} when set.
      */
     public static RegistryEndpoint endpointWithOptionalEnvCredentials() {
         Optional<Credentials> creds = TestConfigYaml.dockerHubCredentialsFromEnv();

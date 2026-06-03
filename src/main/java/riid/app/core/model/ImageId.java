@@ -1,8 +1,8 @@
 package riid.app.core.model;
 
 /**
- * Full image identity: registry + name + tag + digest.
- * Usage: app-level identity passed through facade/OCI build/runtime.
+ * Full image identity: registry + name + tag + digest. Usage: app-level
+ * identity passed through facade/OCI build/runtime.
  */
 public record ImageId(String registry, String name, String tag, String digest) {
     public ImageId {
@@ -32,8 +32,8 @@ public record ImageId(String registry, String name, String tag, String digest) {
     }
 
     /**
-     * Reference name for OCI index.json annotations (name[:tag]).
-     * Usage: OCI layout metadata.
+     * Reference name for OCI index.json annotations (name[:tag]). Usage: OCI layout
+     * metadata.
      */
     public String referenceName() {
         if (tag != null && !tag.isBlank()) {
@@ -65,4 +65,3 @@ public record ImageId(String registry, String name, String tag, String digest) {
         return base;
     }
 }
-

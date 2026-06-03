@@ -23,6 +23,7 @@ import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.BlockSize;
+import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
 import riid.client.core.error.ClientException;
 import riid.client.http.HttpClientConfig;
@@ -33,8 +34,8 @@ import riid.client.service.BlobService;
 import riid.client.service.ManifestService;
 
 /**
- * Integration test against a local registry:2, started via Testcontainers.
- * VPN sensitive
+ * Integration test against a local registry:2, started via Testcontainers. VPN
+ * sensitive
  */
 @Tag("local")
 @Testcontainers
@@ -43,8 +44,7 @@ public class RegistryLocalTest {
 
     @Container
     @SuppressWarnings("resource")
-    private static final GenericContainer<?> REGISTRY = new GenericContainer<>("registry:2")
-            .withExposedPorts(5000);
+    private static final GenericContainer<?> REGISTRY = new GenericContainer<>("registry:2").withExposedPorts(5000);
 
     private static RegistryEndpoint LOCAL;
     private static final String REPO = "alpine";
@@ -56,6 +56,7 @@ public class RegistryLocalTest {
     private static AuthService AUTH_SERVICE;
     private static ManifestService MANIFEST_SERVICE;
     private static BlobService BLOB_SERVICE;
+
     @BeforeAll
     @SuppressWarnings("unused")
     public static void startRegistryAndSeed() throws Exception {
@@ -67,7 +68,7 @@ public class RegistryLocalTest {
         HTTP_CLIENT = HttpClientFactory.create(httpConfig);
         HTTP = new HttpExecutor(HTTP_CLIENT, httpConfig);
         AUTH_SERVICE = new AuthService(HTTP, new ObjectMapper(), new TokenCache());
-        MANIFEST_SERVICE = new ManifestService(HTTP, AUTH_SERVICE, new ObjectMapper());
+        MANIFEST_SERVICE = new ManifestService(HTTP, AUTH_SERVICE, new ObjectMapper(), ClientPlatformConfig.fromHost());
         BLOB_SERVICE = new BlobService(HTTP, AUTH_SERVICE);
 
         // Seed registry with alpine using host docker
@@ -84,8 +85,8 @@ public class RegistryLocalTest {
         String output = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         int code = p.waitFor();
         if (code != 0) {
-            throw new IllegalStateException("Command failed (%d): %s%nOutput:%n%s"
-                    .formatted(code, String.join(" ", cmd), output));
+            throw new IllegalStateException(
+                    "Command failed (%d): %s%nOutput:%n%s".formatted(code, String.join(" ", cmd), output));
         }
     }
 
@@ -104,11 +105,7 @@ public class RegistryLocalTest {
         Assertions.assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(
-                REPO,
-                layer.digest(),
-                layer.size(),
-                layer.mediaType(),
+        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType(),
                 new BlobRequest.RangeSpec.All());
 
         Optional<Long> sizeOpt = BLOB_SERVICE.headBlob(LOCAL, REPO, layer.digest(), SCOPE);
@@ -138,13 +135,8 @@ public class RegistryLocalTest {
         long end = blockSize - 1;
         long rangeLen = end - start + 1;
 
-        BlobRequest req = new BlobRequest(
-                REPO,
-                layer.digest(),
-                rangeLen,
-                layer.mediaType(),
-                new BlobRequest.RangeSpec.Bounded(start, end)
-        );
+        BlobRequest req = new BlobRequest(REPO, layer.digest(), rangeLen, layer.mediaType(),
+                new BlobRequest.RangeSpec.Bounded(start, end));
 
         File tmp = Files.createTempFile("local-layer-range", ".bin").toFile();
         tmp.deleteOnExit();
@@ -163,4 +155,3 @@ public class RegistryLocalTest {
         Assertions.assertNotNull(ex.getMessage());
     }
 }
-

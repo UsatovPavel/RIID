@@ -51,4 +51,3 @@ public record ImageDigest(String algorithm, String hex) {
         return algorithm + ":" + hex;
     }
 }
-

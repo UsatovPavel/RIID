@@ -1,7 +1,9 @@
 package riid.core.config;
 
+import java.nio.file.Path;
 import java.util.Optional;
 
+import riid.app.core.config.AppConfig;
 import riid.client.core.config.Credentials;
 
 /**
@@ -9,6 +11,21 @@ import riid.client.core.config.Credentials;
  */
 @SuppressWarnings("PMD.TestClassWithoutTestCases")
 public final class TestConfigYaml {
+
+    /**
+     * If set (non-blank), {@link #resolveDaemonUnixSocketPath()} returns this path
+     * instead of reading YAML.
+     */
+    public static final String ENV_DAEMON_UNIX_SOCKET = "RIID_DAEMON_UNIX_SOCKET";
+
+    /**
+     * YAML file passed to {@link ConfigLoader#load(Path)} when resolving the daemon
+     * socket without env override (default: {@code config/config.yaml} relative to
+     * the process working directory, same as CLI).
+     */
+    public static final String ENV_CONFIG_PATH = "RIID_CONFIG_PATH";
+
+    private static final Path DEFAULT_CONFIG_PATH = Path.of("config", "config.yaml");
 
     private static final String ENV_DOCKERHUB_USER = "DOCKERHUB_USER";
     private static final String ENV_DOCKERHUB_TOKEN = "DOCKERHUB_TOKEN";
@@ -72,8 +89,30 @@ public final class TestConfigYaml {
     }
 
     /**
-     * Docker Hub basic auth from environment (e.g. GitHub Actions secrets), for rate limits / CI.
-     * Both DOCKERHUB_USER and DOCKERHUB_TOKEN must be non-blank.
+     * Control-plane Unix socket for {@code POST /pull} against a running RIID
+     * daemon (e.g. performance tests).
+     * <ol>
+     * <li>If {@link #ENV_DAEMON_UNIX_SOCKET} is non-blank — use that path.</li>
+     * <li>Otherwise load YAML via {@link #ENV_CONFIG_PATH} (default
+     * {@code config/config.yaml}) and use {@code app.daemon.unixSocketPath} with
+     * application defaults (e.g. {@code /tmp/riid.sock}).</li>
+     * </ol>
+     */
+    public static Path resolveDaemonUnixSocketPath() {
+        String explicit = System.getenv(ENV_DAEMON_UNIX_SOCKET);
+        if (explicit != null && !explicit.isBlank()) {
+            return Path.of(explicit);
+        }
+        Path configPath = Path.of(System.getenv().getOrDefault(ENV_CONFIG_PATH, DEFAULT_CONFIG_PATH.toString()));
+        GlobalConfig global = ConfigLoader.load(configPath);
+        AppConfig app = global.app();
+        AppConfig effectiveApp = app == null ? new AppConfig(null, null, null, null) : app;
+        return Path.of(effectiveApp.daemonOrDefault().unixSocketPathOrDefault());
+    }
+
+    /**
+     * Docker Hub basic auth from environment (e.g. GitHub Actions secrets), for
+     * rate limits / CI. Both DOCKERHUB_USER and DOCKERHUB_TOKEN must be non-blank.
      */
     public static Optional<Credentials> dockerHubCredentialsFromEnv() {
         String user = System.getenv(ENV_DOCKERHUB_USER);
@@ -118,18 +157,13 @@ public final class TestConfigYaml {
                       credentials:
                         username: %s
                         password: %s
-                """.formatted(
-                        scheme,
-                        host,
-                        port,
-                        yamlDoubleQuoted(c.username()),
-                        yamlDoubleQuoted(c.password())))
+                """.formatted(scheme, host, port, yamlDoubleQuoted(c.username()), yamlDoubleQuoted(c.password())))
                 .orElse("""
-                    - scheme: %s
-                      host: %s
-                      port: %d
-                      credentials: null
-                """.formatted(scheme, host, port));
+                            - scheme: %s
+                              host: %s
+                              port: %d
+                              credentials: null
+                        """.formatted(scheme, host, port));
         return """
                 client:
                   http:

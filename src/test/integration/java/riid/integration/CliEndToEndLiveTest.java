@@ -14,7 +14,7 @@ import riid.core.config.ConfigLoader;
 import riid.core.config.TestConfigYaml;
 import riid.logging.TestRootLoggerEvents;
 import riid.p2p.P2PExecutor;
-import riid.runtime.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeAdapter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -35,8 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Full-flow smoke: CLI args -> ConfigLoader -> ImageLoadingFacade -> dispatcher -> registry -> runtime (stub).
- * Live: hits Docker Hub for library/busybox:latest.
+ * Full-flow smoke: CLI args -> ConfigLoader -> ImageLoadingFacade -> dispatcher
+ * -> registry -> runtime (stub). Live: hits Docker Hub for
+ * library/busybox:latest.
  */
 @Tag("filesystem")
 @Tag("e2e")
@@ -54,40 +55,25 @@ class CliEndToEndLiveTest {
             ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
             ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
 
-            CliApplication cli = new CliApplication(
-                    (opts, meterRegistry) -> {
-                        var cfg = ConfigLoader.load(opts.configPath());
-                        RegistryEndpoint endpoint = cfg.client().registries().getFirst();
-                        return (repo, ref, runtimeId) -> {
-                            try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
-                                 ImageLoadingFacade svc = ImageLoadingFacade.createDefault(
-                                         endpoint,
-                                         cache,
-                                         new P2PExecutor.NoOp(),
-                                         Map.of(runtime.runtimeId(), runtime),
-                                         fs
-                                 )) {
-                                String registry = endpoint.registryName();
-                                return svc.load(
-                                        ImageId.fromRegistry(registry, repo, ref),
-                                        runtimeId
-                                );
-                            } catch (IOException e) {
-                                throw new RuntimeException("Failed to load image", e);
-                            }
-                        };
-                    },
-                    Map.of(runtime.runtimeId(), runtime),
+            CliApplication cli = new CliApplication((opts, meterRegistry) -> {
+                var cfg = ConfigLoader.load(opts.configPath());
+                RegistryEndpoint endpoint = cfg.client().registries().getFirst();
+                return (repo, ref, runtimeId) -> {
+                    try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
+                            ImageLoadingFacade svc = ImageLoadingFacade.createDefault(endpoint, cache,
+                                    new P2PExecutor.NoOp(), Map.of(runtime.runtimeId(), runtime), fs)) {
+                        String registry = endpoint.registryName();
+                        return svc.load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to load image", e);
+                    }
+                };
+            }, Map.of(runtime.runtimeId(), runtime),
                     new PrintWriter(new OutputStreamWriter(outBuf, java.nio.charset.StandardCharsets.UTF_8), true),
-                    new PrintWriter(new OutputStreamWriter(errBuf, java.nio.charset.StandardCharsets.UTF_8), true)
-            );
+                    new PrintWriter(new OutputStreamWriter(errBuf, java.nio.charset.StandardCharsets.UTF_8), true));
 
-            int code = cli.run(new String[]{
-                    "--config", config.toString(),
-                    "--repo", "library/busybox",
-                    "--tag", "latest",
-                    "--runtime", runtime.runtimeId()
-            });
+            int code = cli.run(new String[]{"--config", config.toString(), "--repo", "library/busybox", "--tag",
+                    "latest", "--runtime", runtime.runtimeId()});
 
             if (code != 0) {
                 fail("CLI exit code " + code + "\nSTDOUT:\n" + outBuf + "\nSTDERR:\n" + errBuf);
@@ -102,11 +88,9 @@ class CliEndToEndLiveTest {
         }
     }
 
-    private static String assertMilestoneStepLogging(TestRootLoggerEvents logs)
-            throws ReflectiveOperationException {
+    private static String assertMilestoneStepLogging(TestRootLoggerEvents logs) throws ReflectiveOperationException {
         List<Object> stepEvents = logs.events().stream()
-                .filter(event -> TestRootLoggerEvents.keyValue(event, "event") != null)
-                .toList();
+                .filter(event -> TestRootLoggerEvents.keyValue(event, "event") != null).toList();
 
         Set<String> seenEvents = new HashSet<>();
         Set<String> traceIds = new HashSet<>();
@@ -138,19 +122,16 @@ class CliEndToEndLiveTest {
             throws ReflectiveOperationException {
         List<Object> nonMilestoneRiid = logs.events().stream()
                 .filter(event -> TestRootLoggerEvents.keyValue(event, "event") == null)
-                .filter(CliEndToEndLiveTest::isRiidLogger)
-                .toList();
+                .filter(CliEndToEndLiveTest::isRiidLogger).toList();
         assertFalse(nonMilestoneRiid.isEmpty(), "expected at least one non-milestone log from riid.*");
         for (Object event : nonMilestoneRiid) {
             Map<String, String> mdc = TestRootLoggerEvents.mdcPropertyMap(event);
             assertNotNull(mdc, "MDC map expected for non-milestone riid log");
             String traceId = mdc.get("trace_id");
             assertNotNull(traceId,
-                    "trace_id must be present on non-milestone riid logs (logger="
-                            + loggerNameSafe(event) + ")");
+                    "trace_id must be present on non-milestone riid logs (logger=" + loggerNameSafe(event) + ")");
             assertEquals(expectedTraceId, traceId,
-                    "non-milestone log must use same trace_id as milestones (logger="
-                            + loggerNameSafe(event) + ")");
+                    "non-milestone log must use same trace_id as milestones (logger=" + loggerNameSafe(event) + ")");
         }
     }
 
