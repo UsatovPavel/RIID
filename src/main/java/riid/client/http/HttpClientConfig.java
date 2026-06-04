@@ -7,20 +7,19 @@ import java.time.Duration;
 /**
  * HTTP client configuration for registry calls.
  */
-public record HttpClientConfig(
-        @JsonProperty("connectTimeout") Duration connectTimeout,
+public record HttpClientConfig(@JsonProperty("connectTimeout") Duration connectTimeout,
         @JsonProperty("requestTimeout") Duration requestTimeout,
-        @JsonProperty("maxRetries") int maxRetries,
-        @JsonProperty("initialBackoff") Duration initialBackoff,
-        @JsonProperty("maxBackoff") Duration maxBackoff,
+        @JsonProperty("imageTimeoutMin") Duration imageTimeoutMin,
+        @JsonProperty("imageTimeoutMax") Duration imageTimeoutMax, @JsonProperty("maxRetries") int maxRetries,
+        @JsonProperty("initialBackoff") Duration initialBackoff, @JsonProperty("maxBackoff") Duration maxBackoff,
         @JsonProperty("backoffExponentBase") int backoffExponentBase,
-        @JsonProperty("retryIdempotentOnly") boolean retryIdempotentOnly,
-        @JsonProperty("userAgent") String userAgent,
-        @JsonProperty("followRedirects") boolean followRedirects,
-        @JsonProperty("maxRedirects") int maxRedirects
-) {
+        @JsonProperty("retryIdempotentOnly") boolean retryIdempotentOnly, @JsonProperty("userAgent") String userAgent,
+        @JsonProperty("followRedirects") boolean followRedirects, @JsonProperty("maxRedirects") int maxRedirects) {
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
+    private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(5);
+    private static final Duration DEFAULT_IMAGE_TIMEOUT_MAX = Duration.ofMinutes(30);
+    private static final long TIMEOUT_SCALE_BYTES = 15L * 1024L * 1024L * 1024L; // 15 GiB
     private static final int DEFAULT_MAX_RETRIES = 2;
     private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofMillis(200);
     private static final Duration DEFAULT_MAX_BACKOFF = Duration.ofSeconds(2);
@@ -32,25 +31,20 @@ public record HttpClientConfig(
     private static final int DEFAULT_MAX_REDIRECTS = 5;
 
     public HttpClientConfig() {
-        this(DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES,
-                DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_BACKOFF_EXPONENT_BASE,
-                DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT,
-                DEFAULT_FOLLOW_REDIRECTS, DEFAULT_MAX_REDIRECTS);
+        this(DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, DEFAULT_IMAGE_TIMEOUT_MIN, DEFAULT_IMAGE_TIMEOUT_MAX,
+                DEFAULT_MAX_RETRIES, DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_BACKOFF_EXPONENT_BASE,
+                DEFAULT_RETRY_IDEMPOTENT_ONLY, DEFAULT_USER_AGENT, DEFAULT_FOLLOW_REDIRECTS, DEFAULT_MAX_REDIRECTS);
     }
 
     @Deprecated
-    public HttpClientConfig(Duration connectTimeout,
-                            Duration requestTimeout,
-                            int maxRetries,
-                            Duration initialBackoff,
-                            Duration maxBackoff,
-                            int backoffExponentBase,
-                            boolean retryIdempotentOnly,
-                            String userAgent,
-                            boolean followRedirects,
-                            int maxRedirects) {
+    public HttpClientConfig(Duration connectTimeout, Duration requestTimeout, Duration imageTimeoutMin,
+            Duration imageTimeoutMax, int maxRetries, Duration initialBackoff, Duration maxBackoff,
+            int backoffExponentBase, boolean retryIdempotentOnly, String userAgent, boolean followRedirects,
+            int maxRedirects) {
         this.connectTimeout = connectTimeout != null ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         this.requestTimeout = requestTimeout != null ? requestTimeout : DEFAULT_REQUEST_TIMEOUT;
+        this.imageTimeoutMin = imageTimeoutMin != null ? imageTimeoutMin : DEFAULT_IMAGE_TIMEOUT_MIN;
+        this.imageTimeoutMax = imageTimeoutMax != null ? imageTimeoutMax : DEFAULT_IMAGE_TIMEOUT_MAX;
         this.maxRetries = maxRetries;
         this.initialBackoff = initialBackoff != null ? initialBackoff : DEFAULT_INITIAL_BACKOFF;
         this.maxBackoff = maxBackoff != null ? maxBackoff : DEFAULT_MAX_BACKOFF;
@@ -68,6 +62,15 @@ public record HttpClientConfig(
         }
         if (requestTimeout.isNegative()) {
             throw new IllegalArgumentException("requestTimeout must be non-negative");
+        }
+        if (imageTimeoutMin.isNegative()) {
+            throw new IllegalArgumentException("imageTimeoutMin must be non-negative");
+        }
+        if (imageTimeoutMax.isNegative()) {
+            throw new IllegalArgumentException("imageTimeoutMax must be non-negative");
+        }
+        if (imageTimeoutMax.compareTo(imageTimeoutMin) < 0) {
+            throw new IllegalArgumentException("imageTimeoutMax must be >= imageTimeoutMin");
         }
         if (initialBackoff.isNegative() || maxBackoff.isNegative()) {
             throw new IllegalArgumentException("backoff must be non-negative");
@@ -94,22 +97,36 @@ public record HttpClientConfig(
     }
 
     public Builder toBuilder() {
-        return new Builder()
-                .connectTimeout(connectTimeout)
-                .requestTimeout(requestTimeout)
-                .maxRetries(maxRetries)
-                .initialBackoff(initialBackoff)
-                .maxBackoff(maxBackoff)
-                .backoffExponentBase(backoffExponentBase)
-                .retryIdempotentOnly(retryIdempotentOnly)
-                .userAgent(userAgent)
-                .followRedirects(followRedirects)
+        return new Builder().connectTimeout(connectTimeout).requestTimeout(requestTimeout)
+                .imageTimeoutMin(imageTimeoutMin).imageTimeoutMax(imageTimeoutMax).maxRetries(maxRetries)
+                .initialBackoff(initialBackoff).maxBackoff(maxBackoff).backoffExponentBase(backoffExponentBase)
+                .retryIdempotentOnly(retryIdempotentOnly).userAgent(userAgent).followRedirects(followRedirects)
                 .maxRedirects(maxRedirects);
+    }
+
+    /**
+     * Interpolate timeout in [imageTimeoutMin, imageTimeoutMax] by payload size.
+     * Scale anchor is 15 GiB: at/above it timeout reaches imageTimeoutMax.
+     */
+    public Duration timeoutForSizeBytes(long sizeBytes) {
+        if (sizeBytes <= 0) {
+            return imageTimeoutMin;
+        }
+        long minMs = imageTimeoutMin.toMillis();
+        long maxMs = imageTimeoutMax.toMillis();
+        if (maxMs <= minMs) {
+            return imageTimeoutMin;
+        }
+        double ratio = Math.min(1.0, (double) sizeBytes / TIMEOUT_SCALE_BYTES);
+        long timeoutMs = minMs + Math.round((maxMs - minMs) * ratio);
+        return Duration.ofMillis(Math.min(timeoutMs, maxMs));
     }
 
     public static final class Builder {
         private Duration connectTimeoutValue;
         private Duration requestTimeoutValue;
+        private Duration imageTimeoutMinValue;
+        private Duration imageTimeoutMaxValue;
         private Integer maxRetriesValue;
         private Duration initialBackoffValue;
         private Duration maxBackoffValue;
@@ -129,6 +146,16 @@ public record HttpClientConfig(
 
         public Builder requestTimeout(Duration v) {
             this.requestTimeoutValue = v;
+            return this;
+        }
+
+        public Builder imageTimeoutMin(Duration v) {
+            this.imageTimeoutMinValue = v;
+            return this;
+        }
+
+        public Builder imageTimeoutMax(Duration v) {
+            this.imageTimeoutMaxValue = v;
             return this;
         }
 
@@ -173,9 +200,10 @@ public record HttpClientConfig(
         }
 
         public HttpClientConfig build() {
-            return new HttpClientConfig(
-                    connectTimeoutValue != null ? connectTimeoutValue : DEFAULT_CONNECT_TIMEOUT,
+            return new HttpClientConfig(connectTimeoutValue != null ? connectTimeoutValue : DEFAULT_CONNECT_TIMEOUT,
                     requestTimeoutValue != null ? requestTimeoutValue : DEFAULT_REQUEST_TIMEOUT,
+                    imageTimeoutMinValue != null ? imageTimeoutMinValue : DEFAULT_IMAGE_TIMEOUT_MIN,
+                    imageTimeoutMaxValue != null ? imageTimeoutMaxValue : DEFAULT_IMAGE_TIMEOUT_MAX,
                     maxRetriesValue != null ? maxRetriesValue : DEFAULT_MAX_RETRIES,
                     initialBackoffValue != null ? initialBackoffValue : DEFAULT_INITIAL_BACKOFF,
                     maxBackoffValue != null ? maxBackoffValue : DEFAULT_MAX_BACKOFF,
@@ -183,9 +211,7 @@ public record HttpClientConfig(
                     retryIdempotentOnlyValue != null ? retryIdempotentOnlyValue : DEFAULT_RETRY_IDEMPOTENT_ONLY,
                     userAgentValue != null ? userAgentValue : DEFAULT_USER_AGENT,
                     followRedirectsValue != null ? followRedirectsValue : DEFAULT_FOLLOW_REDIRECTS,
-                    maxRedirectsValue != null ? maxRedirectsValue : DEFAULT_MAX_REDIRECTS
-            );
+                    maxRedirectsValue != null ? maxRedirectsValue : DEFAULT_MAX_REDIRECTS);
         }
     }
 }
-

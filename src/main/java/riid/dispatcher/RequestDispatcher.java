@@ -9,7 +9,8 @@ import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
 
 /**
- * Dispatcher decides источник (cache/P2P/registry) и вызывает соответствующие адаптеры.
+ * Dispatcher decides источник (cache/P2P/registry) и вызывает соответствующие
+ * адаптеры.
  */
 public interface RequestDispatcher {
 
@@ -32,10 +33,9 @@ public interface RequestDispatcher {
         }
 
         @Override
-        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest,
-                                      long sizeBytes, MediaType mediaType) {
+        public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes,
+                MediaType mediaType) {
             throw new UnsupportedOperationException("Dispatcher not implemented");
         }
     }
 }
-

@@ -4,7 +4,7 @@ YANDEX_CLOUD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ENV_FILE := $(YANDEX_CLOUD_DIR).env
 
 # С хоста (yc compute ssh). Переопределение: make bootstrap-on-server YC_INSTANCE_ID=...
-YC_INSTANCE_ID ?= fv4jo9irtdjgr0n048es
+YC_INSTANCE_ID ?= fv46q0don9ordq567fnf
 YC_IDENTITY ?= $(HOME)/.ssh/ssh-key-1775683235717
 YC_LOGIN ?= user
 # Домашний каталог на ВМ для push-secrets (переопредели, если не /home/<логин>).
@@ -132,3 +132,12 @@ test-scenario-c:
 		'set -a; [ -f config/.env ] && . config/.env; set +a' \
 		'./gradlew performanceTest --tests riid.performance.parrallel.cache.Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest' \
 		| $(YC_SSH) -- bash -s
+
+
+autonomic:
+	cd ~/RIID && \
+	set -a; [ -f config/.env ] && . config/.env; set +a; \
+	nohup ./gradlew performanceTest \
+		--tests riid.performance.sequentially.manyimages.Daemon30ImagesSequentialPullTest \
+		>> _scenario_sequential-30.txt 2>&1 & \
+	echo $$!

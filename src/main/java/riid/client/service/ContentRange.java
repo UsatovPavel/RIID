@@ -5,8 +5,8 @@ import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 
 /**
- * Parsed Content-Range header.
- * totalSize is nullable because registries may return wildcard form: "bytes startOffsetBytes-endOffsetBytes/*".
+ * Parsed Content-Range header. totalSize is nullable because registries may
+ * return wildcard form: "bytes startOffsetBytes-endOffsetBytes/*".
  */
 record ContentRange(long start, long end, Long totalSize) {
     private static final String RANGE_UNIT = "bytes";
@@ -31,8 +31,7 @@ record ContentRange(long start, long end, Long totalSize) {
             case BlobRequest.RangeSpec.Bounded bounded -> {
                 if (bounded.startOffsetBytes() != start) {
                     throw new ClientException(
-                            new ClientError.Parse(ClientError.ParseKind.RANGE,
-                                    CONTENT_RANGE_START_MISMATCH),
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, CONTENT_RANGE_START_MISMATCH),
                             CONTENT_RANGE_START_MISMATCH);
                 }
                 if (bounded.endOffsetBytes() != end) {
@@ -44,8 +43,7 @@ record ContentRange(long start, long end, Long totalSize) {
             case BlobRequest.RangeSpec.From from -> {
                 if (from.startOffsetBytes() != start) {
                     throw new ClientException(
-                            new ClientError.Parse(ClientError.ParseKind.RANGE,
-                                    CONTENT_RANGE_START_MISMATCH),
+                            new ClientError.Parse(ClientError.ParseKind.RANGE, CONTENT_RANGE_START_MISMATCH),
                             CONTENT_RANGE_START_MISMATCH);
                 }
             }
@@ -68,33 +66,28 @@ record ContentRange(long start, long end, Long totalSize) {
     static ContentRange parse(String header) {
         String trimmed = header.trim();
         if (!trimmed.startsWith(RANGE_UNIT)) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Unsupported Content-Range"),
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.RANGE, "Unsupported Content-Range"),
                     "Unsupported Content-Range: " + header);
         }
         String[] parts = trimmed.split(" ", 2);
         if (parts.length != EXPECTED_RANGE_PARTS) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
                     INVALID_CONTENT_RANGE + ": " + header);
         }
         String[] rangeAndTotal = parts[1].split("/", 2);
         if (rangeAndTotal.length != EXPECTED_RANGE_PARTS) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
                     INVALID_CONTENT_RANGE + ": " + header);
         }
         String[] range = rangeAndTotal[0].split("-", 2);
         if (range.length != EXPECTED_RANGE_PARTS) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
                     INVALID_CONTENT_RANGE + ": " + header);
         }
         long start = parseLong(range[0], "Content-Range startOffsetBytes");
         long end = parseLong(range[1], "Content-Range endOffsetBytes");
         if (end < start) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.RANGE, INVALID_CONTENT_RANGE),
                     "Content-Range endOffsetBytes < startOffsetBytes");
         }
         Long total = null;
@@ -114,8 +107,7 @@ record ContentRange(long start, long end, Long totalSize) {
         try {
             return Long.parseLong(raw.trim());
         } catch (NumberFormatException e) {
-            throw new ClientException(
-                    new ClientError.Parse(ClientError.ParseKind.RANGE, "Invalid " + label),
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.RANGE, "Invalid " + label),
                     "Invalid " + label + ": " + raw);
         }
     }

@@ -4,7 +4,8 @@ package riid.runtime;
  * Helper main that prints a configurable amount of output.
  */
 public final class OutputFloodMain {
-    private OutputFloodMain() { }
+    private OutputFloodMain() {
+    }
 
     public static void main(String[] args) {
         int outBytes = args.length > 0 ? Integer.parseInt(args[0]) : 0;

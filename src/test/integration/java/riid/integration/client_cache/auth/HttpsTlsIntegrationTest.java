@@ -85,8 +85,7 @@ class HttpsTlsIntegrationTest {
         Path invalidCa = writePem("invalid-ca-", "not-a-certificate");
         AuthConfig auth = new AuthConfig(300, null, null, invalidCa.toString());
 
-        IllegalStateException ex = assertThrows(
-                IllegalStateException.class,
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> HttpClientFactory.create(httpConfig(), auth));
         assertTrue(ex.getMessage().contains("SECURITY:TLS:HTTP_CLIENT_INIT_FAILED"));
         assertTrue(ex.getCause() instanceof CertificateException);
@@ -101,11 +100,7 @@ class HttpsTlsIntegrationTest {
         HttpClientConfig cfg = httpConfig();
         Path caPath = writePem("mtls-ca-", TestConfigYaml.CERT_PEM);
 
-        AuthConfig positive = new AuthConfig(
-                300,
-                certPath.toString(),
-                keyPath.toString(),
-                caPath.toString());
+        AuthConfig positive = new AuthConfig(300, certPath.toString(), keyPath.toString(), caPath.toString());
         HttpClient clientWithCert = HttpClientFactory.create(cfg, positive);
         try {
             HttpExecutor executor = new HttpExecutor(clientWithCert, cfg);
@@ -204,15 +199,8 @@ class HttpsTlsIntegrationTest {
     }
 
     private static HttpClientConfig httpConfig() {
-        return HttpClientConfig.builder()
-                .connectTimeout(Duration.ofSeconds(2))
-                .requestTimeout(Duration.ofSeconds(2))
-                .maxRetries(0)
-                .initialBackoff(Duration.ofMillis(50))
-                .maxBackoff(Duration.ofMillis(50))
-                .retryIdempotentOnly(true)
-                .userAgent("riid-test")
-                .followRedirects(true)
-                .build();
+        return HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(2)).requestTimeout(Duration.ofSeconds(2))
+                .maxRetries(0).initialBackoff(Duration.ofMillis(50)).maxBackoff(Duration.ofMillis(50))
+                .retryIdempotentOnly(true).userAgent("riid-test").followRedirects(true).build();
     }
 }

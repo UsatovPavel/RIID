@@ -20,4 +20,3 @@ public final class Digests {
         return DigestUtils.sha256Hex(is);
     }
 }
-

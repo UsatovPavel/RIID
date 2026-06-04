@@ -10,7 +10,8 @@ import java.nio.file.Path;
 public final class TestPaths {
     public static final Path DEFAULT_BASE_DIR = Path.of("build", "test-fs");
 
-    private TestPaths() { }
+    private TestPaths() {
+    }
 
     public static Path tempFile(HostFilesystem fs, String prefix, String suffix) throws IOException {
         Path path = PathSupport.temporaryPath(prefix, suffix);

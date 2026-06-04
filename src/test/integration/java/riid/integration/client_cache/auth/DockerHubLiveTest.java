@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -21,8 +22,8 @@ import riid.client.http.HttpClientConfig;
 import riid.core.config.TestRegistryConfig;
 
 /**
- * Live Docker Hub public smoke (no tokens).
- * Requires network; gated by ENABLE_DOCKERHUB_LIVE=1.
+ * Live Docker Hub public smoke (no tokens). Requires network; gated by
+ * ENABLE_DOCKERHUB_LIVE=1.
  */
 @Tag("live")
 class DockerHubLiveTest {
@@ -36,10 +37,7 @@ class DockerHubLiveTest {
         String reference = "latest";
 
         RegistryEndpoint endpoint = TestRegistryConfig.endpoint();
-        HttpClientConfig cfg = HttpClientConfig.builder()
-                .followRedirects(true)
-                .maxRetries(1)
-                .build();
+        HttpClientConfig cfg = HttpClientConfig.builder().followRedirects(true).maxRetries(1).build();
 
         try (RegistryClientImpl client = new RegistryClientImpl(endpoint, cfg)) {
             ManifestResult manifest = client.fetchManifest(repo, reference);
@@ -47,11 +45,7 @@ class DockerHubLiveTest {
             assertFalse(mf.layers().isEmpty(), "layers should not be empty");
 
             Descriptor layer = mf.layers().getFirst();
-            BlobRequest req = new BlobRequest(
-                    repo,
-                    layer.digest(),
-                    layer.size(),
-                    layer.mediaType(),
+            BlobRequest req = new BlobRequest(repo, layer.digest(), layer.size(), layer.mediaType(),
                     new BlobRequest.RangeSpec.All());
 
             var sizeOpt = client.headBlob(repo, layer.digest());
@@ -65,4 +59,3 @@ class DockerHubLiveTest {
         }
     }
 }
-

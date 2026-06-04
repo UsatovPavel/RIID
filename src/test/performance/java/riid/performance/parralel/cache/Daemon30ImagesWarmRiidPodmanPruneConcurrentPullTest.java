@@ -26,18 +26,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * PR15 scenario (c): assume RIID daemon already holds layers for the fixture list (warm cache).
- * Implementation: sequential {@code POST /pull} for all
- * {@link PopularDockerHubImagesFromProgramDocs#SCENARIO_C_WARM_REPOSITORIES} (subset of the PR15 thirty:
- * excludes {@code library/clefos}, which commonly mismatches amd64 manifests on Docker Hub), then
- * {@code podman system prune -af}
- * only (RIID cache unchanged), then the same {@code POST /pull} requests in parallel ({@code runtimeId: podman}).
+ * PR15 scenario (c): assume RIID daemon already holds layers for the fixture
+ * list (warm cache). Implementation: sequential {@code POST /pull} for all
+ * {@link PopularDockerHubImagesFromProgramDocs#SCENARIO_C_WARM_REPOSITORIES}
+ * (subset of the PR15 thirty: excludes {@code library/clefos}, which commonly
+ * mismatches amd64 manifests on Docker Hub), then
+ * {@code podman system prune -af} only (RIID cache unchanged), then the same
+ * {@code POST /pull} requests in parallel ({@code runtimeId: podman}).
  *
- * <p>Requires external daemon, {@link TestConfigYaml#resolveDaemonUnixSocketPath()}, Linux, curl, podman,
- * network; {@code app.daemon.maxConcurrentPulls} should accommodate concurrent pulls for this fixture size.
+ * <p>
+ * Requires external daemon,
+ * {@link TestConfigYaml#resolveDaemonUnixSocketPath()}, Linux, curl, podman,
+ * network; {@code app.daemon.maxConcurrentPulls} should accommodate concurrent
+ * pulls for this fixture size.
  */
 @EnabledOnOs(OS.LINUX)
-@Tag("local")
+@Tag("performance")
 @Tag("filesystem")
 class Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest {
 
@@ -63,8 +67,8 @@ class Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest {
                 long t0 = System.nanoTime();
                 DaemonUnixSocketPullSupport.postPull(socketPath, workDir, repo, ref, RUNTIME);
                 long ms = (System.nanoTime() - t0) / 1_000_000L;
-                System.out.println("[Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest] warmup i=" + (i + 1)
-                        + '/' + N + " repo=" + repo + " pull_ms=" + ms);
+                System.out.println("[Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest] warmup i=" + (i + 1) + '/' + N
+                        + " repo=" + repo + " pull_ms=" + ms);
             }
             long warmupWallMs = (System.nanoTime() - warmupStart) / 1_000_000L;
             System.out.println("[Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest] warmup_wall_ms=" + warmupWallMs);
@@ -110,8 +114,8 @@ class Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest {
                 System.out.println("[Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest] "
                         + "after_podman_prune_riid_pull_ms_list=" + pullMsList);
                 System.out.println("[Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest] "
-                        + "after_podman_prune_riid_sum_pull_ms=" + sumPullMs
-                        + " concurrent_wave_wall_ms=" + waveWallMs);
+                        + "after_podman_prune_riid_sum_pull_ms=" + sumPullMs + " concurrent_wave_wall_ms="
+                        + waveWallMs);
             }
         } finally {
             TestFilesystemSupport.deleteRecursive(workDir);

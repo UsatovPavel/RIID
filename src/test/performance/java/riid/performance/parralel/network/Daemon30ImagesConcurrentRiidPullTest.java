@@ -23,16 +23,20 @@ import riid.performance.PerformanceColdCacheHelper;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * PR15-style load: all {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES}
- * {@code POST /pull} requests are issued <strong>at the same time</strong> against an already
- * running RIID daemon ({@code runtimeId: podman}). Uses a {@link CountDownLatch} so worker
- * threads start their {@code curl} together after the latch opens.
+ * PR15-style load: all
+ * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES}
+ * {@code POST /pull} requests are issued <strong>at the same time</strong>
+ * against an already running RIID daemon ({@code runtimeId: podman}). Uses a
+ * {@link CountDownLatch} so worker threads start their {@code curl} together
+ * after the latch opens.
  *
- * <p>Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()} (env overrides documented there).
- * Requires Linux, curl, network; daemon must allow concurrent pulls (see {@code app.daemon.maxConcurrentPulls}).
+ * <p>
+ * Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()} (env
+ * overrides documented there). Requires Linux, curl, network; daemon must allow
+ * concurrent pulls (see {@code app.daemon.maxConcurrentPulls}).
  */
 @EnabledOnOs(OS.LINUX)
-@Tag("local")
+@Tag("performance")
 @Tag("filesystem")
 class Daemon30ImagesConcurrentRiidPullTest {
 
@@ -84,8 +88,8 @@ class Daemon30ImagesConcurrentRiidPullTest {
                 for (int i = 0; i < N; i++) {
                     pullMsList.add(pullMsByIndex[i]);
                     sumPullMs += pullMsByIndex[i];
-                    System.out.println("[Daemon30ImagesConcurrentRiidPullTest] riid concurrent i=" + (i + 1)
-                            + '/' + N + " repo=" + repos.get(i) + " pull_ms=" + pullMsByIndex[i]);
+                    System.out.println("[Daemon30ImagesConcurrentRiidPullTest] riid concurrent i=" + (i + 1) + '/' + N
+                            + " repo=" + repos.get(i) + " pull_ms=" + pullMsByIndex[i]);
                 }
                 System.out.println("[Daemon30ImagesConcurrentRiidPullTest] riid_pull_ms_list=" + pullMsList);
                 System.out.println("[Daemon30ImagesConcurrentRiidPullTest] riid_sum_pull_ms=" + sumPullMs

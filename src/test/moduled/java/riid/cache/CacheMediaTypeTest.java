@@ -20,4 +20,3 @@ class CacheMediaTypeTest {
         assertEquals(CacheMediaType.UNKNOWN, CacheMediaType.from("text/plain"));
     }
 }
-

@@ -33,7 +33,8 @@ import riid.dispatcher.model.RepositoryName;
 import riid.p2p.P2PExecutor;
 
 /**
- * Simple dispatcher: cache -> P2P -> registry (registry concurrency limit is configurable).
+ * Simple dispatcher: cache -> P2P -> registry (registry concurrency limit is
+ * configurable).
  */
 @SuppressFBWarnings({"EI_EXPOSE_REP2"})
 public class SimpleRequestDispatcher implements RequestDispatcher {
@@ -47,27 +48,17 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
     private final DispatcherMilestoneLogger stepLogger;
     private final DispatcherLayerSourceMetrics layerSourceMetrics;
 
-    public SimpleRequestDispatcher(RegistryClient client,
-                                   CacheAdapter cache,
-                                   P2PExecutor p2p,
-                                   HostFilesystem fs) {
+    public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p, HostFilesystem fs) {
         this(client, cache, p2p, new DispatcherConfig(), fs, DispatcherLayerSourceMetrics.NOOP);
     }
 
-    public SimpleRequestDispatcher(RegistryClient client,
-                                   CacheAdapter cache,
-                                   P2PExecutor p2p,
-                                   DispatcherConfig config,
-                                   HostFilesystem fs) {
+    public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p, DispatcherConfig config,
+            HostFilesystem fs) {
         this(client, cache, p2p, config, fs, DispatcherLayerSourceMetrics.NOOP);
     }
 
-    public SimpleRequestDispatcher(RegistryClient client,
-                                   CacheAdapter cache,
-                                   P2PExecutor p2p,
-                                   DispatcherConfig config,
-                                   HostFilesystem fs,
-                                   DispatcherLayerSourceMetrics layerSourceMetrics) {
+    public SimpleRequestDispatcher(RegistryClient client, CacheAdapter cache, P2PExecutor p2p, DispatcherConfig config,
+            HostFilesystem fs, DispatcherLayerSourceMetrics layerSourceMetrics) {
         this.client = Objects.requireNonNull(client);
         this.cache = cache;
         this.p2p = p2p;
@@ -83,9 +74,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         String reference = ref.digest() != null && !ref.digest().isBlank() ? ref.digest() : ref.tag();
         ManifestResult manifest = client.fetchManifest(ref.repository(), reference);
         var layer = manifest.manifest().layers().getFirst();
-        return fetchLayer(new RepositoryName(ref.repository()),
-                ImageDigest.parse(layer.digest()),
-                layer.size(),
+        return fetchLayer(new RepositoryName(ref.repository()), ImageDigest.parse(layer.digest()), layer.size(),
                 MediaType.from(layer.mediaType()));
     }
 
@@ -98,9 +87,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         // 1) cache
         Path cachedPath = null;
         if (cache != null && cache.has(digest)) {
-            cachedPath = cache.get(digest)
-                    .flatMap(entry -> cache.resolve(entry.key()))
-                    .orElse(null);
+            cachedPath = cache.get(digest).flatMap(entry -> cache.resolve(entry.key())).orElse(null);
         }
         if (cachedPath != null) {
             stepLogger.sourceSelectFromCache(selectStartedNs);
@@ -116,19 +103,14 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         if (p2p != null) {
             long fetchStartedNs = System.nanoTime();
             try {
-                var p2pPath = p2p.fetch(
-                        repository.value(),
-                        digest,
-                        sizeBytes,
-                        CacheMediaType.from(mediaType.value()));
+                var p2pPath = p2p.fetch(repository.value(), digest, sizeBytes, CacheMediaType.from(mediaType.value()));
                 if (p2pPath.isPresent()) {
                     LOGGER.info("p2p hit for layer {}", digest);
                     Path resultPath = p2pPath.get();
                     if (cache != null) {
                         try {
                             long size = sizeBytes > 0 ? sizeBytes : fs.size(resultPath);
-                            CacheEntry entry = cache.put(digest,
-                                    FilesystemCachePayload.of(fs, resultPath, size),
+                            CacheEntry entry = cache.put(digest, FilesystemCachePayload.of(fs, resultPath, size),
                                     CacheMediaType.from(mediaType.value()));
                             Path resolvedPath = cache.resolve(entry.key()).orElse(null);
                             if (resolvedPath != null) {
@@ -136,7 +118,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                                 try {
                                     fs.deleteIfExists(p2pPath.get());
                                 } catch (Exception ex) {
-                                    LOGGER.warn("Failed to delete temp p2p file {}: {}", p2pPath.get(), ex.getMessage());
+                                    LOGGER.warn("Failed to delete temp p2p file {}: {}", p2pPath.get(),
+                                            ex.getMessage());
                                 }
                             }
                         } catch (ValidationException ve) {
@@ -166,14 +149,8 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         try {
             File tmp = createTemp();
             Path tempPath = tmp.toPath();
-            BlobResult blob = client.fetchBlob(
-                    new BlobRequest(
-                            repository.value(),
-                            digest.toString(),
-                            sizeBytes,
-                            mediaType.value(),
-                            new BlobRequest.RangeSpec.All()),
-                    tmp);
+            BlobResult blob = client.fetchBlob(new BlobRequest(repository.value(), digest.toString(), sizeBytes,
+                    mediaType.value(), new BlobRequest.RangeSpec.All()), tmp);
             LOGGER.info("downloaded layer {} from registry", digest);
 
             Path resultPath = tempPath;
@@ -198,10 +175,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             }
             if (p2p != null) {
                 try {
-                    p2p.publish(
-                            ImageDigest.parse(blob.digest()),
-                            resultPath,
-                            blob.size(),
+                    p2p.publish(ImageDigest.parse(blob.digest()), resultPath, blob.size(),
                             CacheMediaType.from(blob.mediaType()));
                 } catch (Exception ex) {
                     LOGGER.warn("P2P publish failed for {}: {}", blob.digest(), ex.getMessage());
@@ -220,9 +194,7 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             layerSourceMetrics.recordLayerFetch("registry");
             long registryBytes = blob.size() > 0 ? blob.size() : tmp.length();
             layerSourceMetrics.recordLayerFetchedBytes("registry", registryBytes);
-            return new FetchResult(ImageDigest.parse(blob.digest()),
-                    MediaType.from(blob.mediaType()),
-                    resultPath);
+            return new FetchResult(ImageDigest.parse(blob.digest()), MediaType.from(blob.mediaType()), resultPath);
         } catch (RuntimeException e) {
             stepLogger.sourceFetchFailed(fetchStartedNs, e);
             throw e;
@@ -281,4 +253,3 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         registryLimiter.ifPresent(Semaphore::release);
     }
 }
-

@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.ServerSocket;
@@ -38,15 +39,9 @@ class HttpExecutorTest {
     @Test
     void retriesOnlyIdempotentWhenConfigured() throws Exception {
         HttpClient client = new HttpClient();
-        HttpClientConfig config = HttpClientConfig.builder()
-                .connectTimeout(Duration.ofSeconds(1))
-                .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(1)
-                .initialBackoff(Duration.ofMillis(100))
-                .maxBackoff(Duration.ofMillis(200))
-                .retryIdempotentOnly(true)
-                .userAgent("ua")
-                .followRedirects(true)
+        HttpClientConfig config = HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(1))
+                .requestTimeout(Duration.ofSeconds(1)).maxRetries(1).initialBackoff(Duration.ofMillis(100))
+                .maxBackoff(Duration.ofMillis(200)).retryIdempotentOnly(true).userAgent("ua").followRedirects(true)
                 .build();
         HttpExecutor exec = new HttpExecutor(client, config);
 
@@ -135,16 +130,9 @@ class HttpExecutorTest {
     }
 
     private HttpExecutor executor(int maxRetries, Duration backoff) {
-        HttpClientConfig cfg = HttpClientConfig.builder()
-                .connectTimeout(Duration.ofSeconds(1))
-                .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(maxRetries)
-                .initialBackoff(backoff)
-                .maxBackoff(backoff)
-                .retryIdempotentOnly(true)
-                .userAgent("ua")
-                .followRedirects(true)
-                .build();
+        HttpClientConfig cfg = HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(1))
+                .requestTimeout(Duration.ofSeconds(1)).maxRetries(maxRetries).initialBackoff(backoff)
+                .maxBackoff(backoff).retryIdempotentOnly(true).userAgent("ua").followRedirects(true).build();
         var client = HttpClientFactory.create(cfg);
         return new HttpExecutor(client, cfg);
     }
@@ -165,10 +153,8 @@ class HttpExecutorTest {
         return URI.create("http://localhost:" + server.getAddress().getPort() + path);
     }
 
-    private void respond(HttpExchange exchange,
-                         int status,
-                         Map<String, String> headers,
-                         String body) throws IOException {
+    private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body)
+            throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(status, bytes.length);
@@ -177,4 +163,3 @@ class HttpExecutorTest {
         }
     }
 }
-

@@ -5,7 +5,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Configuration holder for Central Registry endpoints available to the client/dispatcher.
+ * Configuration holder for Central Registry endpoints available to the
+ * client/dispatcher.
  */
 public final class CentralRegistryConfig {
     private final List<RegistryEndpoint> endpointsList;
@@ -19,4 +20,3 @@ public final class CentralRegistryConfig {
         return Collections.unmodifiableList(endpointsList);
     }
 }
-

@@ -87,8 +87,7 @@ public final class FileCacheAdapter implements CacheAdapter {
         Path target = pathFor(digest);
         Path temp = PathSupport.temporaryPath(root, "cache-", ".tmp");
         fs.createFile(temp);
-        try (InputStream data = payload.open();
-             OutputStream out = new BufferedOutputStream(fs.newOutputStream(temp))) {
+        try (InputStream data = payload.open(); OutputStream out = new BufferedOutputStream(fs.newOutputStream(temp))) {
             data.transferTo(out);
         } catch (IOException ex) {
             fs.deleteIfExists(temp);

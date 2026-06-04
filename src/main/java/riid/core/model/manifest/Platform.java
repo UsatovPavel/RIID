@@ -9,10 +9,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record Platform(
-        @JsonProperty("architecture") String architecture,
-        @JsonProperty("os") String os,
-        @JsonProperty("variant") String variant
-) {
+public record Platform(@JsonProperty("architecture") String architecture, @JsonProperty("os") String os,
+        @JsonProperty("variant") String variant) {
 }
-

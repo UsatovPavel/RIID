@@ -10,8 +10,9 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.event.KeyValuePair;
 
 /**
- * Attaches Logback {@code ListAppender} to the root logger to capture {@code ILoggingEvent}s
- * without a compile dependency on {@code ch.qos.logback.*} (works in integration/moduled source sets).
+ * Attaches Logback {@code ListAppender} to the root logger to capture
+ * {@code ILoggingEvent}s without a compile dependency on
+ * {@code ch.qos.logback.*} (works in integration/moduled source sets).
  */
 public final class TestRootLoggerEvents implements AutoCloseable {
 
@@ -105,7 +106,8 @@ public final class TestRootLoggerEvents implements AutoCloseable {
         return method.invoke(target, args);
     }
 
-    private static Method findCompatibleMethod(Class<?> type, String methodName, int argCount) throws NoSuchMethodException {
+    private static Method findCompatibleMethod(Class<?> type, String methodName, int argCount)
+            throws NoSuchMethodException {
         for (Method method : type.getMethods()) {
             if (method.getName().equals(methodName) && method.getParameterCount() == argCount) {
                 return method;

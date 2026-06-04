@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -25,13 +26,15 @@ public final class BoundedCommandExecution {
     public static final int DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
     public static final int DEFAULT_MAX_TASKS_COMMAND_EXECUTOR = 16;
     private static final int BUFFER_SIZE = 4096;
-    private static final AtomicReference<ExecutorService> EXECUTOR_REF =
-            new AtomicReference<>(newExecutor(DEFAULT_MAX_TASKS_COMMAND_EXECUTOR));
+    private static final long PROCESS_TERMINATION_TIMEOUT_MS = 200;
+    private static final AtomicReference<ExecutorService> EXECUTOR_REF = new AtomicReference<>(
+            newExecutor(DEFAULT_MAX_TASKS_COMMAND_EXECUTOR));
     private static final BoundedPipedCommandExecutor PIPED_EXECUTOR = new BoundedPipedCommandExecutor(
             DEFAULT_MAX_OUTPUT_BYTES);
     private static volatile OutputConfig DEFAULT_OUTPUT_CONFIG = OutputConfig.defaults();
 
-    private BoundedCommandExecution() { }
+    private BoundedCommandExecution() {
+    }
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(BoundedCommandExecution::shutdownExecutor));
@@ -41,63 +44,70 @@ public final class BoundedCommandExecution {
         return get(run(command, DEFAULT_OUTPUT_CONFIG));
     }
 
-    public static PipedShellResult runWithStdoutPipedToStdin(
-            List<String> producerCommand,
-            List<String> consumerCommand,
-            int maxStderrBytes,
-            ProcessStarter starter) throws IOException, InterruptedException {
+    public static PipedShellResult runWithStdoutPipedToStdin(List<String> producerCommand, List<String> consumerCommand,
+            int maxStderrBytes, ProcessStarter starter) throws IOException, InterruptedException {
         return PIPED_EXECUTOR.runWithStdoutPipedToStdin(producerCommand, consumerCommand, maxStderrBytes, starter);
     }
 
     /**
-     * Same as {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)} with
-     * {@code cmd -> new ProcessBuilder(cmd).start()}.
+     * Same as {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)}
+     * with {@code cmd -> new ProcessBuilder(cmd).start()}.
      */
-    public static PipedShellResult runWithStdoutPipedToStdin(
-            List<String> producerCommand,
-            List<String> consumerCommand,
+    public static PipedShellResult runWithStdoutPipedToStdin(List<String> producerCommand, List<String> consumerCommand,
             int maxStderrBytes) throws IOException, InterruptedException {
-        return runWithStdoutPipedToStdin(
-                producerCommand, consumerCommand, maxStderrBytes, cmd -> new ProcessBuilder(cmd).start());
+        return runWithStdoutPipedToStdin(producerCommand, consumerCommand, maxStderrBytes,
+                cmd -> new ProcessBuilder(cmd).start());
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     public static CompletableFuture<ShellResult> run(List<String> command, int maxOutputBytes) {
         Objects.requireNonNull(command, "command");
         if (maxOutputBytes <= 0) {
             throw new IllegalArgumentException("maxOutputBytes must be positive");
         }
         ExecutorService localExecutor = EXECUTOR_REF.get();
-        return CompletableFuture.supplyAsync(() -> {
+        AtomicReference<Process> processRef = new AtomicReference<>();
+        CompletableFuture<ShellResult> future = CompletableFuture.supplyAsync(() -> {
             try {
                 Process process = new ProcessBuilder(command).start();
-                Future<String> stdout = localExecutor.submit(streamReaderStrict(process.getInputStream(),
-                        maxOutputBytes, "stdout"));
-                Future<String> stderr = localExecutor.submit(streamReaderStrict(process.getErrorStream(),
-                        maxOutputBytes, "stderr"));
+                processRef.set(process);
+                Future<String> stdout = localExecutor
+                        .submit(streamReaderStrict(process.getInputStream(), maxOutputBytes, "stdout"));
+                Future<String> stderr = localExecutor
+                        .submit(streamReaderStrict(process.getErrorStream(), maxOutputBytes, "stderr"));
                 int exitCode = process.waitFor();
                 return new ShellResult(exitCode, get(stdout), get(stderr));
             } catch (OutputLimitExceededException e) {
-                LOGGER.warn("Process output exceeded maxOutputBytes={} for command {}",
-                        maxOutputBytes, command, e);
+                LOGGER.warn("Process output exceeded maxOutputBytes={} for command {}", maxOutputBytes, command, e);
                 throw new RuntimeException(e);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                destroyProcess(processRef.get(), command);
                 throw new RuntimeException(e);
             }
         }, localExecutor);
+        future.whenComplete((result, error) -> {
+            if (future.isCancelled()) {
+                destroyProcess(processRef.get(), command);
+            }
+        });
+        return future;
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     public static CompletableFuture<ShellResult> run(List<String> command, OutputConfig outputConfig) {
         Objects.requireNonNull(command, "command");
         Objects.requireNonNull(outputConfig, "outputConfig");
         outputConfig.validate();
 
         ExecutorService localExecutor = EXECUTOR_REF.get();
-        return CompletableFuture.supplyAsync(() -> {
+        AtomicReference<Process> processRef = new AtomicReference<>();
+        CompletableFuture<ShellResult> future = CompletableFuture.supplyAsync(() -> {
             try {
                 Process process = new ProcessBuilder(command).start();
+                processRef.set(process);
                 Future<String> stdout = localExecutor.submit(streamReaderTruncating(process.getInputStream(),
                         outputConfig.maxStdoutBytes(), "stdout", outputConfig.captureStdout()));
                 Future<String> stderr = localExecutor.submit(streamReaderTruncating(process.getErrorStream(),
@@ -108,9 +118,32 @@ public final class BoundedCommandExecution {
                 throw new RuntimeException(e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                destroyProcess(processRef.get(), command);
                 throw new RuntimeException(e);
             }
         }, localExecutor);
+        future.whenComplete((result, error) -> {
+            if (future.isCancelled()) {
+                destroyProcess(processRef.get(), command);
+            }
+        });
+        return future;
+    }
+
+    private static void destroyProcess(Process process, List<String> command) {
+        if (process == null || !process.isAlive()) {
+            return;
+        }
+        process.destroy();
+        try {
+            if (!process.waitFor(PROCESS_TERMINATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                LOGGER.warn("Forcefully destroying child process for command {}", command);
+                process.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            process.destroyForcibly();
+        }
     }
 
     private static Callable<String> streamReaderStrict(InputStream stream, int maxBytes, String name) {
@@ -135,10 +168,8 @@ public final class BoundedCommandExecution {
         };
     }
 
-    private static Callable<String> streamReaderTruncating(InputStream stream,
-                                                           Integer maxBytes,
-                                                           String name,
-                                                           boolean capture) {
+    private static Callable<String> streamReaderTruncating(InputStream stream, Integer maxBytes, String name,
+            boolean capture) {
         return () -> {
             try (InputStream in = stream) {
                 if (!capture) {
@@ -195,6 +226,9 @@ public final class BoundedCommandExecution {
     private static ShellResult get(CompletableFuture<ShellResult> future) throws IOException, InterruptedException {
         try {
             return future.get();
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            throw e;
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof RuntimeException re && re.getCause() != null) {
@@ -227,6 +261,7 @@ public final class BoundedCommandExecution {
         DEFAULT_OUTPUT_CONFIG = outputConfig;
     }
 
+    @SuppressWarnings("PMD.CloseResource")
     public static synchronized void setMaxTasksCommandExecutor(int value) {
         if (value <= 0) {
             throw new IllegalArgumentException("maxTasksCommandExecutor must be positive");
@@ -236,9 +271,7 @@ public final class BoundedCommandExecution {
     }
 
     private static ExecutorService newExecutor(int maxTasks) {
-        return Executors.newFixedThreadPool(
-                maxTasks,
-                Thread.ofVirtual().name("cmd-io-", 0).factory());
+        return Executors.newFixedThreadPool(maxTasks, Thread.ofVirtual().name("cmd-io-", 0).factory());
     }
 
     private static void shutdownExecutor() {
@@ -246,13 +279,14 @@ public final class BoundedCommandExecution {
         PIPED_EXECUTOR.shutdown();
     }
 
-    public record ShellResult(int exitCode, String stdout, String stderr) { }
+    public record ShellResult(int exitCode, String stdout, String stderr) {
+    }
 
-    /** Result of {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)}. */
-    public record PipedShellResult(
-            int producerExitCode,
-            int consumerExitCode,
-            String producerStderr,
+    /**
+     * Result of
+     * {@link #runWithStdoutPipedToStdin(List, List, int, ProcessStarter)}.
+     */
+    public record PipedShellResult(int producerExitCode, int consumerExitCode, String producerStderr,
             String consumerStderr) {
 
         public void throwIfFailed(String producerLabel, String consumerLabel) throws IOException {
@@ -278,4 +312,3 @@ public final class BoundedCommandExecution {
         }
     }
 }
-

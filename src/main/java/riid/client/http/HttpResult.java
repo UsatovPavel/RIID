@@ -12,11 +12,8 @@ import org.eclipse.jetty.http.HttpFields;
  */
 public record HttpResult<T>(int statusCode, HttpFields headers, T body, URI uri) {
     public enum HeaderName {
-        LOCATION("Location"),
-        CONTENT_RANGE("Content-Range"),
-        CONTENT_TYPE("Content-Type"),
-        CONTENT_LENGTH("Content-Length"),
-        DOCKER_CONTENT_DIGEST("Docker-Content-Digest");
+        LOCATION("Location"), CONTENT_RANGE("Content-Range"), CONTENT_TYPE("Content-Type"),
+        CONTENT_LENGTH("Content-Length"), DOCKER_CONTENT_DIGEST("Docker-Content-Digest");
 
         private final String headerValue;
 
@@ -61,4 +58,3 @@ public record HttpResult<T>(int statusCode, HttpFields headers, T body, URI uri)
         return firstHeaderAsLong(name.value());
     }
 }
-

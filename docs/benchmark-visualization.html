@@ -99,6 +99,14 @@
     <div class="chart-wrap tall">
       <canvas id="chartB1"></canvas>
     </div>
+    <p class="note">
+      Separate side-by-side view from <code>YandexCloud/_scenario_sequential-30.txt</code> (lines 1730-1809).
+      <code>library/clefos</code> is shown as <code>n/a</code> for both tools.
+      By total-sum ratio (RIID/Podman): old bench was <code>157.9%</code>, this run is <code>158.4%</code>.
+    </p>
+    <div class="chart-wrap tall">
+      <canvas id="chartB1OldBench"></canvas>
+    </div>
   </section>
 
   <section>
@@ -183,14 +191,16 @@
       "satosa", "swipl", "mageia", "emqx", "liquibase",
     ];
     const b1Riid = [
-      2058, 1998, 4147, 3393, 3917, 7782, 9831, 8406, 14902, 21661, 11412, 29514, 22040, 11358, 12943,
-      35258, 16272, 24615, 32325, 28679, 50161, 43816, 41950, 51797, 48101, 53284, 25080, 46685, 52891, 34172,
+      2016, 1419, 1823, 2392, 2074, 3609, 4246, 3937, 4912, 11968, 7113, 7016, 3531, 11296, 12296,
+      13163, null, 13725, 10338, 7649, 18199, 17862, 17097, 17131, 17412, 24860, 12908, 24768, 19230, 20790,
     ];
     const b1Podman = [];
     for (let i = 0; i < 30; i++) b1Podman.push(null);
     const podmanKnown = [
-      [0, 3049], [1, 3044], [2, 3749], [3, 3850], [4, 3647], [5, 4351], [6, 4653], [7, 4751],
-      [8, 7157], [9, 24022], [10, 12383], [11, 7660], [12, 16592], [13, 19308], [14, 16903], [15, 9669],
+      [0, 1882], [1, 1728], [2, 2592], [3, 2900], [4, 2482], [5, 2629], [6, 2830], [7, 3491],
+      [8, 4557], [9, 7526], [10, 4623], [11, 5261], [12, 9763], [13, 3411], [14, 4261], [15, 8925],
+      [17, 8515], [18, 8892], [19, 4339], [20, 13647], [21, 9344], [22, 9260], [23, 11085], [24, 10473],
+      [25, 3835], [26, 14853], [27, 9370], [28, 15069], [29, 11810],
     ];
     podmanKnown.forEach(([idx, ms]) => {
       b1Podman[idx] = ms;
@@ -210,6 +220,67 @@
           {
             label: "Podman (pull), ms",
             data: b1Podman,
+            backgroundColor: PODMAN,
+            borderWidth: 0,
+            spanGaps: false,
+          },
+        ],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const v = ctx.raw;
+                if (v == null) return ctx.dataset.label + ": n/a";
+                return ctx.dataset.label + ": " + v + " ms";
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            title: { display: true, text: "Milliseconds per image" },
+          },
+          y: {
+            ticks: { autoSkip: false, font: { size: 10 } },
+          },
+        },
+      },
+    });
+
+    // --- B1 run from old riid version ---
+    const b1RunRiid = [
+      2250, 1985, 2980, 3209, 2452, 3776, 3596, 4171, 5486, 13072,
+      5450, 6572, 15846, 8456, 6766, 13450, null, 15466, 6247, 14134,
+      26497, 11146, 18509, 17474, 17038, 12719, 22609, 21054, 26084, 21525,
+    ];
+    const b1RunPodman = [
+      2650, 1725, 2237, 2531, 2313, 2676, 3434, 3844, 3674, 7832,
+      7346, 8681, 2931, 6107, 4260, 6685, null, 7785, 4863, 10699,
+      10650, 4209, 16402, 13827, 4740, 3859, 9955, 14893, 15255, 22282,
+    ];
+
+    // --- B1 old bench: separate side-by-side chart ---
+    new Chart(document.getElementById("chartB1OldBench"), {
+      type: "bar",
+      data: {
+        labels: repos30,
+        datasets: [
+          {
+            label: "RIID (POST /pull), ms",
+            data: b1RunRiid,
+            backgroundColor: RIID,
+            borderWidth: 0,
+          },
+          {
+            label: "Podman (pull), ms",
+            data: b1RunPodman,
             backgroundColor: PODMAN,
             borderWidth: 0,
             spanGaps: false,

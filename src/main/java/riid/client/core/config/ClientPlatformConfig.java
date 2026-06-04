@@ -6,20 +6,20 @@ import java.util.Objects;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Target OS/architecture when resolving a multi-arch manifest list (OCI index / Docker manifest list).
- * <p>Omitted YAML fields are filled from the JVM host via {@link #withHostFallback()} on
- * {@link ClientConfig#platformOrHostDefault()}.
+ * Target OS/architecture when resolving a multi-arch manifest list (OCI index /
+ * Docker manifest list).
+ * <p>
+ * Omitted YAML fields are filled from the JVM host via
+ * {@link #withHostFallback()} on {@link ClientConfig#platformOrHostDefault()}.
  */
-public record ClientPlatformConfig(
-        @JsonProperty("os") String os,
-        @JsonProperty("architecture") String architecture
-) {
+public record ClientPlatformConfig(@JsonProperty("os") String os, @JsonProperty("architecture") String architecture) {
     public static ClientPlatformConfig fromHost() {
         return new ClientPlatformConfig(hostOs(), hostArchitecture());
     }
 
     /**
-     * Applies non-blank YAML fields; any blank component is taken from {@link #fromHost()}.
+     * Applies non-blank YAML fields; any blank component is taken from
+     * {@link #fromHost()}.
      */
     public ClientPlatformConfig withHostFallback() {
         ClientPlatformConfig host = fromHost();

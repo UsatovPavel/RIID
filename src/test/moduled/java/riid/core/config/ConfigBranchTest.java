@@ -3,6 +3,8 @@ package riid.core.config;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import riid.app.core.config.AppConfig;
 import riid.client.core.config.AuthConfig;
 import riid.client.core.config.ClientConfig;
 import riid.client.core.config.RegistryEndpoint;
@@ -58,7 +60,7 @@ class ConfigBranchTest {
         Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "cfg-null-http", YAML_SUFFIX);
         fs.writeString(tmp, yaml);
         assertThrows(ConfigValidationException.class, () -> ConfigLoader.load(tmp));
-        //Client config must not have side-effect(get http from default HttpConfig)
+        // Client config must not have side-effect(get http from default HttpConfig)
     }
 
     @Tag("filesystem")
@@ -169,6 +171,7 @@ class ConfigBranchTest {
     }
 
     @Test
+    @SuppressFBWarnings(value = "NP_NONNULL_PARAM_VIOLATION", justification = "Intentional negative test: validate() must reject config with missing dispatcher")
     void throwsWhenDispatcherMissing() {
         GlobalConfig cfg = new GlobalConfig(validClient(), null, null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
@@ -217,64 +220,41 @@ class ConfigBranchTest {
 
     @Test
     void throwsWhenHttpMaxRetriesNegative() {
-        assertThrows(IllegalArgumentException.class, () -> HttpClientConfig.builder()
-                .connectTimeout(Duration.ofSeconds(1))
-                .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(-1)
-                .initialBackoff(Duration.ofMillis(100))
-                .maxBackoff(Duration.ofMillis(200))
-                .retryIdempotentOnly(true)
-                .userAgent("ua")
-                .followRedirects(true)
-                .build());
+        assertThrows(IllegalArgumentException.class,
+                () -> HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(1))
+                        .requestTimeout(Duration.ofSeconds(1)).maxRetries(-1).initialBackoff(Duration.ofMillis(100))
+                        .maxBackoff(Duration.ofMillis(200)).retryIdempotentOnly(true).userAgent("ua")
+                        .followRedirects(true).build());
     }
 
     @Test
     void throwsWhenBackoffInverted() {
-        assertThrows(IllegalArgumentException.class, () -> HttpClientConfig.builder()
-                .connectTimeout(Duration.ofSeconds(1))
-                .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(1)
-                .initialBackoff(Duration.ofSeconds(2))
-                .maxBackoff(Duration.ofSeconds(1))
-                .retryIdempotentOnly(true)
-                .userAgent("ua")
-                .followRedirects(true)
-                .build());
+        assertThrows(IllegalArgumentException.class,
+                () -> HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(1))
+                        .requestTimeout(Duration.ofSeconds(1)).maxRetries(1).initialBackoff(Duration.ofSeconds(2))
+                        .maxBackoff(Duration.ofSeconds(1)).retryIdempotentOnly(true).userAgent("ua")
+                        .followRedirects(true).build());
     }
 
     @Test
     void throwsWhenUserAgentBlank() {
-        assertThrows(IllegalArgumentException.class, () -> HttpClientConfig.builder()
-                .connectTimeout(Duration.ofSeconds(1))
-                .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(1)
-                .initialBackoff(Duration.ofMillis(100))
-                .maxBackoff(Duration.ofMillis(200))
-                .retryIdempotentOnly(true)
-                .userAgent("   ")
-                .followRedirects(true)
-                .build());
+        assertThrows(IllegalArgumentException.class,
+                () -> HttpClientConfig.builder().connectTimeout(Duration.ofSeconds(1))
+                        .requestTimeout(Duration.ofSeconds(1)).maxRetries(1).initialBackoff(Duration.ofMillis(100))
+                        .maxBackoff(Duration.ofMillis(200)).retryIdempotentOnly(true).userAgent("   ")
+                        .followRedirects(true).build());
     }
 
     @Test
     void throwsWhenDurationInvalid() {
-        HttpClientConfig http = HttpClientConfig.builder()
-                .connectTimeout(Duration.ZERO)
-                .requestTimeout(Duration.ofSeconds(1))
-                .maxRetries(1)
-                .initialBackoff(Duration.ofSeconds(1))
-                .maxBackoff(Duration.ofSeconds(1))
-                .retryIdempotentOnly(true)
-                .userAgent("ua")
-                .followRedirects(true)
+        HttpClientConfig http = HttpClientConfig.builder().connectTimeout(Duration.ZERO)
+                .requestTimeout(Duration.ofSeconds(1)).maxRetries(1).initialBackoff(Duration.ofSeconds(1))
+                .maxBackoff(Duration.ofSeconds(1)).retryIdempotentOnly(true).userAgent("ua").followRedirects(true)
                 .build();
         ClientConfig client = new ClientConfig(http, new AuthConfig(), List.of(RegistryEndpoint.https("example.org")));
         GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        Assertions.assertEquals(
-                ConfigValidationException.Http.CONNECT_TIMEOUT_POSITIVE.message(),
-                ex.getMessage());
+        Assertions.assertEquals(ConfigValidationException.Http.CONNECT_TIMEOUT_POSITIVE.message(), ex.getMessage());
     }
 
     // ------------ internal branch coverage via reflection
@@ -326,21 +306,15 @@ class ConfigBranchTest {
         // null
         var exNull = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, null, "client.http.requestTimeout"));
-        assertEquals(
-                ConfigValidationException.Http.REQUEST_TIMEOUT_POSITIVE.message(),
-                exNull.getCause().getMessage());
+        assertEquals(ConfigValidationException.Http.REQUEST_TIMEOUT_POSITIVE.message(), exNull.getCause().getMessage());
         // zero
         var exZero = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, Duration.ZERO, "client.http.initialBackoff"));
-        assertEquals(
-                ConfigValidationException.Http.INITIAL_BACKOFF_POSITIVE.message(),
-                exZero.getCause().getMessage());
+        assertEquals(ConfigValidationException.Http.INITIAL_BACKOFF_POSITIVE.message(), exZero.getCause().getMessage());
         // negative
         var exNeg = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, Duration.ofSeconds(-1), "client.http.maxBackoff"));
-        assertEquals(
-                ConfigValidationException.Http.MAX_BACKOFF_POSITIVE.message(),
-                exNeg.getCause().getMessage());
+        assertEquals(ConfigValidationException.Http.MAX_BACKOFF_POSITIVE.message(), exNeg.getCause().getMessage());
 
         // fallback branch (unknown field)
         var exUnknown = assertThrows(InvocationTargetException.class,
@@ -360,22 +334,19 @@ class ConfigBranchTest {
         var exMissing = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-file.pem", "client.auth.certPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exMissing.getCause());
-        assertEquals(
-                ConfigValidationException.Auth.CERT_MISSING.message() + ": no-such-file.pem",
+        assertEquals(ConfigValidationException.Auth.CERT_MISSING.message() + ": no-such-file.pem",
                 exMissing.getCause().getMessage());
 
         var exKey = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-key.pem", "client.auth.keyPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exKey.getCause());
-        assertEquals(
-                ConfigValidationException.Auth.KEY_MISSING.message() + ": no-such-key.pem",
+        assertEquals(ConfigValidationException.Auth.KEY_MISSING.message() + ": no-such-key.pem",
                 exKey.getCause().getMessage());
 
         var exCa = assertThrows(InvocationTargetException.class,
                 () -> m.invoke(null, "no-such-ca.pem", "client.auth.caPath"));
         Assertions.assertInstanceOf(ConfigValidationException.class, exCa.getCause());
-        assertEquals(
-                ConfigValidationException.Auth.CA_MISSING.message() + ": no-such-ca.pem",
+        assertEquals(ConfigValidationException.Auth.CA_MISSING.message() + ": no-such-ca.pem",
                 exCa.getCause().getMessage());
 
         // fallback branch (unknown field)
@@ -389,27 +360,32 @@ class ConfigBranchTest {
     void throwsWhenCertPathMissing() {
         String missing = "no-such-file.pem";
         AuthConfig auth = new AuthConfig(300, missing, "no-such-key.pem", null);
-        ClientConfig client = new ClientConfig(
-                HttpClientConfig.builder().build(),
-                auth,
+        ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), auth,
                 List.of(RegistryEndpoint.https("example.org")));
         GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
-        assertEquals(
-                ConfigValidationException.Auth.CERT_MISSING.message() + ": " + missing,
-                ex.getMessage());
+        assertEquals(ConfigValidationException.Auth.CERT_MISSING.message() + ": " + missing, ex.getMessage());
     }
 
     @Test
     void throwsWhenCertAndKeyPairIsIncomplete() {
         AuthConfig auth = new AuthConfig(300, "client.pem", null, null);
-        ClientConfig client = new ClientConfig(
-                HttpClientConfig.builder().build(),
-                auth,
+        ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), auth,
                 List.of(RegistryEndpoint.https("example.org")));
         GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals(ConfigValidationException.Auth.CERT_KEY_PAIR_REQUIRED.message(), ex.getMessage());
+    }
+
+    @Test
+    void throwsWhenDaemonMaxRequestBodyBytesNotPositive() {
+        AppConfig.DaemonConfig daemon = new AppConfig.DaemonConfig("/tmp/riid.sock", "127.0.0.1", 9090, 8, 0,
+                Duration.ofSeconds(10), AppConfig.OverloadPolicy.REJECT, null);
+        AppConfig app = new AppConfig(null, null, null, daemon);
+        GlobalConfig cfg = new GlobalConfig(validClient(), new DispatcherConfig(1), null, app, null);
+
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
+        assertEquals("app.daemon.maxRequestBodyBytes must be positive", ex.getMessage());
     }
 
     @Tag("filesystem")
@@ -420,9 +396,7 @@ class ConfigBranchTest {
         fs.writeString(cert, "cert");
         fs.writeString(key, "key");
         AuthConfig auth = new AuthConfig(300, cert.toString(), key.toString(), null);
-        ClientConfig client = new ClientConfig(
-                HttpClientConfig.builder().build(),
-                auth,
+        ClientConfig client = new ClientConfig(HttpClientConfig.builder().build(), auth,
                 List.of(RegistryEndpoint.https("example.org")));
         GlobalConfig cfg = new GlobalConfig(client, new DispatcherConfig(1), null, null, null);
 
@@ -430,17 +404,12 @@ class ConfigBranchTest {
     }
 
     private static ClientConfig validClient() {
-        return new ClientConfig(
-                HttpClientConfig.builder().build(),
-                new AuthConfig(),
+        return new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(),
                 List.of(RegistryEndpoint.https("example.org")));
     }
 
     private static ClientConfig clientWithRegistries(RegistryEndpoint ep) {
-        return new ClientConfig(
-                HttpClientConfig.builder().build(),
-                new AuthConfig(),
-                List.of(ep));
+        return new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(), List.of(ep));
     }
 
     private static AuthConfig unsafeAuth(long ttl, String cert, String key, String ca) throws Exception {
@@ -453,14 +422,8 @@ class ConfigBranchTest {
         return auth;
     }
 
-    private static HttpClientConfig unsafeHttp(Duration ct,
-                                               Duration rt,
-                                               int mr,
-                                               Duration ib,
-                                               Duration mb,
-                                               boolean retryIdem,
-                                               String ua,
-                                               boolean follow) throws Exception {
+    private static HttpClientConfig unsafeHttp(Duration ct, Duration rt, int mr, Duration ib, Duration mb,
+            boolean retryIdem, String ua, boolean follow) throws Exception {
         sun.misc.Unsafe unsafe = getUnsafe();
         HttpClientConfig cfg = (HttpClientConfig) unsafe.allocateInstance(HttpClientConfig.class);
         setField(cfg, "connectTimeout", ct);
@@ -492,4 +455,3 @@ class ConfigBranchTest {
         }
     }
 }
-

@@ -7,7 +7,8 @@ import java.util.Objects;
 import riid.core.fs.HostFilesystem;
 
 /**
- * OCI layout workspace with optional tar file; {@link #close()} deletes the tar (if any) and the layout tree.
+ * OCI layout workspace with optional tar file; {@link #close()} deletes the tar
+ * (if any) and the layout tree.
  */
 final class OciArchive implements AutoCloseable {
     private final Path archiveFile;
@@ -18,7 +19,9 @@ final class OciArchive implements AutoCloseable {
         return new OciArchive(Objects.requireNonNull(archivePath, "archivePath"), ociDir, fs);
     }
 
-    /** Layout only (tar is streamed to the runtime, not materialized as a file). */
+    /**
+     * Layout only (tar is streamed to the runtime, not materialized as a file).
+     */
     static OciArchive layoutOnly(Path ociDir, HostFilesystem fs) {
         return new OciArchive(null, ociDir, fs);
     }
@@ -48,4 +51,3 @@ final class OciArchive implements AutoCloseable {
         fs.deleteRecursively(ociDirPath);
     }
 }
-

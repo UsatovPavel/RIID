@@ -10,6 +10,7 @@ import riid.core.config.ConfigValidationException;
 import riid.core.config.TestRegistryConfig;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,7 +51,7 @@ class ConfigLoaderTest {
                       port: %d
                 dispatcher:
                   maxConcurrentRegistry: 3
-                """.formatted(scheme, host, port);
+                """.replace("\n", "%n").formatted(scheme, host, port);
         Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
         fs.writeString(tmp, yaml);
 
@@ -130,10 +131,7 @@ class ConfigLoaderTest {
                   maxConcurrentRegistry: 10
                 """.replace("\n", "%n");
         Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
-        fs.writeString(tmp, yaml.formatted(
-                cert.toString(),
-                key.toString(),
-                ca.toString()));
+        fs.writeString(tmp, yaml.formatted(cert.toString(), key.toString(), ca.toString()));
 
         GlobalConfig cfg = ConfigLoader.load(tmp);
         assertEquals(2, cfg.client().registries().size());
@@ -181,6 +179,15 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void loadsRepositoryConfigYaml() {
+        GlobalConfig cfg = ConfigLoader.load(Path.of("config", "config.yaml"));
+        assertEquals(Duration.ofMinutes(30), cfg.client().http().requestTimeout());
+        assertEquals(Duration.ofMinutes(5), cfg.client().http().imageTimeoutMin());
+        assertEquals(Duration.ofMinutes(30), cfg.client().http().imageTimeoutMax());
+        assertEquals(Duration.ofMinutes(30), cfg.app().daemonOrDefault().requestTimeoutOrDefault());
+    }
+
+    @Test
     void invalidHttpConnectTimeoutFailsValidation() throws Exception {
         String yaml = """
                 client:
@@ -201,4 +208,3 @@ class ConfigLoaderTest {
         assertEquals(ConfigValidationException.class, ex.getClass());
     }
 }
-
