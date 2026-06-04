@@ -11,7 +11,6 @@ tasks.named<Test>("test") {
         if (!project.hasProperty("includeStress")) {
             excludeTags("stress")
         }
-        excludeTags("porto")
         if (disableLocal) {
             excludeTags("local")
         }

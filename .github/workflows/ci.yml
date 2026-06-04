@@ -96,3 +96,42 @@ jobs:
             --tests riid.integration.p2p.DragonflySingleP2PExecutorTest
           ./gradlew --no-daemon moduledTest \
             --tests riid.app.daemon.DaemonPullUnixSocketTest
+
+  porto-integration-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      PORTO_RELEASE_REPO: UsatovPavel/porto
+      PORTO_DEB_VERSION: 5.3.58
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 23
+          cache: gradle
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      - name: Install Porto from GitHub release (.deb jammy)
+        run: |
+          set -eux
+          DEB="porto_jammy_${PORTO_DEB_VERSION}_amd64.deb"
+          curl -fLO "https://github.com/${PORTO_RELEASE_REPO}/releases/download/v${PORTO_DEB_VERSION}/${DEB}"
+          sudo apt-get update
+          sudo apt-get install -y "./${DEB}"
+      - name: Start porto
+        run: |
+          sudo systemctl daemon-reload
+          sudo systemctl start porto || sudo service porto start
+      - name: Install Podman
+        run: |
+          sudo apt-get install -y podman
+          podman --version
+      # Runner user has no Porto layer-import ACL; JVM as root matches operations that invoke portoctl successfully.
+      - name: Porto runtime integration tests
+        run: |
+          sudo -E ./gradlew --no-daemon integrationTest \
+            --tests 'riid.integration.runtime_app.PortoRuntimeAdapterIntegrationTest'
+          sudo chown -R runner:runner "$GITHUB_WORKSPACE"
