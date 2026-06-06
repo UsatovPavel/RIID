@@ -174,3 +174,4 @@ jobs:
             .
           docker push "${IMAGE}:${TAG}"
           echo "Pushed ${IMAGE}:${TAG}"
+          sudo chown -R runner:runner "$GITHUB_WORKSPACE"
