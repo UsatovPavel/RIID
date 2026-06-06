@@ -42,7 +42,7 @@ client:
         sizeLimit: 2Gi
     - name: dragonfly-output
       hostPath:
-        path: /var/run/dragonfly/output
+        path: /var/lib/dragonfly/output
         type: DirectoryOrCreate
   extraVolumeMounts:
     - name: dragonfly-run-tmpfs

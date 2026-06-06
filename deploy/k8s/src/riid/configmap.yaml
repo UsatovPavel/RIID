@@ -39,10 +39,10 @@ data:
         metricsPort: 9090
         maxConcurrentPulls: 32
         requestTimeout: "PT30M"
+        maxCacheBytes: 10737418240
         overloadPolicy: REJECT
     p2p:
       dragonfly:
         enabled: true
         dfdaemonAddr: "unix:///var/run/dragonfly/dfdaemon.sock"
-        requestTimeout: "PT30S"
         maxRetries: 2

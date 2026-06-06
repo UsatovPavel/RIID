@@ -14,10 +14,12 @@ make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset \
   PERF_REGISTRY_DATASET="$(pwd)/deploy/k8s/performance/input/dataset_b.tsv"
 
 make -C deploy/k8s/performance debug-registry-node
-## Тестирование
+## Тестирование: Dataset(A, B), Backend: (Riid, Podman)
 make -C deploy/k8s/bootstrap/registry registry-apply-test-profile
 make -C deploy/k8s/performance clear-cluster-cache
-make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid
+#### На самом деле что в YandexCloud что в Kubernetes очистка кэша не работает для riid. Проще кластер перезапустить для запуска с чистого листа чем дебажить.
+#### (возможно из-за выполнения рекомендаций Клода)
+make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=B SCENARIO=perf-multi-riid
 make -C deploy/k8s/performance run BACKEND=podman MODE=rolling CONCURRENCY=2 DATASET=A 
 make -C deploy/k8s/performance summarize
 
@@ -29,6 +31,8 @@ make -C deploy/k8s/bootstrap registry-node-tc-apply
 Перегенирировать тестовые dataset.
 make -C deploy/k8s/providers generate-registry-image-lists
 
+## Обновить версию riid 
+make -C deploy/k8s/bootstrap rollout-riid-image-from-manifest
 
 
 

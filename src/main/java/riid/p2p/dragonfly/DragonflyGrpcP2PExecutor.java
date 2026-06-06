@@ -33,20 +33,19 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final DragonflyConfig config;
     private final RegistryAuthProvider authProvider;
     private final PullerFactory pullerFactory;
-    private volatile Puller sharedPuller;
     private volatile boolean closed;
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
                                     DragonflyConfig config) {
         this(endpoint, config, RegistryAuthProvider.passthrough(),
-                cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
+                (cfg, timeout) -> new ExternalDragonflyPuller(createPuller(cfg, timeout)));
     }
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
                                     DragonflyConfig config,
                                     RegistryAuthProvider authProvider) {
         this(endpoint, config, authProvider,
-                cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
+                (cfg, timeout) -> new ExternalDragonflyPuller(createPuller(cfg, timeout)));
     }
 
     public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
@@ -70,6 +69,9 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
             throws IOException {
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest, "digest");
+        if (closed) {
+            throw new IOException("dragonfly puller is already closed");
+        }
         if (!config.enabledOrDefault()) {
             return Optional.empty();
         }
@@ -88,7 +90,8 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
                 digest,
                 outputPath,
                 authProvider.resolve(endpoint, repository));
-        Puller puller = getOrCreatePuller();
+        Duration pullTimeout = config.requestTimeoutForSizeBytes(size);
+        Puller puller = pullerFactory.create(config, pullTimeout);
         try {
             PullResult result = puller.pull(request).join();
             return Optional.of(result.path());
@@ -101,6 +104,12 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
             throw new IOException("dragonfly pull failed: " + cause.getMessage(), cause);
         } catch (DragonflyPullException e) {
             throw new IOException("dragonfly pull failed: " + e.getMessage(), e);
+        } finally {
+            try {
+                puller.close();
+            } catch (Exception e) {
+                throw new IOException("failed to close dragonfly puller", e);
+            }
         }
     }
 
@@ -131,43 +140,11 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     }
 
     @Override
-    public void close() throws IOException {
-        Puller toClose;
-        synchronized (this) {
-            toClose = sharedPuller;
-            closed = true;
-        }
-        if (toClose == null) {
-            return;
-        }
-        try {
-            toClose.close();
-        } catch (Exception e) {
-            throw new IOException("failed to close dragonfly puller", e);
-        }
+    public void close() {
+        closed = true;
     }
 
-    private Puller getOrCreatePuller() throws IOException {
-        if (closed) {
-            throw new IOException("dragonfly puller is already closed");
-        }
-        Puller current = sharedPuller;
-        if (current != null) {
-            return current;
-        }
-        synchronized (this) {
-            if (closed) {
-                throw new IOException("dragonfly puller is already closed");
-            }
-            if (sharedPuller == null) {
-                sharedPuller = pullerFactory.create(config);
-            }
-            return sharedPuller;
-        }
-    }
-
-    private static DragonflyImagePuller createPuller(DragonflyConfig cfg) throws IOException {
-        Duration timeout = cfg.requestTimeout();
+    private static DragonflyImagePuller createPuller(DragonflyConfig cfg, Duration timeout) throws IOException {
         Integer retries = cfg.maxRetries();
         try {
             DragonflyImagePuller.Builder builder = DragonflyImagePuller.builder().withAddress(cfg.dfdaemonAddr());
@@ -185,7 +162,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
 
     @FunctionalInterface
     public interface PullerFactory {
-        Puller create(DragonflyConfig config) throws IOException;
+        Puller create(DragonflyConfig config, Duration requestTimeout) throws IOException;
     }
 
     public interface Puller {
@@ -213,4 +190,5 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
             delegate.close();
         }
     }
+
 }

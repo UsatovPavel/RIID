@@ -140,7 +140,10 @@ public class ConfigValidationException extends RuntimeException {
     public enum P2P {
         DRAGONFLY_DFDAEMON_ADDR_REQUIRED("P2P: p2p.dragonfly.dfdaemonAddr must not be blank when enabled"),
         DRAGONFLY_SCHEDULER_ADDR_BLANK("P2P: p2p.dragonfly.schedulerAddr must not be blank when set"),
-        DRAGONFLY_MAX_RETRIES_NEGATIVE("P2P: p2p.dragonfly.maxRetries must be >= 0");
+        DRAGONFLY_MAX_RETRIES_NEGATIVE("P2P: p2p.dragonfly.maxRetries must be >= 0"),
+        DRAGONFLY_IMAGE_TIMEOUT_MIN_POSITIVE("P2P: p2p.dragonfly.imageTimeoutMin must be positive"),
+        DRAGONFLY_IMAGE_TIMEOUT_MAX_POSITIVE("P2P: p2p.dragonfly.imageTimeoutMax must be positive"),
+        DRAGONFLY_IMAGE_TIMEOUT_INVERTED("P2P: p2p.dragonfly.imageTimeoutMax must be >= imageTimeoutMin");
 
         private final String reasonMessage;
 

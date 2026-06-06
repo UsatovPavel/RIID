@@ -44,5 +44,4 @@ data:
       dragonfly:
         enabled: true
         dfdaemonAddr: "unix:///var/run/dragonfly/dfdaemon.sock"
-        requestTimeout: "PT30S"
         maxRetries: 2
