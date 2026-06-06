@@ -6,7 +6,5 @@ import riid.p2p.dragonfly.DragonflyConfig;
 /**
  * P2P module configuration.
  */
-public record P2PConfig(
-        @JsonProperty("dragonfly") DragonflyConfig dragonfly
-) {
+public record P2PConfig(@JsonProperty("dragonfly") DragonflyConfig dragonfly) {
 }

@@ -34,4 +34,3 @@ public final class FileBlobSink implements BlobSink {
         // nothing to close; stream is owned by caller
     }
 }
-

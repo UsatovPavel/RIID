@@ -17,7 +17,8 @@ import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.classic.util.LogbackMDCAdapter;
 
 /**
- * 7.4 Redaction: secrets must not appear raw in log lines; masking yields [REDACTED].
+ * 7.4 Redaction: secrets must not appear raw in log lines; masking yields
+ * [REDACTED].
  */
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class LogRedactionTest {
@@ -51,11 +52,8 @@ class LogRedactionTest {
         context.start();
         try {
             Logger logger = context.getLogger("redaction-test");
-            logger.atInfo()
-                    .addKeyValue("password", SECRET_PASSWORD)
-                    .addKeyValue("token", SECRET_TOKEN)
-                    .addKeyValue("authorization", SECRET_BEARER)
-                    .log("synthetic milestone");
+            logger.atInfo().addKeyValue("password", SECRET_PASSWORD).addKeyValue("token", SECRET_TOKEN)
+                    .addKeyValue("authorization", SECRET_BEARER).log("synthetic milestone");
         } finally {
             context.stop();
         }
@@ -70,9 +68,7 @@ class LogRedactionTest {
 
     @Test
     void exceptionStyleMessagesDoNotLeakSecretsAfterValueMasking() throws IOException {
-        String raw = "failed: password=" + SECRET_PASSWORD
-                + " token=" + SECRET_TOKEN
-                + " " + SECRET_BEARER;
+        String raw = "failed: password=" + SECRET_PASSWORD + " token=" + SECRET_TOKEN + " " + SECRET_BEARER;
         String masked = applyValueMasks(raw);
         assertFalse(masked.contains(SECRET_PASSWORD));
         assertFalse(masked.contains(SECRET_TOKEN));

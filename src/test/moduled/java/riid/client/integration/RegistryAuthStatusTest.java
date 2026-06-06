@@ -48,8 +48,8 @@ class RegistryAuthStatusTest {
             DockerImageName httpd = DockerImageName.parse("httpd:2-alpine");
             try (GenericContainer<?> gen = new GenericContainer<>(httpd).withCommand("sleep", "30")) {
                 gen.start();
-                org.testcontainers.containers.Container.ExecResult res =
-                        gen.execInContainer("htpasswd", "-nbB", USER, PASSWORD);
+                org.testcontainers.containers.Container.ExecResult res = gen.execInContainer("htpasswd", "-nbB", USER,
+                        PASSWORD);
                 String output = res.getStdout().trim();
                 String[] parts = output.split(":", EXPECTED_HTPASSWD_PARTS);
                 if (parts.length != EXPECTED_HTPASSWD_PARTS) {
@@ -66,10 +66,8 @@ class RegistryAuthStatusTest {
     }
 
     @Container
-    private static final GenericContainer<?> REGISTRY = new GenericContainer<>(REGISTRY_IMAGE)
-            .withExposedPorts(5000)
-            .withEnv("REGISTRY_HTTP_ADDR", "0.0.0.0:5000")
-            .withEnv("REGISTRY_AUTH", "htpasswd")
+    private static final GenericContainer<?> REGISTRY = new GenericContainer<>(REGISTRY_IMAGE).withExposedPorts(5000)
+            .withEnv("REGISTRY_HTTP_ADDR", "0.0.0.0:5000").withEnv("REGISTRY_AUTH", "htpasswd")
             .withEnv("REGISTRY_AUTH_HTPASSWD_REALM", "Registry Realm")
             .withEnv("REGISTRY_AUTH_HTPASSWD_PATH", "/auth/htpasswd")
             .withCopyFileToContainer(MountableFile.forHostPath(HTPASSWD_PATH), "/auth/htpasswd");
@@ -85,8 +83,8 @@ class RegistryAuthStatusTest {
         int port = REGISTRY.getMappedPort(5000);
         BASE_URL = "http://" + host + ":" + port;
 
-        AUTH_HEADER = "Basic " + Base64.getEncoder()
-                .encodeToString((USER + ":" + PASSWORD).getBytes(StandardCharsets.UTF_8));
+        AUTH_HEADER = "Basic "
+                + Base64.getEncoder().encodeToString((USER + ":" + PASSWORD).getBytes(StandardCharsets.UTF_8));
 
         CLIENT = HttpClientFactory.create(new HttpClientConfig());
     }
@@ -140,5 +138,3 @@ class RegistryAuthStatusTest {
         throw new IllegalStateException("Failed to get status for " + path);
     }
 }
-
-

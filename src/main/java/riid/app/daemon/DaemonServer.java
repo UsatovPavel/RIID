@@ -1,6 +1,10 @@
 package riid.app.daemon;
 
 import java.io.IOException;
+import java.util.Locale;
+import java.net.StandardProtocolFamily;
+import java.net.UnixDomainSocketAddress;
+import java.nio.channels.SocketChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -9,6 +13,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -37,15 +42,10 @@ public final class DaemonServer {
     private final ExecutorService pullExecutor;
     private final Path unixSocketPath;
 
-    public DaemonServer(String unixSocketPath,
-                        String metricsHost,
-                        int metricsPort,
-                        CliApplication.ImageLoader loader,
-                        Set<String> availableRuntimes,
-                        int maxConcurrentPulls,
-                        Duration requestTimeout,
-                        AppConfig.OverloadPolicy overloadPolicy,
-                        PrometheusMeterRegistry prometheusRegistry) {
+    @SuppressWarnings("PMD.CloseResource")
+    public DaemonServer(String unixSocketPath, String metricsHost, int metricsPort, CliApplication.ImageLoader loader,
+            Set<String> availableRuntimes, int maxConcurrentPulls, int maxRequestBodyBytes, Duration requestTimeout,
+            AppConfig.OverloadPolicy overloadPolicy, PrometheusMeterRegistry prometheusRegistry) {
         Objects.requireNonNull(unixSocketPath, "unixSocketPath");
         Objects.requireNonNull(metricsHost, "metricsHost");
         Objects.requireNonNull(loader, "loader");
@@ -53,6 +53,9 @@ public final class DaemonServer {
         Objects.requireNonNull(requestTimeout, "requestTimeout");
         Objects.requireNonNull(overloadPolicy, "overloadPolicy");
         Objects.requireNonNull(prometheusRegistry, "prometheusRegistry");
+        if (maxRequestBodyBytes <= 0) {
+            throw new IllegalArgumentException("maxRequestBodyBytes must be positive");
+        }
         if (overloadPolicy != AppConfig.OverloadPolicy.REJECT) {
             throw new IllegalArgumentException("Only REJECT overload policy is supported");
         }
@@ -74,18 +77,11 @@ public final class DaemonServer {
         server.addConnector(metricsConnector);
 
         Handler.Sequence root = new Handler.Sequence();
-        PullConcurrencyGuard pullConcurrencyGuard =
-                new SemaphorePullConcurrencyGuard(new Semaphore(maxConcurrentPulls, true));
-        root.addHandler(new PullHttpHandler(
-            CONTROL_CONNECTOR_NAME,
-            loader,
-            availableRuntimes,
-            pullConcurrencyGuard,
-            requestTimeout,
-            pullExecutor,
-            new DaemonPullHttpMetrics(prometheusRegistry),
-            new ImageLoadPipelineMetrics(prometheusRegistry)
-        ));
+        PullConcurrencyGuard pullConcurrencyGuard = new SemaphorePullConcurrencyGuard(
+                new Semaphore(maxConcurrentPulls, true));
+        root.addHandler(new PullHttpHandler(CONTROL_CONNECTOR_NAME, loader, availableRuntimes, pullConcurrencyGuard,
+                maxRequestBodyBytes, requestTimeout, pullExecutor, new DaemonPullHttpMetrics(prometheusRegistry),
+                new ImageLoadPipelineMetrics(prometheusRegistry)));
         root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME, prometheusRegistry));
         root.addHandler(new HealthHttpHandler());
         root.addHandler(new NotFoundHttpHandler());
@@ -93,8 +89,10 @@ public final class DaemonServer {
     }
 
     /**
-     * TCP listen port for the metrics connector (after {@link #start()}). {@code -1} if not bound.
+     * TCP listen port for the metrics connector (after {@link #start()}).
+     * {@code -1} if not bound.
      */
+    @SuppressWarnings("PMD.CloseResource")
     public int getMetricsListenPort() {
         for (var connector : server.getConnectors()) {
             if (METRICS_CONNECTOR_NAME.equals(connector.getName()) && connector instanceof ServerConnector sc) {
@@ -105,15 +103,22 @@ public final class DaemonServer {
     }
 
     /**
-     * Starts the server (UDS + metrics TCP). Does not block; pair with {@link #stop()} in tests or embedders.
+     * Starts the server (UDS + metrics TCP). Does not block; pair with
+     * {@link #stop()} in tests or embedders.
      */
     public void start() throws Exception {
-        prepareSocketPath();
-        server.start();
+        try {
+            prepareSocketPath();
+            server.start();
+        } catch (Exception e) {
+            pullExecutor.shutdown();
+            throw e;
+        }
     }
 
     /**
-     * Stops Jetty and releases the pull executor; deletes the Unix socket file if present.
+     * Stops Jetty and releases the pull executor; deletes the Unix socket file if
+     * present.
      */
     public void stop() throws Exception {
         try {
@@ -141,7 +146,29 @@ public final class DaemonServer {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.deleteIfExists(unixSocketPath);
+        if (Files.exists(unixSocketPath)) {
+            if (isSocketActive(unixSocketPath)) {
+                throw new IOException("Unix socket is already in use: " + unixSocketPath);
+            }
+            Files.deleteIfExists(unixSocketPath);
+        }
+    }
+
+    private static boolean isSocketActive(Path socketPath) throws IOException {
+        try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX)) {
+            channel.connect(UnixDomainSocketAddress.of(socketPath));
+            return true;
+        } catch (IOException e) {
+            if (isPermissionDenied(e)) {
+                throw new IOException("Cannot probe unix socket liveness due to permissions: " + socketPath, e);
+            }
+            return false;
+        }
+    }
+
+    private static boolean isPermissionDenied(IOException e) {
+        String message = e.getMessage();
+        return message != null && message.toLowerCase(Locale.ROOT).contains("permission denied");
     }
 
     private void deleteSocketIfExists() {

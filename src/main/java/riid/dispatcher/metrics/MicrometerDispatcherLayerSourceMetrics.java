@@ -6,7 +6,8 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
 /**
- * Prometheus-compatible counters for dispatcher layer source (cache / P2P / registry).
+ * Prometheus-compatible counters for dispatcher layer source (cache / P2P /
+ * registry).
  */
 public final class MicrometerDispatcherLayerSourceMetrics implements DispatcherLayerSourceMetrics {
 
@@ -21,11 +22,8 @@ public final class MicrometerDispatcherLayerSourceMetrics implements DispatcherL
 
     @Override
     public void recordLayerFetch(String source) {
-        Counter.builder(FETCHES)
-                .description("Layers served from cache, P2P, or registry")
-                .tag("source", source)
-                .register(registry)
-                .increment();
+        Counter.builder(FETCHES).description("Layers served from cache, P2P, or registry").tag("source", source)
+                .register(registry).increment();
     }
 
     @Override
@@ -33,11 +31,7 @@ public final class MicrometerDispatcherLayerSourceMetrics implements DispatcherL
         if (bytes <= 0) {
             return;
         }
-        Counter.builder(BYTES)
-                .description("Layer payload bytes served from cache, P2P, or registry")
-                .baseUnit("bytes")
-                .tag("source", source)
-                .register(registry)
-                .increment(bytes);
+        Counter.builder(BYTES).description("Layer payload bytes served from cache, P2P, or registry").baseUnit("bytes")
+                .tag("source", source).register(registry).increment(bytes);
     }
 }

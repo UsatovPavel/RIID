@@ -30,15 +30,14 @@ import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 
 /**
- * Live smoke against Docker Hub for alpine:edge.
- * Requires internet access; no docker-compose.
+ * Live smoke against Docker Hub for alpine:edge. Requires internet access; no
+ * docker-compose.
  */
 @Tag("filesystem")
 @Tag("live")
 public class RegistryLiveTest {
 
-    private static final RegistryEndpoint DOCKER_HUB =
-            TestRegistryConfig.endpoint();
+    private static final RegistryEndpoint DOCKER_HUB = TestRegistryConfig.endpoint();
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final String SCOPE = "repository:library/alpine:pull";
@@ -60,11 +59,7 @@ public class RegistryLiveTest {
         assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(
-                REPO,
-                layer.digest(),
-                layer.size(),
-                layer.mediaType(),
+        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType(),
                 new BlobRequest.RangeSpec.All());
 
         // HEAD
@@ -81,5 +76,3 @@ public class RegistryLiveTest {
         assertTrue(tmp.length() > 0, "downloaded file should not be empty");
     }
 }
-
-

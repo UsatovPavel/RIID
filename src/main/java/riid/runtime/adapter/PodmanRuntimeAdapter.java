@@ -10,10 +10,11 @@ import java.util.Objects;
 
 /**
  * Podman adapter (WSL2-friendly): {@code podman load -q -i path} for a file;
- * piped layout import uses {@code podman load -q} (stdin is the default input per {@code podman load --help}).
+ * piped layout import uses {@code podman load -q} (stdin is the default input
+ * per {@code podman load --help}).
  */
 public class PodmanRuntimeAdapter implements RuntimeAdapter {
-    private static final String PODMAN_BIN = "podman";
+    public static final String PODMAN_BIN = "podman";
     private static final int MAX_PROC_STDERR = 64 * 1024;
 
     @Override
@@ -33,17 +34,11 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
             throw new IOException("Image file not found: " + imagePath);
         }
 
-        List<String> cmd = List.of(
-                PODMAN_BIN,
-                "load",
-                "-q",
-                "-i",
-                imagePath.toAbsolutePath().toString()
-        );
+        List<String> cmd = List.of(PODMAN_BIN, "load", "-q", "-i", imagePath.toAbsolutePath().toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         if (shellResult.exitCode() != 0) {
-            throw new IOException("podman load failed (exit " + shellResult.exitCode() + "): "
-                    + shellResult.stdout() + shellResult.stderr());
+            throw new IOException("podman load failed (exit " + shellResult.exitCode() + "): " + shellResult.stdout()
+                    + shellResult.stderr());
         }
     }
 
@@ -61,8 +56,8 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
 
         List<String> tarCmd = List.of("tar", "-cf", "-", "-C", root.toString(), ".");
         List<String> loadCmd = List.of(PODMAN_BIN, "load", "-q");
-        BoundedCommandExecution.PipedShellResult result = BoundedCommandExecution.runWithStdoutPipedToStdin(
-                tarCmd, loadCmd, MAX_PROC_STDERR, this::startProcess);
+        BoundedCommandExecution.PipedShellResult result = BoundedCommandExecution.runWithStdoutPipedToStdin(tarCmd,
+                loadCmd, MAX_PROC_STDERR, this::startProcess);
         result.throwIfFailed("tar", "podman load");
     }
 

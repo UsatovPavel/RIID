@@ -10,5 +10,3 @@ public record DispatcherConfig(@JsonProperty("maxConcurrentRegistry") int maxCon
         this(4);
     }
 }
-
-

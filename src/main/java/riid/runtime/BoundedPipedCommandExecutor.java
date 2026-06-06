@@ -29,19 +29,16 @@ final class BoundedPipedCommandExecutor {
 
     private final int defaultMaxOutputBytes;
     private final Semaphore concurrentPipesLimiter = new Semaphore(MAX_CONCURRENT_PIPE_OPERATIONS, true);
-    private final ExecutorService pipeIoExecutor = Executors.newFixedThreadPool(
-            MAX_PIPE_EXECUTOR_TASKS,
+    private final ExecutorService pipeIoExecutor = Executors.newFixedThreadPool(MAX_PIPE_EXECUTOR_TASKS,
             Thread.ofVirtual().name("cmd-pipe-io-", 0).factory());
 
     BoundedPipedCommandExecutor(int defaultMaxOutputBytes) {
         this.defaultMaxOutputBytes = defaultMaxOutputBytes;
     }
 
-    BoundedCommandExecution.PipedShellResult runWithStdoutPipedToStdin(
-            List<String> producerCommand,
-            List<String> consumerCommand,
-            int maxStderrBytes,
-            BoundedCommandExecution.ProcessStarter starter) throws IOException, InterruptedException {
+    BoundedCommandExecution.PipedShellResult runWithStdoutPipedToStdin(List<String> producerCommand,
+            List<String> consumerCommand, int maxStderrBytes, BoundedCommandExecution.ProcessStarter starter)
+            throws IOException, InterruptedException {
         Objects.requireNonNull(producerCommand, "producerCommand");
         Objects.requireNonNull(consumerCommand, "consumerCommand");
         Objects.requireNonNull(starter, "starter");
@@ -60,7 +57,8 @@ final class BoundedPipedCommandExecutor {
                 throw e;
             }
             try {
-                // Submit transfer first: without it producer/consumer can mutually block on pipe backpressure.
+                // Submit transfer first: without it producer/consumer can mutually block on
+                // pipe backpressure.
                 Future<Void> pipeTransfer = pipeIoExecutor.submit(() -> {
                     try (InputStream in = producer.getInputStream(); OutputStream out = consumer.getOutputStream()) {
                         in.transferTo(out);
@@ -72,15 +70,30 @@ final class BoundedPipedCommandExecutor {
                 Future<String> consumerStderr = pipeIoExecutor.submit(
                         streamReaderTruncating(consumer.getErrorStream(), stderrLimit, "piped-consumer-stderr"));
 
+                Throwable primaryFailure = null;
+                boolean stderrCollected = false;
                 try {
-                    pipeTransfer.get();
-                } catch (ExecutionException e) {
-                    rethrowPipeTransferFailure(e);
+                    try {
+                        pipeTransfer.get();
+                    } catch (ExecutionException e) {
+                        rethrowPipeTransferFailure(e);
+                    }
+                    String producerStderrText = get(producerStderr);
+                    String consumerStderrText = get(consumerStderr);
+                    stderrCollected = true;
+                    int producerExit = producer.waitFor();
+                    int consumerExit = consumer.waitFor();
+                    return new BoundedCommandExecution.PipedShellResult(producerExit, consumerExit, producerStderrText,
+                            consumerStderrText);
+                } catch (Throwable t) {
+                    primaryFailure = t;
+                    throw t;
+                } finally {
+                    if (!stderrCollected && primaryFailure != null) {
+                        attachStderrDiagnostics(primaryFailure, producerStderr, "producer");
+                        attachStderrDiagnostics(primaryFailure, consumerStderr, "consumer");
+                    }
                 }
-                int producerExit = producer.waitFor();
-                int consumerExit = consumer.waitFor();
-                return new BoundedCommandExecution.PipedShellResult(
-                        producerExit, consumerExit, get(producerStderr), get(consumerStderr));
             } finally {
                 if (producer.isAlive()) {
                     producer.destroyForcibly();
@@ -163,5 +176,19 @@ final class BoundedPipedCommandExecutor {
             throw re;
         }
         throw new IOException(c);
+    }
+
+    private static void attachStderrDiagnostics(Throwable failure, Future<String> stderrFuture, String streamName) {
+        try {
+            String stderr = get(stderrFuture);
+            if (!stderr.isBlank()) {
+                failure.addSuppressed(new IOException(streamName + " stderr:\n" + stderr));
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            failure.addSuppressed(e);
+        } catch (IOException e) {
+            failure.addSuppressed(e);
+        }
     }
 }

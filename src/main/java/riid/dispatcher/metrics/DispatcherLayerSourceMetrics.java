@@ -17,12 +17,14 @@ public interface DispatcherLayerSourceMetrics {
     };
 
     /**
-     * @param source one of {@code cache}, {@code p2p}, {@code registry}
+     * @param source
+     *            one of {@code cache}, {@code p2p}, {@code registry}
      */
     void recordLayerFetch(String source);
 
     /**
-     * Layer payload bytes attributed to this source (Prometheus counter for {@code increase()} / volume dashboards).
+     * Layer payload bytes attributed to this source (Prometheus counter for
+     * {@code increase()} / volume dashboards).
      */
     void recordLayerFetchedBytes(String source, long bytes);
 }

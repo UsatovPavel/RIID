@@ -10,7 +10,7 @@ import riid.cache.oci.ImageDigest;
 /**
  * P2P layer contract (stub).
  */
-public interface P2PExecutor {
+public interface P2PExecutor extends AutoCloseable {
     /**
      * Try to fetch blob from peers.
      *
@@ -22,6 +22,14 @@ public interface P2PExecutor {
      * Publish blob to peers (best effort).
      */
     void publish(ImageDigest digest, Path path, long size, CacheMediaType mediaType);
+
+    /**
+     * Releases optional P2P resources (channels, threads, etc).
+     */
+    @Override
+    default void close() throws Exception {
+        // no-op by default
+    }
 
     /**
      * No-op implementation.

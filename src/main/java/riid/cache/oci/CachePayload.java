@@ -12,4 +12,3 @@ public interface CachePayload {
 
     long sizeBytes() throws IOException;
 }
-

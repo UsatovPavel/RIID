@@ -8,6 +8,7 @@ import riid.cache.auth.TokenCache;
 import riid.client.api.ManifestResult;
 import riid.client.core.config.ClientPlatformConfig;
 import riid.client.core.config.RegistryEndpoint;
+import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 import riid.client.core.model.Digests;
 import riid.core.model.manifest.MediaTypes;
@@ -37,18 +38,20 @@ class ManifestServiceTest {
         String template = """
                 {"schemaVersion":2,"mediaType":"%s","manifests":[]}
                 """.replace("\n", "%n");
-        byte[] body = template.formatted(MediaTypes.OCI_IMAGE_INDEX)
-                .getBytes(StandardCharsets.UTF_8);
+        byte[] body = template.formatted(MediaTypes.OCI_IMAGE_INDEX).getBytes(StandardCharsets.UTF_8);
         HttpFields.Mutable headers = HttpFields.build();
         headers.add("Content-Type", MediaTypes.OCI_IMAGE_INDEX);
 
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers,
-                new ByteArrayInputStream(body), URI.create("https://x"));
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers, new ByteArrayInputStream(body),
+                URI.create("https://x"));
 
         ManifestService svc = new ManifestService(http, new NoAuth(), mapper, ClientPlatformConfig.fromHost());
 
-        assertThrows(ClientException.class, () -> svc.fetchManifest(endpoint, "library/busybox", "latest", "scope"));
+        ClientException ex = assertThrows(ClientException.class,
+                () -> svc.fetchManifest(endpoint, "library/busybox", "latest", "scope"));
+        assertTrue(ex.error() instanceof ClientError.Parse parse
+                && parse.kind() == ClientError.ParseKind.MANIFEST_PLATFORM);
     }
 
     @Test
@@ -66,22 +69,21 @@ class ManifestServiceTest {
                     }
                   ]
                 }
-                """.replace("\n", "%n")
-                .formatted(MediaTypes.OCI_IMAGE_INDEX)
-                .getBytes(StandardCharsets.UTF_8);
+                """.replace("\n", "%n").formatted(MediaTypes.OCI_IMAGE_INDEX).getBytes(StandardCharsets.UTF_8);
         HttpFields.Mutable headers = HttpFields.build();
         headers.add("Content-Type", MediaTypes.OCI_IMAGE_INDEX);
 
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers,
-                new ByteArrayInputStream(body), URI.create("https://x"));
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers, new ByteArrayInputStream(body),
+                URI.create("https://x"));
 
-        ManifestService svc = new ManifestService(
-                http, new NoAuth(), mapper, new ClientPlatformConfig("linux", "amd64"));
+        ManifestService svc = new ManifestService(http, new NoAuth(), mapper,
+                new ClientPlatformConfig("linux", "amd64"));
 
-        ClientException ex = assertThrows(
-                ClientException.class,
+        ClientException ex = assertThrows(ClientException.class,
                 () -> svc.fetchManifest(endpoint, "library/x", "latest", "scope"));
+        assertTrue(ex.error() instanceof ClientError.Parse parse
+                && parse.kind() == ClientError.ParseKind.MANIFEST_PLATFORM);
         assertTrue(ex.getMessage().contains("No manifest list entry for platform linux/amd64"));
     }
 
@@ -95,14 +97,13 @@ class ManifestServiceTest {
                   "layers": [{"mediaType":"application/vnd.oci.image.layer.v1.tar","digest":"sha256:beef","size":34}]
                 }
                 """.replace("\n", "%n");
-        byte[] body = template.formatted(MediaTypes.OCI_IMAGE_MANIFEST)
-                .getBytes(StandardCharsets.UTF_8);
+        byte[] body = template.formatted(MediaTypes.OCI_IMAGE_MANIFEST).getBytes(StandardCharsets.UTF_8);
         HttpFields.Mutable headers = HttpFields.build();
         headers.add("Content-Type", MediaTypes.OCI_IMAGE_MANIFEST);
 
         FakeHttp http = new FakeHttp();
-        http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers,
-                new ByteArrayInputStream(body), URI.create("https://x"));
+        http.nextGet = new HttpResult<>(HttpStatus.OK_200, headers, new ByteArrayInputStream(body),
+                URI.create("https://x"));
 
         ManifestService svc = new ManifestService(http, new NoAuth(), mapper, ClientPlatformConfig.fromHost());
 
@@ -142,4 +143,3 @@ class ManifestServiceTest {
         }
     }
 }
-

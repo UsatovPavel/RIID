@@ -22,4 +22,3 @@ public final class MediaTypes {
     public static final String DOCKER_IMAGE_LAYER = "application/vnd.docker.image.rootfs.diff.tar";
     public static final String DOCKER_IMAGE_LAYER_GZIP = "application/vnd.docker.image.rootfs.diff.tar.gzip";
 }
-

@@ -2,24 +2,28 @@ package riid.runtime;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Assertions;
+
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import org.junit.jupiter.api.Test;
 
 class BoundedCommandExecutionTest {
 
     @Test
     void setMaxOutputBytesRejectsNonPositive() {
-        var ex1 = assertThrows(IllegalArgumentException.class,
-                () -> BoundedCommandExecution.setMaxOutputBytes(0));
-        var ex2 = assertThrows(IllegalArgumentException.class,
-                () -> BoundedCommandExecution.setMaxOutputBytes(-1));
+        var ex1 = assertThrows(IllegalArgumentException.class, () -> BoundedCommandExecution.setMaxOutputBytes(0));
+        var ex2 = assertThrows(IllegalArgumentException.class, () -> BoundedCommandExecution.setMaxOutputBytes(-1));
         org.junit.jupiter.api.Assertions.assertNotNull(ex1.getMessage());
         org.junit.jupiter.api.Assertions.assertNotNull(ex2.getMessage());
     }
@@ -90,6 +94,29 @@ class BoundedCommandExecutionTest {
         assertLimitExceeded(ex);
     }
 
+    @Test
+    void cancelDestroysChildProcess() throws Exception {
+        Path dir = Files.createTempDirectory("bce-cancel-");
+        Path started = dir.resolve("started.txt");
+        Path stopped = dir.resolve("stopped.txt");
+        try {
+            CompletableFuture<BoundedCommandExecution.ShellResult> future = BoundedCommandExecution
+                    .run(cancellableCommand(started, stopped), OutputConfig.defaults());
+            assertTrueEventually(() -> Files.exists(started), 5);
+            future.cancel(true);
+            assertThrows(CancellationException.class, future::join);
+            assertTrueEventually(() -> Files.exists(stopped), 5);
+        } finally {
+            if (Files.exists(stopped)) {
+                Files.delete(stopped);
+            }
+            if (Files.exists(started)) {
+                Files.delete(started);
+            }
+            Files.deleteIfExists(dir);
+        }
+    }
+
     private static Future<String> failedFuture(Throwable cause) {
         CompletableFuture<String> f = new CompletableFuture<>();
         f.completeExceptionally(cause);
@@ -113,8 +140,35 @@ class BoundedCommandExecutionTest {
             javaBin = javaBin + ".exe";
         }
         String classpath = System.getProperty("java.class.path");
-        return List.of(javaBin, "-cp", classpath, OutputFloodMain.class.getName(),
-                Integer.toString(outBytes), Integer.toString(errBytes));
+        return List.of(javaBin, "-cp", classpath, OutputFloodMain.class.getName(), Integer.toString(outBytes),
+                Integer.toString(errBytes));
+    }
+
+    private static List<String> cancellableCommand(Path started, Path stopped) {
+        String javaHome = System.getProperty("java.home");
+        String javaBin = new File(javaHome, "bin" + File.separator + "java").getPath();
+        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
+            javaBin = javaBin + ".exe";
+        }
+        String classpath = System.getProperty("java.class.path");
+        return List.of(javaBin, "-cp", classpath, CancellableProbeMain.class.getName(), started.toString(),
+                stopped.toString());
+    }
+
+    private static void assertTrueEventually(Check check, int timeoutSeconds) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        while (System.nanoTime() < deadline) {
+            if (check.get()) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+        Assertions.fail("Condition was not met within " + timeoutSeconds + " seconds");
+    }
+
+    @FunctionalInterface
+    private interface Check {
+        boolean get() throws Exception;
     }
 
     private static void assertLimitExceeded(ExecutionException ex) {
@@ -122,10 +176,8 @@ class BoundedCommandExecutionTest {
         if (cause instanceof RuntimeException re && re.getCause() != null) {
             cause = re.getCause();
         }
-        Assertions.assertTrue(
-                cause instanceof BoundedCommandExecution.OutputLimitExceededException,
+        Assertions.assertTrue(cause instanceof BoundedCommandExecution.OutputLimitExceededException,
                 "Expected OutputLimitExceededException but was: " + cause);
     }
 
 }
-

@@ -23,6 +23,7 @@ import riid.runtime.RuntimeConfig;
  */
 public final class ConfigValidator {
     private static final int MIN_BACKOFF_EXPONENT_BASE = 2;
+    private static final int MAX_UNIX_SOCKET_PATH_BYTES = 108;
     private static final String AUTH_CERT_PATH = "client.auth.certPath";
     private static final String AUTH_KEY_PATH = "client.auth.keyPath";
     private static final String AUTH_CA_PATH = "client.auth.caPath";
@@ -81,6 +82,11 @@ public final class ConfigValidator {
         }
         checkDuration(http.connectTimeout(), "client.http.connectTimeout");
         checkDuration(http.requestTimeout(), "client.http.requestTimeout");
+        checkDuration(http.imageTimeoutMin(), "client.http.imageTimeoutMin");
+        checkDuration(http.imageTimeoutMax(), "client.http.imageTimeoutMax");
+        if (http.imageTimeoutMax().compareTo(http.imageTimeoutMin()) < 0) {
+            throw new ConfigValidationException(ConfigValidationException.Http.IMAGE_TIMEOUT_INVERTED.message());
+        }
         if (http.maxRetries() < 0) {
             throw new ConfigValidationException(ConfigValidationException.Http.MAX_RETRIES_NEGATIVE.message());
         }
@@ -93,9 +99,7 @@ public final class ConfigValidator {
             throw new ConfigValidationException(ConfigValidationException.Http.BACKOFF_INVERTED.message());
         }
         if (http.backoffExponentBase() < MIN_BACKOFF_EXPONENT_BASE) {
-            throw new ConfigValidationException(
-                ConfigValidationException.Http.BACKOFF_EXPONENT_BASE_MIN.message()
-            );
+            throw new ConfigValidationException(ConfigValidationException.Http.BACKOFF_EXPONENT_BASE_MIN.message());
         }
         String userAgent = http.userAgent();
         if (userAgent == null || userAgent.isBlank()) {
@@ -109,6 +113,9 @@ public final class ConfigValidator {
         }
         if (auth.defaultTokenTtlSeconds() <= 0) {
             throw new ConfigValidationException(ConfigValidationException.Auth.TTL_POSITIVE.message());
+        }
+        if (auth.maxTokenCacheEntries() != null && auth.maxTokenCacheEntries() <= 0) {
+            throw new ConfigValidationException("client.auth.maxTokenCacheEntries must be positive");
         }
         boolean hasCert = hasText(auth.certPath());
         boolean hasKey = hasText(auth.keyPath());
@@ -142,8 +149,9 @@ public final class ConfigValidator {
             if (unixSocketPath.isBlank()) {
                 throw new ConfigValidationException("app.daemon.unixSocketPath must not be blank");
             }
-            if (unixSocketPath.getBytes(StandardCharsets.UTF_8).length >= 108) {
-                throw new ConfigValidationException("app.daemon.unixSocketPath must be shorter than 108 bytes");
+            if (unixSocketPath.getBytes(StandardCharsets.UTF_8).length >= MAX_UNIX_SOCKET_PATH_BYTES) {
+                throw new ConfigValidationException(
+                        "app.daemon.unixSocketPath must be shorter than " + MAX_UNIX_SOCKET_PATH_BYTES + " bytes");
             }
         }
         String metricsHost = daemon.metricsHost();
@@ -158,6 +166,10 @@ public final class ConfigValidator {
         if (maxConcurrentPulls != null && maxConcurrentPulls <= 0) {
             throw new ConfigValidationException("app.daemon.maxConcurrentPulls must be positive");
         }
+        Integer maxRequestBodyBytes = daemon.maxRequestBodyBytes();
+        if (maxRequestBodyBytes != null && maxRequestBodyBytes <= 0) {
+            throw new ConfigValidationException("app.daemon.maxRequestBodyBytes must be positive");
+        }
         Duration requestTimeout = daemon.requestTimeout();
         if (requestTimeout != null && (requestTimeout.isZero() || requestTimeout.isNegative())) {
             throw new ConfigValidationException("app.daemon.requestTimeout must be positive");
@@ -165,6 +177,10 @@ public final class ConfigValidator {
         AppConfig.OverloadPolicy overloadPolicy = daemon.overloadPolicy();
         if (overloadPolicy != null && overloadPolicy != AppConfig.OverloadPolicy.REJECT) {
             throw new ConfigValidationException("app.daemon.overloadPolicy supports only REJECT");
+        }
+        Long maxCacheBytes = daemon.maxCacheBytes();
+        if (maxCacheBytes != null && maxCacheBytes <= 0) {
+            throw new ConfigValidationException("app.daemon.maxCacheBytes must be positive");
         }
     }
 
@@ -225,6 +241,10 @@ public final class ConfigValidator {
             String message = switch (field) {
                 case "client.http.connectTimeout" -> ConfigValidationException.Http.CONNECT_TIMEOUT_POSITIVE.message();
                 case "client.http.requestTimeout" -> ConfigValidationException.Http.REQUEST_TIMEOUT_POSITIVE.message();
+                case "client.http.imageTimeoutMin" ->
+                    ConfigValidationException.Http.IMAGE_TIMEOUT_MIN_POSITIVE.message();
+                case "client.http.imageTimeoutMax" ->
+                    ConfigValidationException.Http.IMAGE_TIMEOUT_MAX_POSITIVE.message();
                 case "client.http.initialBackoff" -> ConfigValidationException.Http.INITIAL_BACKOFF_POSITIVE.message();
                 case "client.http.maxBackoff" -> ConfigValidationException.Http.MAX_BACKOFF_POSITIVE.message();
                 default -> null;
@@ -252,8 +272,7 @@ public final class ConfigValidator {
                 throw new ConfigValidationException(message + ": " + value);
             }
             throw new ConfigValidationException(
-                ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value)
-            );
+                    ConfigValidationException.Common.FIELD_PATH_EXISTS.format(field, value));
         }
         if (!Files.isRegularFile(p)) {
             String message = switch (field) {

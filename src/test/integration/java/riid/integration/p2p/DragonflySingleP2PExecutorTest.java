@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
@@ -32,15 +33,16 @@ import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Assumptions;
 
 /**
- * Integration tests for RIID P2P adapter on top of external Dragonfly puller library.
- * Verifies behavior contract: first fetch may go back-to-source, second fetch is served
- * from dfdaemon local cache for the same digest.
- * Run: ./scripts/minikube-dragonfly.sh && make dragonfly-integration-test
- * Or: DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \
- *     ./gradlew integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
+ * Integration tests for RIID P2P adapter on top of external Dragonfly puller
+ * library. Verifies behavior contract: first fetch may go back-to-source,
+ * second fetch is served from dfdaemon local cache for the same digest. Run:
+ * ./scripts/minikube-dragonfly.sh && make dragonfly-integration-test Or:
+ * DFDAEMON_ADDR=unix:///var/run/dragonfly/dfdaemon.sock \ ./gradlew
+ * integrationTest -PincludeLocal --tests DragonflySingleP2PExecutorTest
  */
 @Tag("local")
 @Tag("filesystem")
@@ -49,7 +51,8 @@ class DragonflySingleP2PExecutorTest {
 
     private static final String REPO = "repo";
     private static final String CONTENT_TYPE = "application/octet-stream";
-    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR", "unix:///var/run/dragonfly/dfdaemon.sock");
+    private static final String DFDAEMON_ADDR = System.getenv().getOrDefault("DFDAEMON_ADDR",
+            "unix:///var/run/dragonfly/dfdaemon.sock");
 
     private static HttpServer server;
     private static byte[] payload;
@@ -61,6 +64,7 @@ class DragonflySingleP2PExecutorTest {
     private static DragonflyGrpcP2PExecutor p2p;
 
     @BeforeAll
+    @SuppressFBWarnings(value = "DMI_HARDCODED_ABSOLUTE_FILENAME", justification = "Unix socket path is the canonical Dragonfly location in this integration test")
     static void setUp() throws Exception {
         boolean useUnix = DFDAEMON_ADDR.startsWith("unix://");
         Assumptions.assumeTrue(!useUnix || Files.exists(Path.of("/var/run/dragonfly/dfdaemon.sock")),
@@ -71,8 +75,8 @@ class DragonflySingleP2PExecutorTest {
         payload = "p2p-single-cache-test".getBytes(StandardCharsets.UTF_8);
         digest = "sha256:" + sha256(payload);
         blobRequests = new AtomicInteger();
-        expectedAuthHeader = "Basic " + Base64.getEncoder()
-                .encodeToString("riid-user:riid-secret".getBytes(StandardCharsets.UTF_8));
+        expectedAuthHeader = "Basic "
+                + Base64.getEncoder().encodeToString("riid-user:riid-secret".getBytes(StandardCharsets.UTF_8));
 
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v2/", exchange -> {
@@ -95,12 +99,8 @@ class DragonflySingleP2PExecutorTest {
         });
         server.start();
 
-        endpoint = new RegistryEndpoint(
-                "http",
-                "127.0.0.1",
-                server.getAddress().getPort(),
-                Credentials.basic("riid-user", "riid-secret")
-        );
+        endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(),
+                Credentials.basic("riid-user", "riid-secret"));
         fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
         p2p = new DragonflyGrpcP2PExecutor(endpoint, config);

@@ -52,11 +52,8 @@ class AuthServiceTest {
         setupServer(exchange -> {
             String path = exchange.getRequestURI().getPath();
             if (path.equals("/v2/")) {
-                exchange.getResponseHeaders().add(
-                        "WWW-Authenticate",
-                        "Bearer realm=\"http://localhost:"
-                                + server.getAddress().getPort()
-                                + "/token\",service=\"registry\",scope=\"repo:pull\"");
+                exchange.getResponseHeaders().add("WWW-Authenticate", "Bearer realm=\"http://localhost:"
+                        + server.getAddress().getPort() + "/token\",service=\"registry\",scope=\"repo:pull\"");
                 respond(exchange, 401, Map.of(), "");
             } else if (path.equals("/token")) {
                 respond(exchange, 200, Map.of(), "{\"token\":\"" + token + "\",\"expires_in\":120}");
@@ -64,10 +61,7 @@ class AuthServiceTest {
                 respond(exchange, 404, Map.of(), "");
             }
         });
-        RegistryEndpoint ep = new RegistryEndpoint(
-                "http",
-                "localhost",
-                server.getAddress().getPort(),
+        RegistryEndpoint ep = new RegistryEndpoint("http", "localhost", server.getAddress().getPort(),
                 Credentials.basic("u", "p"));
         AuthService auth = authService();
         Optional<String> hdr = auth.getAuthHeader(ep, "repo", "repo:pull");
@@ -95,10 +89,8 @@ class AuthServiceTest {
         server.start();
     }
 
-    private void respond(HttpExchange exchange,
-                         int status,
-                         Map<String, String> headers,
-                         String body) throws IOException {
+    private void respond(HttpExchange exchange, int status, Map<String, String> headers, String body)
+            throws IOException {
         headers.forEach((k, v) -> exchange.getResponseHeaders().add(k, v));
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(status, bytes.length);
@@ -107,4 +99,3 @@ class AuthServiceTest {
         }
     }
 }
-

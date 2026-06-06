@@ -31,15 +31,13 @@ class ImageLoadingFacadeFactoryTest {
                       port: %d
                 dispatcher:
                   maxConcurrentRegistry: 2
-                """.formatted(scheme, host, port);
+                """.replace("\n", "%n").formatted(scheme, host, port);
         HostFilesystem fs = new NioHostFilesystem();
         Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "config-", ".yaml");
         fs.writeString(tmp, yaml);
 
         try (riid.app.service.ImageLoadingFacade svc = ImageLoadingFacade.createFromConfig(tmp)) {
-        assertNotNull(svc);
+            assertNotNull(svc);
         }
     }
 }
-
-

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,23 +39,28 @@ public class HttpExecutor {
     }
 
     public HttpResult<InputStream> get(URI uri, Map<String, String> headers) {
-        return sendWithRetry("GET", uri, headers, true);
+        return sendWithRetry("GET", uri, headers, true, config.requestTimeout());
+    }
+
+    /**
+     * GET for registry layer/config blobs (dynamic timeout based on layer size).
+     */
+    public HttpResult<InputStream> getBlob(URI uri, Map<String, String> headers, long layerSizeBytes) {
+        return sendWithRetry("GET", uri, headers, true, config.timeoutForSizeBytes(layerSizeBytes));
     }
 
     public HttpResult<Void> head(URI uri, Map<String, String> headers) {
-        HttpResult<InputStream> resp = sendWithRetry("HEAD", uri, headers, true);
+        HttpResult<InputStream> resp = sendWithRetry("HEAD", uri, headers, true, config.requestTimeout());
         return new HttpResult<>(resp.statusCode(), resp.headers(), null, resp.uri());
     }
 
-    private HttpResult<InputStream> sendWithRetry(String method,
-                                                  URI uri,
-                                                  Map<String, String> headers,
-                                                  boolean idempotent) {
+    private HttpResult<InputStream> sendWithRetry(String method, URI uri, Map<String, String> headers,
+            boolean idempotent, Duration requestTimeout) {
         int attempts = 0;
         while (true) {
             attempts++;
             try {
-                HttpResult<InputStream> resp = execute(method, uri, headers);
+                HttpResult<InputStream> resp = execute(method, uri, headers, requestTimeout);
                 if (shouldRetry(resp.statusCode(), attempts, idempotent)) {
                     backoff(attempts);
                     continue;
@@ -70,16 +76,13 @@ public class HttpExecutor {
         }
     }
 
-    private HttpResult<InputStream> execute(String method,
-                                            URI uri,
-                                            Map<String, String> headers) throws IOException {
+    private HttpResult<InputStream> execute(String method, URI uri, Map<String, String> headers,
+            Duration requestTimeout) throws IOException {
+        long timeoutMillis = requestTimeout.toMillis();
         if (METHOD_HEAD.equalsIgnoreCase(method)) {
             try {
-                Request req = client.newRequest(uri)
-                        .method(METHOD_HEAD)
-                        .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
-                        .followRedirects(config.followRedirects())
-                        .headers(h -> {
+                Request req = client.newRequest(uri).method(METHOD_HEAD).timeout(timeoutMillis, TimeUnit.MILLISECONDS)
+                        .followRedirects(config.followRedirects()).headers(h -> {
                             headers.forEach(h::add);
                             applyUserAgent(h, headers);
                         });
@@ -96,17 +99,14 @@ public class HttpExecutor {
 
         @SuppressWarnings("PMD.CloseResource")
         InputStreamResponseListener listener = new InputStreamResponseListener();
-        Request request = client.newRequest(uri)
-                .method(method)
-                .timeout(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS)
-                .followRedirects(config.followRedirects())
-                .headers(h -> {
+        Request request = client.newRequest(uri).method(method).timeout(timeoutMillis, TimeUnit.MILLISECONDS)
+                .followRedirects(config.followRedirects()).headers(h -> {
                     headers.forEach(h::add);
                     applyUserAgent(h, headers);
                 });
         request.send(listener);
         try {
-            var response = listener.get(config.requestTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            var response = listener.get(timeoutMillis, TimeUnit.MILLISECONDS);
             HttpFields httpHeaders = response.getHeaders();
             return new HttpResult<>(response.getStatus(), httpHeaders, listener.getInputStream(), uri);
         } catch (InterruptedException ie) {
@@ -185,4 +185,3 @@ public class HttpExecutor {
     }
 
 }
-

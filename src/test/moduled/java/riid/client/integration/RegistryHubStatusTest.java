@@ -11,6 +11,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import riid.core.config.TestRegistryConfig;
 
 /**
@@ -19,10 +20,8 @@ import riid.core.config.TestRegistryConfig;
 class RegistryHubStatusTest {
 
     private static final String HUB = TestRegistryConfig.baseUrl();
-    private static final HttpClient CLIENT = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    private static final HttpClient CLIENT = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(10)).build();
 
     @Test
     void pingRequiresAuth() throws Exception {
@@ -33,8 +32,7 @@ class RegistryHubStatusTest {
     @Test
     void missingManifestIsAuthOrNotFound() throws Exception {
         int status = status("/v2/nonexistent-repo-12345/manifests/latest");
-        assertTrue(Set.of(401, 404).contains(status),
-                "Expected 401 or 404 from missing manifest, got " + status);
+        assertTrue(Set.of(401, 404).contains(status), "Expected 401 or 404 from missing manifest, got " + status);
     }
 
     private int status(String path) throws Exception {
@@ -42,10 +40,7 @@ class RegistryHubStatusTest {
         for (int i = 0; i < 5; i++) {
             try {
                 HttpResponse<Void> resp = CLIENT.send(
-                        HttpRequest.newBuilder(URI.create(HUB + path))
-                                .timeout(Duration.ofSeconds(10))
-                                .GET()
-                                .build(),
+                        HttpRequest.newBuilder(URI.create(HUB + path)).timeout(Duration.ofSeconds(10)).GET().build(),
                         HttpResponse.BodyHandlers.discarding());
                 return resp.statusCode();
             } catch (Exception e) {
@@ -59,5 +54,3 @@ class RegistryHubStatusTest {
         throw new IllegalStateException("No response from Hub for " + path);
     }
 }
-
-

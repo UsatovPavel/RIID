@@ -4,10 +4,12 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 /**
- * Path helpers for generating unique temp-like paths (creation is delegated to HostFilesystem).
+ * Path helpers for generating unique temp-like paths (creation is delegated to
+ * HostFilesystem).
  */
 public final class PathSupport {
-    private PathSupport() { }
+    private PathSupport() {
+    }
 
     public static Path temporaryPath(String prefix, String suffix) {
         return temporaryPath(null, prefix, suffix);
@@ -29,4 +31,3 @@ public final class PathSupport {
         return temporaryPath(baseDir, prefix, "");
     }
 }
-

@@ -30,8 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * After a successful mocked {@code POST /pull}, {@code GET /metrics} on the TCP connector must scrape
- * valid Prometheus text with dashboard-critical series names (no registry / real image pull).
+ * After a successful mocked {@code POST /pull}, {@code GET /metrics} on the TCP
+ * connector must scrape valid Prometheus text with dashboard-critical series
+ * names (no registry / real image pull).
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
@@ -39,10 +40,14 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class DaemonPullMetricsEndpointTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    /** Tar size in the {@code mib_10_50} bucket so tar category counters are emitted. */
+    /**
+     * Tar size in the {@code mib_10_50} bucket so tar category counters are
+     * emitted.
+     */
     private static final long MOCK_TAR_BYTES = 12L * 1024 * 1024;
 
     @Test
+    @SuppressWarnings("PMD.CloseResource")
     void getMetricsAfterMockedPullContainsKeyPrometheusSeries() throws Exception {
         assumeTrue(TestFilesystemSupport.curlAvailable(), "curl must be on PATH for HTTP over UDS");
 
@@ -50,16 +55,10 @@ class DaemonPullMetricsEndpointTest {
         Path socketPath = dir.resolve("riid.sock");
         Path bodyFile = dir.resolve("body.json");
 
-        DaemonServer daemon = new DaemonServer(
-                socketPath.toString(),
-                "127.0.0.1",
-                0,
-                (repo, ref, rt) ->
-                        new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), MOCK_TAR_BYTES),
-                Set.of("podman"),
-                4,
-                Duration.ofSeconds(30),
-                AppConfig.OverloadPolicy.REJECT,
+        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0,
+                (repo, ref, rt) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref),
+                        MOCK_TAR_BYTES),
+                Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         try {
@@ -68,23 +67,9 @@ class DaemonPullMetricsEndpointTest {
             assertTrue(metricsPort > 0, "metrics TCP port must be bound");
 
             String json = "{\"repository\":\"library/busybox\",\"reference\":\"latest\",\"runtimeId\":\"podman\"}";
-            ProcessBuilder pb = new ProcessBuilder(
-                    "curl",
-                    "-sS",
-                    "--fail-with-body",
-                    "--unix-socket",
-                    socketPath.toString(),
-                    "-o",
-                    bodyFile.toString(),
-                    "-w",
-                    "%{http_code}",
-                    "-X",
-                    "POST",
-                    "http://localhost/pull",
-                    "-H",
-                    "Content-Type: application/json",
-                    "-d",
-                    json);
+            ProcessBuilder pb = new ProcessBuilder("curl", "-sS", "--fail-with-body", "--unix-socket",
+                    socketPath.toString(), "-o", bodyFile.toString(), "-w", "%{http_code}", "-X", "POST",
+                    "http://localhost/pull", "-H", "Content-Type: application/json", "-d", json);
             pb.redirectError(ProcessBuilder.Redirect.PIPE);
             Process p = pb.start();
             String httpCode = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
@@ -96,30 +81,23 @@ class DaemonPullMetricsEndpointTest {
 
             assertEquals("success", MAPPER.readTree(Files.readString(bodyFile)).path("status").asText());
 
-            HttpClient client = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
-                    .build();
+            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
             HttpRequest getMetrics = HttpRequest.newBuilder()
-                    .uri(URI.create("http://127.0.0.1:" + metricsPort + "/metrics"))
-                    .timeout(Duration.ofSeconds(10))
-                    .GET()
-                    .build();
-            HttpResponse<String> scrape = client.send(getMetrics, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                    .uri(URI.create("http://127.0.0.1:" + metricsPort + "/metrics")).timeout(Duration.ofSeconds(10))
+                    .GET().build();
+            HttpResponse<String> scrape = client.send(getMetrics,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             assertEquals(200, scrape.statusCode());
-            assertTrue(
-                    scrape.headers().firstValue("content-type").orElse("").startsWith("text/plain"),
+            assertTrue(scrape.headers().firstValue("content-type").orElse("").startsWith("text/plain"),
                     "Content-Type should be Prometheus text; got: " + scrape.headers().map());
 
             String body = scrape.body();
             assertTrue(body.contains("# HELP"), "expected Prometheus exposition with HELP lines: " + bodySnippet(body));
-            assertTrue(
-                    body.contains("riid_daemon_pull_seconds_count"),
+            assertTrue(body.contains("riid_daemon_pull_seconds_count"),
                     "expected POST /pull timer count: " + bodySnippet(body));
-            assertTrue(
-                    body.contains("riid_image_load_seconds_count"),
+            assertTrue(body.contains("riid_image_load_seconds_count"),
                     "expected pipeline timer count: " + bodySnippet(body));
-            assertTrue(
-                    body.contains("riid_image_load_tar_size_category_total"),
+            assertTrue(body.contains("riid_image_load_tar_size_category_total"),
                     "expected tar size category counter after mocked load with known tar size: " + bodySnippet(body));
         } finally {
             daemon.stop();

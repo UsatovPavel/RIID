@@ -32,8 +32,8 @@ import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 
 /**
- * Live smoke against Docker Hub for alpine:edge.
- * Requires internet access; no docker-compose.
+ * Live smoke against Docker Hub for alpine:edge. Requires internet access; no
+ * docker-compose.
  */
 public class RegistryLiveTest {
 
@@ -63,11 +63,7 @@ public class RegistryLiveTest {
         assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(
-                REPO,
-                layer.digest(),
-                layer.size(),
-                layer.mediaType(),
+        BlobRequest req = new BlobRequest(REPO, layer.digest(), layer.size(), layer.mediaType(),
                 new BlobRequest.RangeSpec.All());
 
         // HEAD
@@ -92,11 +88,7 @@ public class RegistryLiveTest {
         assertFalse(manifest.manifest().layers().isEmpty(), "layers should not be empty");
 
         var layer = manifest.manifest().layers().getFirst();
-        BlobRequest req = new BlobRequest(
-                TLS_REPO,
-                layer.digest(),
-                layer.size(),
-                layer.mediaType(),
+        BlobRequest req = new BlobRequest(TLS_REPO, layer.digest(), layer.size(), layer.mediaType(),
                 new BlobRequest.RangeSpec.All());
 
         Optional<Long> sizeOpt = blobService.headBlob(DOCKER_HUB, TLS_REPO, layer.digest(), TLS_SCOPE);
@@ -118,4 +110,3 @@ public class RegistryLiveTest {
                 "missing tag should raise ClientException (404)");
     }
 }
-

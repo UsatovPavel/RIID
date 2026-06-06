@@ -21,16 +21,16 @@ import riid.app.service.LoadOutcome;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
+import riid.core.config.TestRegistryConfig;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class CliApplicationTest {
-    private static final String RUNTIME_PODMAN = "podman";
+    private static final String RUNTIME_PODMAN = PodmanRuntimeAdapter.PODMAN_BIN;
     private static final String REPO_BUSYBOX = "library/busybox";
-    private static final String REGISTRY_DOCKER_IO = "registry-1.docker.io";
 
     private static LoadOutcome mockLoadOutcome(String repo, String ref) {
-        return new LoadOutcome(ImageId.fromRegistry(REGISTRY_DOCKER_IO, repo, ref), -1L);
+        return new LoadOutcome(ImageId.fromRegistry(TestRegistryConfig.registryName(), repo, ref), -1L);
     }
 
     @Test
@@ -40,14 +40,12 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8)),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
         int code = appWithErr.run(new String[]{});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.USAGE.code(), code);
-        assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Usage"),
-                errBuf.toString(StandardCharsets.UTF_8));
+        assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Usage"), errBuf.toString(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -57,8 +55,7 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
         int code = app.run(new String[]{"--runtime", RUNTIME_PODMAN});
 
@@ -73,8 +70,7 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
         int code = app.run(new String[]{"--repo", REPO_BUSYBOX});
 
@@ -85,14 +81,11 @@ class CliApplicationTest {
     @Test
     void failsOnUnknownRuntime() {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
-        riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                (options, meterRegistry) -> {
-                    throw new AssertionError("Service factory must not be invoked on invalid runtime");
-                },
-                Map.of(RUNTIME_PODMAN, new PodmanRuntimeAdapter()),
+        riid.app.cli.CliApplication app = new riid.app.cli.CliApplication((options, meterRegistry) -> {
+            throw new AssertionError("Service factory must not be invoked on invalid runtime");
+        }, Map.of(RUNTIME_PODMAN, new PodmanRuntimeAdapter()),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
         int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", "unknown"});
 
@@ -107,27 +100,20 @@ class CliApplicationTest {
         AtomicReference<String> refSeen = new AtomicReference<>();
         AtomicReference<String> runtimeSeen = new AtomicReference<>();
 
-        riid.app.cli.CliApplication app = new riid.app.cli.CliApplication(
-                (options, meterRegistry) -> {
-                    configSeen.set(options.configPath());
-                    return (repo, ref, runtime) -> {
-                        repoSeen.set(repo);
-                        refSeen.set(ref);
-                        runtimeSeen.set(runtime);
-                        return mockLoadOutcome(repo, ref);
-                    };
-                },
-                riid.app.service.ImageLoadingFacade.defaultRuntimes(),
+        riid.app.cli.CliApplication app = new riid.app.cli.CliApplication((options, meterRegistry) -> {
+            configSeen.set(options.configPath());
+            return (repo, ref, runtime) -> {
+                repoSeen.set(repo);
+                refSeen.set(ref);
+                runtimeSeen.set(runtime);
+                return mockLoadOutcome(repo, ref);
+            };
+        }, riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--config", "config/config.yaml",
-                "--repo", REPO_BUSYBOX,
-                "--tag", "latest",
-                "--runtime", RUNTIME_PODMAN
-        });
+        int code = app.run(new String[]{"--config", "config/config.yaml", "--repo", REPO_BUSYBOX, "--tag", "latest",
+                "--runtime", RUNTIME_PODMAN});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.OK.code(), code);
         assertEquals(Path.of("config/config.yaml"), configSeen.get());
@@ -143,8 +129,7 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(outBuf, StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true));
 
         int code = app.run(new String[]{"--help"});
 
@@ -154,10 +139,7 @@ class CliApplicationTest {
 
     @Test
     void parserMarksConfigAsImplicitByDefault() {
-        var result = CliParser.parse(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN
-        });
+        var result = CliParser.parse(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN});
 
         assertEquals(false, result.options().configProvidedByUser());
         assertEquals(Path.of("config", "config.yaml"), result.options().configPath());
@@ -165,11 +147,8 @@ class CliApplicationTest {
 
     @Test
     void parserMarksConfigAsExplicitWhenProvided() {
-        var result = CliParser.parse(new String[]{
-                "--config", "custom.yaml",
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN
-        });
+        var result = CliParser
+                .parse(new String[]{"--config", "custom.yaml", "--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN});
 
         assertEquals(true, result.options().configProvidedByUser());
         assertEquals(Path.of("custom.yaml"), result.options().configPath());
@@ -182,18 +161,12 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> {
                     refSeen.set(ref);
                     return mockLoadOutcome(repo, ref);
-                },
-                riid.app.service.ImageLoadingFacade.defaultRuntimes(),
+                }, riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--tag", "latest",
-                "--digest", "sha256:abc",
-                "--runtime", RUNTIME_PODMAN
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--tag", "latest", "--digest", "sha256:abc",
+                "--runtime", RUNTIME_PODMAN});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.OK.code(), code);
         assertEquals("sha256:abc", refSeen.get());
@@ -206,16 +179,10 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--username", "u",
-                "--password", "p1",
-                "--password-env", "SOME_ENV"
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--username", "u",
+                "--password", "p1", "--password-env", "SOME_ENV"});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Use only one of"));
@@ -228,14 +195,9 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--username", "user"
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--username", "user"});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Password is required"));
@@ -248,14 +210,9 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--password", "secret"
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--password", "secret"});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Username is required"));
@@ -268,16 +225,11 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
         String missingVar = "NON_EXISTENT_" + UUID.randomUUID();
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--username", "user",
-                "--password-env", missingVar
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--username", "user",
+                "--password-env", missingVar});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("is not set or empty"));
@@ -295,15 +247,10 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--username", "user",
-                "--password-file", emptyFile.toString()
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--username", "user",
+                "--password-file", emptyFile.toString()});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Password file is empty"));
@@ -320,15 +267,10 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--username", "user",
-                "--password-file", passwordFile.toString()
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--username", "user",
+                "--password-file", passwordFile.toString()});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.OK.code(), code);
     }
@@ -342,14 +284,10 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 riid.app.service.ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--cert-path", missing.toString()
-        });
+        int code = app.run(
+                new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--cert-path", missing.toString()});
 
         assertEquals(riid.app.cli.CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("cert-path does not exist"));
@@ -362,17 +300,12 @@ class CliApplicationTest {
                 (options, meterRegistry) -> (repo, ref, runtime) -> mockLoadOutcome(repo, ref),
                 ImageLoadingFacade.defaultRuntimes(),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
-                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true)
-        );
+                new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
-        int code = app.run(new String[]{
-                "--repo", REPO_BUSYBOX,
-                "--runtime", RUNTIME_PODMAN,
-                "--unknown-flag"
-        });
+        int code = app.run(new String[]{"--repo", REPO_BUSYBOX, "--runtime", RUNTIME_PODMAN, "--unknown-flag"});
 
         assertEquals(CliApplication.ExitCode.USAGE.code(), code);
         assertTrue(errBuf.toString(StandardCharsets.UTF_8).contains("Unknown option"));
     }
-}
 
+}

@@ -22,4 +22,3 @@ class HttpHelpersTest {
         assertEquals("bytes=5-", HttpExecutor.rangeHeader(5, null));
     }
 }
-

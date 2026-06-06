@@ -9,11 +9,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ManifestRef(
-        @JsonProperty("mediaType") String mediaType,
-        @JsonProperty("digest") String digest,
-        @JsonProperty("size") long size,
-        @JsonProperty("platform") Platform platform
-) {
+public record ManifestRef(@JsonProperty("mediaType") String mediaType, @JsonProperty("digest") String digest,
+        @JsonProperty("size") long size, @JsonProperty("platform") Platform platform) {
 }
-

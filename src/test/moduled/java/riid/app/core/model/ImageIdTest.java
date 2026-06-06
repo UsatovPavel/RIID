@@ -45,4 +45,3 @@ class ImageIdTest {
         assertSame(original, original.withDigest("   "));
     }
 }
-

@@ -10,4 +10,3 @@ public record AuthChallenge(String realm, String service, String scope) {
         Objects.requireNonNull(realm, "realm");
     }
 }
-
