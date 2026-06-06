@@ -12,10 +12,12 @@ import java.util.Map;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.junit.jupiter.api.AfterEach;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -76,11 +78,7 @@ class RegistryClientImplTest {
 
             File tmp = File.createTempFile("blob-", ".bin");
             tmp.deleteOnExit();
-            BlobRequest req = new BlobRequest(
-                    REPO,
-                    layerDigest,
-                    (long) layer.length,
-                    OCTET,
+            BlobRequest req = new BlobRequest(REPO, layerDigest, (long) layer.length, OCTET,
                     new BlobRequest.RangeSpec.All());
             BlobResult br = client.fetchBlob(req, tmp);
             assertEquals(layerDigest, br.digest());
@@ -114,12 +112,8 @@ class RegistryClientImplTest {
         }
     }
 
-    private void startServer(byte[] layer,
-                             String layerDigest,
-                             byte[] manifestBytes,
-                             String manifestDigest,
-                             int tagsStatus,
-                             int blobStatus) throws IOException {
+    private void startServer(byte[] layer, String layerDigest, byte[] manifestBytes, String manifestDigest,
+            int tagsStatus, int blobStatus) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext(API_PREFIX, exchange -> respond(exchange, STATUS_OK, Map.of(), ""));
         server.createContext(API_PREFIX + REPO + "/manifests/latest", exchange -> {
@@ -127,10 +121,8 @@ class RegistryClientImplTest {
                 respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), "");
                 return;
             }
-            Map<String, String> headers = Map.of(
-                    CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json",
-                    "Docker-Content-Digest", manifestDigest
-            );
+            Map<String, String> headers = Map.of(CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json",
+                    "Docker-Content-Digest", manifestDigest);
             respond(exchange, STATUS_OK, headers, manifestBytes);
         });
         server.createContext(API_PREFIX + REPO + "/blobs/" + layerDigest, exchange -> {
@@ -139,17 +131,13 @@ class RegistryClientImplTest {
                     respond(exchange, STATUS_NOT_FOUND, Map.of(), new byte[0]);
                     return;
                 }
-                respond(exchange, STATUS_OK, Map.of(
-                        CONTENT_LENGTH, String.valueOf(layer.length),
-                        CONTENT_TYPE, OCTET
-                ), new byte[0]);
+                respond(exchange, STATUS_OK, Map.of(CONTENT_LENGTH, String.valueOf(layer.length), CONTENT_TYPE, OCTET),
+                        new byte[0]);
                 return;
             }
             if (METHOD_GET.equals(exchange.getRequestMethod())) {
-                respond(exchange, blobStatus, Map.of(
-                        CONTENT_LENGTH, String.valueOf(layer.length),
-                        CONTENT_TYPE, OCTET
-                ), layer);
+                respond(exchange, blobStatus, Map.of(CONTENT_LENGTH, String.valueOf(layer.length), CONTENT_TYPE, OCTET),
+                        layer);
                 return;
             }
             respond(exchange, STATUS_METHOD_NOT_ALLOWED, Map.of(), new byte[0]);
@@ -204,4 +192,3 @@ class RegistryClientImplTest {
         return sb.toString();
     }
 }
-

@@ -1,5 +1,6 @@
 ## deploy/k8s
-## Quickstart 
+
+## Quickstart
 ## Install cluster
 make -C deploy/k8s/bootstrap install-all
 ## Install local registry
@@ -12,12 +13,10 @@ make -C deploy/k8s/performance clear-cluster-cache
 make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid
 make -C deploy/k8s/performance summarize
 
-
 ## Change test registry_provider:
 Change config.yaml
 Generate test dataset.
 make -C deploy/k8s/providers generate-registry-image-lists
-
 
 Kubernetes manifests for **RIID** + **Dragonfly** (same Helm values as CI: root `scripts/values.yaml`). One Dragonfly client only—in `dragonfly-system`; do not add dfdaemon in `riid-system`. Java-side notes: **internalDocs/moduledocs/**.
 
@@ -44,14 +43,15 @@ flowchart TB
   BASE -. "performance" .-> PERF
 ```
 
-### Env 
+### Env
 Under **`deploy/k8s/config/`** (see **`config/.env.example`**):
-```.env
+```env
 RIID_DOCKERHUB_USER=
 RIID_DOCKERHUB_TOKEN=
 RIID_SELECTEL_USER=
 RIID_SELECTEL_TOKEN=
 ```
+
 ### Layout
 
 | Path | Role | Notes |
@@ -62,7 +62,7 @@ RIID_SELECTEL_TOKEN=
 | `bootstrap/` | Deploy entrypoint | Main `Makefile` drives kubectl/helm; `bootstrap/registry/` handles registry profiles, secrets, mirrors, perf helpers (`SELECTEL_DIR` in scripts is a legacy name for this directory) |
 | `.resolved/` | Materialized tree | Gitignored copy of `src/` (and related paths) with concrete image references—what kubectl and Helm actually use |
 
-### Target cluster
+### Flow
 
 ```mermaid
 flowchart LR

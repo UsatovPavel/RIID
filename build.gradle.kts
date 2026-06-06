@@ -4,6 +4,7 @@ plugins {
     id("pmd")
     id("jacoco")
     id("com.github.spotbugs")
+    id("com.diffplug.spotless") version "8.5.1"
     id("com.gradleup.shadow") version "9.3.0"
     id("idea")
     id("java-test-fixtures")
@@ -38,6 +39,7 @@ apply(from = "gradle/test-source-sets.gradle.kts")
 apply(from = "gradle/dependencies.gradle.kts")
 apply(from = "gradle/tests-tasks.gradle.kts")
 apply(from = "gradle/docker.gradle.kts")
+apply(from = "gradle/formatting.gradle.kts")
 
 idea {
     module {

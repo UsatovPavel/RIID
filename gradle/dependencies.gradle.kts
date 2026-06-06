@@ -18,6 +18,7 @@ dependencies {
     add("runtimeOnly", "ch.qos.logback:logback-classic:1.5.32")
     add("runtimeOnly", "net.logstash.logback:logstash-logback-encoder:9.0")
     add("testRuntimeOnly", "ch.qos.logback:logback-classic:1.5.12")
+    add("testImplementation", "com.github.spotbugs:spotbugs-annotations:4.9.8")
     add("compileOnly", "com.github.spotbugs:spotbugs-annotations:4.9.8")
     add("compileOnly", "org.jetbrains:annotations:26.0.2")
     add("testCompileOnly", "com.github.spotbugs:spotbugs-annotations:4.9.8")

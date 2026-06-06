@@ -30,7 +30,8 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Default RegistryClient implementation through jetty. Throw exception on close.
+ * Default RegistryClient implementation through jetty. Throw exception on
+ * close.
  */
 public final class RegistryClientImpl implements RegistryClient {
     private static final String PULL_SCOPE_TEMPLATE = "repository:%s:pull";
@@ -44,40 +45,30 @@ public final class RegistryClientImpl implements RegistryClient {
     private final ObjectMapper mapper;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    public RegistryClientImpl(RegistryEndpoint endpoint,
-                              HttpClientConfig httpConfig) {
+    public RegistryClientImpl(RegistryEndpoint endpoint, HttpClientConfig httpConfig) {
         this(endpoint, httpConfig, new AuthConfig(), null, ClientPlatformConfig.fromHost());
     }
 
-    public RegistryClientImpl(RegistryEndpoint endpoint,
-                              HttpClientConfig httpConfig,
-                              long defaultTokenTtlSeconds) {
+    public RegistryClientImpl(RegistryEndpoint endpoint, HttpClientConfig httpConfig, long defaultTokenTtlSeconds) {
         this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), null,
                 ClientPlatformConfig.fromHost());
     }
 
-    public RegistryClientImpl(RegistryEndpoint endpoint,
-                              HttpClientConfig httpConfig,
-                              long defaultTokenTtlSeconds,
-                              BlobPartialDownloadConfig rangeConfig) {
+    public RegistryClientImpl(RegistryEndpoint endpoint, HttpClientConfig httpConfig, long defaultTokenTtlSeconds,
+            BlobPartialDownloadConfig rangeConfig) {
         this(endpoint, httpConfig, new AuthConfig(defaultTokenTtlSeconds, null, null, null), rangeConfig,
                 ClientPlatformConfig.fromHost());
     }
 
-    public RegistryClientImpl(RegistryEndpoint endpoint,
-                              HttpClientConfig httpConfig,
-                              AuthConfig authConfig,
-                              BlobPartialDownloadConfig rangeConfig,
-                              ClientPlatformConfig manifestPlatform) {
+    public RegistryClientImpl(RegistryEndpoint endpoint, HttpClientConfig httpConfig, AuthConfig authConfig,
+            BlobPartialDownloadConfig rangeConfig, ClientPlatformConfig manifestPlatform) {
         this.endpoint = Objects.requireNonNull(endpoint);
         this.mapper = new ObjectMapper();
         AuthConfig effectiveAuthConfig = authConfig != null ? authConfig : new AuthConfig();
         this.jettyClient = HttpClientFactory.create(httpConfig, effectiveAuthConfig);
         this.http = new HttpExecutor(jettyClient, httpConfig);
-        this.authService = new AuthService(
-                http,
-                mapper,
-                new TokenCache(),
+        this.authService = new AuthService(http, mapper,
+                new TokenCache(effectiveAuthConfig.maxTokenCacheEntriesOrDefault()),
                 effectiveAuthConfig.defaultTokenTtlSeconds());
         ClientPlatformConfig platform = manifestPlatform != null ? manifestPlatform : ClientPlatformConfig.fromHost();
         this.manifestService = new ManifestService(http, authService, mapper, platform);
@@ -93,12 +84,8 @@ public final class RegistryClientImpl implements RegistryClient {
     @Override
     public BlobResult fetchConfig(String repository, Manifest manifest, File target) {
         String scope = pullScope(repository);
-        BlobRequest req = new BlobRequest(
-                repository,
-                manifest.config().digest(),
-                manifest.config().size(),
-                manifest.config().mediaType(),
-                new BlobRequest.RangeSpec.All());
+        BlobRequest req = new BlobRequest(repository, manifest.config().digest(), manifest.config().size(),
+                manifest.config().mediaType(), new BlobRequest.RangeSpec.All());
         return blobService.fetchBlob(endpoint, req, target, scope);
     }
 
@@ -121,31 +108,18 @@ public final class RegistryClientImpl implements RegistryClient {
         authService.getAuthHeader(endpoint, repository, scope).ifPresent(v -> headers.put("Authorization", v));
         String path = RegistryApi.tagListPath(repository);
         String query = buildTagQuery(n, last);
-        URI uri = HttpRequestBuilder.buildUri(
-                endpoint.scheme(),
-                endpoint.host(),
-                endpoint.port(),
-                path,
-                query);
+        URI uri = HttpRequestBuilder.buildUri(endpoint.scheme(), endpoint.host(), endpoint.port(), path, query);
         HttpResult<java.io.InputStream> resp = http.get(uri, headers);
         int status = resp.statusCode();
         if (status < 200 || status >= 300) {
-            throw new ClientException(
-                    new ClientError.Http(
-                            ClientError.HttpKind.BAD_STATUS,
-                            status,
-                            "Tag list failed"),
+            throw new ClientException(new ClientError.Http(ClientError.HttpKind.BAD_STATUS, status, "Tag list failed"),
                     "Tag list failed: " + status);
         }
         try (var body = resp.body()) {
             return mapper.readValue(body, TagList.class);
         } catch (IOException e) {
-            throw new ClientException(
-                    new ClientError.Parse(
-                            ClientError.ParseKind.MANIFEST,
-                            "Failed to parse tag list"),
-                    "Failed to parse tag list",
-                    e);
+            throw new ClientException(new ClientError.Parse(ClientError.ParseKind.MANIFEST, "Failed to parse tag list"),
+                    "Failed to parse tag list", e);
         }
     }
 
@@ -174,4 +148,3 @@ public final class RegistryClientImpl implements RegistryClient {
         return query.isEmpty() ? null : query.toString();
     }
 }
-

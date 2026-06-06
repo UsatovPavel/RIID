@@ -1,0 +1,24 @@
+{{- if .Values.kubeStateMetrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "riid-observer.labels" . | nindent 4 }}
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/component: exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: kube-state-metrics
+  ports:
+    - name: http-metrics
+      port: 8080
+      targetPort: http-metrics
+      protocol: TCP
+{{- end }}

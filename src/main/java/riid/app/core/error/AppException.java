@@ -34,4 +34,3 @@ public class AppException extends RuntimeException {
         return "APP_ERROR";
     }
 }
-

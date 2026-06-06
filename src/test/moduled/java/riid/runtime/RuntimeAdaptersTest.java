@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Tag("filesystem")
@@ -84,6 +85,12 @@ class RuntimeAdaptersTest {
         assertEquals("podman", new PodmanRuntimeAdapter().runtimeId());
         assertEquals("docker", new DockerRuntimeAdapter().runtimeId());
         assertEquals("porto", new PortoRuntimeAdapter().runtimeId());
+    }
+
+    @Test
+    void dockerKeepsArchiveImportPath() {
+        DockerRuntimeAdapter adapter = new DockerRuntimeAdapter();
+        assertFalse(adapter.prefersOciLayoutStreamImport());
     }
 
     @Test
@@ -170,18 +177,11 @@ class RuntimeAdaptersTest {
         String layerDigest = sha256(layerBytes);
         Files.write(blobs.resolve(layerDigest), layerBytes);
 
-        var manifest = new Manifest(
-                2,
-                "application/vnd.oci.image.manifest.v1+json",
-                new Descriptor(
-                        "application/vnd.oci.image.config.v1+json",
-                        "sha256:" + configDigest,
+        var manifest = new Manifest(2, "application/vnd.oci.image.manifest.v1+json",
+                new Descriptor("application/vnd.oci.image.config.v1+json", "sha256:" + configDigest,
                         configBytes.length),
-                List.of(new Descriptor(
-                        "application/vnd.oci.image.layer.v1.tar",
-                        "sha256:" + layerDigest,
-                        layerBytes.length))
-        );
+                List.of(new Descriptor("application/vnd.oci.image.layer.v1.tar", "sha256:" + layerDigest,
+                        layerBytes.length)));
         byte[] manifestBytes = mapper.writeValueAsBytes(manifest);
         String manifestDigest = sha256(manifestBytes);
         Files.write(blobs.resolve(manifestDigest), manifestBytes);
@@ -210,8 +210,7 @@ class RuntimeAdaptersTest {
 
     private static void runTar(Path archive, Path ociDir) throws IOException, InterruptedException {
         Process p = new ProcessBuilder("tar", "-cf", archive.toString(), "-C", ociDir.toString(), ".")
-                .redirectErrorStream(true)
-                .start();
+                .redirectErrorStream(true).start();
         int code = p.waitFor();
         if (code != 0) {
             String out;
@@ -292,6 +291,3 @@ class RuntimeAdaptersTest {
     }
 
 }
-
-
-

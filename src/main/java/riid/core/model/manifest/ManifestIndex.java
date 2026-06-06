@@ -13,15 +13,10 @@ import java.util.List;
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ManifestIndex(
-        @JsonProperty("schemaVersion") int schemaVersion,
+public record ManifestIndex(@JsonProperty("schemaVersion") int schemaVersion,
         @JsonProperty("mediaType") String mediaType,
-        @JsonProperty("manifests")
-        @JsonSetter(nulls = Nulls.AS_EMPTY)
-        List<ManifestRef> manifests
-) {
+        @JsonProperty("manifests") @JsonSetter(nulls = Nulls.AS_EMPTY) List<ManifestRef> manifests) {
     public ManifestIndex {
         manifests = manifests == null ? List.of() : List.copyOf(manifests);
     }
 }
-

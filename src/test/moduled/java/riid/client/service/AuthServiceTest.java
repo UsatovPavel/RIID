@@ -58,7 +58,8 @@ class AuthServiceTest {
     void throwsOnUnexpectedPingStatus() {
         http.enqueueHead(new HttpResult<>(500, HttpFields.EMPTY, null, URI.create("https://x")));
 
-        ClientException ex = assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "scope"));
+        ClientException ex = assertThrows(ClientException.class,
+                () -> service.getAuthHeader(endpoint, "repo", "scope"));
         assertTrue(ex.getMessage().contains("SECURITY:AUTH:UNEXPECTED_PING_STATUS"));
     }
 
@@ -67,7 +68,8 @@ class AuthServiceTest {
         HttpFields.Mutable headers = HttpFields.build();
         http.enqueueHead(new HttpResult<>(HttpStatus.UNAUTHORIZED_401, headers, null, URI.create("https://x")));
 
-        ClientException ex = assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "scope"));
+        ClientException ex = assertThrows(ClientException.class,
+                () -> service.getAuthHeader(endpoint, "repo", "scope"));
         assertTrue(ex.getMessage().contains("SECURITY:AUTH:MISSING_CHALLENGE"));
     }
 
@@ -79,7 +81,8 @@ class AuthServiceTest {
         http.enqueueGet(new HttpResult<>(HttpStatus.UNAUTHORIZED_401, HttpFields.EMPTY,
                 new ByteArrayInputStream(new byte[0]), URI.create("https://auth")));
 
-        ClientException ex = assertThrows(ClientException.class, () -> service.getAuthHeader(endpoint, "repo", "repo:pull"));
+        ClientException ex = assertThrows(ClientException.class,
+                () -> service.getAuthHeader(endpoint, "repo", "repo:pull"));
         assertTrue(ex.getMessage().contains("SECURITY:AUTH:TOKEN_ENDPOINT_FAILED"));
     }
 
@@ -90,8 +93,8 @@ class AuthServiceTest {
         http.enqueueHead(new HttpResult<>(HttpStatus.UNAUTHORIZED_401, pingHeaders, null, URI.create("https://x")));
 
         byte[] body = "{\"token\":\"abc\",\"expires_in\":5}".getBytes(StandardCharsets.UTF_8);
-        http.enqueueGet(new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY,
-                new ByteArrayInputStream(body), URI.create("https://auth")));
+        http.enqueueGet(new HttpResult<>(HttpStatus.OK_200, HttpFields.EMPTY, new ByteArrayInputStream(body),
+                URI.create("https://auth")));
 
         Optional<String> hdr = service.getAuthHeader(endpoint, "repo", "repo:pull");
 
@@ -137,4 +140,3 @@ class AuthServiceTest {
         }
     }
 }
-

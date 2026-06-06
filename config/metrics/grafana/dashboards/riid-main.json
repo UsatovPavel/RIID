@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Unsuccess rate, pipeline latency p50/p95, throughput SLO (tar ≥ 10 MiB). Layer byte volume over time: `increase(riid_dispatcher_layer_bytes_total[6h])` by `source` (time series). Traffic split panel: inter = Dragonfly scheduler BACK_TO_SOURCE + RIID `registry`; intra = scheduler REMOTE_PEER/p2p",
+  "description": "Unsuccess rate, pipeline latency p50/p95, throughput SLO (tar ≥ 10 MiB). Layer byte volume over time: `increase(riid_dispatcher_layer_bytes_total[6h])` by `source` (time series).",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -194,13 +194,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(riid_image_load_throughput_slo_bps_bucket[5m])) by (le))",
-          "legendFormat": "p95 throughput (tar ≥ 10 MiB)",
+          "expr": "histogram_quantile(0.95, sum(rate(riid_image_provide_throughput_slo_bps_bucket[5m])) by (le))",
+          "legendFormat": "p95 provide throughput (tar ≥ 10 MiB)",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Throughput p95 — SLO cohort (tar ≥ 10 MiB)",
+      "title": "Provide throughput p95 — SLO cohort (tar ≥ 10 MiB)",
       "type": "timeseries"
     },
     {

@@ -5,11 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * Runtime module configuration.
  */
-public record RuntimeConfig(
-        @JsonProperty("output") OutputConfig output,
-        @JsonProperty("dockerCmd") String dockerCmd,
-        @JsonProperty("maxTasksCommandExecutor") Integer maxTasksCommandExecutor
-) {
+public record RuntimeConfig(@JsonProperty("output") OutputConfig output, @JsonProperty("dockerCmd") String dockerCmd,
+        @JsonProperty("maxTasksCommandExecutor") Integer maxTasksCommandExecutor) {
     public static final String DEFAULT_DOCKER_BIN = "docker";
 
     public OutputConfig outputConfigOrDefault() {
@@ -24,5 +21,3 @@ public record RuntimeConfig(
         return maxTasksCommandExecutor;
     }
 }
-
-

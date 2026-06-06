@@ -48,8 +48,7 @@ class RegistryClientImplListTagsTest {
         String body = String.format("{\"name\":\"%s\",\"tags\":[\"latest\",\"edge\"]}", REPO);
         server.createContext(V2 + REPO + "/tags/list", new JsonHandler(body, 200));
 
-        try (RegistryClient client = new RegistryClientImpl(
-                new RegistryEndpoint("http", "localhost", port, null),
+        try (RegistryClient client = new RegistryClientImpl(new RegistryEndpoint("http", "localhost", port, null),
                 new HttpClientConfig())) {
             TagList list = client.listTags(REPO, null, null);
             assertEquals(REPO, list.name());
@@ -62,8 +61,7 @@ class RegistryClientImplListTagsTest {
         server.createContext(V2, new JsonHandler("", 200));
         server.createContext(V2 + REPO + "/tags/list", new JsonHandler("{}", 503));
 
-        try (RegistryClient client = new RegistryClientImpl(
-                new RegistryEndpoint("http", "localhost", port, null),
+        try (RegistryClient client = new RegistryClientImpl(new RegistryEndpoint("http", "localhost", port, null),
                 new HttpClientConfig())) {
             assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
         }
@@ -74,8 +72,7 @@ class RegistryClientImplListTagsTest {
         server.createContext(V2, new JsonHandler("", 200));
         server.createContext(V2 + REPO + "/tags/list", new JsonHandler("{not-json", 200));
 
-        try (RegistryClient client = new RegistryClientImpl(
-                new RegistryEndpoint("http", "localhost", port, null),
+        try (RegistryClient client = new RegistryClientImpl(new RegistryEndpoint("http", "localhost", port, null),
                 new HttpClientConfig())) {
             assertThrows(ClientException.class, () -> client.listTags(REPO, null, null));
         }
@@ -100,4 +97,3 @@ class RegistryClientImplListTagsTest {
         }
     }
 }
-

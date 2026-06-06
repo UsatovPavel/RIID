@@ -8,8 +8,10 @@ import java.util.Map;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.AfterEach;
+
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,13 +61,7 @@ class ManifestServiceHeadTest {
     @Test
     void headSuccess() throws Exception {
         setupServer(exchange -> {
-            respond(
-                    exchange,
-                    200,
-                    Map.of(
-                            "Docker-Content-Digest", "sha256:abc",
-                            "Content-Length", "5"),
-                    "");
+            respond(exchange, 200, Map.of("Docker-Content-Digest", "sha256:abc", "Content-Length", "5"), "");
         });
         ManifestService svc = manifestService();
         assertTrue(svc.headManifest(endpoint(), "repo", "latest", "scope").isPresent());
@@ -100,4 +96,3 @@ class ManifestServiceHeadTest {
         }
     }
 }
-

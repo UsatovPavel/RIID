@@ -3,6 +3,8 @@ client:
   http:
     connectTimeout: "PT5S"
     requestTimeout: "PT30M"
+    imageTimeoutMin: "PT5M"
+    imageTimeoutMax: "PT30M"
     maxRetries: 2
     initialBackoff: "PT0.2S"
     maxBackoff: "PT2S"
@@ -16,6 +18,7 @@ client:
     retryWithoutRangeOnUnsatisfiableRange: true
   auth:
     defaultTokenTtlSeconds: 300
+    maxTokenCacheEntries: 4096
     certPath: null
     keyPath: null
     caPath: null
@@ -34,5 +37,7 @@ app:
     metricsHost: "0.0.0.0"
     metricsPort: 9090
     maxConcurrentPulls: 32
+    maxRequestBodyBytes: 8192
     requestTimeout: "PT30M"
     overloadPolicy: REJECT
+    maxCacheBytes: 10737418240 #10 GB

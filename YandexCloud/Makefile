@@ -23,7 +23,7 @@ GRAFANA_REMOTE_PORT ?= 3000
 
 YC_SSH = yc compute ssh --id $(YC_INSTANCE_ID) --identity-file $(YC_IDENTITY) --login $(YC_LOGIN)
 
-.PHONY: connect help bootstrap-on-server push-secrets-on-server install-on-server minikube-start-on-server test-sequential-30 test-concurrent-30-b2 test-scenario-a test-scenario-c fetch-daemon-logs grafana-tunnel
+.PHONY: connect help bootstrap-on-server push-secrets-on-server install-on-server minikube-start-on-server test-sequential-30 test-concurrent-30-b2 test-scenario-a test-scenario-c fetch-daemon-logs grafana-tunnel autonomic
 
 help:
 	@echo "connect                  — с хоста: SSH на ВМ"
@@ -132,3 +132,12 @@ test-scenario-c:
 		'set -a; [ -f config/.env ] && . config/.env; set +a' \
 		'./gradlew performanceTest --tests riid.performance.parrallel.cache.Daemon30ImagesWarmRiidPodmanPruneConcurrentPullTest' \
 		| $(YC_SSH) -- bash -s
+
+
+autonomic:
+	cd ~/RIID && \
+	set -a; [ -f config/.env ] && . config/.env; set +a; \
+	nohup ./gradlew performanceTest \
+		--tests riid.performance.sequentially.manyimages.Daemon30ImagesSequentialPullTest \
+		>> _scenario_sequential-30.txt 2>&1 & \
+	echo $$!

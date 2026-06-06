@@ -1,10 +1,13 @@
 import com.github.spotbugs.snom.SpotBugsTask
+import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.plugins.quality.Checkstyle
 import org.gradle.api.plugins.quality.CheckstyleExtension
 import org.gradle.api.plugins.quality.Pmd
+import org.gradle.kotlin.dsl.the
 import org.gradle.testing.jacoco.tasks.JacocoReport
 
 val skipQuality = project.hasProperty("skipQuality")
+val sourceSets = the<SourceSetContainer>()
 
 private fun isGeneratedPath(path: String): Boolean =
     path.replace('\\', '/').contains("/generated/")
@@ -41,6 +44,16 @@ tasks.withType(SpotBugsTask::class).configureEach {
     }
 }
 
+// Keep test source sets untouched: add testFixtures only to SpotBugs aux classpath.
+val testFixturesOutput = sourceSets.named("testFixtures").map { it.output }
+tasks.withType(SpotBugsTask::class).matching { it.name == "spotbugsIntegrationTest" }.configureEach {
+    dependsOn("testFixturesClasses")
+    auxClassPaths.from(testFixturesOutput)
+}
+tasks.withType(SpotBugsTask::class).matching { it.name == "spotbugsPerformanceTest" }.configureEach {
+    dependsOn("testFixturesClasses")
+    auxClassPaths.from(testFixturesOutput)
+}
 tasks.named("jacocoTestReport", JacocoReport::class) {
     enabled = !skipQuality
     dependsOn(tasks.named("test")) // jacoco runs only when explicitly invoked, but needs tests

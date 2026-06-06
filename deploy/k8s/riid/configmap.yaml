@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: riid-config
+  namespace: riid-system
+data:
+  config.yaml: |
+    client:
+      http:
+        connectTimeout: "PT5S"
+        requestTimeout: "PT30M"
+        maxRetries: 2
+        initialBackoff: "PT0.2S"
+        maxBackoff: "PT2S"
+        backoffExponentBase: 2
+        retryIdempotentOnly: true
+        userAgent: "riid-client"
+        followRedirects: true
+      partialDownloading:
+        mode: AUTO
+        partialDigestValidation: SKIP
+        retryWithoutRangeOnUnsatisfiableRange: true
+      auth:
+        defaultTokenTtlSeconds: 300
+        certPath: null
+        keyPath: null
+        caPath: null
+      registries:
+        - scheme: "https"
+          host: "registry-1.docker.io"
+          port: -1
+          credentials: null
+    dispatcher:
+      maxConcurrentRegistry: 4
+    app:
+      daemon:
+        unixSocketPath: "/tmp/riid.sock"
+        metricsHost: "0.0.0.0"
+        metricsPort: 9090
+        maxConcurrentPulls: 32
+        requestTimeout: "PT30M"
+        overloadPolicy: REJECT
+    p2p:
+      dragonfly:
+        enabled: true
+        dfdaemonAddr: "unix:///var/run/dragonfly/dfdaemon.sock"
+        requestTimeout: "PT30S"
+        maxRetries: 2
