@@ -1,6 +1,0 @@
-# Merged into RIID config client.registries by render-riid-config-secret.sh (--profile dockerhub).
-registries:
-  - scheme: "https"
-    host: "registry-1.docker.io"
-    port: -1
-    credentials: null
