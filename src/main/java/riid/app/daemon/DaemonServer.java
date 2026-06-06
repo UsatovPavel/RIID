@@ -18,7 +18,6 @@ import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
-import org.eclipse.jetty.util.thread.VirtualThreadPool;
 
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 
@@ -26,7 +25,9 @@ import riid.app.cli.CliApplication;
 import riid.app.core.config.AppConfig;
 import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
+import riid.app.daemon.handler.HealthHttpHandler;
 import riid.app.daemon.handler.MetricsHttpHandler;
+import riid.app.daemon.handler.NotFoundHttpHandler;
 import riid.app.daemon.handler.PullHttpHandler;
 import riid.app.daemon.metrics.DaemonPullHttpMetrics;
 import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
@@ -59,7 +60,8 @@ public final class DaemonServer {
             throw new IllegalArgumentException("Only REJECT overload policy is supported");
         }
 
-        this.server = new Server(new VirtualThreadPool());
+        // Keep Jetty on its default server pool. Pull work still runs on virtual threads below.
+        this.server = new Server();
         this.pullExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.unixSocketPath = Path.of(unixSocketPath);
 
@@ -81,6 +83,8 @@ public final class DaemonServer {
                 maxRequestBodyBytes, requestTimeout, pullExecutor, new DaemonPullHttpMetrics(prometheusRegistry),
                 new ImageLoadPipelineMetrics(prometheusRegistry)));
         root.addHandler(new MetricsHttpHandler(METRICS_CONNECTOR_NAME, prometheusRegistry));
+        root.addHandler(new HealthHttpHandler());
+        root.addHandler(new NotFoundHttpHandler());
         server.setHandler(root);
     }
 

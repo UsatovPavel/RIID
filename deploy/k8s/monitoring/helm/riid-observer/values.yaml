@@ -1,0 +1,21 @@
+namespace: riid-system
+
+victoriaMetrics:
+  image: victoriametrics/victoria-metrics:latest
+  pullPolicy: IfNotPresent
+
+grafana:
+  image: grafana/grafana-oss:latest
+  pullPolicy: IfNotPresent
+  adminUser: admin
+  adminPassword: admin
+
+monitoringNodeAffinity:
+  required: true
+
+kubeStateMetrics:
+  enabled: true
+  image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.14.0
+  pullPolicy: IfNotPresent
+  # Without this, kube_pod_labels omits pod labels and Grafana joins (app.kubernetes.io/name) return no data.
+  metricLabelsAllowlist: "pods=[app.kubernetes.io/name]"

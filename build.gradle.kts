@@ -61,6 +61,8 @@ idea {
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
     archiveFileName.set("riid.jar")
+    // gRPC uses ServiceLoader (META-INF/services/*).
+    mergeServiceFiles()
     manifest {
         attributes("Main-Class" to "riid.app.cli.CliApplication")
     }

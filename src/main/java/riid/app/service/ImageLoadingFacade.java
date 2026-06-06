@@ -40,6 +40,7 @@ import riid.dispatcher.metrics.DispatcherLayerSourceMetrics;
 import riid.dispatcher.metrics.MicrometerDispatcherLayerSourceMetrics;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
+import riid.p2p.dragonfly.ChallengeTokenAuthProvider;
 import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
@@ -251,16 +252,51 @@ public final class ImageLoadingFacade implements AutoCloseable {
         }
         Path tempDir = appConfig != null ? appConfig.tempDirectoryPath() : null;
         List<String> allowedRegistries = appConfig != null ? appConfig.allowedRegistriesOrEmpty() : List.of();
-        P2PExecutor p2p = config.p2p() != null && config.p2p().dragonfly() != null
-                && config.p2p().dragonfly().enabledOrDefault()
-                        ? new DragonflyGrpcP2PExecutor(endpoint, fs, config.p2p().dragonfly())
-                        : new P2PExecutor.NoOp();
+        P2PExecutor p2p = new P2PExecutor.NoOp();
+        ChallengeTokenAuthProvider challengeTokenAuthProvider = null;
+        if (config.p2p() != null
+                && config.p2p().dragonfly() != null
+                && config.p2p().dragonfly().enabledOrDefault()) {
+            challengeTokenAuthProvider = new ChallengeTokenAuthProvider(httpConfig, authConfig);
+            p2p = new DragonflyGrpcP2PExecutor(
+                    endpoint,
+                    config.p2p().dragonfly(),
+                    challengeTokenAuthProvider);
+        }
         DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
                 ? DispatcherLayerSourceMetrics.NOOP
                 : new MicrometerDispatcherLayerSourceMetrics(meterRegistry);
+        ChallengeTokenAuthProvider finalChallengeTokenAuthProvider = challengeTokenAuthProvider;
         return new ImageLoadingFacade(
                 new SimpleRequestDispatcher(client, cache, p2p, config.dispatcher(), fs, layerMetrics),
-                new RuntimeRegistry(runtimes), client, fs, tempDir, allowedRegistries, cache::close, p2p::close);
+                new RuntimeRegistry(runtimes),
+                client,
+                fs,
+                tempDir,
+                allowedRegistries,
+                () -> {
+                    Exception error = null;
+                    try {
+                        cache.close();
+                    } catch (Exception e) {
+                        error = e;
+                    }
+                    if (finalChallengeTokenAuthProvider != null) {
+                        try {
+                            finalChallengeTokenAuthProvider.close();
+                        } catch (Exception e) {
+                            if (error == null) {
+                                error = e;
+                            } else {
+                                error.addSuppressed(e);
+                            }
+                        }
+                    }
+                    if (error != null) {
+                        throw error;
+                    }
+                },
+                p2p::close);
     }
 
     private void ensureRegistryAllowed(String registry) {

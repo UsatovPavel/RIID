@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Tar size bucket load counts, and successful pipeline latency p50/p95 per `category` (histogram of `riid_image.load`). Bucket order uses recording rule `riid:image_load:tar_category_sortidx` (see `config/metrics/prometheus-rules/riid-recording-rules.yaml` + vmalert).",
+  "description": "Tar size bucket load counts, and successful pipeline latency p50/p95 per `category` (histogram of `riid_image.load`). Bucket order uses Micrometer tag `sort_idx` on RIID metrics.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -22,7 +22,7 @@
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "Successful loads with known tar size: `increase` count per `category` over the dashboard range. Uses **Bar chart** (not bar gauge) so all bars share one Y-axis from 0 to the global max count — avoids per-series max where every column looked 100% tall. **X order**: multiply by `riid:image_load:tar_category_sortidx` (`sort_idx` via recording rule), then hide `sort_idx` in transform.",
+      "description": "Successful loads with known tar size: `increase` count per `category` over the dashboard range. **Bar chart** shares one Y-axis max. **Sort**: `sort_idx` label from RIID (`ImageSizeBucket`), hidden after sort.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "fixed", "fixedColor": "blue" },
@@ -77,7 +77,7 @@
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(riid_image_load_tar_size_category_total[$__range])) by (category) * on(category) group_left(sort_idx) riid:image_load:tar_category_sortidx",
+          "expr": "sum(increase(riid_image_load_tar_size_category_total[$__range])) by (category, sort_idx)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -114,7 +114,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "victoriametrics" },
-      "description": "Successful loads only (`result=success`), excluding `unknown` / `n_a`. Percentiles from Micrometer timer histogram (`riid_image_load_seconds_bucket`); aggregation window in query `[5m]` relative to each evaluation instant. Rows sorted by `sort_idx` via join with recording rule `riid:image_load:tar_category_sortidx`.",
+      "description": "Successful loads only (`result=success`), excluding `unknown` / `n_a`. Percentiles from `riid_image_load_seconds_bucket`. Rows sorted by **`sort_idx`** from RIID timer metrics.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -151,7 +151,7 @@
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_quantile(0.50, sum(rate(riid_image_load_seconds_bucket{result=\"success\",category!~\"unknown|n_a\"}[5m])) by (le, category))",
+          "expr": "histogram_quantile(0.50, sum(rate(riid_image_load_seconds_bucket{result=\"success\",category!~\"unknown|n_a\"}[5m])) by (le, category, sort_idx))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -162,7 +162,7 @@
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(riid_image_load_seconds_bucket{result=\"success\",category!~\"unknown|n_a\"}[5m])) by (le, category))",
+          "expr": "histogram_quantile(0.95, sum(rate(riid_image_load_seconds_bucket{result=\"success\",category!~\"unknown|n_a\"}[5m])) by (le, category, sort_idx))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -173,7 +173,7 @@
           "datasource": { "type": "prometheus", "uid": "victoriametrics" },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "riid:image_load:tar_category_sortidx",
+          "expr": "sum(riid_image_load_tar_size_category_total) by (category, sort_idx)",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",

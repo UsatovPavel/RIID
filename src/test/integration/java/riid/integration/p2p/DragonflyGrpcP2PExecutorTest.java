@@ -82,7 +82,7 @@ class DragonflyGrpcP2PExecutorTest {
                 Credentials.basic("riid-user", "riid-secret"));
         HostFilesystem fs = new NioHostFilesystem();
         DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
-        try (DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, fs, config);
+        try (DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, config);
                 TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                 RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {
             var warmup = p2p.fetch(REPO, ImageDigest.parse(digest), payload.length, CacheMediaType.OCTET_STREAM);

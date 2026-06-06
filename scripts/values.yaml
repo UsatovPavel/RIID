@@ -23,11 +23,26 @@ client:
   image:
     repository: dragonflyoss/client
     tag: latest
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: riid.monitoring
+                operator: DoesNotExist
   metrics:
     enable: true
   dfinit:
     enable: false
-  # hostPath /var/run/dragonfly уже в чарте по умолчанию — сокет на хосте при --driver=none
+  # Ensure dfdaemon output path exists for RIID outputPath=/var/run/dragonfly/output/p2p-*.bin
+  extraVolumes:
+    - name: dragonfly-output
+      hostPath:
+        path: /var/run/dragonfly/output
+        type: DirectoryOrCreate
+  extraVolumeMounts:
+    - name: dragonfly-output
+      mountPath: /var/run/dragonfly/output
 redis:
   replica:
     replicaCount: 1

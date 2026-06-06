@@ -14,27 +14,14 @@ import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
 
 /**
- * Turns pull failures from the image loading path and registry client into HTTP
- * status and JSON for the daemon POST /pull endpoint.
+ * Turns pull failures from the image loading path and registry client into HTTP status and JSON for the daemon
+ * POST /pull endpoint.
  * <p>
- * Registry HTTP 404 on manifest or blob becomes HTTP 404 with code
- * registry_not_found and a single fixed user-facing message.
- * <p>
- * Other registry 4xx (401, 403, 409, …) still become HTTP 404 with that same
- * message, but a different JSON code (registry_response_unauthorized,
- * registry_response_forbidden, registry_response_other) so callers can tell
- * cases apart without exposing the registry line status.
- * <p>
- * Registry blocked by allowedRegistries becomes HTTP 403 with
- * registry_not_allowed. Missing runtime adapter becomes HTTP 422 with
- * adapter_not_found.
- *
- * <p>
- * Manifest list resolution that cannot satisfy the configured platform becomes
- * HTTP 422 with manifest_not_satisfiable.
- * <p>
- * Registry 5xx is not handled here; the handler responds with HTTP 500 and
- * pull_failed.
+ * Registry HTTP 404 on manifest or blob becomes HTTP 404 with code registry_not_found and a fixed message.
+ * Other registry 4xx (401, 403, 409, …) are normalized to the same user message but distinct JSON codes.
+ * Registry blocked by allowedRegistries becomes HTTP 403 with registry_not_allowed; missing runtime adapter is
+ * HTTP 422 with adapter_not_found; manifest platform mismatch is HTTP 422 with manifest_not_satisfiable.
+ * Registry 5xx is not handled here and remains a handler-level HTTP 500 pull_failed.
  */
 public final class DaemonPullErrorMapper {
 

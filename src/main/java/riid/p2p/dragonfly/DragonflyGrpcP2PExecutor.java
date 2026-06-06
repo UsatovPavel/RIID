@@ -18,7 +18,6 @@ import java.util.UUID;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
-import riid.core.fs.HostFilesystem;
 import riid.core.fs.PathSupport;
 
 /**
@@ -32,19 +31,37 @@ import riid.core.fs.PathSupport;
 public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final RegistryEndpoint endpoint;
     private final DragonflyConfig config;
+    private final RegistryAuthProvider authProvider;
     private final PullerFactory pullerFactory;
     private volatile Puller sharedPuller;
     private volatile boolean closed;
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, HostFilesystem fs, DragonflyConfig config) {
-        this(endpoint, fs, config, cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
+                                    DragonflyConfig config) {
+        this(endpoint, config, RegistryAuthProvider.passthrough(),
+                cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
     }
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, HostFilesystem fs, DragonflyConfig config,
-            PullerFactory pullerFactory) {
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
+                                    DragonflyConfig config,
+                                    RegistryAuthProvider authProvider) {
+        this(endpoint, config, authProvider,
+                cfg -> new ExternalDragonflyPuller(createPuller(cfg)));
+    }
+
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
+                                    DragonflyConfig config,
+                                    PullerFactory pullerFactory) {
+        this(endpoint, config, RegistryAuthProvider.passthrough(), pullerFactory);
+    }
+
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
+                                    DragonflyConfig config,
+                                    RegistryAuthProvider authProvider,
+                                    PullerFactory pullerFactory) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
-        Objects.requireNonNull(fs, "fs");
         this.config = Objects.requireNonNull(config, "config");
+        this.authProvider = Objects.requireNonNull(authProvider, "authProvider");
         this.pullerFactory = Objects.requireNonNull(pullerFactory, "pullerFactory");
     }
 
@@ -65,7 +82,12 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         } else {
             outputPath = PathSupport.temporaryPath("p2p-", ".bin");
         }
-        RegistryPullRequest request = RegistryPullRequestMapper.map(endpoint, repository, digest, outputPath);
+        RegistryPullRequest request = RegistryPullRequestMapper.map(
+                endpoint,
+                repository,
+                digest,
+                outputPath,
+                authProvider.resolve(endpoint, repository));
         Puller puller = getOrCreatePuller();
         try {
             PullResult result = puller.pull(request).join();

@@ -10,8 +10,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
 /**
- * Micrometer timers for {@code POST /pull} on the daemon control plane (latency
- * and outcome by HTTP status / JSON code).
+ * Micrometer timers for {@code POST /pull} on the daemon control plane (latency and outcome by HTTP status / JSON
+ * code).
  */
 public final class DaemonPullHttpMetrics {
 
