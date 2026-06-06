@@ -30,9 +30,16 @@ ifeq ($(DATASET_FILE),)
   endif
 endif
 
-.PHONY: run rolling-riid recreate-riid rolling-podman recreate-podman clear-cluster-cache summarize
+.PHONY: run rolling-riid recreate-riid rolling-podman recreate-podman clear-cluster-cache delete-local-registry-dataset debug-registry-node summarize
 
 CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-all-riid-pods.sh
+DELETE_REGISTRY_SCRIPT := $(PERF_DIR)/registry/delete-dataset-from-local-registry.sh
+# Удаление тегов из local-registry по TSV (см. delete-dataset-from-local-registry.sh).
+# DATASET / DATASET_FILE — как у цели run.
+# REGISTRY_URL — если пусто, делается port-forward svc/local-registry → 127.0.0.1:5000 на время скрипта.
+REGISTRY_URL ?=
+DELETE_DATASET_RUN_GC ?= 0
+DELETE_DATASET_DRY_RUN ?= 0
 
 run:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -77,6 +84,42 @@ clear-cluster-cache:
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	bash "$(CLEAR_CLUSTER_SCRIPT)"
+
+delete-local-registry-dataset:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	REG_URL="$(strip $(REGISTRY_URL))"; \
+	if [ -z "$$REG_URL" ]; then \
+	  kubectl -n registry-system port-forward svc/local-registry 5000:5000 >/dev/null 2>&1 & \
+	  PF=$$!; \
+	  trap 'kill $$PF 2>/dev/null || true' EXIT INT TERM; \
+	  sleep 2; \
+	  REG_URL=http://127.0.0.1:5000; \
+	fi; \
+	REGISTRY_URL="$$REG_URL" \
+	DATASET_FILE="$(DATASET_FILE)" \
+	DELETE_DATASET_RUN_GC="$(DELETE_DATASET_RUN_GC)" \
+	DELETE_DATASET_DRY_RUN="$(DELETE_DATASET_DRY_RUN)" \
+	bash "$(DELETE_REGISTRY_SCRIPT)"
+
+# Имя ноды registry и свободное место на хосте (kubectl debug + df /host), без SSH.
+debug-registry-node:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)" >&2; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	NODE=$$(kubectl get nodes -l riid.registry=true -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
+	if [ -z "$$NODE" ]; then \
+	  NODE=$$(kubectl -n registry-system get pod -l app.kubernetes.io/name=local-registry -o jsonpath='{.items[0].spec.nodeName}' 2>/dev/null); \
+	fi; \
+	if [ -z "$$NODE" ]; then \
+	  NODE=$$(kubectl -n registry-system get pod -o wide --no-headers 2>/dev/null | awk '$$1 ~ /^local-registry-/ { print $$7; exit }'); \
+	fi; \
+	[ -n "$$NODE" ] || { echo "debug-registry-node: cannot resolve node (riid.registry=true, local-registry pod, or name ^local-registry-)" >&2; exit 1; }; \
+	printf '%s\n' "node=$$NODE"; \
+	kubectl debug "node/$$NODE" -i --image=busybox:1.36 -- sh -c 'df -h /host 2>/dev/null || df -h; echo ""; df -hi /host 2>/dev/null || df -hi'
 
 # Сводка T_riid / T_podman / ratio / success rate по двум runner-CSV (см. summarize/summarize-riid-vs-podman.sh).
 # SUMMARY_OUT=path — записать в файл; иначе только stdout.

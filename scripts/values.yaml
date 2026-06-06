@@ -36,11 +36,17 @@ client:
     enable: false
   # Ensure dfdaemon output path exists for RIID outputPath=/var/run/dragonfly/output/p2p-*.bin
   extraVolumes:
+    - name: dragonfly-run-tmpfs
+      emptyDir:
+        medium: Memory
+        sizeLimit: 2Gi
     - name: dragonfly-output
       hostPath:
         path: /var/run/dragonfly/output
         type: DirectoryOrCreate
   extraVolumeMounts:
+    - name: dragonfly-run-tmpfs
+      mountPath: /run/dragonfly
     - name: dragonfly-output
       mountPath: /var/run/dragonfly/output
 redis:

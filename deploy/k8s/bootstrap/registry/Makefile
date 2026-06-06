@@ -22,6 +22,7 @@ DRAGONFLY_SELECTEL_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-selecte
 .PHONY: secret-config-riid registry-dockerhub registry-selectel registry-local registry-apply-profile \
 	registry-apply-test-profile \
 	install-local-registry wait-local-registry init-worker-tooling-image load-performance-registry-dataset \
+	calc-worker-to-worker-speed \
 	init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental \
 	dragonfly-dockerhub-pull-secret dragonfly-selectel-registry-pull-secret
 
@@ -187,6 +188,17 @@ load-performance-registry-dataset:
 	echo "load-performance-registry-dataset: REGISTRY_LOADER_IMAGE=$$LOADER_IMG" >&2; \
 	DATASET_FILE="$(PERF_REGISTRY_DATASET)" REGISTRY_LOADER_IMAGE="$$LOADER_IMG" \
 	  bash "$(K8S)/performance/registry/load-dataset-into-local-registry.sh"
+
+calc-worker-to-worker-speed:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	TEST_NAMESPACE="$(TEST_NAMESPACE)" FILE_SIZE_MB="$(FILE_SIZE_MB)" ITERATIONS="$(ITERATIONS)" \
+	SERVER_IMAGE="$(SERVER_IMAGE)" CLIENT_IMAGE="$(CLIENT_IMAGE)" SERVICE_PORT="$(SERVICE_PORT)" \
+	WAIT_TIMEOUT="$(WAIT_TIMEOUT)" KEEP_RESOURCES="$(KEEP_RESOURCES)" \
+	SERVER_WARMUP_RETRIES="$(SERVER_WARMUP_RETRIES)" SERVER_WARMUP_SLEEP_SEC="$(SERVER_WARMUP_SLEEP_SEC)" \
+	bash "$(K8S)/performance/registry/calc-worker-to-worker-traffic-speed.sh"
 
 init-performance-registry-images:
 	@"$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
