@@ -1,10 +1,66 @@
 ## deploy/k8s
 
+## Quickstart
+## Install cluster
+make -C deploy/k8s/bootstrap install-all
+## Install local registry
+make -C deploy/k8s/bootstrap/registry registry-apply-profile
+make -C deploy/k8s/bootstrap/registry install-local-registry
+make -C deploy/k8s/bootstrap/registry wait-local-registry
+make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset
+## Testing
+make -C deploy/k8s/performance clear-cluster-cache
+make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid
+make -C deploy/k8s/performance summarize
+
+## Change test registry_provider:
+Change config.yaml
+Generate test dataset.
+make -C deploy/k8s/providers generate-registry-image-lists
+
 Kubernetes manifests for **RIID** + **Dragonfly** (same Helm values as CI: root `scripts/values.yaml`). One Dragonfly client only—in `dragonfly-system`; do not add dfdaemon in `riid-system`. Java-side notes: **internalDocs/moduledocs/**.
+
+Image truth lives in **`config/imagelist/dockerhub.yaml`**; **`mapper-common.sh`** + **`imagelist_emit_overlays.py`** produce **`selectel.yaml`** / **`local.yaml`**. On the workstation, **`deploy/k8s/providers/`** runs overlays, datasets, and **`provider-apply`**, which copies `src/` (+ optional `performance/`) into **`.resolved/`** and resolves logical `image:` keys from the catalog (`.resolved/` is gitignored).
+
+## Scripts architecture
+```mermaid
+flowchart TB
+  subgraph SE["Cluster bootstrap (kubeconfig, registry ops)"]
+    MK[bootstrap/Makefile]
+    REG[bootstrap/registry mirrors & scripts]
+    CFG[cluster kubeconfig]
+    REG ~~~ CFG
+  end
+
+  MK --> DF["src/dragonfly/"]
+  MK --> MO["src/monitoring/"]
+  MK --> STO["src/storage/"]
+  MK --> PERF["performance/"]
+
+  BASE["Cluster rollout"]
+
+  MK -.-> BASE
+  BASE -. "performance" .-> PERF
+```
+
+### Env
+Under **`deploy/k8s/config/`** (see **`config/.env.example`**):
+```env
+RIID_DOCKERHUB_USER=
+RIID_DOCKERHUB_TOKEN=
+RIID_SELECTEL_USER=
+RIID_SELECTEL_TOKEN=
+```
 
 ### Layout
 
-`namespace.yaml` · `riid/` (DaemonSet, ConfigMap, Service, `.env` → Secret) · `dragonfly/install-dragonfly.sh` · `storage/local-path-storage.yaml` (optional default SC) · `monitoring/worker/` (vmagent) · `monitoring/observer/` (VictoriaMetrics, Grafana) · **`Selectel/Makefile`** — deploy commands below.
+| Path | Role | Notes |
+|------|------|------|
+| `src/` | Cluster manifests and Helm charts (Dragonfly installer, optional default storage class, RIID workload, vmagent worker, observer chart) | Logical `image:` keys; not applied directly until resolved |
+| `config/` | Environment and catalogs | `config.yaml`, `imagelist/`, `.env` (registry credentials on the workstation) |
+| `providers/` | Generation and resolution | Builds imagelist overlays, runs `provider-apply` into `.resolved/` |
+| `bootstrap/` | Deploy entrypoint | Main `Makefile` drives kubectl/helm; `bootstrap/registry/` handles registry profiles, secrets, mirrors, perf helpers (`SELECTEL_DIR` in scripts is a legacy name for this directory) |
+| `.resolved/` | Materialized tree | Gitignored copy of `src/` (and related paths) with concrete image references—what kubectl and Helm actually use |
 
 ### Flow
 
@@ -24,18 +80,20 @@ RIID and the Helm Dragonfly client run on workers; node `riid.monitoring=true` h
 
 ### Deployment
 
-**Kubeconfig:** `deploy/k8s/Selectel/serverConfig.yaml` by default; override with `CONFIG_FILE=…` on every `make -C deploy/k8s/Selectel …`.
+**Kubeconfig:** Bootstrap reads `deploy/k8s/providers/cluster/Selectel/serverConfig.yaml` by default (copy from `serverConfig.example.yaml` there if missing); override with `CONFIG_FILE` on each `make -C deploy/k8s/bootstrap …` invocation.
 
-**Full sequence (Selectel/OpenStack default SC path):**  
-`make -C deploy/k8s/Selectel install-all` — invokes `storage-default`, `mark-monitoring-node-auto`, `install-dragonfly`, `install-riid`, `wait-riid-ready`, `install-metrics-collector`, `wait-metrics-collector`, `install-riid-runtimes`, `install-smoke-utils`.
+**Resolved manifests:** Sources under `src/` keep abstract image references. `provider-apply` writes a `.resolved/` tree with real digests/tags so kubectl and Helm stay reproducible. RIID, metrics, observer install paths run that resolution for you; if you apply YAML by hand, run the bootstrap target that refreshes Kubernetes manifests first. Helm values for the observer chart and Dragonfly (e.g. Selectel registry profile) come from the same resolved material—generate overlays on the workstation before rollout so registry-specific Helm snippets exist.
 
-**Granular (same order if not using `install-all`):**  
-`storage-default` · `mark-monitoring-node-auto` (`MONITORING_NODE=<node>` optional) · `install-dragonfly` · `install-riid` · `wait-riid-ready` · `install-metrics-collector` · `wait-metrics-collector` · `install-riid-runtimes` · `install-smoke-utils`.
+**Full rollout:** `make -C deploy/k8s/bootstrap install-all` walks the happy path for a Selectel/OpenStack cluster with the default storage class: ensure storage and node labels suit Dragonfly and the monitoring VM, install Dragonfly then RIID, wait until RIID is healthy and tooling checks pass, bring up VictoriaMetrics scraping and the Grafana observer stack, then wait until that observer is ready. Optional local registry mirroring and dataset loads are handled from `bootstrap/registry/` when you need them.
 
-**Registry credentials:** put `deploy/k8s/riid/.env` (see `riid/.env.example`); `install-riid` runs `secret-config-riid` (Docker Hub profile) when the file exists. Switch registry in-cluster: `make -C deploy/k8s/Selectel registry-dockerhub` or `registry-selectel`; updates `secret-config-riid` flow uses `riid/registry/*.yaml` profiles.
+**Step-by-step:** You can run the same phases individually via `deploy/k8s/bootstrap/Makefile` (storage validation and node labeling, Dragonfly, RIID + waits/verification, metrics, observer chart sync/install/wait) instead of `install-all`.
 
-**Smoke pull:** `make -C deploy/k8s/Selectel smoke-download` — `SMOKE_REPOSITORY` — имя как на Docker Hub (default `library/jobber`). Для Selectel зеркала: `make init-performance-registry-images`, затем `SMOKE_REGISTRY_TARGET=selectel` (`deploy/k8s/Selectel/registry/performance-registry-smoke-map.tsv`).
+**Registry lists on the workstation:** From `deploy/k8s/providers/`, regenerate imagelist overlays and registry image-list artifacts whenever the catalog changes; dataset inclusion follows `test_registry_provider` (and related keys) in `config.yaml`.
 
-**Observer stack** (after labeling the monitoring node): not in Makefile—`kubectl apply -f deploy/k8s/monitoring/observer/victoria-metrics.yaml -f deploy/k8s/monitoring/observer/grafana.yaml`.
+**Registry credentials:** Keep secrets in `deploy/k8s/config/.env` and push cluster pull secrets through the `bootstrap/registry/` Makefile targets for Docker Hub, Selectel, or local registry profiles.
 
-**Other clusters:** without Cinder, apply `storage/local-path-storage.yaml` instead of `storage-default`; keep using the same `make` targets from `Selectel/` where kubectl context applies.
+**Smoke pull:** `make -C deploy/k8s/bootstrap smoke-download` performs an end-to-end pull using a Docker Hub–style repository path (`SMOKE_REPOSITORY`, default `library/jobber`). The repo RIID should use is derived from `config.yaml` plus the imagelist YAML via the smoke resolver scripts under `bootstrap/registry/` and `providers/registry/image/`. If the catalog omits an explicit registry host, set `TEST_REGISTRY_PULL_HOST` or `test_registry_pull_host` in `config.yaml`.
+
+**Observer stack:** Delivered with Helm and synced Grafana assets via the monitoring-observer install path—not by applying stale standalone observer YAML.
+
+**Other clusters:** Without Cinder’s default SC, install the local-path provisioner manifest from `src/storage/` instead of the storage-default step; otherwise keep using the same bootstrap Makefile with your kube context.

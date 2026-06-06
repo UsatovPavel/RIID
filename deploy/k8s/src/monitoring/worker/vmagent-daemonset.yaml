@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vmagent
+  namespace: riid-system
+  labels:
+    app.kubernetes.io/name: vmagent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vmagent
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vmagent
+    spec:
+      serviceAccountName: vmagent
+      containers:
+        - name: vmagent
+          image: monitoring.vmagent
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - >
+              exec /vmagent-prod
+              -promscrape.config=/etc/vmagent/promscrape.yaml
+              -remoteWrite.url=${VM_REMOTE_WRITE_URL}
+          env:
+            - name: VM_REMOTE_WRITE_URL
+              value: http://victoria-metrics:8428/api/v1/write
+          volumeMounts:
+            - name: vmagent-scrape-config
+              mountPath: /etc/vmagent/promscrape.yaml
+              subPath: promscrape.yaml
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+      volumes:
+        - name: vmagent-scrape-config
+          configMap:
+            name: vmagent-scrape-config

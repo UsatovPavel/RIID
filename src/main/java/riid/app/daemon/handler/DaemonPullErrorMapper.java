@@ -156,7 +156,6 @@ public final class DaemonPullErrorMapper {
         }
         return null;
     }
-
     private static String safeMessage(Throwable e) {
         String message = e.getMessage();
         if (message == null || message.isBlank()) {

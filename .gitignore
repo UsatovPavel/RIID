@@ -53,10 +53,17 @@ bin/
 Исправления*
 external_utils/*
 **/*.log
+
+### Deploy artifacts###
+deploy/k8s/.resolved/
+deploy/k8s/bootstrap/**.tsv
+deploy/k8s/providers/cluster/**/serverConfig.yaml
+deploy/k8s/**/output/
+deploy/k8s/performance/input/
+
 ## Selectel artifacts###
-deploy/k8s/Selectech/*
-!deploy/k8s/Selectech/sync-dotenv-from-serverconfig.sh
-!deploy/k8s/Selectech/.env.example
-!deploy/k8s/Selectech/Makefile
+deploy/k8s/Selectel/*
+!deploy/k8s/Selectel/.env.example
+!deploy/k8s/Selectel/Makefile
 !deploy/k8s/riid/.env.example
-!deploy/k8s/Selectech/init-performance-registry-images.sh
+!deploy/k8s/Selectel/registry/init-performance-registry-images.sh

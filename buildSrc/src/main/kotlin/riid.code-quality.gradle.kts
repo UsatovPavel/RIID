@@ -54,7 +54,6 @@ tasks.withType(SpotBugsTask::class).matching { it.name == "spotbugsPerformanceTe
     dependsOn("testFixturesClasses")
     auxClassPaths.from(testFixturesOutput)
 }
-
 tasks.named("jacocoTestReport", JacocoReport::class) {
     enabled = !skipQuality
     dependsOn(tasks.named("test")) // jacoco runs only when explicitly invoked, but needs tests

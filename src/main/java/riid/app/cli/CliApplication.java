@@ -208,9 +208,7 @@ public final class CliApplication {
     @FunctionalInterface
     public interface ServiceFactory {
         /**
-         * @param meterRegistry
-         *            optional; when non-null (e.g. daemon mode), wired into
-         *            {@link ImageLoadingFacade}
+         * @param meterRegistry optional; when non-null (e.g. daemon mode), wired into {@link ImageLoadingFacade}
          */
         ImageLoader create(CliParser.CliOptions options, MeterRegistry meterRegistry) throws Exception;
     }
@@ -238,7 +236,6 @@ public final class CliApplication {
             }
         };
     }
-
     @FunctionalInterface
     public interface ImageLoader {
         LoadOutcome load(String repository, String reference, String runtimeId);

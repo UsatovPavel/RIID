@@ -41,8 +41,13 @@ _helm-install:
 	helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null || true
 	helm repo update
 	@echo ">>> Установка Dragonfly..."
-	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true
-	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f values.yaml
+	@TMP_VALUES=$$(mktemp); \
+	trap 'rm -f "$$TMP_VALUES"' EXIT; \
+	./render-values-from-infra.sh "$$TMP_VALUES"; \
+	echo ">>> Effective images from deploy/k8s/config/imagelist/dockerhub.yaml (.infra.images) → Helm values:"; \
+	yq e '.manager.image, .scheduler.image, .seedClient.image, .client.image' "$$TMP_VALUES"; \
+	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true; \
+	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f "$$TMP_VALUES"
 	@echo ""
 	@echo ">>> Dragonfly установлен. Проверка:"
 	minikube kubectl -- get pods -n dragonfly-system
@@ -54,8 +59,13 @@ _helm-install-2nodes:
 	helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null || true
 	helm repo update
 	@echo ">>> Установка Dragonfly (TCP:65001, /tmp/riid-output)..."
-	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true
-	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f values.yaml -f values-minikube-2nodes.yaml
+	@TMP_VALUES=$$(mktemp); \
+	trap 'rm -f "$$TMP_VALUES"' EXIT; \
+	./render-values-from-infra.sh "$$TMP_VALUES"; \
+	echo ">>> Effective images from deploy/k8s/config/imagelist/dockerhub.yaml (.infra.images) → Helm values:"; \
+	yq e '.manager.image, .scheduler.image, .seedClient.image, .client.image' "$$TMP_VALUES"; \
+	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true; \
+	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f "$$TMP_VALUES" -f values-minikube-2nodes.yaml
 	@echo ""
 	@echo ">>> Dragonfly (2-node) установлен:"
 	minikube kubectl -- get pods -n dragonfly-system -o wide

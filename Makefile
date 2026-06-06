@@ -137,7 +137,7 @@ download_to_daemon_50MB:
   	-d '{"repository":"library/irssi","reference":"latest","runtimeId":"podman"}'
 
 # PR15 scenario (a): library/irssi, 5× холодный кэш (RIID + podman), в stdout — списки ms и riid_median_pull_ms / podman_median_pull_ms.
-# Нужны: демон на UDS из config, curl, podman; опционально config/.env (см. DaemonBenchmarkColdCachePullsTest).
+# Нужны: демон на UDS из config, curl, podman; опционально config/.env и RIID_PERF_CACHE_DIR (см. DaemonBenchmarkColdCachePullsTest).
 perf_scenario_a:
 	set -a; [ -f config/.env ] && . ./config/.env; set +a; \
 	./gradlew performanceTest --tests riid.performance.sequentially.oneimage.DaemonBenchmarkColdCachePullsTest
