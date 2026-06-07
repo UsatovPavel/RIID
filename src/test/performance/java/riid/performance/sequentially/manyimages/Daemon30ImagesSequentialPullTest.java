@@ -27,9 +27,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * PR15 scenario b1 (moderate): same first 30 repositories as
  * {@link PopularDockerHubImagesFromProgramDocs#FIRST_30_REPOSITORIES},
  * sequential pulls. Перед фазой (1): {@code podman system prune -af} и restart
- * RIID daemon (cold daemon process). Далее: (1) via an already running RIID daemon ({@code POST /pull},
- * {@code runtimeId: podman}), (2) then native {@code podman pull} for each,
- * after {@code podman system prune -af} immediately before that Podman phase
+ * RIID daemon (cold daemon process). Далее: (1) via an already running RIID
+ * daemon ({@code POST /pull}, {@code runtimeId: podman}), (2) then native
+ * {@code podman pull} for each, after {@code podman system prune -af}
+ * immediately before that Podman phase
  * ({@link #coldPodmanCacheThenMeasuredPulls()}).
  *
  * <p>
@@ -74,8 +75,9 @@ class Daemon30ImagesSequentialPullTest {
                 index++;
                 long t0 = System.nanoTime();
                 try {
-                    DaemonUnixSocketPullSupport.PullResult result = DaemonUnixSocketPullSupport.postPullCapture(socketPath,
-                            workDir, repo, PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE, RUNTIME);
+                    DaemonUnixSocketPullSupport.PullResult result = DaemonUnixSocketPullSupport.postPullCapture(
+                            socketPath, workDir, repo, PopularDockerHubImagesFromProgramDocs.POPULAR_IMAGES_REFERENCE,
+                            RUNTIME);
                     long ms = (System.nanoTime() - t0) / 1_000_000L;
                     if (result.finished() && result.exitCode() == 0 && result.httpStatus() == 200) {
                         riidPullMsList.add(ms);
@@ -87,8 +89,9 @@ class Daemon30ImagesSequentialPullTest {
                                 + " repo=" + repo + " exit=" + result.exitCode() + " http=" + result.httpStatus()
                                 + " pull_wall_ms=" + ms + " stderr=" + result.stderr() + " body=" + bodyOneLine);
                         if (index == CLEFOS_INDEX) {
-                            System.err.println("[Daemon30ImagesSequentialPullTest] i=17 expected non-200 candidate: http="
-                                    + result.httpStatus() + " exit=" + result.exitCode());
+                            System.err
+                                    .println("[Daemon30ImagesSequentialPullTest] i=17 expected non-200 candidate: http="
+                                            + result.httpStatus() + " exit=" + result.exitCode());
                         }
                     }
                 } catch (Exception e) {

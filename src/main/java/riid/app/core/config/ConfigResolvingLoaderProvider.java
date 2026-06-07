@@ -16,7 +16,8 @@ import riid.core.fs.NioHostFilesystem;
 import riid.p2p.P2PExecutor;
 
 /**
- * Resolves config source (file vs built-in defaults) and produces an image loader.
+ * Resolves config source (file vs built-in defaults) and produces an image
+ * loader.
  */
 public final class ConfigResolvingLoaderProvider {
     private static final RegistryEndpoint DEFAULT_REGISTRY_ENDPOINT = new RegistryEndpoint("https",

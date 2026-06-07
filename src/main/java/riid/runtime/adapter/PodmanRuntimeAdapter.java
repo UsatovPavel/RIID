@@ -43,8 +43,8 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     }
 
     /**
-     * Streams {@code tar -cf - -C layout .} into {@code podman load -q} on stdin (no {@code -i -}; that is a bogus
-     * path).
+     * Streams {@code tar -cf - -C layout .} into {@code podman load -q} on stdin
+     * (no {@code -i -}; that is a bogus path).
      */
     @Override
     public void importOciLayoutDirectory(Path ociLayoutRoot) throws IOException, InterruptedException {

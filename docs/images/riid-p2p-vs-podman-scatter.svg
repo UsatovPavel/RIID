@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-label="RIID vs Podman scatter plot">
+<rect width="100%" height="100%" fill="#0f1219"/>
+<rect x="72" y="48" width="904" height="440" fill="#171c28" stroke="#2a3142"/>
+<line x1="72" y1="373.4" x2="976" y2="373.4" stroke="#2a3142" stroke-width="1"/>
+<line x1="72" y1="214.7" x2="976" y2="214.7" stroke="#2a3142" stroke-width="1"/>
+<line x1="72" y1="55.9" x2="976" y2="55.9" stroke="#2a3142" stroke-width="1"/>
+<line x1="72.0" y1="48" x2="72.0" y2="488" stroke="#2a3142" stroke-width="1"/>
+<line x1="398.8" y1="48" x2="398.8" y2="488" stroke="#2a3142" stroke-width="1"/>
+<line x1="725.6" y1="48" x2="725.6" y2="488" stroke="#2a3142" stroke-width="1"/>
+<line x1="725.6" y1="48" x2="725.6" y2="488" stroke="#818cf8" stroke-width="2" stroke-dasharray="6,4"/>
+<circle cx="619.9" cy="480.7" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="519.4" cy="452.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="374.7" cy="442.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="474.7" cy="416.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="681.0" cy="372.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="375.0" cy="371.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="528.6" cy="357.0" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="547.8" cy="331.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="449.6" cy="328.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="422.8" cy="302.1" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="542.1" cy="301.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="296.8" cy="301.6" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="570.8" cy="299.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="297.7" cy="296.1" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="470.9" cy="293.7" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="607.0" cy="292.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="648.3" cy="288.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="629.1" cy="281.2" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="580.5" cy="274.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="466.6" cy="272.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="441.4" cy="272.7" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="481.8" cy="270.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="553.7" cy="270.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="546.9" cy="269.7" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="454.9" cy="267.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="522.4" cy="266.7" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="774.5" cy="266.4" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="674.1" cy="263.0" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="472.4" cy="261.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="507.9" cy="260.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="818.8" cy="259.7" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="613.2" cy="255.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="649.6" cy="255.0" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="718.3" cy="254.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="673.7" cy="250.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="544.5" cy="248.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="637.4" cy="245.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="693.0" cy="244.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="458.9" cy="243.1" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="641.6" cy="243.1" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="537.5" cy="237.6" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="637.6" cy="237.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="751.7" cy="236.8" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="767.7" cy="233.4" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="406.2" cy="232.9" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="645.3" cy="232.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="565.8" cy="232.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="705.0" cy="231.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="668.4" cy="227.7" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="660.5" cy="225.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="589.4" cy="224.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="566.4" cy="223.0" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="723.7" cy="216.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="642.1" cy="213.1" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="528.3" cy="212.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="696.0" cy="211.8" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="764.8" cy="209.9" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="678.2" cy="209.2" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="737.5" cy="206.1" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="638.2" cy="202.6" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="860.9" cy="200.8" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="663.3" cy="197.9" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="753.5" cy="196.5" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="738.9" cy="196.1" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="609.0" cy="194.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="530.6" cy="192.0" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="745.2" cy="188.7" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="628.9" cy="184.6" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="652.2" cy="184.0" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="704.1" cy="183.9" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="642.6" cy="178.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="490.7" cy="176.9" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="784.5" cy="175.4" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="717.1" cy="169.3" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="756.9" cy="149.4" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="676.7" cy="148.6" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="775.4" cy="144.6" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="848.4" cy="139.8" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="690.5" cy="139.5" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="773.5" cy="132.2" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="693.0" cy="121.1" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="698.4" cy="119.9" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="289.2" cy="117.6" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="655.0" cy="106.4" r="5" fill="#f472b6" opacity="0.9"/>
+<circle cx="728.4" cy="98.1" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="875.5" cy="97.9" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="845.5" cy="81.8" r="5" fill="#5eead4" opacity="0.9"/>
+<circle cx="933.0" cy="54.6" r="5" fill="#5eead4" opacity="0.9"/>
+<text x="524" y="536" fill="#e8eaef" font-family="sans-serif" font-size="14" text-anchor="middle">Relative speed RIID / Podman (T_podman / T_riid)</text>
+<text x="18" y="268" fill="#e8eaef" font-family="sans-serif" font-size="14" text-anchor="middle" transform="rotate(-90 18 268)">Image size (MiB, log)</text>
+<text x="524" y="28" fill="#e8eaef" font-family="sans-serif" font-size="16" font-weight="600" text-anchor="middle">RIID+Dragonfly vs Podman — dataset A (≥ 1 MiB)</text>
+<text x="72.0" y="508" fill="#8b92a8" font-family="sans-serif" font-size="12" text-anchor="middle">0</text>
+<text x="398.8" y="508" fill="#8b92a8" font-family="sans-serif" font-size="12" text-anchor="middle">0.5</text>
+<text x="725.6" y="508" fill="#8b92a8" font-family="sans-serif" font-size="12" text-anchor="middle">1</text>
+<text x="62" y="377.4" fill="#8b92a8" font-family="sans-serif" font-size="12" text-anchor="end">10</text>
+<text x="62" y="218.7" fill="#8b92a8" font-family="sans-serif" font-size="12" text-anchor="end">100</text>
+<text x="62" y="59.9" fill="#8b92a8" font-family="sans-serif" font-size="12" text-anchor="end">1k</text>
+<rect x="786" y="64" width="180" height="52" fill="#171c28" stroke="#2a3142" rx="4"/>
+<circle cx="800" cy="82" r="5" fill="#5eead4"/>
+<text x="814" y="86" fill="#e8eaef" font-size="12" font-family="sans-serif">RIID faster</text>
+<circle cx="800" cy="102" r="5" fill="#f472b6"/>
+<text x="814" y="106" fill="#e8eaef" font-size="12" font-family="sans-serif">Podman faster</text>
+</svg>

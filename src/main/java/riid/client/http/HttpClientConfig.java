@@ -109,10 +109,7 @@ public record HttpClientConfig(@JsonProperty("connectTimeout") Duration connectT
      * Scale anchor is 15 GiB: at/above it timeout reaches imageTimeoutMax.
      */
     public Duration timeoutForSizeBytes(long sizeBytes) {
-        return PayloadTimeoutPolicy.timeoutForSizeBytes(
-                sizeBytes,
-                imageTimeoutMin,
-                imageTimeoutMax,
+        return PayloadTimeoutPolicy.timeoutForSizeBytes(sizeBytes, imageTimeoutMin, imageTimeoutMax,
                 PayloadTimeoutPolicy.DEFAULT_SCALE_BYTES);
     }
 

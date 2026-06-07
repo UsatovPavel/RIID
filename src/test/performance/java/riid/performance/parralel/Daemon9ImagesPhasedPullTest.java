@@ -35,12 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * WARNING: THIS TEST WILLREMOVE ALL PODMAN CONTAINERS
- * Phased pull load against a real {@link DaemonServer}: repositories from
- * {@code PopularDockerImagesSizes.txt} data rows 2–10 (header excluded).
- * Phase A: odd positions (1,3,5,7,9); pause 10s; phase B: even positions (2,4,6,8).
+ * WARNING: THIS TEST WILLREMOVE ALL PODMAN CONTAINERS Phased pull load against
+ * a real {@link DaemonServer}: repositories from
+ * {@code PopularDockerImagesSizes.txt} data rows 2–10 (header excluded). Phase
+ * A: odd positions (1,3,5,7,9); pause 10s; phase B: even positions (2,4,6,8).
  *
- * <p>Requires Linux, curl, podman, network to Docker Hub.
+ * <p>
+ * Requires Linux, curl, podman, network to Docker Hub.
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
@@ -52,21 +53,12 @@ class Daemon9ImagesPhasedPullTest {
     private static final String RUNTIME = "podman";
 
     /** Rows 2,4,6,8,10 → odd 1-based positions 1,3,5,7,9 within lines 2–10. */
-    private static final String[] PHASE_ODD_REPOS = {
-            "library/hello-seattle",
-            "library/cirros",
-            "library/photon",
-            "library/eggdrop",
-            "library/spiped",
-    };
+    private static final String[] PHASE_ODD_REPOS = {"library/hello-seattle", "library/cirros", "library/photon",
+            "library/eggdrop", "library/spiped",};
 
     /** Rows 3,5,7,9 → even 1-based positions 2,4,6,8 within lines 2–10. */
-    private static final String[] PHASE_EVEN_REPOS = {
-            "library/hola-mundo",
-            "library/jobber",
-            "library/api-firewall",
-            "library/hitch",
-    };
+    private static final String[] PHASE_EVEN_REPOS = {"library/hola-mundo", "library/jobber", "library/api-firewall",
+            "library/hitch",};
 
     @Test
     void phasedPullsOddThenEvenWithMetricsPrinted() throws Exception {
@@ -83,9 +75,7 @@ class Daemon9ImagesPhasedPullTest {
         PrometheusMeterRegistry prom = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
         CliApplication.ImageLoader loader = (repository, reference, runtimeId) -> {
             try (ImageLoadingFacade facade = ImageLoadingFacade.createFromConfig(configPath, null, prom)) {
-                return facade.load(
-                        ImageId.fromRegistry(registry, repository, reference),
-                        runtimeId);
+                return facade.load(ImageId.fromRegistry(registry, repository, reference), runtimeId);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to load image", e);
             }
@@ -94,16 +84,8 @@ class Daemon9ImagesPhasedPullTest {
         Path workDir = Files.createTempDirectory("riid-perf-popular-pull");
         Path socketPath = workDir.resolve("riid.sock");
         Duration requestTimeout = Duration.ofMinutes(30);
-        DaemonServer daemon = new DaemonServer(
-                socketPath.toString(),
-                "127.0.0.1",
-                0,
-                loader,
-                Set.of(RUNTIME),
-                8,
-                requestTimeout,
-                AppConfig.OverloadPolicy.REJECT,
-                prom);
+        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RUNTIME), 8,
+                requestTimeout, AppConfig.OverloadPolicy.REJECT, prom);
 
         long lastPullDurationMs = -1L;
         long lastCompletedEpochMs = -1L;
@@ -135,7 +117,8 @@ class Daemon9ImagesPhasedPullTest {
         System.out.println("[DaemonPopularImagesPhasedPullTest] phased pull finished OK");
         System.out.println("[DaemonPopularImagesPhasedPullTest] last_pull_duration_ms=" + lastPullDurationMs);
         System.out.println("[DaemonPopularImagesPhasedPullTest] last_operation_completed_instant=" + lastDone);
-        System.out.println("[DaemonPopularImagesPhasedPullTest] last_operation_completed_epoch_ms=" + lastCompletedEpochMs);
+        System.out.println(
+                "[DaemonPopularImagesPhasedPullTest] last_operation_completed_epoch_ms=" + lastCompletedEpochMs);
         System.out.println("[DaemonPopularImagesPhasedPullTest] total_wall_ms_since_container_cleanup=" + totalMs);
 
         assertTrue(lastPullDurationMs >= 0);
@@ -143,9 +126,7 @@ class Daemon9ImagesPhasedPullTest {
     }
 
     private static void removeAllPodmanContainers() throws IOException, InterruptedException {
-        Process p = new ProcessBuilder("podman", "rm", "-af")
-                .redirectErrorStream(true)
-                .start();
+        Process p = new ProcessBuilder("podman", "rm", "-af").redirectErrorStream(true).start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
         assertEquals(0, code, "podman rm -af failed: " + out);
@@ -153,25 +134,11 @@ class Daemon9ImagesPhasedPullTest {
 
     private static void pullOne(Path socketPath, Path workDir, String repository) throws Exception {
         Path bodyFile = workDir.resolve("body-" + repository.replace('/', '-') + ".json");
-        String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + REF
-                + "\",\"runtimeId\":\"" + RUNTIME + "\"}";
-        ProcessBuilder pb = new ProcessBuilder(
-                "curl",
-                "-sS",
-                "--fail-with-body",
-                "--unix-socket",
-                socketPath.toString(),
-                "-o",
-                bodyFile.toString(),
-                "-w",
-                "%{http_code}",
-                "-X",
-                "POST",
-                "http://localhost/pull",
-                "-H",
-                "Content-Type: application/json",
-                "-d",
-                json);
+        String json = "{\"repository\":\"" + repository + "\",\"reference\":\"" + REF + "\",\"runtimeId\":\"" + RUNTIME
+                + "\"}";
+        ProcessBuilder pb = new ProcessBuilder("curl", "-sS", "--fail-with-body", "--unix-socket",
+                socketPath.toString(), "-o", bodyFile.toString(), "-w", "%{http_code}", "-X", "POST",
+                "http://localhost/pull", "-H", "Content-Type: application/json", "-d", json);
         pb.redirectError(ProcessBuilder.Redirect.PIPE);
         Process proc = pb.start();
         String httpCode = new String(proc.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();

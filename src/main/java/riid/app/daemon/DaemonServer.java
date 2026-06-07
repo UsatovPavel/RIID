@@ -59,7 +59,8 @@ public final class DaemonServer {
             throw new IllegalArgumentException("Only REJECT overload policy is supported");
         }
 
-        // Keep Jetty on its default server pool. Pull work still runs on virtual threads below.
+        // Keep Jetty on its default server pool. Pull work still runs on virtual
+        // threads below.
         this.server = new Server();
         this.pullExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.unixSocketPath = Path.of(unixSocketPath);

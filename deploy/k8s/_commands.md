@@ -25,7 +25,8 @@ nohup make -C deploy/k8s/performance run \
   BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid \
   > _riid_dataset_a.log 2>&1 &
 echo $!
-make -C deploy/k8s/performance run BACKEND=podman MODE=rolling CONCURRENCY=2 DATASET=B 
+nohup make -C deploy/k8s/performance run BACKEND=podman MODE=rolling CONCURRENCY=2 DATASET=A &> _podman_datsaset_a.txt
+echo $!
 make -C deploy/k8s/performance summarize
 
 ## Настроить сеть 

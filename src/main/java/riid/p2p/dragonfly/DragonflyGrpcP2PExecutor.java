@@ -35,29 +35,22 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
     private final PullerFactory pullerFactory;
     private volatile boolean closed;
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    DragonflyConfig config) {
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, DragonflyConfig config) {
         this(endpoint, config, RegistryAuthProvider.passthrough(),
                 (cfg, timeout) -> new ExternalDragonflyPuller(createPuller(cfg, timeout)));
     }
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    DragonflyConfig config,
-                                    RegistryAuthProvider authProvider) {
-        this(endpoint, config, authProvider,
-                (cfg, timeout) -> new ExternalDragonflyPuller(createPuller(cfg, timeout)));
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, DragonflyConfig config,
+            RegistryAuthProvider authProvider) {
+        this(endpoint, config, authProvider, (cfg, timeout) -> new ExternalDragonflyPuller(createPuller(cfg, timeout)));
     }
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    DragonflyConfig config,
-                                    PullerFactory pullerFactory) {
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, DragonflyConfig config, PullerFactory pullerFactory) {
         this(endpoint, config, RegistryAuthProvider.passthrough(), pullerFactory);
     }
 
-    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint,
-                                    DragonflyConfig config,
-                                    RegistryAuthProvider authProvider,
-                                    PullerFactory pullerFactory) {
+    public DragonflyGrpcP2PExecutor(RegistryEndpoint endpoint, DragonflyConfig config,
+            RegistryAuthProvider authProvider, PullerFactory pullerFactory) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         this.config = Objects.requireNonNull(config, "config");
         this.authProvider = Objects.requireNonNull(authProvider, "authProvider");
@@ -84,11 +77,7 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
         } else {
             outputPath = PathSupport.temporaryPath("p2p-", ".bin");
         }
-        RegistryPullRequest request = RegistryPullRequestMapper.map(
-                endpoint,
-                repository,
-                digest,
-                outputPath,
+        RegistryPullRequest request = RegistryPullRequestMapper.map(endpoint, repository, digest, outputPath,
                 authProvider.resolve(endpoint, repository));
         Duration pullTimeout = config.requestTimeoutForSizeBytes(size);
         Puller puller = pullerFactory.create(config, pullTimeout);

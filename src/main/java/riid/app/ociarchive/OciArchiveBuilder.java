@@ -146,23 +146,11 @@ public final class OciArchiveBuilder {
         String repository = imageId.name();
         var cfg = manifest.config();
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        PullTaskPlanner pullTaskPlanner = new PullTaskPlanner(
-                1 + manifest.layers().size(),
-                mdcSnapshot,
-                repository,
-                blobsDir
-        );
-        pullTaskPlanner.addIfDigestNew(
-                cfg.digest(),
-                cfg.size(),
-                MediaType.from(cfg.mediaType())
-        );
+        PullTaskPlanner pullTaskPlanner = new PullTaskPlanner(1 + manifest.layers().size(), mdcSnapshot, repository,
+                blobsDir);
+        pullTaskPlanner.addIfDigestNew(cfg.digest(), cfg.size(), MediaType.from(cfg.mediaType()));
         for (var layer : manifest.layers()) {
-            pullTaskPlanner.addIfDigestNew(
-                    layer.digest(),
-                    layer.size(),
-                    MediaType.from(layer.mediaType())
-            );
+            pullTaskPlanner.addIfDigestNew(layer.digest(), layer.size(), MediaType.from(layer.mediaType()));
         }
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -236,10 +224,7 @@ public final class OciArchiveBuilder {
         private final String repository;
         private final Path blobsDir;
 
-        private PullTaskPlanner(int expectedTasks,
-                                Map<String, String> mdcSnapshot,
-                                String repository,
-                                Path blobsDir) {
+        private PullTaskPlanner(int expectedTasks, Map<String, String> mdcSnapshot, String repository, Path blobsDir) {
             this.pullTasks = new ArrayList<>(expectedTasks);
             this.scheduledDigests = new HashSet<>(expectedTasks);
             this.mdcSnapshot = mdcSnapshot;
@@ -252,11 +237,7 @@ public final class OciArchiveBuilder {
                 return;
             }
             pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
-                pullLayer(repository,
-                        ImageDigest.parse(digest),
-                        size,
-                        mediaType,
-                        blobsDir);
+                pullLayer(repository, ImageDigest.parse(digest), size, mediaType, blobsDir);
             }));
         }
 
@@ -265,11 +246,8 @@ public final class OciArchiveBuilder {
         }
     }
 
-    private void pullLayer(String repository,
-                           ImageDigest digest,
-                           long size,
-                           MediaType mediaType,
-                           Path blobsDir) throws IOException {
+    private void pullLayer(String repository, ImageDigest digest, long size, MediaType mediaType, Path blobsDir)
+            throws IOException {
         var fetched = dispatcher.fetchLayer(new RepositoryName(repository), digest, size, mediaType);
         File tmp = fetched.path().toFile();
         fs.copy(tmp.toPath(), blobsDir.resolve(fetched.digest().hex()));

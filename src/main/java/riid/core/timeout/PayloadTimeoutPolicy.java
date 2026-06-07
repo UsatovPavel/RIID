@@ -3,8 +3,8 @@ package riid.core.timeout;
 import java.time.Duration;
 
 /**
- * Resolves timeout by payload size using linear interpolation in
- * [minTimeout, maxTimeout] range.
+ * Resolves timeout by payload size using linear interpolation in [minTimeout,
+ * maxTimeout] range.
  */
 public final class PayloadTimeoutPolicy {
     public static final long DEFAULT_SCALE_BYTES = 15L * 1024L * 1024L * 1024L; // 15 GiB
@@ -12,7 +12,8 @@ public final class PayloadTimeoutPolicy {
     private PayloadTimeoutPolicy() {
     }
 
-    public static Duration timeoutForSizeBytes(long sizeBytes, Duration minTimeout, Duration maxTimeout, long scaleBytes) {
+    public static Duration timeoutForSizeBytes(long sizeBytes, Duration minTimeout, Duration maxTimeout,
+            long scaleBytes) {
         if (minTimeout == null || maxTimeout == null) {
             throw new IllegalArgumentException("minTimeout and maxTimeout must be non-null");
         }

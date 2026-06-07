@@ -13,6 +13,16 @@ make -C deploy/k8s/performance clear-cluster-cache
 make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid
 make -C deploy/k8s/performance summarize
 
+Полный список используемых команд(созадние кластера, тестирование, дебаг) в _commands.md
+## Окружение кластера
+
+- 12 нод;
+- 4 vCPU, 2.2-2.4 ГГц;
+- 8 GB RAM;
+- SSD: 140 ГБ, 500 МБ/с, 25 000 / 15 000 IOPS;
+- SSD не являлся узким местом;
+- средняя скорость сети в кластере: 160-200 МБ/с.
+
 ### Network / `tc` (Traffic Control)
 
 **На этом дереве (`deploy/k8s`) WAN не эмулируется:** ограничения RTT или полосы через Linux **Traffic Control (`tc`, `netem`, TBF и т.п.) не применяются** скриптами performance/bootstrap. Замеры идут в **реальной топологии** кластера (узлы провайдера ↔ реестр, Dragonfly, лимиты SLA сети/диска).

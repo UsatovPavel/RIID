@@ -11,8 +11,7 @@ import riid.core.timeout.PayloadTimeoutPolicy;
  */
 public record DragonflyConfig(@JsonProperty("enabled") Boolean enabled,
         @JsonProperty("dfdaemonAddr") String dfdaemonAddr, @JsonProperty("schedulerAddr") String schedulerAddr,
-        @JsonProperty("maxRetries") Integer maxRetries,
-        @JsonProperty("imageTimeoutMin") Duration imageTimeoutMin,
+        @JsonProperty("maxRetries") Integer maxRetries, @JsonProperty("imageTimeoutMin") Duration imageTimeoutMin,
         @JsonProperty("imageTimeoutMax") Duration imageTimeoutMax) {
     private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(1);
     private static final Duration DEFAULT_IMAGE_TIMEOUT_MAX = Duration.ofMinutes(30);
@@ -30,10 +29,7 @@ public record DragonflyConfig(@JsonProperty("enabled") Boolean enabled,
     }
 
     public Duration requestTimeoutForSizeBytes(long sizeBytes) {
-        return PayloadTimeoutPolicy.timeoutForSizeBytes(
-                sizeBytes,
-                imageTimeoutMinOrDefault(),
-                imageTimeoutMaxOrDefault(),
-                PayloadTimeoutPolicy.DEFAULT_SCALE_BYTES);
+        return PayloadTimeoutPolicy.timeoutForSizeBytes(sizeBytes, imageTimeoutMinOrDefault(),
+                imageTimeoutMaxOrDefault(), PayloadTimeoutPolicy.DEFAULT_SCALE_BYTES);
     }
 }

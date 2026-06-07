@@ -237,10 +237,10 @@ public final class ConfigValidator {
         if (dragonfly.imageTimeoutMax() != null) {
             checkDuration(dragonfly.imageTimeoutMax(), "p2p.dragonfly.imageTimeoutMax");
         }
-        if (dragonfly.imageTimeoutMin() != null
-                && dragonfly.imageTimeoutMax() != null
+        if (dragonfly.imageTimeoutMin() != null && dragonfly.imageTimeoutMax() != null
                 && dragonfly.imageTimeoutMax().compareTo(dragonfly.imageTimeoutMin()) < 0) {
-            throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_IMAGE_TIMEOUT_INVERTED.message());
+            throw new ConfigValidationException(
+                    ConfigValidationException.P2P.DRAGONFLY_IMAGE_TIMEOUT_INVERTED.message());
         }
     }
 
