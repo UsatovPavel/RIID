@@ -1,6 +1,11 @@
 CONFIG_FILE ?= ../providers/cluster/Selectel/serverConfig.yaml
 KUBECONFIG := $(abspath $(CONFIG_FILE))
 PERF_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+K8S := $(abspath $(PERF_DIR)/..)
+GLOBAL_CONFIG_FILE := $(K8S)/config/config.yaml
+REGISTRY_DIR := $(PERF_DIR)/registry
+REGISTRY_TC_SCRIPT := $(REGISTRY_DIR)/registry-node-tc.sh
+REGISTRY_TC_CHECK_SCRIPT := $(REGISTRY_DIR)/registry-node-tc-check.sh
 INPUT_DIR := $(PERF_DIR)/input
 
 MODE ?= rolling
@@ -30,7 +35,7 @@ ifeq ($(DATASET_FILE),)
   endif
 endif
 
-.PHONY: run rolling-riid recreate-riid rolling-podman recreate-podman clear-cluster-cache delete-local-registry-dataset debug-registry-node summarize
+.PHONY: run rolling-riid recreate-riid rolling-podman recreate-podman clear-cluster-cache delete-local-registry-dataset debug-registry-node registry-node-tc-apply registry-node-tc-clear registry-node-tc-check summarize
 
 CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-all-riid-pods.sh
 DELETE_REGISTRY_SCRIPT := $(PERF_DIR)/registry/delete-dataset-from-local-registry.sh
@@ -103,6 +108,24 @@ delete-local-registry-dataset:
 	DELETE_DATASET_RUN_GC="$(DELETE_DATASET_RUN_GC)" \
 	DELETE_DATASET_DRY_RUN="$(DELETE_DATASET_DRY_RUN)" \
 	bash "$(DELETE_REGISTRY_SCRIPT)"
+
+# tc на registry-ноде (hostNetwork + privileged Pod): latency/bandwidth из config.yaml (.network_parameters).
+registry-node-tc-apply:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	command -v yq >/dev/null || { echo "yq not found"; exit 1; }; \
+	command -v bash >/dev/null || { echo "bash not found"; exit 1; }; \
+	CLUSTER_CONFIG="$(GLOBAL_CONFIG_FILE)" bash "$(REGISTRY_TC_SCRIPT)" apply
+
+registry-node-tc-clear:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	command -v bash >/dev/null || { echo "bash not found"; exit 1; }; \
+	CLUSTER_CONFIG="$(GLOBAL_CONFIG_FILE)" bash "$(REGISTRY_TC_SCRIPT)" clear
+
+# tc на всех нодах кластера (или NODE=имя): read-only qdisc/class show; exit 1 при stale tc на не-registry нодах.
+registry-node-tc-check:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	command -v bash >/dev/null || { echo "bash not found"; exit 1; }; \
+	CLUSTER_CONFIG="$(GLOBAL_CONFIG_FILE)" NODE="$(NODE)" bash "$(REGISTRY_TC_CHECK_SCRIPT)"
 
 # Имя ноды registry и свободное место на хосте (kubectl debug + df /host), без SSH.
 debug-registry-node:

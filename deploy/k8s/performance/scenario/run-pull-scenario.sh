@@ -207,7 +207,7 @@ else
 fi
 
 if [[ -n "$DATASET_FILE" ]]; then
-  while IFS=$'\t' read -r repo ref _size_bytes _size_human; do
+  while IFS=$'\t' read -r repo ref _size_bytes _size_human || [[ -n "${repo:-}" ]]; do
     if [[ "$repo" == "repository" || -z "$repo" || "$repo" == \#* ]]; then
       continue
     fi

@@ -1,9 +1,11 @@
 ## Устанавливаем кластер
 Вставляем конфиг в providers/cluster/Selectel и проксируем grafana в 1 терминале
 make -C deploy/k8s/bootstrap install-all
-## Говорим откуда в тесте будем скачивать во 2 терминале 
-make -C deploy/k8s/bootstrap connect
-make -C deploy/k8s/bootstrap/registry install-local-registry
+## Подготовка registryы во 2 терминале 
+1)
+ make -C deploy/k8s/bootstrap connect
+
+2) make -C deploy/k8s/bootstrap/registry install-local-registry
 make -C deploy/k8s/bootstrap/registry wait-local-registry
 ### small images 
 make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset
@@ -19,13 +21,15 @@ make -C deploy/k8s/bootstrap/registry registry-apply-test-profile
 make -C deploy/k8s/performance clear-cluster-cache
 #### На самом деле что в YandexCloud что в Kubernetes очистка кэша не работает для riid. Проще кластер перезапустить для запуска с чистого листа чем дебажить.
 #### (возможно из-за выполнения рекомендаций Клода)
-make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=B SCENARIO=perf-multi-riid
-make -C deploy/k8s/performance run BACKEND=podman MODE=rolling CONCURRENCY=2 DATASET=A 
+nohup make -C deploy/k8s/performance run \
+  BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid \
+  > _riid_dataset_a.log 2>&1 &
+echo $!
+make -C deploy/k8s/performance run BACKEND=podman MODE=rolling CONCURRENCY=2 DATASET=B 
 make -C deploy/k8s/performance summarize
 
-## Настроить сеть
-make -C deploy/k8s/bootstrap registry-node-tc-apply
-
+## Настроить сеть 
+make -C deploy/k8s/performance registry-node-tc-apply
 ## Смена test registry_provider или test images:
 Поменять config.yaml
 Перегенирировать тестовые dataset.
@@ -36,7 +40,7 @@ make -C deploy/k8s/bootstrap rollout-riid-image-from-manifest
 
 
 
-## Init registry
+## Init container registry
 
 REGISTRY_PUSH_REPO_STRIP_LIBRARY=0 \
 REGISTRY_MIRROR_TSV_ONLY=1 \
@@ -44,6 +48,11 @@ RIID_IMAGES_LIST=deploy/k8s/bootstrap/registry/init/infra_images_list.tsv \
 make -C deploy/k8s/bootstrap/registry init-performance-registry-images
 
 ## Debug
+
+make -C deploy/k8s/bootstrap monitor-proxy
+
+make -C deploy/k8s/performance registry-node-tc-check
+
 kubectl -n dragonfly-system get pods &> _error.txt
 helm -n dragonfly-system status dragonfly >> _error.txt
 helm -n dragonfly-system history dragonfly >> _error.txt

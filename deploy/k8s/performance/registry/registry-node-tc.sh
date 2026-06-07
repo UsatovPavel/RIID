@@ -19,8 +19,8 @@ if [[ "$MODE" != "apply" && "$MODE" != "clear" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BOOTSTRAP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-K8S_ROOT="$(cd "${BOOTSTRAP_DIR}/.." && pwd)"
+PERF_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+K8S_ROOT="$(cd "${PERF_DIR}/.." && pwd)"
 CLUSTER_CONFIG="${CLUSTER_CONFIG:-${K8S_ROOT}/config/config.yaml}"
 
 TC_POD="${REGISTRY_TC_POD_NAME:-riid-registry-node-tc}"

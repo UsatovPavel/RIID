@@ -39,7 +39,7 @@ data:
         metricsPort: 9090
         maxConcurrentPulls: 32
         requestTimeout: "PT30M"
-        maxCacheBytes: 10737418240
+        maxCacheBytes: 42949672960 # 40 GB
         overloadPolicy: REJECT
     p2p:
       dragonfly:

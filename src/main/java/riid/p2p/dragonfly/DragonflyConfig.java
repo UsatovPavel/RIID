@@ -14,7 +14,7 @@ public record DragonflyConfig(@JsonProperty("enabled") Boolean enabled,
         @JsonProperty("maxRetries") Integer maxRetries,
         @JsonProperty("imageTimeoutMin") Duration imageTimeoutMin,
         @JsonProperty("imageTimeoutMax") Duration imageTimeoutMax) {
-    private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(3);
+    private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(1);
     private static final Duration DEFAULT_IMAGE_TIMEOUT_MAX = Duration.ofMinutes(30);
 
     public boolean enabledOrDefault() {
