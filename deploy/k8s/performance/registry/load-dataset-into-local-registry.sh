@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Зеркалирует образы в локальный registry для perf/smoke.
 #
+# После каждого успешного mirror смотрим df "/" внутри
+# контейнера; если Used превышает порог (по умолчанию 16 GiB), вызываем
+# `podman system prune -af`, чтобы снизить риск eviction узла по ephemeral-storage.
+#
 # Режимы:
 #   По умолчанию — TSV DATASET_FILE + deploy/k8s/config/.env (REGISTRY_SELECTEL_NAME → префикс источника).
 #   LOAD_TEST_IMAGELIST=1 — список из resolve_smoke_repository.py (config/imagelist YAML);
@@ -21,6 +25,8 @@ LOADER_NAMESPACE="${REGISTRY_LOADER_NAMESPACE:-registry-system}"
 LOADER_POD_NAME="${REGISTRY_LOADER_POD_NAME:-local-registry-loader}"
 LOADER_IMAGE="${REGISTRY_LOADER_IMAGE:-ghcr.io/usatovpavel/riid:v0.3.8}"
 KEEP_LOADER_POD="${KEEP_REGISTRY_LOADER_POD:-0}"
+# 16 GiB in 1K-blocks (see df -Pk column Used)
+LOADER_ROOT_USED_PRUNE_THRESHOLD_KIB="${LOADER_ROOT_USED_PRUNE_THRESHOLD_KIB:-16777216}"
 
 if [[ "$LOAD_TEST_IMAGELIST" == 1 ]]; then
   if [[ ! -f "$RESOLVER_PY" ]]; then
@@ -149,6 +155,18 @@ if [[ "$LOAD_TEST_IMAGELIST" == 1 ]]; then
   echo "load-dataset-into-local-registry: mode=catalog resolve_smoke_repository.py" >&2
 fi
 
+_maybe_prune_loader_podman_if_root_usage_high() {
+  local used_kib
+  used_kib="$(kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- df -Pk / 2>/dev/null | awk 'NR == 2 { print $3 }' || true)"
+  if [[ -z "$used_kib" || ! "$used_kib" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  if ((used_kib > LOADER_ROOT_USED_PRUNE_THRESHOLD_KIB)); then
+    echo "load-dataset-into-local-registry: loader / used=${used_kib}KiB threshold=${LOADER_ROOT_USED_PRUNE_THRESHOLD_KIB}KiB -> podman system prune -af" >&2
+    kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- podman system prune -af >/dev/null 2>&1 || true
+  fi
+}
+
 _catalog_pull_push() {
   local src="$1" dst="$2"
   total=$((total + 1))
@@ -160,7 +178,10 @@ _catalog_pull_push() {
     return 1
   fi
   ok=$((ok + 1))
+  _maybe_prune_loader_podman_if_root_usage_high
 }
+
+_maybe_prune_loader_podman_if_root_usage_high
 
 if [[ "$LOAD_TEST_IMAGELIST" == 1 ]]; then
   while IFS=$'\t' read -r pull_ref repository reference _rest || [[ -n "${pull_ref:-}" ]]; do

@@ -19,9 +19,9 @@ import riid.core.model.manifest.Manifest;
 import riid.runtime.BoundedCommandExecution;
 
 /**
- * Porto adapter: imports via {@code portoctl layer}.
- * Accepts an OCI archive (converts to rootfs tar) or a prepared rootfs tar.
- * Requires {@code portoctl} and portod socket (e.g. {@code /run/portod.socket}) accessible.
+ * Porto adapter: imports via {@code portoctl layer}. Accepts an OCI archive
+ * (converts to rootfs tar) or a prepared rootfs tar. Requires {@code portoctl}
+ * and portod socket (e.g. {@code /run/portod.socket}) accessible.
  */
 public class PortoRuntimeAdapter implements RuntimeAdapter {
 
@@ -76,7 +76,8 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     /**
-     * Export OCI archive into a rootfs tar. If {@code outputTar} is null, a temp file is created.
+     * Export OCI archive into a rootfs tar. If {@code outputTar} is null, a temp
+     * file is created.
      */
     public Path exportRootfsTar(Path ociArchive, Path outputTar) throws IOException, InterruptedException {
         Objects.requireNonNull(ociArchive, "ociArchive");
@@ -118,17 +119,9 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     private void importRootfsTar(Path tar, String layerName) throws IOException, InterruptedException {
         long bytes = Files.size(tar);
-        LOGGER.info(
-                "portoctl layer import starting: layer={} tar={} (~{} MiB)",
-                layerName,
-                tar.toAbsolutePath(),
+        LOGGER.info("portoctl layer import starting: layer={} tar={} (~{} MiB)", layerName, tar.toAbsolutePath(),
                 bytes / (1024 * 1024));
-        List<String> cmd = List.of(
-                PORTOCTL_BIN,
-                "layer",
-                "-I",
-                layerName,
-                tar.toAbsolutePath().toString());
+        List<String> cmd = List.of(PORTOCTL_BIN, "layer", "-I", layerName, tar.toAbsolutePath().toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         LOGGER.info("portoctl layer import finished: layer={} exit={}", layerName, shellResult.exitCode());
         if (shellResult.exitCode() != 0) {
@@ -239,8 +232,8 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 : List.of(TAR_BIN, "-xf", archive.toString(), "-C", destDir.toString());
         BoundedCommandExecution.ShellResult result = BoundedCommandExecution.run(cmd);
         if (result.exitCode() != 0) {
-            throw new IOException("tar extract failed (exit " + result.exitCode() + EXIT_SUFFIX
-                    + result.stdout() + result.stderr());
+            throw new IOException(
+                    "tar extract failed (exit " + result.exitCode() + EXIT_SUFFIX + result.stdout() + result.stderr());
         }
     }
 
@@ -248,8 +241,8 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         List<String> cmd = List.of(TAR_BIN, "-cf", destTar.toString(), "-C", sourceDir.toString(), ".");
         BoundedCommandExecution.ShellResult result = BoundedCommandExecution.run(cmd);
         if (result.exitCode() != 0) {
-            throw new IOException("tar create failed (exit " + result.exitCode() + EXIT_SUFFIX
-                    + result.stdout() + result.stderr());
+            throw new IOException(
+                    "tar create failed (exit " + result.exitCode() + EXIT_SUFFIX + result.stdout() + result.stderr());
         }
     }
 
@@ -259,13 +252,10 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 : List.of(TAR_BIN, "-tf", archive.toString());
         BoundedCommandExecution.ShellResult result = BoundedCommandExecution.run(cmd);
         if (result.exitCode() != 0) {
-            throw new IOException("tar list failed (exit " + result.exitCode() + EXIT_SUFFIX
-                    + result.stdout() + result.stderr());
+            throw new IOException(
+                    "tar list failed (exit " + result.exitCode() + EXIT_SUFFIX + result.stdout() + result.stderr());
         }
-        return result.stdout().lines()
-                .map(String::trim)
-                .filter(line -> !line.isBlank())
-                .toList();
+        return result.stdout().lines().map(String::trim).filter(line -> !line.isBlank()).toList();
     }
 
     private static String normalizeTarEntry(String entry) {

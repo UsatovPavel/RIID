@@ -1,6 +1,7 @@
 package riid.client.http;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import riid.core.timeout.PayloadTimeoutPolicy;
 
 import java.time.Duration;
 
@@ -17,9 +18,8 @@ public record HttpClientConfig(@JsonProperty("connectTimeout") Duration connectT
         @JsonProperty("followRedirects") boolean followRedirects, @JsonProperty("maxRedirects") int maxRedirects) {
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
-    private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(5);
+    private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(2);
     private static final Duration DEFAULT_IMAGE_TIMEOUT_MAX = Duration.ofMinutes(30);
-    private static final long TIMEOUT_SCALE_BYTES = 15L * 1024L * 1024L * 1024L; // 15 GiB
     private static final int DEFAULT_MAX_RETRIES = 2;
     private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofMillis(200);
     private static final Duration DEFAULT_MAX_BACKOFF = Duration.ofSeconds(2);
@@ -109,17 +109,8 @@ public record HttpClientConfig(@JsonProperty("connectTimeout") Duration connectT
      * Scale anchor is 15 GiB: at/above it timeout reaches imageTimeoutMax.
      */
     public Duration timeoutForSizeBytes(long sizeBytes) {
-        if (sizeBytes <= 0) {
-            return imageTimeoutMin;
-        }
-        long minMs = imageTimeoutMin.toMillis();
-        long maxMs = imageTimeoutMax.toMillis();
-        if (maxMs <= minMs) {
-            return imageTimeoutMin;
-        }
-        double ratio = Math.min(1.0, (double) sizeBytes / TIMEOUT_SCALE_BYTES);
-        long timeoutMs = minMs + Math.round((maxMs - minMs) * ratio);
-        return Duration.ofMillis(Math.min(timeoutMs, maxMs));
+        return PayloadTimeoutPolicy.timeoutForSizeBytes(sizeBytes, imageTimeoutMin, imageTimeoutMax,
+                PayloadTimeoutPolicy.DEFAULT_SCALE_BYTES);
     }
 
     public static final class Builder {

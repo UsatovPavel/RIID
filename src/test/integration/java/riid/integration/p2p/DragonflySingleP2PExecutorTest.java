@@ -102,7 +102,7 @@ class DragonflySingleP2PExecutorTest {
         endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(),
                 Credentials.basic("riid-user", "riid-secret"));
         fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null, null);
         p2p = new DragonflyGrpcP2PExecutor(endpoint, config);
     }
 

@@ -22,11 +22,13 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Stress: {@code POST /pull} for a large public image (~1.7 GiB aggregate per
- * {@code PopularDockerImagesSizes.txt}) through an already running RIID daemon (registry path inside
- * Riid), same wire format as production clients; then {@code podman system prune -af} and a measured
- * native {@code podman pull} of the same ref (cold podman store, comparable to PR15 scenario (a)).
+ * {@code PopularDockerImagesSizes.txt}) through an already running RIID daemon
+ * (registry path inside Riid), same wire format as production clients; then
+ * {@code podman system prune -af} and a measured native {@code podman pull} of
+ * the same ref (cold podman store, comparable to PR15 scenario (a)).
  *
- * <p>Requires Linux, {@code curl}, {@code podman}, network, daemon on
+ * <p>
+ * Requires Linux, {@code curl}, {@code podman}, network, daemon on
  * {@link TestConfigYaml#resolveDaemonUnixSocketPath()}.
  *
  * <pre>
@@ -40,7 +42,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("filesystem")
 class BigSizeImageRegistryTest {
 
-    /** @see PopularDockerImagesSizes.txt — {@code library/silverpeas} latest ~1.7 GiB */
+    /**
+     * @see PopularDockerImagesSizes.txt — {@code library/silverpeas} latest ~1.7
+     *      GiB
+     */
     private static final String REPOSITORY = "library/silverpeas";
     private static final String REFERENCE = "latest";
     private static final String RUNTIME = "podman";
@@ -70,7 +75,8 @@ class BigSizeImageRegistryTest {
             runOrFail("podman", "pull", podmanRef);
             long podmanMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - p0);
             assertTrue(podmanMs > 0, "podman pull wall time should be positive");
-            System.out.println("[BigSizeImageRegistryTest] podman_native pull_wall_ms=" + podmanMs + " ref=" + podmanRef);
+            System.out
+                    .println("[BigSizeImageRegistryTest] podman_native pull_wall_ms=" + podmanMs + " ref=" + podmanRef);
         } finally {
             TestFilesystemSupport.deleteRecursive(workDir);
         }

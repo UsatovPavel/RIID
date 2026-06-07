@@ -5,10 +5,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -144,22 +146,15 @@ public final class OciArchiveBuilder {
         String repository = imageId.name();
         var cfg = manifest.config();
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        // 1 is task for config blob
-        List<Callable<Void>> pullTasks = new ArrayList<>(1 + manifest.layers().size());
-        pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
-            pullLayer(repository, ImageDigest.parse(cfg.digest()), cfg.size(), MediaType.from(cfg.mediaType()),
-                    blobsDir);
-        }));
+        PullTaskPlanner pullTaskPlanner = new PullTaskPlanner(1 + manifest.layers().size(), mdcSnapshot, repository,
+                blobsDir);
+        pullTaskPlanner.addIfDigestNew(cfg.digest(), cfg.size(), MediaType.from(cfg.mediaType()));
         for (var layer : manifest.layers()) {
-            final var layerRef = layer;
-            pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
-                pullLayer(repository, ImageDigest.parse(layerRef.digest()), layerRef.size(),
-                        MediaType.from(layerRef.mediaType()), blobsDir);
-            }));
+            pullTaskPlanner.addIfDigestNew(layer.digest(), layer.size(), MediaType.from(layer.mediaType()));
         }
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<Void>> futures = executor.invokeAll(pullTasks);
+            List<Future<Void>> futures = executor.invokeAll(pullTaskPlanner.pullTasks());
             for (Future<Void> future : futures) {
                 awaitPull(future);
             }
@@ -220,6 +215,35 @@ public final class OciArchiveBuilder {
     @FunctionalInterface
     private interface PullTask {
         void run() throws IOException;
+    }
+
+    private final class PullTaskPlanner {
+        private final List<Callable<Void>> pullTasks;
+        private final Set<String> scheduledDigests;
+        private final Map<String, String> mdcSnapshot;
+        private final String repository;
+        private final Path blobsDir;
+
+        private PullTaskPlanner(int expectedTasks, Map<String, String> mdcSnapshot, String repository, Path blobsDir) {
+            this.pullTasks = new ArrayList<>(expectedTasks);
+            this.scheduledDigests = new HashSet<>(expectedTasks);
+            this.mdcSnapshot = mdcSnapshot;
+            this.repository = repository;
+            this.blobsDir = blobsDir;
+        }
+
+        private void addIfDigestNew(String digest, long size, MediaType mediaType) {
+            if (!scheduledDigests.add(digest)) {
+                return;
+            }
+            pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
+                pullLayer(repository, ImageDigest.parse(digest), size, mediaType, blobsDir);
+            }));
+        }
+
+        private List<Callable<Void>> pullTasks() {
+            return pullTasks;
+        }
     }
 
     private void pullLayer(String repository, ImageDigest digest, long size, MediaType mediaType, Path blobsDir)

@@ -11,8 +11,7 @@ DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
 
 # OpenStack Cinder: класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
-# Переопределить: make storage-default STORAGE_CLASS=другой-класс
-STORAGE_CLASS ?= fast.ru-3b
+STORAGE_CLASS ?= fast.ru-3b ## Санкт-Петербург
 RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
 OBSERVER_ROLLOUT_TIMEOUT ?= 600s

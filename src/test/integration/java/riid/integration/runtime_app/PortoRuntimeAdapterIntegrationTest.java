@@ -67,7 +67,7 @@ class PortoRuntimeAdapterIntegrationTest {
         RegistryEndpoint endpoint = TestRegistryConfig.endpointWithOptionalEnvCredentials();
         HostFilesystem fs = new NioHostFilesystem();
         try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
-             RegistryClientImpl client = new RegistryClientImpl(endpoint, new HttpClientConfig())) {
+                RegistryClientImpl client = new RegistryClientImpl(endpoint, new HttpClientConfig())) {
             RequestDispatcher dispatcher = new SimpleRequestDispatcher(client, cache, new P2PExecutor.NoOp(), fs);
             OciArchiveBuilder builder = new OciArchiveBuilder(dispatcher, fs);
             ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
@@ -110,16 +110,11 @@ class PortoRuntimeAdapterIntegrationTest {
     }
 
     private static List<String> listLayers() throws Exception {
-        Process p = new ProcessBuilder("portoctl", "layer", "-L")
-                .redirectErrorStream(true)
-                .start();
+        Process p = new ProcessBuilder("portoctl", "layer", "-L").redirectErrorStream(true).start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
         assertEquals(0, code, "portoctl layer -L failed: " + out);
-        return out.lines()
-                .map(String::trim)
-                .filter(line -> !line.isBlank())
-                .toList();
+        return out.lines().map(String::trim).filter(line -> !line.isBlank()).toList();
     }
 
     private static void ensurePodmanImage(String image) throws Exception {
@@ -130,9 +125,7 @@ class PortoRuntimeAdapterIntegrationTest {
     }
 
     private static boolean imageExists(String image) throws Exception {
-        Process p = new ProcessBuilder(PODMAN, "image", "exists", image)
-                .redirectErrorStream(true)
-                .start();
+        Process p = new ProcessBuilder(PODMAN, "image", "exists", image).redirectErrorStream(true).start();
         int code = p.waitFor();
         return code == 0;
     }

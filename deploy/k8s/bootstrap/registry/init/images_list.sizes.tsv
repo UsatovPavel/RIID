@@ -25,11 +25,11 @@ library/httpd	latest	45224584	43.1 MiB
 library/haproxy	latest	45900918	43.8 MiB
 openpolicyagent/gatekeeper	dev	46754417	44.6 MiB
 linuxserver/nzbget	latest	46788932	44.6 MiB
-grafana/loki	main-d8f4d0f		
+grafana/loki	main-d8f4d0f	45147521	43.1 MiB
 fluent/fluent-bit	latest	48729278	46.5 MiB
-library/debian	trixie-backports		
+library/debian	trixie-backports	49310848	47.0 MiB
 bitnami/redis	latest	49517472	47.2 MiB
-portainer/agent	alpine-sts		
+portainer/agent	alpine-sts	62137461	59.3 MiB
 amazon/cloudwatch-agent	latest	52027140	49.6 MiB
 library/traefik	windowsservercore-ltsc2025		
 library/redis	latest	53243107	50.8 MiB
@@ -37,29 +37,29 @@ newrelic/newrelic-fluentbit-output	latest	54052029	51.5 MiB
 library/amazonlinux	latest	54569705	52.0 MiB
 linuxserver/tautulli	latest	57786780	55.1 MiB
 amazon/aws-xray-daemon	latest	58400285	55.7 MiB
-portainer/portainer-ce	alpine-sts		
+portainer/portainer-ce	alpine-sts	47231424	45.0 MiB
 library/consul	1.15.4	58891952	56.2 MiB
-nginxinc/nginx-unprivileged	alpine3.23-perl		
-library/nginx	trixie-perl		
+nginxinc/nginx-unprivileged	alpine3.23-perl	33340150	31.8 MiB
+library/nginx	trixie-perl	75259232	71.8 MiB
 timberio/vector	nightly-distroless-libc	64300194	61.3 MiB
 grafana/promtail	latest	67292103	64.2 MiB
 kope/protokube	latest	67756526	64.6 MiB
 newrelic/nri-kubernetes	latest	69482430	66.3 MiB
-calico/node	v3.33.0-0.dev-472-gcef2f47bb759		
+calico/node	v3.33.0-0.dev-472-gcef2f47bb759	145652262	138.9 MiB
 istio/pilot	1.30.0-beta.0	75151861	71.7 MiB
 library/centos	centos7.9.2009	76097157	72.6 MiB
 bitnami/kubectl	latest	79930672	76.2 MiB
 linuxserver/jackett	latest	80615989	76.9 MiB
 ljfranklin/terraform-resource	latest	80993849	77.2 MiB
-calico/cni	v3.32.0-8-gd0234d1e790f		
+calico/cni	v3.32.0-8-gd0234d1e790f	69464182	66.2 MiB
 dynatrace/oneagent	latest	82275648	78.5 MiB
 portainer/portainer	latest	86795383	82.8 MiB
 linuxserver/sonarr	latest	89295259	85.2 MiB
 istio/proxyv2	1.30.0-beta.0	90970270	86.8 MiB
-linuxserver/radarr	6.2.0-nightly		
+linuxserver/radarr	6.2.0-nightly	92899055	88.6 MiB
 seabreeze/dumpsettingsandenvvariables	linuxv4	102084850	97.4 MiB
-library/mariadb	lts-ubi9		
-gitlab/gitlab-runner	bleeding		
+library/mariadb	lts-ubi9	163670076	156.1 MiB
+gitlab/gitlab-runner	bleeding	107800686	102.8 MiB
 library/influxdb	latest	107241320	102.3 MiB
 moby/buildkit	latest	109383864	104.3 MiB
 bitnami/mariadb	latest	112343849	107.1 MiB
@@ -67,19 +67,19 @@ library/rabbitmq	latest	113497011	108.2 MiB
 linuxserver/ombi	latest	124974930	119.2 MiB
 bitnami/postgresql	latest	128209232	122.3 MiB
 fluent/fluentd-kubernetes-daemonset	v1.19-debian-kafka-arm64-1	133800819	127.6 MiB
-kong/kong-gateway	3.14.0.2-20260428-rhel-fips		
+kong/kong-gateway	3.14.0.2-20260428-rhel-fips	181269431	172.9 MiB
 amazon/aws-cli	latest	136545489	130.2 MiB
 amazon/aws-for-fluent-bit	latest	137338982	131.0 MiB
 library/docker	latest	140938664	134.4 MiB
 prom/prometheus	latest	152909412	145.8 MiB
-library/tomcat	jre25-temurin-noble		
+library/tomcat	jre25-temurin-noble	118801539	113.3 MiB
 library/postgres	latest	162293153	154.8 MiB
 linuxserver/plex	latest	163971691	156.4 MiB
 envoyproxy/envoy	tools-dev-2a8d390f8395e065f19d1dbb74657b8bc59cf030	177378269	169.2 MiB
-amazon/aws-efs-csi-driver	master		
-library/php	8.4.21RC1-zts-trixie		
+amazon/aws-efs-csi-driver	master	80487546	76.8 MiB
+library/php	8.4.21RC1-zts-trixie	185461855	176.9 MiB
 newrelic/infrastructure-bundle	latest	202381286	193.0 MiB
-library/wordpress	php8.5-fpm		
+library/wordpress	php8.5-fpm	270125091	257.6 MiB		
 library/mysql	latest	273451129	260.8 MiB
 datadog/agent	7-rc-ltsc2019		
 jenkins/jenkins	latest	289589780	276.2 MiB

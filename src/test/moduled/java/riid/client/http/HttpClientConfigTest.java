@@ -14,7 +14,7 @@ class HttpClientConfigTest {
         HttpClientConfig cfg = HttpClientConfig.builder().build();
         assertEquals(Duration.ofSeconds(5), cfg.connectTimeout());
         assertEquals(Duration.ofMinutes(30), cfg.requestTimeout());
-        assertEquals(Duration.ofMinutes(5), cfg.imageTimeoutMin());
+        assertEquals(Duration.ofMinutes(2), cfg.imageTimeoutMin());
         assertEquals(Duration.ofMinutes(30), cfg.imageTimeoutMax());
         assertEquals(2, cfg.maxRetries());
         assertEquals(Duration.ofMillis(200), cfg.initialBackoff());
@@ -53,9 +53,9 @@ class HttpClientConfigTest {
 
     @Test
     void timeoutForSizeBytesInterpolatesAndCaps() {
-        HttpClientConfig cfg = HttpClientConfig.builder().imageTimeoutMin(Duration.ofMinutes(5))
+        HttpClientConfig cfg = HttpClientConfig.builder().imageTimeoutMin(Duration.ofMinutes(1))
                 .imageTimeoutMax(Duration.ofMinutes(30)).build();
-        assertEquals(Duration.ofMinutes(5), cfg.timeoutForSizeBytes(0));
+        assertEquals(Duration.ofMinutes(1), cfg.timeoutForSizeBytes(0));
         assertEquals(Duration.ofMinutes(30), cfg.timeoutForSizeBytes(15L * 1024 * 1024 * 1024));
         assertEquals(Duration.ofMinutes(30), cfg.timeoutForSizeBytes(30L * 1024 * 1024 * 1024));
     }

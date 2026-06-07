@@ -231,8 +231,16 @@ public final class ConfigValidator {
         if (dragonfly.maxRetries() != null && dragonfly.maxRetries() < 0) {
             throw new ConfigValidationException(ConfigValidationException.P2P.DRAGONFLY_MAX_RETRIES_NEGATIVE.message());
         }
-        if (dragonfly.requestTimeout() != null) {
-            checkDuration(dragonfly.requestTimeout(), "p2p.dragonfly.requestTimeout");
+        if (dragonfly.imageTimeoutMin() != null) {
+            checkDuration(dragonfly.imageTimeoutMin(), "p2p.dragonfly.imageTimeoutMin");
+        }
+        if (dragonfly.imageTimeoutMax() != null) {
+            checkDuration(dragonfly.imageTimeoutMax(), "p2p.dragonfly.imageTimeoutMax");
+        }
+        if (dragonfly.imageTimeoutMin() != null && dragonfly.imageTimeoutMax() != null
+                && dragonfly.imageTimeoutMax().compareTo(dragonfly.imageTimeoutMin()) < 0) {
+            throw new ConfigValidationException(
+                    ConfigValidationException.P2P.DRAGONFLY_IMAGE_TIMEOUT_INVERTED.message());
         }
     }
 
@@ -247,6 +255,10 @@ public final class ConfigValidator {
                     ConfigValidationException.Http.IMAGE_TIMEOUT_MAX_POSITIVE.message();
                 case "client.http.initialBackoff" -> ConfigValidationException.Http.INITIAL_BACKOFF_POSITIVE.message();
                 case "client.http.maxBackoff" -> ConfigValidationException.Http.MAX_BACKOFF_POSITIVE.message();
+                case "p2p.dragonfly.imageTimeoutMin" ->
+                    ConfigValidationException.P2P.DRAGONFLY_IMAGE_TIMEOUT_MIN_POSITIVE.message();
+                case "p2p.dragonfly.imageTimeoutMax" ->
+                    ConfigValidationException.P2P.DRAGONFLY_IMAGE_TIMEOUT_MAX_POSITIVE.message();
                 default -> null;
             };
             if (message != null) {

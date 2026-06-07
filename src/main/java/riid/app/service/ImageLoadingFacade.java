@@ -254,14 +254,9 @@ public final class ImageLoadingFacade implements AutoCloseable {
         List<String> allowedRegistries = appConfig != null ? appConfig.allowedRegistriesOrEmpty() : List.of();
         P2PExecutor p2p = new P2PExecutor.NoOp();
         ChallengeTokenAuthProvider challengeTokenAuthProvider = null;
-        if (config.p2p() != null
-                && config.p2p().dragonfly() != null
-                && config.p2p().dragonfly().enabledOrDefault()) {
+        if (config.p2p() != null && config.p2p().dragonfly() != null && config.p2p().dragonfly().enabledOrDefault()) {
             challengeTokenAuthProvider = new ChallengeTokenAuthProvider(httpConfig, authConfig);
-            p2p = new DragonflyGrpcP2PExecutor(
-                    endpoint,
-                    config.p2p().dragonfly(),
-                    challengeTokenAuthProvider);
+            p2p = new DragonflyGrpcP2PExecutor(endpoint, config.p2p().dragonfly(), challengeTokenAuthProvider);
         }
         DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
                 ? DispatcherLayerSourceMetrics.NOOP
@@ -269,12 +264,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         ChallengeTokenAuthProvider finalChallengeTokenAuthProvider = challengeTokenAuthProvider;
         return new ImageLoadingFacade(
                 new SimpleRequestDispatcher(client, cache, p2p, config.dispatcher(), fs, layerMetrics),
-                new RuntimeRegistry(runtimes),
-                client,
-                fs,
-                tempDir,
-                allowedRegistries,
-                () -> {
+                new RuntimeRegistry(runtimes), client, fs, tempDir, allowedRegistries, () -> {
                     Exception error = null;
                     try {
                         cache.close();
@@ -295,8 +285,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                     if (error != null) {
                         throw error;
                     }
-                },
-                p2p::close);
+                }, p2p::close);
     }
 
     private void ensureRegistryAllowed(String registry) {

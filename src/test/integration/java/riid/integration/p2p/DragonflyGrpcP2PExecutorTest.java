@@ -81,7 +81,7 @@ class DragonflyGrpcP2PExecutorTest {
         RegistryEndpoint endpoint = new RegistryEndpoint("http", "127.0.0.1", server.getAddress().getPort(),
                 Credentials.basic("riid-user", "riid-secret"));
         HostFilesystem fs = new NioHostFilesystem();
-        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null);
+        DragonflyConfig config = new DragonflyConfig(true, DFDAEMON_ADDR, null, null, null, null);
         try (DragonflyGrpcP2PExecutor p2p = new DragonflyGrpcP2PExecutor(endpoint, config);
                 TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                 RecordingRegistryClient registry = new RecordingRegistryClient(digest, payload.length, MEDIA_LAYER)) {

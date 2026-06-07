@@ -182,7 +182,7 @@ class ConfigLoaderTest {
     void loadsRepositoryConfigYaml() {
         GlobalConfig cfg = ConfigLoader.load(Path.of("config", "config.yaml"));
         assertEquals(Duration.ofMinutes(30), cfg.client().http().requestTimeout());
-        assertEquals(Duration.ofMinutes(5), cfg.client().http().imageTimeoutMin());
+        assertEquals(Duration.ofMinutes(2), cfg.client().http().imageTimeoutMin());
         assertEquals(Duration.ofMinutes(30), cfg.client().http().imageTimeoutMax());
         assertEquals(Duration.ofMinutes(30), cfg.app().daemonOrDefault().requestTimeoutOrDefault());
     }

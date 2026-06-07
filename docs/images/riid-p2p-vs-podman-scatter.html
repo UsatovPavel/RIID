@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RIID P2P vs Podman — dataset A</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1219;
+      --card: #171c28;
+      --text: #e8eaef;
+      --muted: #8b92a8;
+      --riid: #5eead4;
+      --podman: #f472b6;
+      --accent: #818cf8;
+      --line: #2a3142;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2rem 1.5rem 3rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    h1 { font-weight: 700; font-size: 1.65rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); max-width: 56rem; margin-bottom: 1.5rem; }
+    .sub code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; color: var(--accent); }
+    .stats {
+      display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.75rem; max-width: 56rem;
+    }
+    .stat {
+      background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+      padding: 0.85rem 1rem; min-width: 11rem;
+    }
+    .stat .label { color: var(--muted); font-size: 0.82rem; }
+    .stat .value { font-size: 1.25rem; font-weight: 700; margin-top: 0.15rem; }
+    section {
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 1.25rem 1.25rem 1.5rem; margin-bottom: 1.75rem; max-width: 56rem;
+    }
+    section h2 { margin: 0 0 0.25rem; font-size: 1.05rem; font-weight: 600; }
+    .note { color: var(--muted); font-size: 0.88rem; margin: 0 0 1rem; }
+    .chart-wrap { position: relative; height: 520px; }
+    .chart-wrap.bar { height: 220px; }
+    .legend-row { display: flex; gap: 1.25rem; font-size: 0.88rem; color: var(--muted); margin-top: 0.75rem; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.35rem; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <h1>RIID+Dragonfly vs Podman — dataset A (88 images ≥ 1 MiB)</h1>
+  <p class="sub">
+    Кластер Selectel, rolling <code>CONCURRENCY=2</code>, 10 RIID pod. Показаны образы <strong>≥ 1 MiB</strong> (мелкие исключены).
+    Ось X: <code>T_podman / T_riid</code> (&gt;1 — RIID быстрее). Ось Y: размер (MiB, log).
+  </p>
+
+  <div class="stats" id="stats"></div>
+
+  <section>
+    <h2>Scatter — speed vs size</h2>
+    <p class="note">Вертикальная линия x=1 — паритет. Зелёные точки: RIID быстрее; розовые: Podman быстрее.</p>
+    <div class="chart-wrap">
+      <canvas id="chartScatter"></canvas>
+    </div>
+    <div class="legend-row">
+      <span><span class="dot" style="background:#5eead4"></span>RIID быстрее (x &gt; 1)</span>
+      <span><span class="dot" style="background:#f472b6"></span>Podman быстрее (x &lt; 1)</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Registry egress (весь прогон)</h2>
+    <p class="note">Суммарный TX registry-ноды: RIID+P2P vs прямой Podman pull.</p>
+    <div class="chart-wrap bar">
+      <canvas id="chartRegistry"></canvas>
+    </div>
+  </section>
+
+  <script>
+    const RIID = "#5eead4";
+    const PODMAN = "#f472b6";
+    const MUTED = "#8b92a8";
+    const POINTS = [{"image": "riid/busybox:latest", "short": "busybox:latest", "x": 0.8383, "y": 2.109, "size_human": "2.1 MiB", "t_riid_ms": 1506.9, "t_podman_ms": 1263.3, "winner": "Podman"}, {"image": "riid/v2tec/watchtower:latest", "short": "v2tec/watchtower:latest", "x": 0.6846, "y": 3.1618, "size_human": "3.2 MiB", "t_riid_ms": 1994.0, "t_podman_ms": 1365.1, "winner": "Podman"}, {"image": "riid/alpine:latest", "short": "alpine:latest", "x": 0.4631, "y": 3.6852, "size_human": "3.7 MiB", "t_riid_ms": 1411.6, "t_podman_ms": 653.7, "winner": "Podman"}, {"image": "riid/containrrr/watchtower:latest", "short": "containrrr/watchtower:latest", "x": 0.6161, "y": 5.3722, "size_human": "5.4 MiB", "t_riid_ms": 2475.9, "t_podman_ms": 1525.4, "winner": "Podman"}, {"image": "riid/curlimages/curl:latest", "short": "curlimages/curl:latest", "x": 0.9318, "y": 10.136, "size_human": "10.1 MiB", "t_riid_ms": 1824.4, "t_podman_ms": 1699.9, "winner": "Podman"}, {"image": "riid/cfcommunity/slack-notification-resource:latest", "short": "cfcommunity/slack-notification-resource:latest", "x": 0.4636, "y": 10.316, "size_human": "10.3 MiB", "t_riid_ms": 3551.4, "t_podman_ms": 1646.6, "winner": "Podman"}, {"image": "riid/prom/node-exporter:latest", "short": "prom/node-exporter:latest", "x": 0.6986, "y": 12.6858, "size_human": "12.7 MiB", "t_riid_ms": 2937.78, "t_podman_ms": 2052.4, "winner": "Podman"}, {"image": "riid/stakater/reloader:merge-1138-ubi", "short": "stakater/reloader:merge-1138-ubi", "x": 0.728, "y": 18.4316, "size_human": "18.4 MiB", "t_riid_ms": 2912.8, "t_podman_ms": 2120.4, "winner": "Podman"}, {"image": "riid/registry:latest", "short": "registry:latest", "x": 0.5778, "y": 19.2522, "size_human": "19.3 MiB", "t_riid_ms": 3328.4, "t_podman_ms": 1923.1, "winner": "Podman"}, {"image": "riid/istio/operator:1.23.6-distroless", "short": "istio/operator:1.23.6-distroless", "x": 0.5367, "y": 28.1389, "size_human": "28.1 MiB", "t_riid_ms": 4162.8, "t_podman_ms": 2234.0, "winner": "Podman"}, {"image": "riid/bitnami/sealed-secrets-controller:latest", "short": "bitnami/sealed-secrets-controller:latest", "x": 0.7192, "y": 28.2793, "size_human": "28.3 MiB", "t_riid_ms": 3437.1, "t_podman_ms": 2472.0, "winner": "Podman"}, {"image": "riid/ubuntu:latest", "short": "ubuntu:latest", "x": 0.3439, "y": 28.3556, "size_human": "28.4 MiB", "t_riid_ms": 1917.8, "t_podman_ms": 659.6, "winner": "Podman"}, {"image": "riid/google/cadvisor:latest", "short": "google/cadvisor:latest", "x": 0.7632, "y": 29.1109, "size_human": "29.1 MiB", "t_riid_ms": 3129.0, "t_podman_ms": 2388.0, "winner": "Podman"}, {"image": "riid/memcached:latest", "short": "memcached:latest", "x": 0.3453, "y": 30.707, "size_human": "30.7 MiB", "t_riid_ms": 3093.0, "t_podman_ms": 1068.0, "winner": "Podman"}, {"image": "riid/nginxinc/nginx-unprivileged:alpine3.23-perl", "short": "nginxinc/nginx-unprivileged:alpine3.23-perl", "x": 0.6104, "y": 31.7956, "size_human": "31.8 MiB", "t_riid_ms": 5075.7, "t_podman_ms": 3098.3, "winner": "Podman"}, {"image": "riid/newrelic/nri-kube-events:latest", "short": "newrelic/nri-kube-events:latest", "x": 0.8186, "y": 32.4024, "size_human": "32.4 MiB", "t_riid_ms": 3035.1, "t_podman_ms": 2484.4, "winner": "Podman"}, {"image": "riid/amazon/amazon-ecs-agent:latest", "short": "amazon/amazon-ecs-agent:latest", "x": 0.8818, "y": 34.3396, "size_human": "34.3 MiB", "t_riid_ms": 3362.3, "t_podman_ms": 2965.0, "winner": "Podman"}, {"image": "riid/presearch/node:latest", "short": "presearch/node:latest", "x": 0.8524, "y": 38.1208, "size_human": "38.1 MiB", "t_riid_ms": 3304.8, "t_podman_ms": 2817.0, "winner": "Podman"}, {"image": "riid/pivotalcf/pivnet-resource:latest", "short": "pivotalcf/pivnet-resource:latest", "x": 0.7781, "y": 42.061, "size_human": "42.1 MiB", "t_riid_ms": 5021.3, "t_podman_ms": 3907.1, "winner": "Podman"}, {"image": "riid/grafana/loki:main-d8f4d0f", "short": "grafana/loki:main-d8f4d0f", "x": 0.6038, "y": 43.056, "size_human": "43.1 MiB", "t_riid_ms": 6365.5, "t_podman_ms": 3843.3, "winner": "Podman"}, {"image": "riid/httpd:latest", "short": "httpd:latest", "x": 0.5652, "y": 43.1295, "size_human": "43.1 MiB", "t_riid_ms": 3646.0, "t_podman_ms": 2060.8, "winner": "Podman"}, {"image": "riid/openpolicyagent/gatekeeper:dev", "short": "openpolicyagent/gatekeeper:dev", "x": 0.627, "y": 44.5885, "size_human": "44.6 MiB", "t_riid_ms": 5013.8, "t_podman_ms": 3143.6, "winner": "Podman"}, {"image": "riid/linuxserver/nzbget:latest", "short": "linuxserver/nzbget:latest", "x": 0.7371, "y": 44.6214, "size_human": "44.6 MiB", "t_riid_ms": 5633.4, "t_podman_ms": 4152.6, "winner": "Podman"}, {"image": "riid/portainer/portainer-ce:alpine-sts", "short": "portainer/portainer-ce:alpine-sts", "x": 0.7266, "y": 45.0434, "size_human": "45.0 MiB", "t_riid_ms": 5474.6, "t_podman_ms": 3977.8, "winner": "Podman"}, {"image": "riid/fluent/fluent-bit:latest", "short": "fluent/fluent-bit:latest", "x": 0.5858, "y": 46.4719, "size_human": "46.5 MiB", "t_riid_ms": 5704.6, "t_podman_ms": 3342.0, "winner": "Podman"}, {"image": "riid/debian:trixie-backports", "short": "debian:trixie-backports", "x": 0.6891, "y": 47.0265, "size_human": "47.0 MiB", "t_riid_ms": 5721.7, "t_podman_ms": 3943.0, "winner": "Podman"}, {"image": "riid/bitnami/redis:latest", "short": "bitnami/redis:latest", "x": 1.0749, "y": 47.2235, "size_human": "47.2 MiB", "t_riid_ms": 3576.8, "t_podman_ms": 3844.8, "winner": "RIID"}, {"image": "riid/amazon/cloudwatch-agent:latest", "short": "amazon/cloudwatch-agent:latest", "x": 0.9212, "y": 49.6169, "size_human": "49.6 MiB", "t_riid_ms": 4152.8, "t_podman_ms": 3825.5, "winner": "Podman"}, {"image": "riid/redis:latest", "short": "redis:latest", "x": 0.6127, "y": 50.7766, "size_human": "50.8 MiB", "t_riid_ms": 4140.0, "t_podman_ms": 2536.7, "winner": "Podman"}, {"image": "riid/newrelic/newrelic-fluentbit-output:latest", "short": "newrelic/newrelic-fluentbit-output:latest", "x": 0.667, "y": 51.548, "size_human": "51.5 MiB", "t_riid_ms": 5163.2, "t_podman_ms": 3443.7, "winner": "Podman"}, {"image": "riid/amazonlinux:latest", "short": "amazonlinux:latest", "x": 1.1427, "y": 52.0417, "size_human": "52.0 MiB", "t_riid_ms": 4208.8, "t_podman_ms": 4809.5, "winner": "RIID"}, {"image": "riid/linuxserver/tautulli:latest", "short": "linuxserver/tautulli:latest", "x": 0.828, "y": 55.1098, "size_human": "55.1 MiB", "t_riid_ms": 5261.3, "t_podman_ms": 4356.1, "winner": "Podman"}, {"image": "riid/amazon/aws-xray-daemon:latest", "short": "amazon/aws-xray-daemon:latest", "x": 0.8837, "y": 55.6949, "size_human": "55.7 MiB", "t_riid_ms": 5819.9, "t_podman_ms": 5142.9, "winner": "Podman"}, {"image": "riid/consul:1.15.4", "short": "consul:1.15.4", "x": 0.9888, "y": 56.1637, "size_human": "56.2 MiB", "t_riid_ms": 4869.5, "t_podman_ms": 4814.9, "winner": "Podman"}, {"image": "riid/portainer/agent:alpine-sts", "short": "portainer/agent:alpine-sts", "x": 0.9206, "y": 59.2589, "size_human": "59.3 MiB", "t_riid_ms": 5163.9, "t_podman_ms": 4754.0, "winner": "Podman"}, {"image": "riid/timberio/vector:nightly-distroless-libc", "short": "timberio/vector:nightly-distroless-libc", "x": 0.7229, "y": 61.3214, "size_human": "61.3 MiB", "t_riid_ms": 6586.5, "t_podman_ms": 4761.6, "winner": "Podman"}, {"image": "riid/grafana/promtail:latest", "short": "grafana/promtail:latest", "x": 0.8651, "y": 64.1748, "size_human": "64.2 MiB", "t_riid_ms": 6145.1, "t_podman_ms": 5316.0, "winner": "Podman"}, {"image": "riid/kope/protokube:latest", "short": "kope/protokube:latest", "x": 0.9501, "y": 64.6177, "size_human": "64.6 MiB", "t_riid_ms": 6062.9, "t_podman_ms": 5760.4, "winner": "Podman"}, {"image": "riid/calico/cni:v3.32.0-8-gd0234d1e790f", "short": "calico/cni:v3.32.0-8-gd0234d1e790f", "x": 0.592, "y": 66.2462, "size_human": "66.2 MiB", "t_riid_ms": 7348.8, "t_podman_ms": 4350.4, "winner": "Podman"}, {"image": "riid/newrelic/nri-kubernetes:latest", "short": "newrelic/nri-kubernetes:latest", "x": 0.8715, "y": 66.2636, "size_human": "66.3 MiB", "t_riid_ms": 4481.7, "t_podman_ms": 3906.0, "winner": "Podman"}, {"image": "riid/istio/pilot:1.30.0-beta.0", "short": "istio/pilot:1.30.0-beta.0", "x": 0.7122, "y": 71.6704, "size_human": "71.7 MiB", "t_riid_ms": 4947.8, "t_podman_ms": 3523.6, "winner": "Podman"}, {"image": "riid/nginx:trixie-perl", "short": "nginx:trixie-perl", "x": 0.8654, "y": 71.7728, "size_human": "71.8 MiB", "t_riid_ms": 6835.7, "t_podman_ms": 5915.3, "winner": "Podman"}, {"image": "riid/centos:centos7.9.2009", "short": "centos:centos7.9.2009", "x": 1.0399, "y": 72.5719, "size_human": "72.6 MiB", "t_riid_ms": 5856.1, "t_podman_ms": 6089.6, "winner": "RIID"}, {"image": "riid/bitnami/kubectl:latest", "short": "bitnami/kubectl:latest", "x": 1.0644, "y": 76.2278, "size_human": "76.2 MiB", "t_riid_ms": 5347.8, "t_podman_ms": 5692.2, "winner": "RIID"}, {"image": "riid/amazon/aws-efs-csi-driver:master", "short": "amazon/aws-efs-csi-driver:master", "x": 0.5114, "y": 76.7589, "size_human": "76.8 MiB", "t_riid_ms": 10988.5, "t_podman_ms": 5619.4, "winner": "Podman"}, {"image": "riid/linuxserver/jackett:latest", "short": "linuxserver/jackett:latest", "x": 0.8772, "y": 76.8814, "size_human": "76.9 MiB", "t_riid_ms": 5712.6, "t_podman_ms": 5010.9, "winner": "Podman"}, {"image": "riid/ljfranklin/terraform-resource:latest", "short": "ljfranklin/terraform-resource:latest", "x": 0.7555, "y": 77.2418, "size_human": "77.2 MiB", "t_riid_ms": 6570.5, "t_podman_ms": 4964.2, "winner": "Podman"}, {"image": "riid/dynatrace/oneagent:latest", "short": "dynatrace/oneagent:latest", "x": 0.9685, "y": 78.4642, "size_human": "78.5 MiB", "t_riid_ms": 6416.0, "t_podman_ms": 6213.7, "winner": "Podman"}, {"image": "riid/portainer/portainer:latest", "short": "portainer/portainer:latest", "x": 0.9125, "y": 82.7745, "size_human": "82.8 MiB", "t_riid_ms": 6674.3, "t_podman_ms": 6090.4, "winner": "Podman"}, {"image": "riid/linuxserver/sonarr:latest", "short": "linuxserver/sonarr:latest", "x": 0.9005, "y": 85.1586, "size_human": "85.2 MiB", "t_riid_ms": 6167.0, "t_podman_ms": 5553.2, "winner": "Podman"}, {"image": "riid/istio/proxyv2:1.30.0-beta.0", "short": "istio/proxyv2:1.30.0-beta.0", "x": 0.7917, "y": 86.756, "size_human": "86.8 MiB", "t_riid_ms": 5020.1, "t_podman_ms": 3974.3, "winner": "Podman"}, {"image": "riid/linuxserver/radarr:6.2.0-nightly", "short": "linuxserver/radarr:6.2.0-nightly", "x": 0.7565, "y": 88.5954, "size_human": "88.6 MiB", "t_riid_ms": 8224.4, "t_podman_ms": 6222.1, "winner": "Podman"}, {"image": "riid/seabreeze/dumpsettingsandenvvariables:linuxv4", "short": "seabreeze/dumpsettingsandenvvariables:linuxv4", "x": 0.9972, "y": 97.3557, "size_human": "97.4 MiB", "t_riid_ms": 7675.4, "t_podman_ms": 7653.9, "winner": "Podman"}, {"image": "riid/influxdb:latest", "short": "influxdb:latest", "x": 0.8723, "y": 102.2733, "size_human": "102.3 MiB", "t_riid_ms": 8068.7, "t_podman_ms": 7038.5, "winner": "Podman"}, {"image": "riid/gitlab/gitlab-runner:bleeding", "short": "gitlab/gitlab-runner:bleeding", "x": 0.6981, "y": 102.8067, "size_human": "102.8 MiB", "t_riid_ms": 11728.6, "t_podman_ms": 8187.6, "winner": "Podman"}, {"image": "riid/moby/buildkit:latest", "short": "moby/buildkit:latest", "x": 0.9547, "y": 104.3166, "size_human": "104.3 MiB", "t_riid_ms": 6824.8, "t_podman_ms": 6515.5, "winner": "Podman"}, {"image": "riid/bitnami/mariadb:latest", "short": "bitnami/mariadb:latest", "x": 1.06, "y": 107.1394, "size_human": "107.1 MiB", "t_riid_ms": 6961.5, "t_podman_ms": 7379.5, "winner": "RIID"}, {"image": "riid/rabbitmq:latest", "short": "rabbitmq:latest", "x": 0.9275, "y": 108.2392, "size_human": "108.2 MiB", "t_riid_ms": 6463.0, "t_podman_ms": 5994.7, "winner": "Podman"}, {"image": "riid/tomcat:jre25-temurin-noble", "short": "tomcat:jre25-temurin-noble", "x": 1.0183, "y": 113.298, "size_human": "113.3 MiB", "t_riid_ms": 8590.3, "t_podman_ms": 8747.38, "winner": "RIID"}, {"image": "riid/linuxserver/ombi:latest", "short": "linuxserver/ombi:latest", "x": 0.8663, "y": 119.1854, "size_human": "119.2 MiB", "t_riid_ms": 9053.8, "t_podman_ms": 7842.9, "winner": "Podman"}, {"image": "riid/bitnami/postgresql:latest", "short": "bitnami/postgresql:latest", "x": 1.207, "y": 122.2699, "size_human": "122.3 MiB", "t_riid_ms": 8042.9, "t_podman_ms": 9707.9, "winner": "RIID"}, {"image": "riid/fluent/fluentd-kubernetes-daemonset:v1.19-debian-kafka-arm64-1", "short": "fluent/fluentd-kubernetes-daemonset:v1.19-debian-kafka-arm64-1", "x": 0.9047, "y": 127.6024, "size_human": "127.6 MiB", "t_riid_ms": 10538.6, "t_podman_ms": 9534.6, "winner": "Podman"}, {"image": "riid/amazon/aws-cli:latest", "short": "amazon/aws-cli:latest", "x": 1.0427, "y": 130.2199, "size_human": "130.2 MiB", "t_riid_ms": 10143.3, "t_podman_ms": 10576.7, "winner": "RIID"}, {"image": "riid/amazon/aws-for-fluent-bit:latest", "short": "amazon/aws-for-fluent-bit:latest", "x": 1.0204, "y": 130.9767, "size_human": "131.0 MiB", "t_riid_ms": 10792.1, "t_podman_ms": 11012.1, "winner": "RIID"}, {"image": "riid/docker:latest", "short": "docker:latest", "x": 0.8217, "y": 134.4096, "size_human": "134.4 MiB", "t_riid_ms": 10200.5, "t_podman_ms": 8381.4, "winner": "Podman"}, {"image": "riid/calico/node:v3.33.0-0.dev-472-gcef2f47bb759", "short": "calico/node:v3.33.0-0.dev-472-gcef2f47bb759", "x": 0.7017, "y": 138.9048, "size_human": "138.9 MiB", "t_riid_ms": 13230.6, "t_podman_ms": 9284.5, "winner": "Podman"}, {"image": "riid/prom/prometheus:latest", "short": "prom/prometheus:latest", "x": 1.0301, "y": 145.8258, "size_human": "145.8 MiB", "t_riid_ms": 8904.1, "t_podman_ms": 9172.1, "winner": "RIID"}, {"image": "riid/postgres:latest", "short": "postgres:latest", "x": 0.8521, "y": 154.7748, "size_human": "154.8 MiB", "t_riid_ms": 10598.8, "t_podman_ms": 9030.9, "winner": "Podman"}, {"image": "riid/mariadb:lts-ubi9", "short": "mariadb:lts-ubi9", "x": 0.8877, "y": 156.0879, "size_human": "156.1 MiB", "t_riid_ms": 12016.0, "t_podman_ms": 10666.6, "winner": "Podman"}, {"image": "riid/linuxserver/plex:latest", "short": "linuxserver/plex:latest", "x": 0.9672, "y": 156.3756, "size_human": "156.4 MiB", "t_riid_ms": 7608.2, "t_podman_ms": 7359.0, "winner": "Podman"}, {"image": "riid/envoyproxy/envoy:tools-dev-2a8d390f8395e065f19d1dbb74657b8bc59cf030", "short": "envoyproxy/envoy:tools-dev-2a8d390f8395e065f19d1dbb74657b8bc59cf030", "x": 0.873, "y": 169.1611, "size_human": "169.2 MiB", "t_riid_ms": 12083.1, "t_podman_ms": 10548.9, "winner": "Podman"}, {"image": "riid/kong/kong-gateway:3.14.0.2-20260428-rhel-fips", "short": "kong/kong-gateway:3.14.0.2-20260428-rhel-fips", "x": 0.6407, "y": 172.872, "size_human": "172.9 MiB", "t_riid_ms": 19039.3, "t_podman_ms": 12199.4, "winner": "Podman"}, {"image": "riid/php:8.4.21RC1-zts-trixie", "short": "php:8.4.21RC1-zts-trixie", "x": 1.0901, "y": 176.8702, "size_human": "176.9 MiB", "t_riid_ms": 10564.9, "t_podman_ms": 11517.3, "winner": "RIID"}, {"image": "riid/newrelic/infrastructure-bundle:latest", "short": "newrelic/infrastructure-bundle:latest", "x": 0.9871, "y": 193.0058, "size_human": "193.0 MiB", "t_riid_ms": 11287.2, "t_podman_ms": 11141.7, "winner": "Podman"}, {"image": "riid/wordpress:php8.5-fpm", "short": "wordpress:php8.5-fpm", "x": 1.048, "y": 257.6114, "size_human": "257.6 MiB", "t_riid_ms": 16282.9, "t_podman_ms": 17063.7, "winner": "RIID"}, {"image": "riid/mysql:latest", "short": "mysql:latest", "x": 0.9252, "y": 260.7833, "size_human": "260.8 MiB", "t_riid_ms": 19956.4, "t_podman_ms": 18463.2, "winner": "Podman"}, {"image": "riid/jenkins/jenkins:latest", "short": "jenkins/jenkins:latest", "x": 1.0762, "y": 276.1743, "size_human": "276.2 MiB", "t_riid_ms": 11298.0, "t_podman_ms": 12159.2, "winner": "RIID"}, {"image": "riid/bitnami/mongodb:latest", "short": "bitnami/mongodb:latest", "x": 1.188, "y": 296.3491, "size_human": "296.3 MiB", "t_riid_ms": 16632.5, "t_podman_ms": 19758.9, "winner": "RIID"}, {"image": "riid/golang:latest", "short": "golang:latest", "x": 0.9463, "y": 297.6469, "size_human": "297.6 MiB", "t_riid_ms": 19680.2, "t_podman_ms": 18623.6, "winner": "Podman"}, {"image": "riid/grafana/grafana:latest", "short": "grafana/grafana:latest", "x": 1.0733, "y": 330.8556, "size_human": "330.9 MiB", "t_riid_ms": 21764.4, "t_podman_ms": 23359.5, "winner": "RIID"}, {"image": "riid/node:latest", "short": "node:latest", "x": 0.9502, "y": 388.6124, "size_human": "388.6 MiB", "t_riid_ms": 26200.6, "t_podman_ms": 24896.9, "winner": "Podman"}, {"image": "riid/python:latest", "short": "python:latest", "x": 0.9584, "y": 395.1696, "size_human": "395.2 MiB", "t_riid_ms": 20087.8, "t_podman_ms": 19253.1, "winner": "Podman"}, {"image": "riid/ruby:latest", "short": "ruby:latest", "x": 0.3323, "y": 408.6408, "size_human": "408.6 MiB", "t_riid_ms": 11093.3, "t_podman_ms": 3685.9, "winner": "Podman"}, {"image": "riid/nextcloud:latest", "short": "nextcloud:latest", "x": 0.892, "y": 480.7709, "size_human": "480.8 MiB", "t_riid_ms": 33384.5, "t_podman_ms": 29780.0, "winner": "Podman"}, {"image": "riid/grafana/grafana-image-renderer:latest", "short": "grafana/grafana-image-renderer:latest", "x": 1.0044, "y": 542.6018, "size_human": "542.6 MiB", "t_riid_ms": 33416.8, "t_podman_ms": 33562.5, "winner": "RIID"}, {"image": "riid/rancher/rancher-agent:head", "short": "rancher/rancher-agent:head", "x": 1.2294, "y": 544.4453, "size_human": "544.4 MiB", "t_riid_ms": 22904.0, "t_podman_ms": 28157.2, "winner": "RIID"}, {"image": "riid/elasticsearch:9.3.4", "short": "elasticsearch:9.3.4", "x": 1.1835, "y": 686.9924, "size_human": "687.0 MiB", "t_riid_ms": 32726.3, "t_podman_ms": 38732.9, "winner": "RIID"}, {"image": "riid/sonarqube:latest", "short": "sonarqube:latest", "x": 1.3173, "y": 1019.957, "size_human": "1020.0 MiB", "t_riid_ms": 39097.9, "t_podman_ms": 51503.7, "winner": "RIID"}];
+    const META = {"sum_time_ratio_riid_over_podman": "1.092", "registry_tx_gib_riid": "19.6589", "registry_tx_gib_podman": "112.6360", "registry_tx_reduction_pct": "82.55"};
+
+    Chart.defaults.color = MUTED;
+    Chart.defaults.borderColor = "#2a3142";
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+
+    const statsEl = document.getElementById("stats");
+    const statItems = [
+      ["Образов (≥1 MiB)", String(POINTS.length)],
+      ["Registry TX RIID", META.registry_tx_gib_riid + " GiB"],
+      ["Registry TX Podman", META.registry_tx_gib_podman + " GiB"],
+      ["Снижение TX", META.registry_tx_reduction_pct + "%"],
+      ["sum_time_riid / sum_time_podman", META.sum_time_ratio_riid_over_podman + "×"],
+    ];
+    for (const [label, value] of statItems) {
+      const d = document.createElement("div");
+      d.className = "stat";
+      d.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+      statsEl.appendChild(d);
+    }
+
+    const riidFaster = POINTS.filter(p => p.x > 1);
+    const podFaster = POINTS.filter(p => p.x <= 1);
+
+    new Chart(document.getElementById("chartScatter"), {
+      type: "scatter",
+      data: {
+        datasets: [
+          {
+            label: "RIID быстрее",
+            data: riidFaster.map(p => ({ x: p.x, y: p.y, image: p.short, size_human: p.size_human, t_riid: p.t_riid_ms, t_pod: p.t_podman_ms })),
+            backgroundColor: RIID,
+            borderColor: RIID,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+          {
+            label: "Podman быстрее",
+            data: podFaster.map(p => ({ x: p.x, y: p.y, image: p.short, size_human: p.size_human, t_riid: p.t_riid_ms, t_pod: p.t_podman_ms })),
+            backgroundColor: PODMAN,
+            borderColor: PODMAN,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const p = ctx.raw;
+                return [
+                  p.image,
+                  `size: ${p.size_human} (${p.y.toFixed(1)} MiB)`,
+                  `speed RIID/Podman: ${ctx.parsed.x.toFixed(2)}×`,
+                  `T_riid: ${p.t_riid.toFixed(0)} ms`,
+                  `T_podman: ${p.t_pod.toFixed(0)} ms`,
+                ];
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: "linear",
+            title: { display: true, text: "Относительная скорость RIID / Podman (T_podman / T_riid)" },
+            grid: { color: "#2a3142" },
+          },
+          y: {
+            type: "logarithmic",
+            title: { display: true, text: "Размер образа (MiB, log)" },
+            grid: { color: "#2a3142" },
+          },
+        },
+      },
+      plugins: [{
+        id: "parityLine",
+        afterDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          const x = scales.x.getPixelForValue(1);
+          ctx.save();
+          ctx.strokeStyle = "#818cf8";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(x, chartArea.top);
+          ctx.lineTo(x, chartArea.bottom);
+          ctx.stroke();
+          ctx.fillStyle = "#818cf8";
+          ctx.font = "12px DM Sans";
+          ctx.fillText("x = 1", x + 4, chartArea.top + 14);
+          ctx.restore();
+        },
+      }],
+    });
+
+    new Chart(document.getElementById("chartRegistry"), {
+      type: "bar",
+      data: {
+        labels: ["RIID+Dragonfly", "Podman"],
+        datasets: [{
+          label: "Registry TX (GiB)",
+          data: [parseFloat(META.registry_tx_gib_riid), parseFloat(META.registry_tx_gib_podman)],
+          backgroundColor: [RIID, PODMAN],
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, title: { display: true, text: "GiB" } },
+        },
+      },
+    });
+  </script>
+</body>
+</html>

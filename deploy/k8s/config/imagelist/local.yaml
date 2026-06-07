@@ -18,7 +18,7 @@ infra:
     performance.local_registry: "riid/registry:2"
     registry.oci_distribution: "riid/registry:3.1.1"
     riid.daemonset.init_busybox: "riid/busybox:1.36.1"
-    riid.daemonset.riid: "ghcr.io/usatovpavel/riid:v0.3.8"
+    riid.daemonset.riid: "ghcr.io/usatovpavel/riid:v0.4.1"
     storage.busybox: "riid/busybox:1.37.0"
     storage.local_path_helper_busybox: "riid/busybox:latest"
     storage.local_path_provisioner: "riid/rancher/local-path-provisioner:v0.0.36"

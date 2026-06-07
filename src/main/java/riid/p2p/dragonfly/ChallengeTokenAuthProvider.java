@@ -23,7 +23,8 @@ import riid.client.service.AuthService;
 import ru.hse.dragonfly.puller.registry.RegistryAuth;
 
 /**
- * Resolves auth via registry challenge flow (Bearer token with cache), then falls back to static credentials.
+ * Resolves auth via registry challenge flow (Bearer token with cache), then
+ * falls back to static credentials.
  */
 public final class ChallengeTokenAuthProvider implements RegistryAuthProvider, AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ChallengeTokenAuthProvider.class);
@@ -37,10 +38,7 @@ public final class ChallengeTokenAuthProvider implements RegistryAuthProvider, A
         AuthConfig effectiveAuthConfig = authConfig != null ? authConfig : new AuthConfig();
         HttpClient jettyClient = HttpClientFactory.create(effectiveHttpConfig, effectiveAuthConfig);
         HttpExecutor httpExecutor = new HttpExecutor(jettyClient, effectiveHttpConfig);
-        this.authService = new AuthService(
-                httpExecutor,
-                new ObjectMapper(),
-                new TokenCache(),
+        this.authService = new AuthService(httpExecutor, new ObjectMapper(), new TokenCache(),
                 effectiveAuthConfig.defaultTokenTtlSeconds());
         this.closeAction = jettyClient::stop;
     }

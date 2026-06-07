@@ -24,17 +24,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * PR15 scenario (a): ~50 MiB image, {@link #ITERATIONS} cold-cache rounds for Podman — timings for
- * {@code POST /pull} via an already running RIID daemon, and separate rounds for native
- * {@code podman pull} of the same OCI ref.
+ * PR15 scenario (a): ~50 MiB image, {@link #ITERATIONS} cold-cache rounds for
+ * Podman — timings for {@code POST /pull} via an already running RIID daemon,
+ * and separate rounds for native {@code podman pull} of the same OCI ref.
  *
- * <p>Per iteration (RIID block): {@code podman system prune -af}, optional wipe of
- * {@code RIID_PERF_CACHE_DIR}, then measuredaemon pull time → appended to {@code riid_pull_ms}.
- * Then Podman block: same iterations with prune before each {@code podman pull} →
- * {@code podman_pull_ms}.
+ * <p>
+ * Per iteration (RIID block): {@code podman system prune -af}, optional wipe of
+ * {@code RIID_PERF_CACHE_DIR}, then measuredaemon pull time → appended to
+ * {@code riid_pull_ms}. Then Podman block: same iterations with prune before
+ * each {@code podman pull} → {@code podman_pull_ms}.
  *
- * <p>Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()}. Requires Linux, curl, podman,
- * network. Daemon must accept {@code runtimeId: podman}.
+ * <p>
+ * Daemon socket: {@link TestConfigYaml#resolveDaemonUnixSocketPath()}. Requires
+ * Linux, curl, podman, network. Daemon must accept {@code runtimeId: podman}.
  */
 @EnabledOnOs(OS.LINUX)
 @Tag("local")
@@ -45,7 +47,10 @@ class DaemonBenchmarkColdCachePullsTest {
     public static final String ENV_RIID_PERF_CACHE_DIR = PerformanceColdCacheHelper.ENV_RIID_PERF_CACHE_DIR;
 
     private static final String RUNTIME = "podman";
-    /** ~50 MiB tier from {@code PopularDockerImagesSizes.txt} ({@code library/irssi}). */
+    /**
+     * ~50 MiB tier from {@code PopularDockerImagesSizes.txt}
+     * ({@code library/irssi}).
+     */
     private static final String REPOSITORY = "library/irssi";
     private static final String REFERENCE = "latest";
     private static final int ITERATIONS = 5;
@@ -70,7 +75,8 @@ class DaemonBenchmarkColdCachePullsTest {
                 DaemonUnixSocketPullSupport.postPull(socketPath, workDir, REPOSITORY, REFERENCE, RUNTIME);
                 long ms = (System.nanoTime() - t0) / 1_000_000L;
                 riidPullMs.add(ms);
-                System.out.println("[DaemonScenarioAPodmanColdCachePullsTest] riid i=" + i + "/" + ITERATIONS + " pull_ms=" + ms);
+                System.out.println(
+                        "[DaemonScenarioAPodmanColdCachePullsTest] riid i=" + i + "/" + ITERATIONS + " pull_ms=" + ms);
             }
             long riidPhaseWallMs = (System.nanoTime() - riidPhaseStart) / 1_000_000L;
 

@@ -42,8 +42,8 @@ public final class PerformanceColdCacheHelper {
     }
 
     /**
-     * Restart RIID daemon process and wait until the Unix socket starts
-     * responding to HTTP.
+     * Restart RIID daemon process and wait until the Unix socket starts responding
+     * to HTTP.
      */
     public static void restartRiidDaemon(Path daemonSocketPath) throws Exception {
         runIgnoreExit("pkill", "-f", "[r]iid.jar.*--daemon");
@@ -54,7 +54,10 @@ public final class PerformanceColdCacheHelper {
         waitDaemonReady(daemonSocketPath);
     }
 
-    /** @deprecated use {@link #clearPodmanCaches()} + {@link #restartRiidDaemon(Path)} */
+    /**
+     * @deprecated use {@link #clearPodmanCaches()} +
+     *             {@link #restartRiidDaemon(Path)}
+     */
     @Deprecated
     public static void clearPodmanAndRiidCaches() throws Exception {
         clearPodmanCaches();

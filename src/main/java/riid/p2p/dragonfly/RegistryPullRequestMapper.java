@@ -17,32 +17,19 @@ public final class RegistryPullRequestMapper {
     private RegistryPullRequestMapper() {
     }
 
-    public static RegistryPullRequest map(
-            RegistryEndpoint endpoint,
-            String repository,
-            ImageDigest digest,
+    public static RegistryPullRequest map(RegistryEndpoint endpoint, String repository, ImageDigest digest,
             Path outputPath) {
         return map(endpoint, repository, digest, outputPath, toRegistryAuth(endpoint.credentials()));
     }
 
-    public static RegistryPullRequest map(
-            RegistryEndpoint endpoint,
-            String repository,
-            ImageDigest digest,
-            Path outputPath,
-            RegistryAuth auth) {
+    public static RegistryPullRequest map(RegistryEndpoint endpoint, String repository, ImageDigest digest,
+            Path outputPath, RegistryAuth auth) {
         Objects.requireNonNull(endpoint, "endpoint");
         Objects.requireNonNull(repository, "repository");
         Objects.requireNonNull(digest, "digest");
         Objects.requireNonNull(outputPath, "outputPath");
         Objects.requireNonNull(auth, "auth");
-        return new RegistryPullRequest(
-                registryBase(endpoint),
-                repository,
-                null,
-                digest.toString(),
-                auth,
-                outputPath);
+        return new RegistryPullRequest(registryBase(endpoint), repository, null, digest.toString(), auth, outputPath);
     }
 
     private static String registryBase(RegistryEndpoint endpoint) {

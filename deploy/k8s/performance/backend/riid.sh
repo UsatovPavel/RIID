@@ -9,7 +9,7 @@ IMAGE_REFERENCE="${IMAGE_REFERENCE:?IMAGE_REFERENCE is required}"
 RUNTIME_ID="${RUNTIME_ID:-podman}"
 
 kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- \
-  curl --unix-socket /tmp/riid.sock -sS -X POST "http://localhost/pull" \
+  curl --unix-socket /tmp/riid.sock --fail -sS -X POST "http://localhost/pull" \
   -H 'Content-Type: application/json' \
   -d "{\"repository\":\"${IMAGE_REPOSITORY}\",\"reference\":\"${IMAGE_REFERENCE}\",\"runtimeId\":\"${RUNTIME_ID}\"}" \
   >/dev/null

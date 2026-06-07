@@ -26,6 +26,28 @@ for f in "$RIID_FILE" "$PODMAN_FILE"; do
   fi
 done
 
+extract_registry_tx_delta() {
+  local f="$1"
+  awk -F '\t' '
+    /^# registry_tx_bytes_delta:/ {
+      v = $2
+      gsub(/[[:space:]]+/, "", v)
+      last = v
+    }
+    END {
+      if (last ~ /^[0-9]+$/) print last
+    }
+  ' "$f"
+}
+
+format_gib() {
+  local bytes="$1"
+  awk -v b="$bytes" 'BEGIN { printf "%.4f", b / 1024 / 1024 / 1024 }'
+}
+
+riid_tx_delta="$(extract_registry_tx_delta "$RIID_FILE" || true)"
+podman_tx_delta="$(extract_registry_tx_delta "$PODMAN_FILE" || true)"
+
 GNU_AWK=("gawk")
 if command -v gawk >/dev/null 2>&1; then :; else GNU_AWK=("awk"); fi
 
@@ -121,3 +143,29 @@ END {
         printf "# avg_ratio_simple_mean_over_images_with_ratio: %.4f\n", sum_ratio / imgs_with_ratio
 }
 ' "$RIID_FILE" "$PODMAN_FILE"
+
+if [[ "$riid_tx_delta" =~ ^[0-9]+$ ]]; then
+  riid_tx_gib="$(format_gib "$riid_tx_delta")"
+else
+  riid_tx_delta="-"
+  riid_tx_gib="-"
+fi
+
+if [[ "$podman_tx_delta" =~ ^[0-9]+$ ]]; then
+  podman_tx_gib="$(format_gib "$podman_tx_delta")"
+else
+  podman_tx_delta="-"
+  podman_tx_gib="-"
+fi
+
+tx_ratio="-"
+tx_reduction_pct="-"
+if [[ "$riid_tx_delta" =~ ^[0-9]+$ && "$podman_tx_delta" =~ ^[0-9]+$ && "$podman_tx_delta" -gt 0 ]]; then
+  tx_ratio="$(awk -v a="$riid_tx_delta" -v b="$podman_tx_delta" 'BEGIN { printf "%.4f", a / b }')"
+  tx_reduction_pct="$(awk -v a="$riid_tx_delta" -v b="$podman_tx_delta" 'BEGIN { printf "%.2f", (1 - a / b) * 100 }')"
+fi
+
+printf '# registry_tx_gib_riid:\t%s\n' "$riid_tx_gib"
+printf '# registry_tx_gib_podman:\t%s\n' "$podman_tx_gib"
+printf '# registry_tx_ratio_riid_over_podman:\t%s\n' "$tx_ratio"
+printf '# registry_tx_reduction_pct_vs_podman:\t%s\n' "$tx_reduction_pct"
