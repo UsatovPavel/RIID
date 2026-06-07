@@ -72,29 +72,15 @@ Measured with RIID+Dragonfly vs plain Podman pull in a rolling scenario
 
 Full cluster setup, test methodology: **[deploy/k8s/README.md](deploy/k8s/README.md)**
 
-![RIID+Dragonfly vs Podman — scatter, dataset A (images ≥ 1 MiB)](docs/images/riid-p2p-vs-podman-scatter.svg)
-#### Observability stack
+<img width="1000" height="560" alt="image" src="https://github.com/user-attachments/assets/008259f0-1659-4979-9270-9b3f7e72a659" />
+
+## Stack
+Java 23  
+Gradlew 9.2  
+Dragonfly 2.2  
+### Observability stack
 Daemon exposes Prometheus metrics (`/metrics` on TCP); dashboards for VictoriaMetrics + Grafana are in [`config/metrics/`](config/metrics/README.md).
 See [`graphs from cluster benchmark`](docs/images/graphs-dataset-a.png)
-
----
-
-## Architecture
-
-RIID is modular. Each layer is independently testable. 
-
-```
-```
-
-| Module | Docs | Responsibility |
-|--------|------|---------------|
-| **App** (CLI + wiring) | [docs/app.md](docs/app.md) | Arg parsing, dependency assembly, daemon/CLI entrypoint |
-| **Registry Client** | [docs/client.md](docs/client.md) | Docker API v2, auth, manifests, blob fetch |
-| **Dispatcher** |  | Source strategy, parallelism, fallback, cache writes |
-| **P2P Layer** |  | Dragonfly gRPC integration via `java-dragonfly-image-puller` |
-| **Cache** | | Content-addressable OCI layer store, token cache |
-| **Runtime Adapter** | | OCI artifact import into Podman / Docker / Porto |
-| **Tests** | | 4 categories: moduled, e2e, performance, fuzzing, each in separate module|
 
 ---
 
@@ -107,6 +93,23 @@ RIID is modular. Each layer is independently testable.
 | **porto** | Requires `portoctl` + running `portod`; imports via `portoctl layer -I` |
 
 To add a new runtime: implement the `RuntimeAdapter` interface (~300 lines).
+
+## Architecture
+
+RIID is modular. Each layer is independently testable.  
+
+<img width="591" height="311" alt="RIID diagram (1)" src="https://github.com/user-attachments/assets/f58e0e84-dc0e-43d9-a02e-38ebdc9d54ca" />
+
+
+| Module | Docs | Responsibility |
+|--------|------|---------------|
+| **App** (CLI + wiring) | [docs/app.md](docs/app.md) | Arg parsing, dependency assembly, daemon/CLI entrypoint |
+| **Registry Client** | [docs/client.md](docs/client.md) | Docker API v2, auth, manifests, blob fetch |
+| **Dispatcher** |  | Source strategy, parallelism, fallback, cache writes |
+| **P2P Layer** |  | Dragonfly gRPC integration via `java-dragonfly-image-puller` |
+| **Cache** | | Content-addressable OCI layer store, token cache |
+| **Runtime Adapter** | | OCI artifact import into Podman / Docker / Porto |
+| **Tests** | | 4 categories: moduled, e2e, performance, fuzzing, each in separate module|
 
 ---
 
