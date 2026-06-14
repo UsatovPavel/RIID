@@ -1,10 +1,12 @@
-registry_provider: Docker Hub
+registry_provider: Selectel
 test_registry_provider: local # именно откуда загружает УЖЕ развернутый кластер образы в performance
 cluster_provider: Selectel
 cluster_topology:
   workers: 10
   observers: 1
   registry_nodes: 1
+dragonfly:
+  seed_clients: 3
 network_parameters:
   bandwidth: "50 MB/s"
   latency_additional: "0 ms"

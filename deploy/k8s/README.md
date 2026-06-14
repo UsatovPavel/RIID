@@ -14,20 +14,51 @@ make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATAS
 make -C deploy/k8s/performance summarize
 
 Полный список используемых команд(созадние кластера, тестирование, дебаг) в _commands.md
-## Окружение кластера
+## Cluster environment
 
-- 12 нод;
-- 4 vCPU, 2.2-2.4 ГГц;
+- 12 nodes;
+- 4 vCPU, 2.2-2.4 GHz;
 - 8 GB RAM;
-- SSD: 140 ГБ, 500 МБ/с, 25 000 / 15 000 IOPS;
-- SSD не являлся узким местом;
-- средняя скорость сети в кластере: 160-200 МБ/с.
+- SSD: 140 GB, 500 MB/s, 25,000 / 15,000 IOPS;
+- SSD was not a bottleneck;
+- Average cluster network speed: 160-200 MB/s.
 
 ### Network / `tc` (Traffic Control)
 
-**На этом дереве (`deploy/k8s`) WAN не эмулируется:** ограничения RTT или полосы через Linux **Traffic Control (`tc`, `netem`, TBF и т.п.) не применяются** скриптами performance/bootstrap. Замеры идут в **реальной топологии** кластера (узлы провайдера ↔ реестр, Dragonfly, лимиты SLA сети/диска).
+**No WAN emulation in Recreate scenario:** RTT or bandwidth limits via Linux **Traffic Control (`tc`, `netem`, TBF, etc.) are NOT applied** by performance/bootstrap scripts. Measurements are conducted in the **real cluster topology** (provider nodes ↔ registry, Dragonfly, SLA network/disk limits).
 
-Это сознательно отличается от ряда исследовательских статей (например, NSDI 2022 *Starlight*), где между VM гоняли фиксированные **RTT/BW через `tc`**. Если понадится воспроизводимый профиль WAN, его нужно вводить **отдельно** ( DaemonSet/helpers на нодах, NetworkPolicy+QOS где применимо, отдельный «шейпер» между стендами)—в этом репозитории универсального решения пока нет.
+This deliberately differs from some research papers (e.g., NSDI 2022 *Starlight*) that use fixed **RTT/BW via `tc`** between VMs. Traffic limiting was used exclusively to find the boundary of Dragonfly's effectiveness. Without limits, RIID with P2P showed 200% speed compared to Podman on ~10 images in the rolling scenario. 
+
+## Performance results
+
+### Rolling scenario (CONCURRENCY=2, sequential with limits)
+
+10 RIID pods pulling 91 images with concurrency limit of 2 pods at a time.
+
+| Metric | RIID+Dragonfly | Podman (baseline) | Result |
+|--------|---------------|-------------------|---------|
+| Registry TX (egress) | **19.7 GiB** | 112.6 GiB | **−82.6%** traffic reduction |
+| Download speed | **~1.09×** slower | 1.00× | Comparable with P2P overhead |
+
+**[Interactive scatter: rolling scenario](../../docs/images/riid-p2p-vs-podman-scatter.html)**
+
+### Recreate scenario (all pods simultaneously)
+
+All 10 RIID pods pulling 91 images simultaneously (Kubernetes `Recreate` deployment strategy).
+
+| Metric | Formula | RIID+Dragonfly | Podman (baseline) | Ratio |
+|--------|---------|---------------|-------------------|-------|
+| **Sum of means** | Σt̄ᵣ / Σt̄ₚ | 875 sec | 1073 sec | **0.82×** (18% faster) |
+| **Sum of aggregates** (wall-clock) | ΣTᵃᵍᵍ / ΣTᵃᵍᵍ | 969 sec | 1108 sec | **0.88×** (12% faster) |
+| **Registry TX** (egress) | — | **11.6 GiB** | 112.6 GiB | **−89.7%** |
+
+**[Interactive scatter: recreate scenario](../../docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
+
+Где:
+- **Sum of means**: сумма средних времён загрузки по 10 pod на каждый образ
+- **Sum of aggregates**: сумма максимумов (wall-clock времени кластера на каждый образ)
+- Recreate сценарий демонстрирует лучшую эффективность P2P при одновременной нагрузке
+
 ## Change test registry_provider:
 Change config.yaml
 Generate test dataset.

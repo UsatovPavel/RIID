@@ -59,16 +59,17 @@ Results are presented in the interactive chart:
 
 ### P2P cluster benchmark — dataset A (91 images, Selectel cluster)
 
-Measured with RIID+Dragonfly vs plain Podman pull in a rolling scenario
-(10 RIID pods, 12-node cluster).
+**Recreate scenario** (all 10 RIID pods pull simultaneously):
 
-| Metric | RIID+Dragonfly | Podman (baseline) |
-|--------|---------------|-------------------|
-| `sum(T_pull)` ratio | **1.09×** (9% slower total wall time) | 1.00× |
-| Registry TX (egress) | **19.7 GiB** | 112.6 GiB |
-| Registry traffic reduction | **−82.6%** | — |
+| Metric | Formula | RIID+Dragonfly | Podman (baseline) | Ratio |
+|--------|---------|---------------|-------------------|-------|
+| **Sum of means** | Σt̄ᵣ / Σt̄ₚ | 875 sec | 1073 sec | **0.82×** (18% faster) |
+| **Sum of aggregates** (wall-clock) | ΣTᵃᵍᵍ / ΣTᵃᵍᵍ | 969 sec | 1108 sec | **0.88×** (12% faster) |
+| **Registry TX** (egress) | — | **11.6 GiB** | 112.6 GiB | **−89.7%** |
 
-**[Interactive scatter: RIID P2P vs Podman — speed vs image size](docs/images/riid-p2p-vs-podman-scatter.html)**
+**[Interactive scatter: RIID P2P vs Podman — recreate scenario](docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
+
+**Rolling scenario** (concurrency-limited sequential pulls) showed comparable download speed with **−82.6% registry traffic** reduction (19.7 GiB vs 112.6 GiB). See **[deploy/k8s/README.md](deploy/k8s/README.md)** for detailed methodology and rolling scenario results.
 
 Full cluster setup, test methodology: **[deploy/k8s/README.md](deploy/k8s/README.md)**
 

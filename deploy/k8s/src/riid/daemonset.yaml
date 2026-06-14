@@ -29,8 +29,6 @@ spec:
               - matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
-                  - key: node-role.kubernetes.io/master
-                    operator: DoesNotExist
                   - key: riid.monitoring
                     operator: DoesNotExist
                   - key: riid.registry
