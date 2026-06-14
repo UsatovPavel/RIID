@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BASE_VALUES="${SCRIPT_DIR}/values.yaml"
 IMAGE_LIST="${IMAGE_LIST_FILE:-${REPO_ROOT}/deploy/k8s/config/imagelist/dockerhub.yaml}"
+CLUSTER_CONFIG="${CLUSTER_CONFIG:-${REPO_ROOT}/deploy/k8s/config/config.yaml}"
 
 OUT_FILE="${1:-}"
 TMP_OVERRIDE="$(mktemp)"
@@ -62,6 +63,14 @@ read -r sch_reg sch_repo sch_tag < <(parse_ref "$(infra_image dragonfly.schedule
 read -r cli_reg cli_repo cli_tag < <(parse_ref "$(infra_image dragonfly.client)")
 read -r seed_reg seed_repo seed_tag < <(parse_ref "$(infra_image dragonfly.seed_client)")
 
+SEED_CLIENTS=2
+if [[ -f "${CLUSTER_CONFIG}" ]]; then
+  SEED_CLIENTS_FROM_CONFIG="$(yq e '.dragonfly.seed_clients // ""' "${CLUSTER_CONFIG}" 2>/dev/null || echo "")"
+  if [[ "${SEED_CLIENTS_FROM_CONFIG}" =~ ^[0-9]+$ ]] && [[ "${SEED_CLIENTS_FROM_CONFIG}" -gt 0 ]]; then
+    SEED_CLIENTS="${SEED_CLIENTS_FROM_CONFIG}"
+  fi
+fi
+
 cat > "${TMP_OVERRIDE}" <<EOF
 manager:
   image:
@@ -79,6 +88,7 @@ client:
     repository: ${cli_repo}
     tag: ${cli_tag}
 seedClient:
+  replicas: ${SEED_CLIENTS}
   image:
     registry: ${seed_reg}
     repository: ${seed_repo}

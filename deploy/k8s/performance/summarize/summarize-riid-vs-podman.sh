@@ -73,13 +73,23 @@ function rate_pct(s, tot,      t) {
 NR == FNR {
     if (c[5] != "riid") next
     img = c[3]
+    pod = c[4]
     if (img == "") next
     dr = c[8] + 0
     ex = c[9] + 0
-    riid_n[img]++
-    if (ex == 0) {
-        riid_ok[img]++
-        riid_sum[img] += dr
+    if (pod == "AGGREGATE") {
+        riid_has_agg[img] = 1
+        riid_agg_n[img]++
+        if (ex == 0) {
+            riid_agg_ok[img]++
+            riid_agg_sum[img] += dr
+        }
+    } else {
+        riid_n[img]++
+        if (ex == 0) {
+            riid_ok[img]++
+            riid_sum[img] += dr
+        }
     }
     next
 }
@@ -87,13 +97,23 @@ NR == FNR {
 {
     if (c[5] != "podman") next
     img = c[3]
+    pod = c[4]
     if (img == "") next
     dr = c[8] + 0
     ex = c[9] + 0
-    pod_n[img]++
-    if (ex == 0) {
-        pod_ok[img]++
-        pod_sum[img] += dr
+    if (pod == "AGGREGATE") {
+        pod_has_agg[img] = 1
+        pod_agg_n[img]++
+        if (ex == 0) {
+            pod_agg_ok[img]++
+            pod_agg_sum[img] += dr
+        }
+    } else {
+        pod_n[img]++
+        if (ex == 0) {
+            pod_ok[img]++
+            pod_sum[img] += dr
+        }
     }
 }
 
@@ -103,7 +123,11 @@ END {
 
     for (k in riid_n)
         union[k] = 1
+    for (k in riid_agg_n)
+        union[k] = 1
     for (k in pod_n)
+        union[k] = 1
+    for (k in pod_agg_n)
         union[k] = 1
 
     nuni = asorti(union, keys)
@@ -112,13 +136,18 @@ END {
 
     for (i = 1; i <= nuni; i++) {
         img = keys[i]
+
+        # Always use individual pod mean, ignore AGGREGATE
         n1 = riid_n[img] + 0
         o1 = riid_ok[img] + 0
+        s1 = riid_sum[img] + 0
+
         n2 = pod_n[img] + 0
         o2 = pod_ok[img] + 0
+        s2 = pod_sum[img] + 0
 
-        if (o1 > 0) m1 = riid_sum[img] / o1; else m1 = ""
-        if (o2 > 0) m2 = pod_sum[img] / o2; else m2 = ""
+        if (o1 > 0) m1 = s1 / o1; else m1 = ""
+        if (o2 > 0) m2 = s2 / o2; else m2 = ""
 
         ratio = "-"
         if (o1 > 0 && o2 > 0 && (m2 + 0) > 0) {

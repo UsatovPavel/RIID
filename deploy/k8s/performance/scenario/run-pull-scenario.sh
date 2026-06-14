@@ -149,6 +149,9 @@ run_recreate() {
   local -a pods=("$@")
   local failed=0
   local -a pids=()
+  local start_ms end_ms duration_ms
+
+  start_ms="$(now_ms)"
   for pod in "${pods[@]}"; do
     (
       run_one "$pod"
@@ -163,6 +166,13 @@ run_recreate() {
     fi
     ((idx++))
   done
+  end_ms="$(now_ms)"
+  duration_ms=$((end_ms - start_ms))
+
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+    "$SCENARIO" "$MODE" "$IMAGE_REPOSITORY:$IMAGE_REFERENCE" "AGGREGATE" "$BACKEND" \
+    "$start_ms" "$end_ms" "$duration_ms" "$failed"
+
   return "$failed"
 }
 
