@@ -67,13 +67,14 @@ Results are presented in the interactive chart:
 | **Sum of aggregates** (wall-clock) | ΣTᵃᵍᵍ / ΣTᵃᵍᵍ | 969 sec | 1108 sec | **0.88×** (12% faster) |
 | **Registry TX** (egress) | — | **11.6 GiB** | 112.6 GiB | **−89.7%** |
 
+On big images riid keep **p2p advantage** and overcome podman
+<img width="1097" height="777" alt="image" src="https://github.com/user-attachments/assets/999cac42-5d8b-4cb8-91e2-b1b9a04dce33" />
+
 **[Interactive scatter: RIID P2P vs Podman — recreate scenario](docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
 
 **Rolling scenario** (concurrency-limited sequential pulls) showed comparable download speed with **−82.6% registry traffic** reduction (19.7 GiB vs 112.6 GiB). See **[deploy/k8s/README.md](deploy/k8s/README.md)** for detailed methodology and rolling scenario results.
 
 Full cluster setup, test methodology: **[deploy/k8s/README.md](deploy/k8s/README.md)**
-
-<img width="1000" height="560" alt="image" src="https://github.com/user-attachments/assets/008259f0-1659-4979-9270-9b3f7e72a659" />
 
 ## Stack
 Java 23  
