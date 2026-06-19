@@ -22,7 +22,7 @@ Image *distribution*—delivering multi-gigabyte layers to thousands of nodes—
 
 - Verified by 100+ images from 2 Kb to 4.8 GB both in p2p and registry scenarios (see *benchmarks*)
 All data from external sources (registry, P2P) is integrity-verified (SHA-256).
-
+- Riid keeps Dragonfly advantage when pulling many(10+) and big(300mb+) images simulatiously. This make it **cloud-appliable** tool.
 ---
 
 ## Operation modes
@@ -67,7 +67,7 @@ Results are presented in the interactive chart:
 | **Sum of aggregates** (wall-clock) | ΣTᵃᵍᵍ / ΣTᵃᵍᵍ | 969 sec | 1108 sec | **0.88×** (12% faster) |
 | **Registry TX** (egress) | — | **11.6 GiB** | 112.6 GiB | **−89.7%** |
 
-**[Interactive scatter: RIID P2P vs Podman — recreate scenario](docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
+**[Interactive scatter: RIID P2P vs Podman — recreate scenario](docs/images/riid-p2p-vs-podman-scatter-recreate-en.html)** ([rus version](docs/images/riid-p2p-vs-podman-scatter-recreate.html))
 
 **Rolling scenario** (concurrency-limited sequential pulls) showed comparable download speed with **−82.6% registry traffic** reduction (19.7 GiB vs 112.6 GiB). See **[deploy/k8s/README.md](deploy/k8s/README.md)** for detailed methodology and rolling scenario results.
 

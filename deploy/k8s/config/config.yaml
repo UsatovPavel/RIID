@@ -6,7 +6,7 @@ cluster_topology:
   observers: 1
   registry_nodes: 1
 dragonfly:
-  seed_clients: 3
+  seed_clients: 10
 network_parameters:
   bandwidth: "50 MB/s"
   latency_additional: "0 ms"

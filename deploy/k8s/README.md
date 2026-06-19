@@ -52,7 +52,7 @@ All 10 RIID pods pulling 91 images simultaneously (Kubernetes `Recreate` deploym
 | **Sum of aggregates** (wall-clock) | ΣTᵃᵍᵍ / ΣTᵃᵍᵍ | 969 sec | 1108 sec | **0.88×** (12% faster) |
 | **Registry TX** (egress) | — | **11.6 GiB** | 112.6 GiB | **−89.7%** |
 
-**[Interactive scatter: recreate scenario](../../docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
+**[Interactive scatter: recreate scenario](../../docs/images/riid-p2p-vs-podman-scatter-recreate-en.html)**
 
 Где:
 - **Sum of means**: сумма средних времён загрузки по 10 pod на каждый образ

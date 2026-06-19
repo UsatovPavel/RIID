@@ -1,19 +1,52 @@
 manager:
   replicas: 1
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: riid.monitoring
+                operator: DoesNotExist
+              - key: riid.registry
+                operator: DoesNotExist
   image:
     repository: dragonflyoss/manager
     tag: latest
   metrics:
     enable: true
 scheduler:
-  replicas: 1
+  replicas: 2
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: riid.monitoring
+                operator: DoesNotExist
+              - key: riid.registry
+                operator: DoesNotExist
   image:
     repository: dragonflyoss/scheduler
     tag: latest
   metrics:
     enable: true
 seedClient:
-  replicas: 2
+  replicas: 10
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: riid.monitoring
+                operator: DoesNotExist
+              - key: riid.registry
+                operator: DoesNotExist
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              component: seed-client
+          topologyKey: kubernetes.io/hostname
   image:
     repository: dragonflyoss/client
     tag: latest
@@ -29,6 +62,8 @@ client:
         nodeSelectorTerms:
           - matchExpressions:
               - key: riid.monitoring
+                operator: DoesNotExist
+              - key: riid.registry
                 operator: DoesNotExist
   metrics:
     enable: true
@@ -49,6 +84,37 @@ client:
       mountPath: /run/dragonfly
     - name: dragonfly-output
       mountPath: /var/run/dragonfly/output
+mysql:
+  primary:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: riid.monitoring
+                  operator: DoesNotExist
+                - key: riid.registry
+                  operator: DoesNotExist
 redis:
   replica:
     replicaCount: 1
+  master:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: riid.monitoring
+                  operator: DoesNotExist
+                - key: riid.registry
+                  operator: DoesNotExist
+  replica:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: riid.monitoring
+                  operator: DoesNotExist
+                - key: riid.registry
+                  operator: DoesNotExist
