@@ -26,8 +26,9 @@ public interface RuntimeAdapter {
 
     /**
      * When {@code true}, the app layer builds an on-disk OCI layout only and calls
-     * {@link #importOciLayoutDirectory(Path, String)} instead of materializing an
-     * oci-archive file. Default {@code false}.
+     * {@link #importOciLayoutDirectory(Path)} so the runtime can stream a tar (e.g.
+     * {@code tar cf -} to stdin) instead of materializing an oci-archive file.
+     * Default {@code false}.
      */
     default boolean prefersOciLayoutStreamImport() {
         return false;
@@ -37,14 +38,8 @@ public interface RuntimeAdapter {
      * Import image from a directory that follows OCI image layout (blobs,
      * index.json, oci-layout). Used only when
      * {@link #prefersOciLayoutStreamImport()} is {@code true}.
-     *
-     * @param reference
-     *            the {@code org.opencontainers.image.ref.name} annotation value
-     *            written into {@code index.json} (e.g. {@code
-     *                  "name:tag"}), used to select/name the image being imported.
      */
-    default void importOciLayoutDirectory(Path ociLayoutRoot, String reference)
-            throws IOException, InterruptedException {
+    default void importOciLayoutDirectory(Path ociLayoutRoot) throws IOException, InterruptedException {
         throw new UnsupportedOperationException(
                 "Runtime " + runtimeId() + " does not support OCI layout directory import");
     }

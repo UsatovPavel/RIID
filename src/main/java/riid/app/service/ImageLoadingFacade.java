@@ -141,7 +141,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
             long payloadBytes = archiveBuilder.estimatePayloadBytes(manifestResult);
             if (runtime.prefersOciLayoutStreamImport()) {
                 return archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
-                    runtime.importOciLayoutDirectory(ociDir, imageId.referenceName());
+                    runtime.importOciLayoutDirectory(ociDir);
                     MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
                             .addDurationMs(durationMs(engineStartedNs)).log("Loaded " + imageId + " into runtime "
                                     + runtime.runtimeId() + " via OCI layout stream (~" + payloadBytes + " B payload)");
