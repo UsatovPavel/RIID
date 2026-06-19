@@ -15,7 +15,7 @@ manager:
   metrics:
     enable: true
 scheduler:
-  replicas: 2
+  replicas: 1
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,7 +31,7 @@ scheduler:
   metrics:
     enable: true
 seedClient:
-  replicas: 10
+  replicas: 3
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

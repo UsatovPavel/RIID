@@ -36,7 +36,7 @@ dependencies {
     add("implementation", "org.eclipse.jetty:jetty-server:12.1.5")
     add("implementation", "org.eclipse.jetty:jetty-util:12.1.5")
     add("implementation", "org.eclipse.jetty:jetty-unixdomain-server:12.1.5")
-    add("implementation", "ru.hse:java-dragonfly-image-puller:1.2.0")
+    add("implementation", "ru.hse:java-dragonfly-image-puller:1.2.1")
     add("implementation", "io.micrometer:micrometer-registry-prometheus:1.16.2")
 
 }

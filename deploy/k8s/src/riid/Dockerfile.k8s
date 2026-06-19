@@ -1,3 +1,12 @@
+# composefs has no package in any stable Debian/Ubuntu release yet (only sid/forky);
+# pull the prebuilt binaries+lib from sid instead of adding sid as a runtime apt source.
+# Requires libc6 >= 2.38, hence the final stage below uses the noble (24.04, glibc 2.39)
+# base rather than jammy (glibc 2.35), to avoid a GLIBC version mismatch at runtime.
+FROM debian:sid AS composefs-tools
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends composefs \
+ && rm -rf /var/lib/apt/lists/*
+
 FROM gradle:jdk23 AS builder
 
 WORKDIR /workspace
@@ -26,7 +35,7 @@ RUN if [ -n "$GITHUB_ACTOR" ] && [ -n "$GITHUB_PACKAGES_TOKEN" ]; then \
       ./gradlew --no-daemon clean shadowJar ; \
     fi
 
-FROM eclipse-temurin:23-jre
+FROM eclipse-temurin:23-jre-noble
 
 WORKDIR /opt/riid
 
@@ -38,15 +47,35 @@ COPY --from=builder /workspace/build/libs/riid.jar /opt/riid/riid.jar
 COPY config/config.yaml /etc/riid/config.yaml
 
 # Podman in K8s: overlay graph driver needs fuse-overlayfs. Tooling baked in — no apt in-cluster (Selectel Makefile).
+# libssl3t64 provides libcrypto.so.3, a runtime dependency of the composefs binaries below
+# (confirmed via local ldd against the actual sid .deb contents, not present by default
+# in this base image; package is named libssl3t64 on noble due to the 64-bit time_t ABI rename).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     podman \
     fuse-overlayfs \
+    libssl3t64 \
     curl \
     jq \
     iproute2 \
     netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*
+
+# composefs binaries+lib from debian:sid (see composefs-tools stage above) — no
+# package exists for any stable release. Fail the build immediately on ABI/GLIBC
+# mismatch rather than discovering it only when a pod tries to use composefs.
+COPY --from=composefs-tools /usr/bin/mkcomposefs /usr/bin/composefs-info /usr/bin/
+COPY --from=composefs-tools /usr/sbin/mount.composefs /usr/sbin/mount.composefs
+COPY --from=composefs-tools /usr/lib/x86_64-linux-gnu/libcomposefs.so.1.4.0 /usr/lib/x86_64-linux-gnu/libcomposefs.so.1.4.0
+# `mkcomposefs --help`/`composefs-info --help` exit 1 by CLI convention (missing
+# required positional args), so they can't be used as a success check; verify
+# dynamic linkage directly via ldd instead.
+RUN ln -sf libcomposefs.so.1.4.0 /usr/lib/x86_64-linux-gnu/libcomposefs.so.1 \
+ && ldconfig \
+ && ! ldd /usr/bin/mkcomposefs | grep -q "not found" \
+ && ! ldd /usr/bin/composefs-info | grep -q "not found" \
+ && ! ldd /usr/sbin/mount.composefs | grep -q "not found"
+
 COPY deploy/k8s/src/riid/storage.conf /etc/containers/storage.conf
 
 EXPOSE 9090

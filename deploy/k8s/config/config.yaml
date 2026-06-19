@@ -2,11 +2,11 @@ registry_provider: Selectel
 test_registry_provider: local # именно откуда загружает УЖЕ развернутый кластер образы в performance
 cluster_provider: Selectel
 cluster_topology:
-  workers: 10
+  workers: 4
   observers: 1
   registry_nodes: 1
 dragonfly:
-  seed_clients: 10
+  seed_clients: 2
 network_parameters:
   bandwidth: "50 MB/s"
   latency_additional: "0 ms"

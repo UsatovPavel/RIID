@@ -3,7 +3,7 @@ client:
   http:
     connectTimeout: "PT5S"
     requestTimeout: "PT30M"
-    imageTimeoutMin: "PT2M"
+    imageTimeoutMin: "PT3M"
     imageTimeoutMax: "PT30M"
     maxRetries: 2
     initialBackoff: "PT0.2S"
