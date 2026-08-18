@@ -4,11 +4,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -163,15 +160,9 @@ public final class OciArchiveBuilder {
             }
         }
 
-        // AGENT-73 probe: normalize Docker schema2 media types to OCI equivalents
-        // before writing the manifest blob, so `podman pull oci:` sees a native OCI
-        // manifest instead of an OCI index wrapping Docker-schema2 content. Blob
-        // bytes (config/layers) are untouched (digests unchanged) — only the
-        // manifest's own media-type labels change, so its digest is recomputed.
-        String outerMediaType = indexManifestMediaType(manifestResult, manifest);
-        Manifest normalizedManifest = normalizeToOciMediaTypes(outerMediaType, manifest);
-        byte[] manifestBytes = OBJECT_MAPPER.writeValueAsBytes(normalizedManifest);
-        String manifestDigest = sha256Hex(manifestBytes);
+        // Manifest blob
+        byte[] manifestBytes = OBJECT_MAPPER.writeValueAsBytes(manifest);
+        String manifestDigest = manifestResult.digest().replace("sha256:", "");
         fs.write(blobsDir.resolve(manifestDigest), manifestBytes);
 
         // oci-layout
@@ -180,8 +171,9 @@ public final class OciArchiveBuilder {
         // index.json: descriptor mediaType must match the manifest blob (Docker v2 vs
         // OCI), or podman load fails.
         String template = readResource("oci/index/json.tpl");
-        String index = String.format(Locale.ROOT, template, normalizedManifest.mediaType(), manifestBytes.length,
-                manifestDigest, imageId.referenceName());
+        String indexMediaType = indexManifestMediaType(manifestResult, manifest);
+        String index = String.format(Locale.ROOT, template, indexMediaType, manifestBytes.length, manifestDigest,
+                imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
 
         return ociDir;
@@ -275,40 +267,6 @@ public final class OciArchiveBuilder {
             return fromManifest;
         }
         return MediaTypes.OCI_IMAGE_MANIFEST;
-    }
-
-    private static final Map<String, String> DOCKER_TO_OCI_MEDIA_TYPE = Map.of(MediaTypes.DOCKER_MANIFEST_V2,
-            MediaTypes.OCI_IMAGE_MANIFEST, MediaTypes.DOCKER_IMAGE_CONFIG, MediaTypes.OCI_IMAGE_CONFIG,
-            MediaTypes.DOCKER_IMAGE_LAYER, MediaTypes.OCI_IMAGE_LAYER, MediaTypes.DOCKER_IMAGE_LAYER_GZIP,
-            MediaTypes.OCI_IMAGE_LAYER_GZIP);
-
-    private static String toOciMediaType(String mediaType) {
-        return DOCKER_TO_OCI_MEDIA_TYPE.getOrDefault(mediaType, mediaType);
-    }
-
-    /**
-     * Rewrites Docker schema2 media-type labels (manifest/config/layers) to their
-     * OCI equivalents. Blob content is untouched (config/layer digests only depend
-     * on bytes, not the label), so this only changes the manifest blob's own
-     * digest.
-     */
-    private static Manifest normalizeToOciMediaTypes(String outerMediaType, Manifest manifest) {
-        Descriptor config = manifest.config();
-        Descriptor normalizedConfig = new Descriptor(toOciMediaType(config.mediaType()), config.digest(),
-                config.size());
-        List<Descriptor> normalizedLayers = manifest.layers().stream()
-                .map(l -> new Descriptor(toOciMediaType(l.mediaType()), l.digest(), l.size())).toList();
-        return new Manifest(manifest.schemaVersion(), toOciMediaType(outerMediaType), normalizedConfig,
-                normalizedLayers);
-    }
-
-    private static String sha256Hex(byte[] data) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(data));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
     }
 
     private static void runTar(Path archive, Path ociDir) throws IOException, InterruptedException {

@@ -43,9 +43,8 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     }
 
     /**
-     * AGENT-73 spike: {@code podman pull oci:<layout>} instead of
-     * {@code tar | podman load}, to see what breaks (naive, no ref/tag handling
-     * yet).
+     * Streams {@code tar -cf - -C layout .} into {@code podman load -q} on stdin
+     * (no {@code -i -}; that is a bogus path).
      */
     @Override
     public void importOciLayoutDirectory(Path ociLayoutRoot) throws IOException, InterruptedException {
@@ -55,12 +54,11 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
             throw new IOException("OCI layout root is not a directory: " + root);
         }
 
-        List<String> cmd = List.of(PODMAN_BIN, "pull", "-q", "oci:" + root);
-        BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
-        if (shellResult.exitCode() != 0) {
-            throw new IOException("podman pull oci: failed (exit " + shellResult.exitCode() + "): "
-                    + shellResult.stdout() + shellResult.stderr());
-        }
+        List<String> tarCmd = List.of("tar", "-cf", "-", "-C", root.toString(), ".");
+        List<String> loadCmd = List.of(PODMAN_BIN, "load", "-q");
+        BoundedCommandExecution.PipedShellResult result = BoundedCommandExecution.runWithStdoutPipedToStdin(tarCmd,
+                loadCmd, MAX_PROC_STDERR, this::startProcess);
+        result.throwIfFailed("tar", "podman load");
     }
 
     /**
