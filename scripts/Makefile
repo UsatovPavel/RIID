@@ -47,7 +47,7 @@ _helm-install:
 	echo ">>> Effective images from deploy/k8s/config/imagelist/dockerhub.yaml (.infra.images) → Helm values:"; \
 	yq e '.manager.image, .scheduler.image, .seedClient.image, .client.image' "$$TMP_VALUES"; \
 	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true; \
-	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f "$$TMP_VALUES"
+	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f "$$TMP_VALUES" --set seedClient.replicas=1
 	@echo ""
 	@echo ">>> Dragonfly установлен. Проверка:"
 	minikube kubectl -- get pods -n dragonfly-system

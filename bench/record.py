@@ -1,6 +1,6 @@
 """3-строчная запись для bench_log.md из последнего чистого TSV (AGENT-72).
 
-Строку 3 (verdict/next) дописывает человек — см. bench/log/bench_log.md §5.
+Строку 3 (verdict/next) дописывает человек — см. bench/log/bench_log.md §2.
 """
 
 from __future__ import annotations
