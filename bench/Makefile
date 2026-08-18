@@ -3,7 +3,7 @@
 #   make -C bench check-env    — пререквизиты (dfdaemon, podman, curl, jar, .env)
 #   make -C bench bench        — прогон, N измеряемых итераций (плюс seed)
 #   make -C bench bench N=10
-#   make -C bench record       — 3 строки для Optimization.md
+#   make -C bench record       — запись для bench/log/bench_log.md
 #   make -C bench env-report   — версии установленных утилит
 #
 # Требует поднятого Dragonfly на одной ноде: ./scripts/minikube-dragonfly.sh 1

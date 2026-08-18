@@ -77,8 +77,6 @@ spec:
               subPath: config.yaml
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
-            - name: dragonfly-output
-              mountPath: /var/run/dragonfly/output
             - name: fuse-device
               mountPath: /dev/fuse
       volumes:
@@ -94,10 +92,6 @@ spec:
         - name: dragonfly-sock
           hostPath:
             path: /var/run/dragonfly
-            type: DirectoryOrCreate
-        - name: dragonfly-output
-          hostPath:
-            path: /var/lib/dragonfly/output
             type: DirectoryOrCreate
         - name: fuse-device
           hostPath:

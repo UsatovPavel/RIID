@@ -14,7 +14,7 @@ deploy/k8s/config/imagelist/presented_images_list_sizes.tsv — из них 10 �
 library/httpd, library/memcached, bitnami/redis: они debian-based, их слои podman
 распакует на шаге "download 10 images", и на замеряемом шаге podman пропустит их
 как уже присутствующие, занизив handoff. Это ровно та ловушка, из-за которой в
-кластерном трейсе (Optimization.md §1) 3 слоя python пришли как cache hit.
+кластерном трейсе (bench/log/bench_log.md §1) 3 слоя python пришли как cache hit.
 
 Имена даны в канонической dockerhub-нотации; в имена конкретного реестра их
 переводит bench.registry.map_repository() по правилам

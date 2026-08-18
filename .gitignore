@@ -70,5 +70,5 @@ deploy/k8s/Selectel/*
 !deploy/k8s/Selectel/registry/init-performance-registry-images.sh
 ### Bench artifacts (AGENT-72) ###
 bench/results/
-bench/__pycache__/
+bench/**/__pycache__/
 bench/_error.txt

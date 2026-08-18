@@ -28,6 +28,8 @@ client:
   auth:
     defaultTokenTtlSeconds: 300
     maxTokenCacheEntries: 4096
+    # mTLS не нужен: Selectel/DockerHub аутентифицируют bearer/basic-токеном
+    # поверх TLS, клиентский сертификат не требуют.
     certPath: null
     keyPath: null
     caPath: null
@@ -35,6 +37,11 @@ client:
     - scheme: "__REGISTRY_SCHEME__"
       host: "__REGISTRY_HOST__"
       port: __REGISTRY_PORT__
+      # null здесь всегда: реальные credentials даёт --username/--password-env
+      # при старте демона (Daemon.restart() в bench.py), ImageLoadingFacade
+      # подставляет их вместо этого поля (см. createFromConfig(configPath,
+      # credentialsOverride)). Работоспособность подтверждена preflight'ом
+      # (http=200 на все образы Selectel) и чистыми p2p-прогонами.
       credentials: null
 
 dispatcher:
