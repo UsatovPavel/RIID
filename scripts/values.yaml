@@ -2,27 +2,27 @@ manager:
   replicas: 1
   image:
     repository: dragonflyoss/manager
-    tag: latest
+    tag: v2.4.4-rc.1
   metrics:
     enable: true
 scheduler:
   replicas: 1
   image:
     repository: dragonflyoss/scheduler
-    tag: latest
+    tag: v2.4.4-rc.1
   metrics:
     enable: true
 seedClient:
   replicas: 2
   image:
     repository: dragonflyoss/client
-    tag: latest
+    tag: v1.3.8
   metrics:
     enable: true
 client:
   image:
     repository: dragonflyoss/client
-    tag: latest
+    tag: v1.3.8
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
