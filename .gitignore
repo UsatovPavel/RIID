@@ -53,6 +53,7 @@ bin/
 Исправления*
 external_utils/*
 **/*.log
+CLAUDE.md
 
 ### Deploy artifacts###
 deploy/k8s/.resolved/
@@ -67,3 +68,7 @@ deploy/k8s/Selectel/*
 !deploy/k8s/Selectel/Makefile
 !deploy/k8s/riid/.env.example
 !deploy/k8s/Selectel/registry/init-performance-registry-images.sh
+### Bench artifacts (AGENT-72) ###
+bench/results/
+bench/**/__pycache__/
+bench/_error.txt
