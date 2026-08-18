@@ -34,21 +34,23 @@ client:
     enable: true
   dfinit:
     enable: false
-  # Ensure dfdaemon output path exists for RIID outputPath=/var/run/dragonfly/output/p2p-*.bin
+  # dfdaemon hardlinks a finished task from storage.dir into the requested
+  # outputPath (RIID outputPath=/var/run/dragonfly/output/p2p-*.bin); hardlink
+  # requires both paths on the same filesystem, so storage.dir is moved onto
+  # the same hostPath (/var/run/dragonfly, already mounted for the socket)
+  # instead of the image default /var/lib/dragonfly/ (container-local overlay,
+  # a different device -> "Invalid cross-device link" os error 18).
+  config:
+    storage:
+      dir: /var/run/dragonfly/data/
   extraVolumes:
     - name: dragonfly-run-tmpfs
       emptyDir:
         medium: Memory
         sizeLimit: 2Gi
-    - name: dragonfly-output
-      hostPath:
-        path: /var/lib/dragonfly/output
-        type: DirectoryOrCreate
   extraVolumeMounts:
     - name: dragonfly-run-tmpfs
       mountPath: /run/dragonfly
-    - name: dragonfly-output
-      mountPath: /var/run/dragonfly/output
 redis:
   replica:
     replicaCount: 1

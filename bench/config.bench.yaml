@@ -1,0 +1,60 @@
+# Шаблон конфига RIID-демона для handoff-бенчмарка (AGENT-72).
+#
+# НЕ используется напрямую: bench.py подставляет плейсхолдеры и кладёт готовый
+# конфиг в results/<run_id>/config.yaml. Учётные данные реестра сюда не
+# попадают никогда — они передаются демону через `--username` +
+# `--password-env` (см. bench.py), файл остаётся секрет-фри и git-tracked.
+#
+# Отличия от config/config.yaml (его не трогаем):
+#   * секция p2p.dragonfly включена — эпик требует "Use download via Dragonfly";
+#   * отдельный unix-сокет, чтобы бенч не конфликтовал с рабочим демоном.
+client:
+  http:
+    connectTimeout: "PT5S"
+    requestTimeout: "PT30M"
+    imageTimeoutMin: "PT2M"
+    imageTimeoutMax: "PT30M"
+    maxRetries: 2
+    initialBackoff: "PT0.2S"
+    maxBackoff: "PT2S"
+    backoffExponentBase: 2
+    retryIdempotentOnly: true
+    userAgent: "riid-bench"
+    followRedirects: true
+  partialDownloading:
+    mode: AUTO
+    partialDigestValidation: SKIP
+    retryWithoutRangeOnUnsatisfiableRange: true
+  auth:
+    defaultTokenTtlSeconds: 300
+    maxTokenCacheEntries: 4096
+    certPath: null
+    keyPath: null
+    caPath: null
+  registries:
+    - scheme: "__REGISTRY_SCHEME__"
+      host: "__REGISTRY_HOST__"
+      port: __REGISTRY_PORT__
+      credentials: null
+
+dispatcher:
+  maxConcurrentRegistry: 4
+
+p2p:
+  dragonfly:
+    enabled: true
+    dfdaemonAddr: "__DFDAEMON_ADDR__"
+    imageTimeoutMin: "PT2M"
+    imageTimeoutMax: "PT30M"
+    maxRetries: 2
+
+app:
+  daemon:
+    unixSocketPath: "__DAEMON_SOCKET__"
+    metricsHost: "127.0.0.1"
+    metricsPort: __METRICS_PORT__
+    maxConcurrentPulls: 32
+    maxRequestBodyBytes: 8192
+    requestTimeout: "PT30M"
+    overloadPolicy: REJECT
+    maxCacheBytes: 10737418240
