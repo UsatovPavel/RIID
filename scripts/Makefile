@@ -49,12 +49,18 @@ _helm-install:
 	helm uninstall dragonfly -n dragonfly-system 2>/dev/null || true; \
 	helm install --wait --timeout 15m --create-namespace --namespace dragonfly-system dragonfly dragonfly/dragonfly -f "$$TMP_VALUES" || { \
 		echo ">>> helm install failed, dumping diagnostics:" >&2; \
-		kubectl get pods -n dragonfly-system -o wide >&2; \
+		kubectl get all -n dragonfly-system -o wide >&2; \
 		kubectl get pvc -n dragonfly-system >&2; \
 		kubectl get events -n dragonfly-system --sort-by=.lastTimestamp >&2; \
+		df -h >&2; \
+		free -h >&2; \
 		for pod in $$(kubectl get pods -n dragonfly-system -o jsonpath='{.items[*].metadata.name}'); do \
 			echo ">>> describe $$pod:" >&2; \
 			kubectl describe pod "$$pod" -n dragonfly-system >&2; \
+			echo ">>> logs $$pod:" >&2; \
+			kubectl logs "$$pod" -n dragonfly-system --all-containers=true --tail=100 >&2 || true; \
+			echo ">>> logs $$pod (previous):" >&2; \
+			kubectl logs "$$pod" -n dragonfly-system --all-containers=true --tail=100 --previous >&2 || true; \
 		done; \
 		exit 1; \
 	}
