@@ -57,3 +57,9 @@ podman очищены перед прогоном (см. `bench/bench.py::do_run
 - MR #59 92d4eac — baseline-замер (handoff-бенч AGENT-72) | стенд: Linux 7.0.0-29-generic / podman 5.7.0 / java openjdk 25.0.3
   library/python:latest 395.2MiB N=1 dragonfly-warm sources=p2p:8: handoff med 12.3s (layout 0.1 + import 12.3), wall med 13.0s, dl_end 0.5s
   verdict: baseline ; next: заменить `tar -cf - | podman load` на `podman pull oci:` в `PodmanRuntimeAdapter.importOciLayoutDirectory()` — ожидание: заметное снижение `handoff_import` (сейчас 12.3s из 12.3s handoff, т.е. почти весь handoff — это engine.import)
+- AGENT-73 d1ad66e — `podman pull oci:` наивный (Docker schema2 внутри OCI index, без ref-суффикса/tag) | стенд: тот же
+  library/python:latest 395.2MiB N=1 dragonfly-warm sources=p2p:8: handoff med 17.1s (layout 0.1 + import 17.0), wall med 17.9s, dl_end 0.6s
+  verdict: regression (+47% import к baseline) ; причина (debug-лог podman): `containers/image` copy engine прогоняет manifest candidate-list + per-blob reuse-check, которых `podman load` не делает ; next: попробовать нормализовать media type манифеста на OCI перед записью index.json — убрать candidate-list из-за схемы
+- AGENT-73 d1ad66e — `podman pull oci:` + нормализация media type манифеста в OCI (`OciArchiveBuilder.normalizeToOciMediaTypes`) | стенд: тот же
+  library/python:latest 395.2MiB N=1 dragonfly-warm sources=p2p:8: handoff med 15.4s (layout 0.1 + import 15.3), wall med 16.1s, dl_end 0.5s
+  verdict: regression (+32% import к baseline), лучше наивного варианта на ~1/3 разрыва, но хуже baseline ; candidate-list остаётся и для чистого OCI-манифеста (не только для docker schema2) — оставшийся разрыв не объясняется схемой ; вариант 1 отклонён, откат на `tar | podman load` (детали и root-cause — `zOptimization/PlanPodmanOciPull.md`, `ResearchPodmanEngineSpecific.md`)
