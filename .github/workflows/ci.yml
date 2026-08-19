@@ -2,6 +2,17 @@ name: CI
 
 on:
   pull_request:
+    paths:
+      - "src/**"
+      - "buildSrc/**"
+      - "gradle/**"
+      - "config/**"
+      - "scripts/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/ci.yml"
   push:
     tags:
       - "*"
