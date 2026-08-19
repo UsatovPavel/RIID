@@ -44,6 +44,7 @@ import riid.p2p.dragonfly.ChallengeTokenAuthProvider;
 import riid.p2p.dragonfly.DragonflyGrpcP2PExecutor;
 import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
+import riid.runtime.adapter.ContainerdRuntimeAdapter;
 import riid.runtime.adapter.DockerRuntimeAdapter;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
@@ -238,6 +239,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
+        runtimes.put("containerd", new ContainerdRuntimeAdapter());
         RuntimeConfig runtimeConfig = config.runtime();
         String dockerCmd = runtimeConfig != null
                 ? runtimeConfig.dockerCmdOrDefault()
@@ -317,6 +319,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         runtimes.put("podman", new PodmanRuntimeAdapter());
         runtimes.put("porto", new PortoRuntimeAdapter());
         runtimes.put("docker", new DockerRuntimeAdapter());
+        runtimes.put("containerd", new ContainerdRuntimeAdapter());
         return Map.copyOf(runtimes);
     }
 
