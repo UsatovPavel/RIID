@@ -101,6 +101,23 @@ sudo systemctl enable --now cri-docker.socket
 # падает, PVC остаются Pending и Dragonfly не поднимается.
 sudo iptables -P FORWARD ACCEPT
 
+# На свежих хостах (например, только что созданной VM) модуль br_netfilter не
+# загружен вообще — /proc/sys/net/bridge/bridge-nf-call-iptables отсутствует.
+# Симптом: pod->ClusterIP запрос доходит и корректно DNAT'ится (видно в
+# iptables-счётчиках KUBE-SVC-.../KUBE-SEP-...), но ответ от pod'а-получателя
+# идёт обратно тем же L2-мостом напрямую (оба pod'а в одной подсети моста), не
+# попадая в conntrack — без bridge-nf-call-iptables=1 такой bridged-трафик не
+# проходит через netfilter, un-DNAT не происходит, клиент видит "connection
+# timed out" на любой ClusterIP (в т.ч. CoreDNS 10.96.0.10:53), при этом прямой
+# pod-to-pod (по реальному IP, не ClusterIP) работает нормально — это и отличает
+# эту причину от VPN/routing-проблем ниже. Нужно ДО первого создания CNI-моста.
+sudo modprobe br_netfilter
+sudo sysctl -w net.bridge.bridge-nf-call-iptables=1 >/dev/null
+sudo sysctl -w net.bridge.bridge-nf-call-ip6tables=1 >/dev/null
+echo br_netfilter | sudo tee /etc/modules-load.d/br_netfilter.conf >/dev/null
+printf 'net.bridge.bridge-nf-call-iptables=1\nnet.bridge.bridge-nf-call-ip6tables=1\n' | \
+  sudo tee /etc/sysctl.d/99-k8s-bridge.conf >/dev/null
+
 log "3/7 бинарники в /usr/local/bin"
 install_binary kubectl "https://dl.k8s.io/release/$(curl -sSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 install_binary minikube "https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64"

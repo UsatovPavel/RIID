@@ -72,6 +72,82 @@ def rmi(ref: str, env: dict | None = None) -> None:
     subprocess.run(["podman", "rmi", "-f", ref], capture_output=True, text=True, check=False, env=env)
 
 
+def prune_all(env: dict | None = None) -> None:
+    """Full `podman system prune -af`, not per-ref `rmi`. Required once at the start
+    of a run on any box that has also run RIID's own bench (bench/bench.py): RIID's
+    PodmanRuntimeAdapter imports via `podman load` on an OCI archive with an
+    unqualified ref annotation, which podman tags as `localhost/<repo>:<tag>` *in
+    addition to* the fully-qualified `cr.selcloud.ru/riid/<repo>:<tag>` RIID also
+    applies -- both tags point at the same image ID. `podman rmi -f <qualified-ref>`
+    only drops that one tag; the `localhost/...` alias keeps the layers live in
+    local storage, so a subsequent `podman pull <qualified-ref>` resolves against
+    already-present local content and returns near-instantly (measured: 400-850ms
+    across the whole 11-image set here, size-independent -- vs. 43.97s for a
+    verified from-scratch pull of the same 1.14GB python image after a real
+    `system prune -af`). This produced a completely invalid "dfinit is instant"
+    reading on a box that had just run bench/bench.py -- same failure class as
+    bench.py's own header comment already warns about for the RIID arm
+    ("podman system prune -af (не выборочный rmi -- иначе дедупликация слоёв не
+    даст воспроизвести engine.import)"), just not previously applied here.
+    """
+    subprocess.run(["podman", "system", "prune", "-af"], capture_output=True, text=True, check=False, env=env)
+
+
+def sync_mirror_auth(mirror_host: str = "127.0.0.1:4001") -> None:
+    """Duplicate the real registry's auth.json credentials under the mirror
+    host's own key. Required for dfinit's registries.conf `[[registry.mirror]]`
+    (`insecure = true`, location = 127.0.0.1:4001, the local dfdaemon proxy) to
+    ever actually be used for manifests/blobs.
+
+    Root cause (found via `podman --log-level=debug pull`, 2026-08-19): podman
+    treats the mirror as an independent registry host for credential lookup
+    purposes -- `containers/image`'s dockerClient resolves creds by exact host
+    key ("127.0.0.1:4001/riid/<repo>"), separate from "cr.selcloud.ru/riid/<repo>".
+    auth.json only ever had a "cr.selcloud.ru" entry (from `podman login`), so
+    the mirror candidate's anonymous `/v2/` ping got HTTP 401 and podman's own
+    "unable to retrieve auth token: invalid username/password" error silently
+    dropped that candidate and fell through to the direct (non-mirror) registry
+    for the manifest AND every blob -- meaning P2P/Dragonfly was NEVER actually
+    exercised by any prior dfinit_bench.py run, this session's included. Only
+    the harmless anonymous `/v2/` version-check ever reached the mirror, which
+    is exactly why dfdaemon's own logs only ever showed `/v2/` passthrough
+    traffic and zero `blobs/sha256.*` P2P routing (see
+    zOptimization/SessionSummary_1Hypothesis.md §6).
+
+    This is unrelated to the recurring "invalid HTTP method parsed" ERROR also
+    visible in dfdaemon's logs -- that is just the expected, harmless failure
+    of containers/image's mandatory HTTPS-first ping attempt (a real TLS
+    ClientHello sent to a plain-HTTP-only proxy port), which correctly falls
+    back to a plain HTTP ping immediately after; it was a red herring, not the
+    actual blocker.
+
+    Confirmed fix (same session): after adding this, `podman --log-level=debug
+    pull` shows the manifest AND blob GET going through `http://127.0.0.1:4001/
+    v2/...`, and the dragonfly-client pod log shows `proxy_via_dfdaemon` /
+    `download task succeeded` for the blob -- P2P genuinely engages.
+
+    Idempotent -- safe to call every run. Silently no-ops if there's no
+    "cr.selcloud.ru" entry yet (i.e. `podman login` hasn't been done -- matches
+    this script's existing "Requires: podman login" precondition, nothing new
+    to enforce here).
+    """
+    import json
+
+    auth_path = Path(
+        os.environ.get("REGISTRY_AUTH_FILE")
+        or f"/run/user/{os.getuid()}/containers/auth.json"
+    )
+    if not auth_path.exists():
+        return
+    data = json.loads(auth_path.read_text(encoding="utf-8"))
+    auths = data.get("auths", {})
+    real = auths.get("cr.selcloud.ru")
+    if real is None or auths.get(mirror_host) == real:
+        return
+    auths[mirror_host] = real
+    auth_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
 def seed_client_age_s() -> float | None:
     """Best-effort: seconds since the seed-client pod started, via kubectl. None
     if it can't be determined (no cluster, no permissions, unexpected output) --
@@ -143,6 +219,15 @@ def main() -> int:
 
     print(f"[dfinit-bench] run_id={run_id} registry_prefix={args.registry_prefix}")
     print(f"[dfinit-bench] results: {out_path}")
+
+    print("[dfinit-bench] podman system prune -af (clears any localhost/ aliases left "
+          "by a prior RIID bench run sharing this host's podman storage)")
+    prune_all(env=env)
+
+    print("[dfinit-bench] syncing auth.json creds to the mirror host 127.0.0.1:4001 "
+          "(without this, the mirror candidate 401s and podman silently falls back "
+          "to a direct pull -- P2P never engages, see sync_mirror_auth() docstring)")
+    sync_mirror_auth()
 
     for repo, tag in IMAGES:
         ref = f"{args.registry_prefix}/{repo}:{tag}"

@@ -63,3 +63,27 @@ podman очищены перед прогоном (см. `bench/bench.py::do_run
 - AGENT-73 d1ad66e — `podman pull oci:` + нормализация media type манифеста в OCI (`OciArchiveBuilder.normalizeToOciMediaTypes`) | стенд: тот же
   library/python:latest 395.2MiB N=1 dragonfly-warm sources=p2p:8: handoff med 15.4s (layout 0.1 + import 15.3), wall med 16.1s, dl_end 0.5s
   verdict: regression (+32% import к baseline), лучше наивного варианта на ~1/3 разрыва, но хуже baseline ; candidate-list остаётся и для чистого OCI-манифеста (не только для docker schema2) — оставшийся разрыв не объясняется схемой ; вариант 1 отклонён, откат на `tar | podman load` (детали и root-cause — `zOptimization/PlanPodmanOciPull.md`, `ResearchPodmanEngineSpecific.md`)
+
+### RIID+Dragonfly vs. `dfinit`-mirrored plain `podman pull` (1.Hypotesis, AGENT-89 продолжение)
+
+86df374 — оба плеча на одной свежей (cold) инсталляции Dragonfly, `library/python:latest` (1.14GB local),
+образ на Selectel (`cr.selcloud.ru`) | стенд: AI_Box VM, Linux 6.8.0-138-generic, podman 4.9.3, minikube
+v1.38.1, 1 нода / 1 seed-client. `dfinit`-плечо измерено только после фикса auth.json на mirror-хост и
+`dragonfly-run-tmpfs` sizeLimit 2Gi→4Gi (без этого P2P у dfinit не включается вовсе — см.
+`zOptimization/SessionSummary_1Hypothesis.md` §6-7). Источники: `bench/results/20260819T100730Z.tsv`
+(RIID), `bench/dfinit/results/20260819T115738Z_dfinit-final.tsv` (dfinit).
+
+| | RIID + Dragonfly | `podman pull` via `dfinit` mirror | Δ (dfinit vs RIID) |
+|---|---|---|---|
+| **cold** (первый pull) | 61320 ms (dl_end 38647 + handoff 22421) | 47826 ms | dfinit быстрее в 1.28× |
+| **warm** (повтор) | 23074 ms (dl_end 881 + handoff 21874) | 12498 ms | dfinit быстрее в 1.85× |
+
+verdict: исходная гипотеза "RIID в 2× быстрее podman pull" опровергнута на корректно настроенном
+`dfinit` — быстрее в обеих фазах, не только на warm ; идеальное перекрытие fetch/import предсказывает
+пол для dfinit на cold ≈ max(38647, 22421) = 38647ms, факт 47826ms — барьер синхронизации объясняет
+~60% разрыва (13494 из 22421 возможных мс), остаток ~9.2s не объяснён перекрытием ; на warm dfinit
+(12498ms) обгоняет даже голый import RIID (21874ms) — часть разрыва не про синхронизацию, а про то, что
+`podman load` без `-i` (`PodmanRuntimeAdapter.importOciLayoutDirectory()`, stdin-пайп) лишний раз
+материализует весь tar-поток на диск (`cmd/podman/images/load.go`), чего нативный `podman pull` не
+делает ; next: измерить `PodmanRuntimeAdapter.importImage(Path)` (`-i <path>`, уже существует, не
+используется в текущем pull-пути) изолированно — не требует смены архитектуры.
