@@ -24,7 +24,10 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
 
     @Override
     public boolean prefersOciLayoutStreamImport() {
-        return true;
+        // false: `-i <path>` skips podman load's stdin-only io.Copy(tempfile, stdin)
+        // step (cmd/podman/images/load.go) entirely. ~6% faster handoff, confirmed
+        // over 4 independent fresh-Dragonfly-install A/B rounds, see bench_log.md.
+        return false;
     }
 
     @Override

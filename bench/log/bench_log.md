@@ -63,6 +63,30 @@ podman очищены перед прогоном (см. `bench/bench.py::do_run
 - AGENT-73 d1ad66e — `podman pull oci:` + нормализация media type манифеста в OCI (`OciArchiveBuilder.normalizeToOciMediaTypes`) | стенд: тот же
   library/python:latest 395.2MiB N=1 dragonfly-warm sources=p2p:8: handoff med 15.4s (layout 0.1 + import 15.3), wall med 16.1s, dl_end 0.5s
   verdict: regression (+32% import к baseline), лучше наивного варианта на ~1/3 разрыва, но хуже baseline ; candidate-list остаётся и для чистого OCI-манифеста (не только для docker schema2) — оставшийся разрыв не объясняется схемой ; вариант 1 отклонён, откат на `tar | podman load` (детали и root-cause — `zOptimization/PlanPodmanOciPull.md`, `ResearchPodmanEngineSpecific.md`)
+- AGENT-89 (по 0a2d237) — `PodmanRuntimeAdapter.prefersOciLayoutStreamImport()=false`: писать реальный tar-файл
+  (`OciArchiveBuilder.withArchive`, уже существовавший, но неиспользуемый путь) + `podman load -q -i <path>`
+  вместо `tar -cf - | podman load -q` на stdin — гипотеза: `-i <path>` пропускает
+  `io.Copy(tempfile, stdin)` внутри `podman load` (`cmd/podman/images/load.go`, подтверждено чтением
+  исходников), должно снять часть handoff | стенд: AI_Box VM, podman 4.9.3, `library/python:latest`.
+  Методика: 4 независимых раунда, каждый на свежей (`helm uninstall` → `helm install` → overlay)
+  Dragonfly-инсталляции, по одному замеру (`--iterations 0`, только seed) на вариант за раунд —
+  исключает накопление P2P-контента/contention между замерами, `sources=p2p:7,registry:1` во всех 8
+
+  | раунд | stdin (`true`) handoff | `-i` (`false`) handoff | разница |
+  |---|---|---|---|
+  | 1 | 20646ms | 18944ms | −1702ms |
+  | 2 | 18774ms | 18134ms | −640ms |
+  | 3 | 19248ms | 18294ms | −954ms |
+  | 4 | 20025ms | 18639ms | −1386ms |
+
+  среднее: stdin 19673ms (σ≈718) vs `-i` 18503ms (σ≈313) — `-i` быстрее **в 4 из 4** раундов, в среднем
+  на 1170ms (~6%), разброс почти вдвое меньше
+  verdict: эффект реальный и стабильный (не шум) — но кратно меньше исходной гипотезы про "9.2s residual"
+  (`SessionSummary_1Hypothesis.md §7`); `import` короче в среднем на 1607ms (19114→17507ms), `layout`
+  дороже на 436ms (560→996ms, из-за появившейся синхронной записи tar-файла) — итоговая чистая экономия
+  1170ms соответствует разнице handoff ; **принято**, `prefersOciLayoutStreamImport()` возвращён в
+  `false` ; next: остаток разрыва с dfinit по-прежнему объясняется в основном архитектурным барьером
+  fetch/unpack (§5), не этим фактором
 
 ### RIID+Dragonfly vs. `dfinit`-mirrored plain `podman pull` (1.Hypotesis, AGENT-89 продолжение)
 
