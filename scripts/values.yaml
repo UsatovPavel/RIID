@@ -43,22 +43,11 @@ client:
   config:
     storage:
       dir: /var/run/dragonfly/data/
-  # sizeLimit 2Gi was too small: storage.dir accumulates content for every
-  # pulled image within one Dragonfly install (not per-pull, not GC'd between
-  # pulls), and a single-node bench pulling several images in sequence (e.g.
-  # bench/dfinit/dfinit_bench.py's 11-image set, ~1.14GB python target alone)
-  # fills it before reaching the largest image -- observed as ERROR "fallocate
-  # ... failed: No space left on device (os error 28)" / "download task
-  # failed: status: 'Internal error'" in the dragonfly-client pod log, which
-  # containers/image then reports to the caller as a plain HTTP 500 on the
-  # blob GET (2026-08-19, this session). 4Gi comfortably covers that bench set
-  # with headroom, still well under the client container's 8Gi memory limit
-  # this tmpfs counts against (medium: Memory).
   extraVolumes:
     - name: dragonfly-run-tmpfs
       emptyDir:
         medium: Memory
-        sizeLimit: 4Gi
+        sizeLimit: 2Gi
   extraVolumeMounts:
     - name: dragonfly-run-tmpfs
       mountPath: /run/dragonfly

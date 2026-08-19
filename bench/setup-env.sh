@@ -21,13 +21,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="dragonfly-system"
 SERVICE_CIDR="10.96.0.0/12"
 KUBERNETES_SERVICE_URL="https://10.96.0.1:443/version"
-# Должно быть раньше policy rules, которые WireGuard/AmneziaWG обычно ставит.
-# История: 32763 оказывалось после catch-all VPN rule (никогда не работало) ->
-# 100 работало, пока VPN использовал catch-all на 32762 -> AmneziaWG стал
-# ставить fwmark-правило "not from all fwmark <mark> lookup <table>" на
-# приоритете 99, которое перехватывает трафик раньше 100 (у правил с fwmark-
-# условием обычно нет "src"/более специфичного match, они матчат всё, что не
-# помечено, поэтому наш bypass должен быть строго раньше). 90 запаса ради.
+# Должно быть раньше policy rules, которые VPN-клиенты (WireGuard и т.п.)
+# обычно ставят. История и обоснование конкретного числа — bench/log/changelogEnvVPN.md.
 SERVICE_CIDR_RULE_PRIORITY="90"
 CRI_DOCKERD_VERSION="v0.3.24"
 CRI_DOCKERD_DEB="cri-dockerd_0.3.24.3-0.debian-bookworm_amd64.deb"

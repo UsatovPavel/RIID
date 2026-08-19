@@ -70,8 +70,7 @@ installed must be recorded». Каждая установка/изменение
 
 | Проблема | Причина | Изменение |
 |---|---|---|
-| pod'ы и хост не видят ClusterIP (`10.96.0.1:443` timeout при живом `192.168.1.27:8443`) | VPN AmneziaWG (`awg0`, таблица 51820) с catch-all маршрутизацией уводит в туннель и service-CIDR: маршрута для `10.96.0.0/12` в `main` нет, поэтому правило `lookup main suppress_prefixlength 0` его не ловит | `sudo ip rule add to 10.96.0.0/12 lookup main priority 32763` — только service-CIDR, не персистентно; откат `ip rule del ...`. Pod-CIDR трогать не нужно: для него в `main` есть маршрут через `cni0` |
-| `storage-provisioner` в CrashLoop, PVC вечно `Pending` | следствие предыдущего пункта; после `kubectl delete pod` minikube его не пересоздаёт (addon-под, не DaemonSet), `minikube addons enable` тоже не вернул | 4 статических hostPath-PV с `claimRef` (mysql/redis-master/redis-replica 8Gi, seed-client 100Gi) вместо динамического провижнинга |
+| `storage-provisioner` в CrashLoop, PVC вечно `Pending` | pod'ы теряли доступ к API/ClusterIP (см. `bench/log/changelogEnvVPN.md`, untracked — причина машинно-специфична, не относится к проекту), после чего `kubectl delete pod` minikube его не пересоздаёт (addon-под, не DaemonSet), `minikube addons enable` тоже не вернул | 4 статических hostPath-PV с `claimRef` (mysql/redis-master/redis-replica 8Gi, seed-client 100Gi) вместо динамического провижнинга |
 | mysql и redis в CrashLoop: `Permission denied` на данных | контейнеры чарта бегут под uid 1001, а hostPath-каталоги kubelet создаёт как `root:root 0755` | тома вынесены в `/var/tmp/riid-bench-pv/*` с правами 777 (каталог на диске, world-traversable, в отличие от `$HOME` с 0750) |
 | Dragonfly ставился с `latest` вместо версий из imagelist | `scripts/render-values-from-infra.sh` лежал в git с режимом `100644` — без `+x`; `make _helm-install` зовёт его как `./render-values-from-infra.sh`, получает `Permission denied` и из-за `;` в рецепте продолжает с пустым values-файлом (в CI ровно тот же баг) | режим исправлен на `100755`; чарт ставится с `--version 1.6.26` из `.infra.dragonfly.helm_chart.github_release_tag` |
 
@@ -107,7 +106,7 @@ loopback пода, а не хоста. Итог: `cr.selcloud.ru` не резо�
 `forward . /etc/resolv.conf` → `forward . 8.8.8.8 1.1.1.1`, затем
 `kubectl rollout restart deployment coredns -n kube-system`. Правится
 только форвард CoreDNS, hosts'овый `/etc/resolv.conf` и VPN-роутинг не
-трогаются (те уже отдельно чинены выше). Не персистентно относительно
+трогаются (см. `changelogEnvVPN.md`, untracked). Не персистентно относительно
 пересоздания кластера — если `minikube delete && minikube start`, нужно
 повторить руками (кандидат на перенос в `bench/setup-env.sh`, пока не
 сделано).
@@ -142,41 +141,13 @@ dfdaemon логирует это как WARN и не production output-файл 
 dirty=0` на обеих итерациях (seed и measure) — Dragonfly P2P реально
 работает end-to-end.
 
-## 2026-08-19 — VPN bypass rule снова не работает: приоритет 100 больше не достаточен
-
-`SERVICE_CIDR_RULE_PRIORITY=100` (см. запись выше про 32763 -> 100) перестал
-помогать: `setup-env.sh` падал на той же проверке ClusterIP, хотя правило на
-100 присутствовало (`ip rule show`: `100: from all to 10.96.0.0/12 lookup
-main`). Причина — AmneziaWG стал ставить СВОЁ правило на приоритете **99**:
-`99: not from all fwmark 0xca6c lookup 51820` — это catch-all по fwmark (ловит
-весь трафик без метки, включая наш к `10.96.0.1`), и приоритет 99 < 100,
-поэтому оно матчится первым, до того как правило на 100 успевает сработать.
-`ip route get 10.96.0.1` подтверждал: маршрут уходил в `awg0 table 51820`,
-а не в `main`.
-
-Также отдельно ловили `HOST_HOME_PERMISSION` (`~/.minikube` владеет root) при
-проверке состояния кластера мимо самого скрипта, пока `setup-env.sh` ещё не
-успел дойти до финального `chown` — это ожидаемое промежуточное состояние
-скрипта (см. его собственный комментарий у `sudo chown -R ... $RUN_HOME/.kube
-$RUN_HOME/.minikube`), не отдельный баг.
-
-Фикс: `SERVICE_CIDR_RULE_PRIORITY` в `bench/setup-env.sh` поднят с `100` на
-`90` (раньше 99, с запасом). Старое правило на 100 не мешает — приоритеты
-независимы, `ip rule` допускает несколько правил на разные CIDR/приоритеты
-одновременно; можно накопиться дубликатами при повторных прогонах, но не
-ломает маршрутизацию (правило `100` теперь просто неактивно, забито `99`-м).
-Если AmneziaWG в будущем снова сдвинет свой catch-all ниже 90 — тот же класс
-проблемы, повторить диагностику через `ip rule show` + `ip route get
-10.96.0.1`.
-
 ## 2026-08-19 — новая VM (AI_Box, чистый Ubuntu 24.04.4, VirtualBox): br_netfilter
-не загружен — ClusterIP недоступен из pod'а без VPN
+не загружен — ClusterIP недоступен из pod'а
 
 Стенд: свежая VBox VM `AI_Box` (см. `CLAUDE.md`), 6 vCPU, 11 GB RAM, чистый
-Ubuntu 24.04.4, без VPN — т.е. не тот класс проблем, что в записях выше
-(там всегда был AmneziaWG). `setup-env.sh` падал на той же строке
-(`DNS registry из pod'а не заработал после CoreDNS patch`), но диагностика
-показала другую причину:
+Ubuntu 24.04.4. `setup-env.sh` падал на той же строке (`DNS registry из
+pod'а не заработал после CoreDNS patch`), но диагностика показала другую
+причину (не связанную с VPN-заметками в `changelogEnvVPN.md`, untracked):
 
 - прямой pod-to-pod по реальному IP (`nc 10.244.0.4 53`) — работал;
 - запрос к ClusterIP (`nc 10.96.0.10 53` / CoreDNS) — `connection timed out`
@@ -200,14 +171,10 @@ ACCEPT`, до создания CNI-моста): `sudo modprobe br_netfilter` +
 успешны без CoreDNS-патча (сам патч на public DNS остался нейтральным
 side-effect, не мешает).
 
-Отличать от записи выше про AmneziaWG priority 90: там маршрут к
-`10.96.0.0/12` вообще не попадал в `main` (симптом виден в `ip route get
-10.96.0.1` на хосте); здесь маршрут корректный, `iptables`-правила
-корректные, проблема ниже — в netfilter-хуках моста. Диагностика на будущее:
-если `setup-env.sh` падает на DNS-проверке, сначала проверить `cat
-/proc/sys/net/bridge/bridge-nf-call-iptables` (должно быть `1`, файл должен
-существовать) — если файла нет, это новая VM без загруженного
-`br_netfilter`, а не VPN-проблема.
+Диагностика на будущее: если `setup-env.sh` падает на DNS-проверке, сначала
+проверить `cat /proc/sys/net/bridge/bridge-nf-call-iptables` (должно быть
+`1`, файл должен существовать) — если файла нет, это новая VM без
+загруженного `br_netfilter`.
 
 ## 2026-08-19 — AI_Box: dfinit-mirror никогда не доходил до P2P (auth) + tmpfs 2Gi мал для storage.dir
 
@@ -239,15 +206,30 @@ registry за прокси). Внесено в `bench/dfinit/dfinit_bench.py` к
 до/после — manifest и blob GET теперь реально идут через `127.0.0.1:4001`, и
 dragonfly-client лог показывает `proxy_via_dfdaemon` → `download task succeeded`.
 
-**2) `dragonfly-run-tmpfs` (`scripts/values.yaml`, `client.extraVolumes`) — `sizeLimit:
-2Gi` мал.** `storage.dir` копит контент по всем скачанным образам за время жизни
-Dragonfly-инсталляции (не чистится между pull'ами), поэтому прогон бенча по 11
-образам (`bench/dfinit/dfinit_bench.py`, самый большой — `python:latest`, 1.14GB)
-упирается в `No space left on device (os error 28)` на fallocate ещё до того, как
-дойдёт до python — сам podman это видит просто как HTTP 500 на blob GET, что выглядит
-как "P2P сломан", хотя на самом деле кончилось место. Увеличено до `4Gi` (с
-комментарием в файле) — под лимитом памяти client-контейнера (8Gi), с запасом на
-весь тестовый набор.
+**2) `dragonfly-run-tmpfs` (`scripts/values.yaml`, `client.extraVolumes`) — упёрлись в
+`No space left on device (os error 28)` на fallocate**, ещё до того как прогон бенча по
+11 образам (`bench/dfinit/dfinit_bench.py`, самый большой — `python:latest`, 1.14GB)
+дошёл до python — сам podman это видит просто как HTTP 500 на blob GET, что выглядит
+как "P2P сломан", хотя на самом деле кончилось место.
+
+Первая реакция (эта сессия) — поднять `sizeLimit` с `2Gi` до `4Gi` не глядя. Ошибка,
+пойманная на code review: `sizeLimit: 2Gi` — не случайное число, а значение, стоявшее
+без изменений с июня 2026 (`git log --follow scripts/values.yaml`) через много
+коммитов, т.е. уже проверенное. Правка 2Gi→4Gi была внесена без проверки истории и
+без обоснования — откачена обратно, `scripts/values.yaml` сейчас идентичен состоянию
+до этой сессии.
+
+**Реальная причина ENOSPC осталась не найдена этой правкой и всё ещё не исправлена**:
+при разборе (см. `SessionSummary_1Hypothesis.md`/чат) обнаружено, что настроенный
+`sizeLimit` вообще не доходит до контейнера как заявлено — `mount` на хосте
+подтверждает `size=<sizeLimit>k` корректно, но `kubectl exec ... -- df -h
+/run/dragonfly` **внутри** контейнера client показывает только ~1.2G, независимо от
+того, что стоит в `sizeLimit` (проверено и на `2Gi`, и на `4Gi` — оба давали те же
+~1.2G эффективно). Похоже на конфликт двух volume-монтов на один и тот же путь
+(`socket-dir` hostPath `/var/run/dragonfly` и `dragonfly-run-tmpfs` emptyDir оба
+целятся в `/run/dragonfly` через `/var/run` → `/run` симлинк) — значит крутить
+`sizeLimit` бессмысленно, пока не починен сам конфликт монтов. Не исправлено,
+отдельная открытая задача.
 
 **Важное следствие**: раз P2P никогда не участвовал (баг №1), то ВСЕ прошлые числа
 "dfinit" в `zOptimization/SessionSummary_AGENT-89.md` и в §2/§3/§5

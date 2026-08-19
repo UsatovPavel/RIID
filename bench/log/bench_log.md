@@ -93,7 +93,9 @@ podman очищены перед прогоном (см. `bench/bench.py::do_run
 86df374 — оба плеча на одной свежей (cold) инсталляции Dragonfly, `library/python:latest` (1.14GB local),
 образ на Selectel (`cr.selcloud.ru`) | стенд: AI_Box VM, Linux 6.8.0-138-generic, podman 4.9.3, minikube
 v1.38.1, 1 нода / 1 seed-client. `dfinit`-плечо измерено только после фикса auth.json на mirror-хост и
-`dragonfly-run-tmpfs` sizeLimit 2Gi→4Gi (без этого P2P у dfinit не включается вовсе — см.
+`dragonfly-run-tmpfs` sizeLimit временно поднятым до 4Gi (позже откачен обратно на исходный `2Gi` —
+см. `changelogEnv.md`, сам sizeLimit не был реальной причиной ENOSPC, это отдельный неисправленный
+баг с конфликтом volume-монтов; без первого фикса — auth.json — P2P у dfinit не включается вовсе — см.
 `zOptimization/SessionSummary_1Hypothesis.md` §6-7). Источники: `bench/results/20260819T100730Z.tsv`
 (RIID), `bench/dfinit/results/20260819T115738Z_dfinit-final.tsv` (dfinit).
 
