@@ -14,6 +14,7 @@ import riid.runtime.adapter.ContainerdRuntimeAdapter;
 import riid.runtime.adapter.DockerRuntimeAdapter;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -83,10 +84,10 @@ class RuntimeAdaptersTest {
 
     @Test
     void runtimeId() {
-        assertEquals("podman", new PodmanRuntimeAdapter().runtimeId());
-        assertEquals("docker", new DockerRuntimeAdapter().runtimeId());
-        assertEquals("porto", new PortoRuntimeAdapter().runtimeId());
-        assertEquals("containerd", new ContainerdRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.PODMAN, new PodmanRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.DOCKER, new DockerRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.PORTO, new PortoRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.CONTAINERD, new ContainerdRuntimeAdapter().runtimeId());
     }
 
     @Test

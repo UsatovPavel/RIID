@@ -9,6 +9,7 @@ import riid.app.service.LoadOutcome;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.config.TestConfigYaml;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
@@ -59,8 +60,8 @@ class CliToFactorySmokeTest {
 
     private static final class NoopRuntimeAdapter implements RuntimeAdapter {
         @Override
-        public String runtimeId() {
-            return "stub";
+        public RuntimeId runtimeId() {
+            return RuntimeId.PODMAN;
         }
 
         @Override

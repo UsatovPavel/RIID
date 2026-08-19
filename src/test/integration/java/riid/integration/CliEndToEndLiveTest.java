@@ -15,6 +15,7 @@ import riid.core.config.TestConfigYaml;
 import riid.logging.TestRootLoggerEvents;
 import riid.p2p.P2PExecutor;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -61,19 +62,19 @@ class CliEndToEndLiveTest {
                 return (repo, ref, runtimeId) -> {
                     try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                             ImageLoadingFacade svc = ImageLoadingFacade.createDefault(endpoint, cache,
-                                    new P2PExecutor.NoOp(), Map.of(runtime.runtimeId(), runtime), fs)) {
+                                    new P2PExecutor.NoOp(), Map.of(runtime.runtimeId().value(), runtime), fs)) {
                         String registry = endpoint.registryName();
                         return svc.load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
                     } catch (IOException e) {
                         throw new RuntimeException("Failed to load image", e);
                     }
                 };
-            }, Map.of(runtime.runtimeId(), runtime),
+            }, Map.of(runtime.runtimeId().value(), runtime),
                     new PrintWriter(new OutputStreamWriter(outBuf, java.nio.charset.StandardCharsets.UTF_8), true),
                     new PrintWriter(new OutputStreamWriter(errBuf, java.nio.charset.StandardCharsets.UTF_8), true));
 
             int code = cli.run(new String[]{"--config", config.toString(), "--repo", "library/busybox", "--tag",
-                    "latest", "--runtime", runtime.runtimeId()});
+                    "latest", "--runtime", runtime.runtimeId().value()});
 
             if (code != 0) {
                 fail("CLI exit code " + code + "\nSTDOUT:\n" + outBuf + "\nSTDERR:\n" + errBuf);
@@ -164,8 +165,8 @@ class CliEndToEndLiveTest {
         }
 
         @Override
-        public String runtimeId() {
-            return "stub";
+        public RuntimeId runtimeId() {
+            return RuntimeId.PODMAN;
         }
 
         @Override

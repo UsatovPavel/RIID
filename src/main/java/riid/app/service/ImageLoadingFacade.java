@@ -237,14 +237,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 config.client().platformOrHostDefault());
 
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
-        runtimes.put("podman", new PodmanRuntimeAdapter());
-        runtimes.put("porto", new PortoRuntimeAdapter());
-        runtimes.put("containerd", new ContainerdRuntimeAdapter());
+        registerRuntime(runtimes, new PodmanRuntimeAdapter());
+        registerRuntime(runtimes, new PortoRuntimeAdapter());
+        registerRuntime(runtimes, new ContainerdRuntimeAdapter());
         RuntimeConfig runtimeConfig = config.runtime();
         String dockerCmd = runtimeConfig != null
                 ? runtimeConfig.dockerCmdOrDefault()
                 : RuntimeConfig.DEFAULT_DOCKER_BIN;
-        runtimes.put("docker", new DockerRuntimeAdapter(fs, null, dockerCmd));
+        registerRuntime(runtimes, new DockerRuntimeAdapter(fs, null, dockerCmd));
 
         if (runtimeConfig != null) {
             BoundedCommandExecution.setDefaultOutputConfig(runtimeConfig.outputConfigOrDefault());
@@ -316,11 +316,15 @@ public final class ImageLoadingFacade implements AutoCloseable {
      */
     public static Map<String, RuntimeAdapter> defaultRuntimes() {
         Map<String, RuntimeAdapter> runtimes = new HashMap<>();
-        runtimes.put("podman", new PodmanRuntimeAdapter());
-        runtimes.put("porto", new PortoRuntimeAdapter());
-        runtimes.put("docker", new DockerRuntimeAdapter());
-        runtimes.put("containerd", new ContainerdRuntimeAdapter());
+        registerRuntime(runtimes, new PodmanRuntimeAdapter());
+        registerRuntime(runtimes, new PortoRuntimeAdapter());
+        registerRuntime(runtimes, new DockerRuntimeAdapter());
+        registerRuntime(runtimes, new ContainerdRuntimeAdapter());
         return Map.copyOf(runtimes);
+    }
+
+    private static void registerRuntime(Map<String, RuntimeAdapter> runtimes, RuntimeAdapter adapter) {
+        runtimes.put(adapter.runtimeId().value(), adapter);
     }
 
     @FunctionalInterface

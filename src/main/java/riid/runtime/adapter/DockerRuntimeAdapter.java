@@ -22,7 +22,6 @@ import riid.runtime.BoundedCommandExecution;
  * `docker load`.
  */
 public class DockerRuntimeAdapter implements RuntimeAdapter {
-    private static final String RUNTIME_ID = "docker";
     private static final String DEFAULT_DOCKER_BIN = "docker";
     private static final String DIGEST_FIELD = "digest";
     private final HostFilesystem fs;
@@ -48,8 +47,8 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
     }
 
     @Override
-    public String runtimeId() {
-        return RUNTIME_ID;
+    public RuntimeId runtimeId() {
+        return RuntimeId.DOCKER;
     }
 
     @Override

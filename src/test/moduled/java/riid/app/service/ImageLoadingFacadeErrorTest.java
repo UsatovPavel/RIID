@@ -28,6 +28,7 @@ import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
 import riid.dispatcher.RequestDispatcher;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 class ImageLoadingFacadeErrorTest {
     private static final String DIGEST = "sha256:" + "a".repeat(64);
@@ -155,8 +156,8 @@ class ImageLoadingFacadeErrorTest {
 
     private static final class NoopRuntime implements RuntimeAdapter {
         @Override
-        public String runtimeId() {
-            return "noop";
+        public RuntimeId runtimeId() {
+            return RuntimeId.PODMAN;
         }
 
         @Override
@@ -166,8 +167,8 @@ class ImageLoadingFacadeErrorTest {
 
     private static final class InterruptedRuntime implements RuntimeAdapter {
         @Override
-        public String runtimeId() {
-            return "noop";
+        public RuntimeId runtimeId() {
+            return RuntimeId.PODMAN;
         }
 
         @Override

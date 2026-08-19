@@ -23,9 +23,14 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     private static final String IMAGES = "images";
     private static final String IMPORT = "import";
 
+    /** Path/name of the {@code ctr} binary, for non-default installs. */
     private final String ctrCmd;
+    /** {@code -n}: containerd namespace; null uses {@code ctr}'s own default ({@code default}). */
     private final String namespace;
+    /** {@code -a}: daemon socket address; null uses {@code ctr}'s own default
+     * ({@code /run/containerd/containerd.sock}). */
     private final String address;
+    /** {@code --snapshotter}: snapshotter backend; null uses {@code ctr}'s own default (host-configured). */
     private final String snapshotter;
 
     public ContainerdRuntimeAdapter() {
@@ -40,12 +45,18 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     }
 
     @Override
-    public String runtimeId() {
-        return "containerd";
+    public RuntimeId runtimeId() {
+        return RuntimeId.CONTAINERD;
     }
 
     @Override
     public boolean prefersOciLayoutStreamImport() {
+        // true, unlike Podman's `-i <path>` (see PodmanRuntimeAdapter): that win comes
+        // from skipping Podman's own stdin->tempfile copy. `ctr images import` has no
+        // such copy to skip — file or stdin, it always proxies through the
+        // transfer/streaming gRPC service (core/transfer/archive), decoded by an
+        // already single-pass tar.Reader (core/images/archive/importer.go). A path
+        // here would only add a real disk write that streaming avoids.
         return true;
     }
 

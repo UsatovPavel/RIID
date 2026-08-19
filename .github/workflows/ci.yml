@@ -13,6 +13,8 @@ permissions:
 env:
   GITHUB_ACTOR: ${{ github.actor }}
   GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+  DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
 jobs:
   quality:
@@ -23,7 +25,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
       - uses: actions/setup-java@v4
-        with:
+        with: &java-setup
           distribution: temurin
           java-version: 23
           cache: gradle
@@ -36,29 +38,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
+        with: *java-setup
       - name: Make gradlew executable
         run: chmod +x gradlew
-      - name: Unit tests 
+      - name: Unit tests
         run: ./gradlew test -PdisableLocal
 
   linux-integration-test:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
+        with: *java-setup
       - name: Make gradlew executable
         run: chmod +x gradlew
       # Runner image already ships Docker (Moby); apt docker.io conflicts with containerd.io — do not install it.
@@ -107,19 +100,14 @@ jobs:
   porto-integration-test:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       PORTO_RELEASE_REPO: UsatovPavel/porto
       PORTO_DEB_VERSION: 5.3.58
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
+        with: *java-setup
       - name: Make gradlew executable
         run: chmod +x gradlew
       - name: Install Porto from GitHub release (.deb jammy)
@@ -147,17 +135,11 @@ jobs:
   containerd-integration-test:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
+        with: *java-setup
       - name: Make gradlew executable
         run: chmod +x gradlew
       # Runner image already ships Docker (Moby) with bundled containerd.io (ctr CLI + containerd.sock).
