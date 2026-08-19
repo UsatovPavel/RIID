@@ -8,15 +8,15 @@ import java.nio.file.Path;
  */
 public interface RuntimeAdapter {
     /**
-     * @return runtime id, e.g. "podman", "porto", "containerd".
+     * @return runtime id, e.g. {@link RuntimeId#PODMAN}, {@link RuntimeId#CONTAINERD}.
      */
-    String runtimeId();
+    RuntimeId runtimeId();
 
     /**
      * Can this adapter handle the given runtime id?
      */
     default boolean supports(String runtimeId) {
-        return runtimeId().equalsIgnoreCase(runtimeId);
+        return runtimeId().value().equalsIgnoreCase(runtimeId);
     }
 
     /**

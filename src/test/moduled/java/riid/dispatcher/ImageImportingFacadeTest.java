@@ -18,6 +18,7 @@ import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
 import riid.dispatcher.model.RepositoryName;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 class ImageImportingFacadeTest {
 
@@ -97,8 +98,8 @@ class ImageImportingFacadeTest {
         Path importedPath;
 
         @Override
-        public String runtimeId() {
-            return "test-runtime";
+        public RuntimeId runtimeId() {
+            return RuntimeId.PODMAN;
         }
 
         @Override

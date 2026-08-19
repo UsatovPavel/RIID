@@ -14,11 +14,12 @@ import riid.app.core.model.ImageId;
 import riid.app.service.ImageLoadingFacade;
 import riid.app.service.LoadOutcome;
 import riid.core.config.TestRegistryConfig;
+import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class DaemonModeRuntimeContextLifecycleTest {
-    private static final String RUNTIME_PODMAN = "podman";
+    private static final RuntimeId RUNTIME_PODMAN = RuntimeId.PODMAN;
     private static final String REPO_BUSYBOX = "library/busybox";
 
     private static LoadOutcome mockLoadOutcome(String repo, String ref) {

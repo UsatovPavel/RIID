@@ -10,9 +10,11 @@ import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.runtime.adapter.ContainerdRuntimeAdapter;
 import riid.runtime.adapter.DockerRuntimeAdapter;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -82,9 +84,10 @@ class RuntimeAdaptersTest {
 
     @Test
     void runtimeId() {
-        assertEquals("podman", new PodmanRuntimeAdapter().runtimeId());
-        assertEquals("docker", new DockerRuntimeAdapter().runtimeId());
-        assertEquals("porto", new PortoRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.PODMAN, new PodmanRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.DOCKER, new DockerRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.PORTO, new PortoRuntimeAdapter().runtimeId());
+        assertEquals(RuntimeId.CONTAINERD, new ContainerdRuntimeAdapter().runtimeId());
     }
 
     @Test
@@ -116,6 +119,36 @@ class RuntimeAdaptersTest {
         fs.writeString(tmp, PAYLOAD);
         PodmanRuntimeAdapter adapter = new TestPodmanAdapter(0, "ok", "");
         assertDoesNotThrow(() -> adapter.importImage(tmp));
+    }
+
+    @Test
+    void containerdFailsOnMissingFile() {
+        ContainerdRuntimeAdapter adapter = new ContainerdRuntimeAdapter();
+        Path missing = Path.of("non-existent-containerd.tar");
+        assertThrows(IOException.class, () -> adapter.importImage(missing));
+    }
+
+    @Test
+    void containerdThrowsOnNonZeroExit() throws Exception {
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "containerd-", TAR_SUFFIX);
+        fs.writeString(tmp, PAYLOAD);
+        ContainerdRuntimeAdapter adapter = new TestContainerdAdapter(1, "out", ERR);
+        IOException ex = assertThrows(IOException.class, () -> adapter.importImage(tmp));
+        assertContains(ex.getMessage(), "ctr images import failed");
+        assertContains(ex.getMessage(), "err");
+    }
+
+    @Test
+    void containerdSuccess() throws Exception {
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "containerd-", TAR_SUFFIX);
+        fs.writeString(tmp, PAYLOAD);
+        ContainerdRuntimeAdapter adapter = new TestContainerdAdapter(0, "ok", "");
+        assertDoesNotThrow(() -> adapter.importImage(tmp));
+    }
+
+    @Test
+    void containerdPrefersOciLayoutStreamImport() {
+        assertEquals(true, new ContainerdRuntimeAdapter().prefersOciLayoutStreamImport());
     }
 
     @Test
@@ -256,6 +289,29 @@ class RuntimeAdaptersTest {
         private final String stderr;
 
         private TestPodmanAdapter(int exitCode, String stdout, String stderr) {
+            this.exitCode = exitCode;
+            this.stdout = stdout;
+            this.stderr = stderr;
+        }
+
+        @Override
+        public boolean prefersOciLayoutStreamImport() {
+            return false;
+        }
+
+        @Override
+        protected BoundedCommandExecution.ShellResult runCommand(List<String> command) {
+            return new BoundedCommandExecution.ShellResult(exitCode, stdout, stderr);
+        }
+    }
+
+    @SuppressWarnings("PMD.TestClassWithoutTestCases")
+    private static final class TestContainerdAdapter extends ContainerdRuntimeAdapter {
+        private final int exitCode;
+        private final String stdout;
+        private final String stderr;
+
+        private TestContainerdAdapter(int exitCode, String stdout, String stderr) {
             this.exitCode = exitCode;
             this.stdout = stdout;
             this.stderr = stderr;

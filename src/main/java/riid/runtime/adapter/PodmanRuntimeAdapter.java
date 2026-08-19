@@ -18,8 +18,8 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     private static final int MAX_PROC_STDERR = 64 * 1024;
 
     @Override
-    public String runtimeId() {
-        return "podman";
+    public RuntimeId runtimeId() {
+        return RuntimeId.PODMAN;
     }
 
     @Override

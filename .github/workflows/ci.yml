@@ -2,6 +2,17 @@ name: CI
 
 on:
   pull_request:
+    paths:
+      - "src/**"
+      - "buildSrc/**"
+      - "gradle/**"
+      - "config/**"
+      - "scripts/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/ci.yml"
   push:
     tags:
       - "*"
@@ -13,6 +24,8 @@ permissions:
 env:
   GITHUB_ACTOR: ${{ github.actor }}
   GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+  DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
 jobs:
   quality:
@@ -23,7 +36,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
       - uses: actions/setup-java@v4
-        with:
+        with: &java-setup
           distribution: temurin
           java-version: 23
           cache: gradle
@@ -36,36 +49,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
+        with: *java-setup
       - name: Make gradlew executable
         run: chmod +x gradlew
-      - name: Unit tests 
+      - name: Unit tests
         run: ./gradlew test -PdisableLocal
 
   linux-integration-test:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
+        with: *java-setup
       - name: Make gradlew executable
         run: chmod +x gradlew
+      # Background apt-daily timers can hold the dpkg/apt lock and make apt-get hang
+      # silently (no output) for the rest of the job's timeout; stop them first.
+      - name: Disable background apt timers
+        run: |
+          sudo systemctl stop apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+          sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+          sudo pkill -9 -f unattended-upgrade 2>/dev/null || true
       # Runner image already ships Docker (Moby); apt docker.io conflicts with containerd.io — do not install it.
       - name: Install Podman
         run: |
-          sudo apt-get update
-          sudo apt-get install -y podman
+          sudo apt-get update -o DPkg::Lock::Timeout=60 -o Acquire::Retries=3
+          sudo apt-get install -y -o DPkg::Lock::Timeout=60 podman
           podman --version
       - name: Ensure Docker CLI and socket
         run: |
@@ -107,41 +118,66 @@ jobs:
   porto-integration-test:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       PORTO_RELEASE_REPO: UsatovPavel/porto
       PORTO_DEB_VERSION: 5.3.58
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
+        with: *java-setup
       - name: Make gradlew executable
         run: chmod +x gradlew
+      # Background apt-daily timers can hold the dpkg/apt lock and make apt-get hang
+      # silently (no output) for the rest of the job's timeout; stop them first.
+      - name: Disable background apt timers
+        run: |
+          sudo systemctl stop apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+          sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+          sudo pkill -9 -f unattended-upgrade 2>/dev/null || true
       - name: Install Porto from GitHub release (.deb jammy)
         run: |
           set -eux
           DEB="porto_jammy_${PORTO_DEB_VERSION}_amd64.deb"
           curl -fLO "https://github.com/${PORTO_RELEASE_REPO}/releases/download/v${PORTO_DEB_VERSION}/${DEB}"
-          sudo apt-get update
-          sudo apt-get install -y "./${DEB}"
+          sudo apt-get update -o DPkg::Lock::Timeout=60 -o Acquire::Retries=3
+          sudo apt-get install -y -o DPkg::Lock::Timeout=60 "./${DEB}"
       - name: Start porto
         run: |
           sudo systemctl daemon-reload
           sudo systemctl start porto || sudo service porto start
       - name: Install Podman
         run: |
-          sudo apt-get install -y podman
+          sudo apt-get install -y -o DPkg::Lock::Timeout=60 podman
           podman --version
       # Runner user has no Porto layer-import ACL; JVM as root matches operations that invoke portoctl successfully.
       - name: Porto runtime integration tests
         run: |
           sudo -E ./gradlew --no-daemon integrationTest \
             --tests 'riid.integration.runtime_app.PortoRuntimeAdapterIntegrationTest'
+          sudo chown -R runner:runner "$GITHUB_WORKSPACE"
+
+  containerd-integration-test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: *java-setup
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      # Runner image already ships Docker (Moby) with bundled containerd.io (ctr CLI + containerd.sock).
+      - name: Ensure containerd is running
+        run: |
+          ctr --version
+          sudo systemctl start containerd 2>/dev/null || sudo service containerd start 2>/dev/null || true
+          test -S /run/containerd/containerd.sock
+      # containerd.sock is root:root; JVM as root matches operations that invoke ctr successfully (same approach as Porto).
+      - name: Containerd runtime integration tests
+        run: |
+          sudo -E ./gradlew --no-daemon integrationTest \
+            --tests 'riid.integration.runtime_app.ContainerdRuntimeAdapterIntegrationTest'
           sudo chown -R runner:runner "$GITHUB_WORKSPACE"
 
   build-k8s-image-on-tag:

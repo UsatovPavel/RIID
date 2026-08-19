@@ -73,4 +73,7 @@ bench/results/
 bench/dfinit/results/
 bench/**/__pycache__/
 bench/_error.txt
+
+### internalDocs: local-only AI/personal notes, never committed ###
+internalDocs/
 bench/log/changelogEnvVPN.md

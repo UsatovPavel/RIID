@@ -31,6 +31,7 @@ import riid.app.service.ImageLoadingFacade;
 import riid.core.config.TestConfigYaml;
 import riid.core.config.TestRegistryConfig;
 import riid.core.fs.TestFilesystemSupport;
+import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -75,7 +76,8 @@ class DaemonPodmanCacheReuseLiveTest {
         CliApplication.ImageLoader loader = (repo, ref, runtimeId) -> facade
                 .load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
 
-        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RUNTIME_ID), 4,
+        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RuntimeId.PODMAN),
+                4,
                 8192, Duration.ofMinutes(10), AppConfig.OverloadPolicy.REJECT, prom);
 
         try {

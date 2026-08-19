@@ -9,6 +9,7 @@ import riid.app.service.LoadOutcome;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.config.TestConfigYaml;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
@@ -46,12 +47,12 @@ class CliToFactorySmokeTest {
             }
             return (repo, ref, runtime) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref),
                     -1L);
-        }, Map.of("stub", new NoopRuntimeAdapter()),
+        }, Map.of(RuntimeId.PODMAN, new NoopRuntimeAdapter()),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true));
 
         int code = cli.run(new String[]{"--config", config.toString(), "--repo", "library/busybox", "--tag", "latest",
-                "--runtime", "stub"});
+                "--runtime", "podman"});
 
         assertEquals(0, code);
         assertTrue(factoryCalled.get(), "Factory should be invoked from CLI flow");
@@ -59,8 +60,8 @@ class CliToFactorySmokeTest {
 
     private static final class NoopRuntimeAdapter implements RuntimeAdapter {
         @Override
-        public String runtimeId() {
-            return "stub";
+        public RuntimeId runtimeId() {
+            return RuntimeId.PODMAN;
         }
 
         @Override

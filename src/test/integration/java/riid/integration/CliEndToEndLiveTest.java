@@ -15,6 +15,7 @@ import riid.core.config.TestConfigYaml;
 import riid.logging.TestRootLoggerEvents;
 import riid.p2p.P2PExecutor;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -73,7 +74,7 @@ class CliEndToEndLiveTest {
                     new PrintWriter(new OutputStreamWriter(errBuf, java.nio.charset.StandardCharsets.UTF_8), true));
 
             int code = cli.run(new String[]{"--config", config.toString(), "--repo", "library/busybox", "--tag",
-                    "latest", "--runtime", runtime.runtimeId()});
+                    "latest", "--runtime", runtime.runtimeId().value()});
 
             if (code != 0) {
                 fail("CLI exit code " + code + "\nSTDOUT:\n" + outBuf + "\nSTDERR:\n" + errBuf);
@@ -164,8 +165,8 @@ class CliEndToEndLiveTest {
         }
 
         @Override
-        public String runtimeId() {
-            return "stub";
+        public RuntimeId runtimeId() {
+            return RuntimeId.PODMAN;
         }
 
         @Override

@@ -25,6 +25,7 @@ import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.runtime.adapter.PortoRuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,7 +49,7 @@ class PortoRuntimeAdapterIntegrationTest {
         ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(), REPO, REF);
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
-            app.load(imageId, "porto");
+            app.load(imageId, RuntimeId.PORTO);
         }
 
         List<String> after = listLayers();

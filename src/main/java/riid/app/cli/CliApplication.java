@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
@@ -32,6 +33,7 @@ import riid.core.logging.MilestoneEventLogger;
 import riid.core.logging.MilestoneEventLogger.EventType;
 import riid.core.logging.MilestoneEventLogger.ResultType;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 /**
  * Minimal CLI parser/runner for ImageLoadingFacade.
@@ -56,10 +58,10 @@ public final class CliApplication {
     private final DaemonServiceFactory serviceFactory;
     private final PrintWriter out;
     private final PrintWriter err;
-    private final Set<String> availableRuntimes;
+    private final Set<RuntimeId> availableRuntimes;
     private final DaemonRunner daemonRunner;
 
-    public CliApplication(ServiceFactory serviceFactory, Map<String, RuntimeAdapter> runtimes, PrintWriter out,
+    public CliApplication(ServiceFactory serviceFactory, Map<RuntimeId, RuntimeAdapter> runtimes, PrintWriter out,
             PrintWriter err) {
         this(wrapAsDaemonServiceFactory(serviceFactory), runtimes, out, err,
                 (options, loader, available, prometheusRegistry) -> {
@@ -73,7 +75,7 @@ public final class CliApplication {
                 });
     }
 
-    public CliApplication(DaemonServiceFactory serviceFactory, Map<String, RuntimeAdapter> runtimes, PrintWriter out,
+    public CliApplication(DaemonServiceFactory serviceFactory, Map<RuntimeId, RuntimeAdapter> runtimes, PrintWriter out,
             PrintWriter err, DaemonRunner daemonRunner) {
         this.serviceFactory = Objects.requireNonNull(serviceFactory, "serviceFactory");
         this.availableRuntimes = Set.copyOf(Objects.requireNonNull(runtimes, "runtimes").keySet());
@@ -146,16 +148,16 @@ public final class CliApplication {
                         .addDurationFrom(requestStartedNs).log("Request finished (daemon)");
                 return ExitCode.OK.code();
             }
-            if (!availableRuntimes.contains(options.runtimeId())) {
-                err.printf("Unknown runtime '%s'. Available: %s%n", options.runtimeId(),
-                        String.join(", ", availableRuntimes));
+            RuntimeId runtimeId = parseRuntimeId(options.runtimeId());
+            if (runtimeId == null || !availableRuntimes.contains(runtimeId)) {
+                err.printf("Unknown runtime '%s'. Available: %s%n", options.runtimeId(), formatAvailableRuntimes());
                 MilestoneEventLogger.warn(LOGGER).addEvent(EventType.REQUEST_FINISH).addResult(ResultType.ERROR)
                         .addDurationFrom(requestStartedNs).addErrorKind("VALIDATION").addErrorCode("RUNTIME_NOT_FOUND")
                         .log("Request failed: unknown runtime");
                 return ExitCode.RUNTIME_NOT_FOUND.code();
             }
             ImageLoader loader = serviceFactory.create(options, null);
-            LoadOutcome loadOutcome = loader.load(options.repository(), options.reference(), options.runtimeId());
+            LoadOutcome loadOutcome = loader.load(options.repository(), options.reference(), runtimeId);
             Objects.requireNonNull(loadOutcome);
             if (options.hasCerts()) {
                 out.println("Note: cert/key/CA options accepted but not yet used (stub).");
@@ -180,6 +182,18 @@ public final class CliApplication {
         }
     }
 
+    private static RuntimeId parseRuntimeId(String raw) {
+        try {
+            return RuntimeId.from(raw);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private String formatAvailableRuntimes() {
+        return availableRuntimes.stream().map(RuntimeId::value).sorted().collect(Collectors.joining(", "));
+    }
+
     private void printUsage(PrintWriter writer) {
         String usage = String.join("%n", "Usage: riid --repo <name> [--tag <tag>|--digest <sha256:...>] --runtime <id>",
                 "   or: riid --daemon", "       [--config <path>] [--username <user>",
@@ -188,7 +202,7 @@ public final class CliApplication {
                 "  --repo           Repository name (e.g., library/busybox)",
                 "  --tag/--ref      Tag to pull (default: latest). Ignored if --digest is provided",
                 "  --digest         Digest to pull (format: sha256:...)",
-                "  --runtime        Runtime id (available: %s)".formatted(String.join(", ", availableRuntimes)),
+                "  --runtime        Runtime id (available: %s)".formatted(formatAvailableRuntimes()),
                 "  --daemon         Run in daemon mode (Jetty HTTP IPC server)",
                 "  --config         Path to YAML config (default path: %s)".formatted(DEFAULT_CONFIG_PATH),
                 "                   If omitted and default file is missing, built-in defaults are used",
@@ -240,12 +254,12 @@ public final class CliApplication {
     }
     @FunctionalInterface
     public interface ImageLoader {
-        LoadOutcome load(String repository, String reference, String runtimeId);
+        LoadOutcome load(String repository, String reference, RuntimeId runtimeId);
     }
 
     @FunctionalInterface
     public interface DaemonRunner {
-        void run(CliParser.CliOptions options, ImageLoader loader, Set<String> availableRuntimes,
+        void run(CliParser.CliOptions options, ImageLoader loader, Set<RuntimeId> availableRuntimes,
                 PrometheusMeterRegistry prometheusRegistry) throws Exception;
     }
 }

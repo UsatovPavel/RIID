@@ -38,6 +38,7 @@ import riid.app.daemon.guard.PullConcurrencyGuard;
 import riid.app.daemon.metrics.DaemonPullHttpMetrics;
 import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
 import riid.core.logging.MdcContext;
+import riid.runtime.adapter.RuntimeId;
 
 public final class PullHttpHandler extends Handler.Abstract {
     private static final String PULL_PATH = "/pull";
@@ -72,7 +73,7 @@ public final class PullHttpHandler extends Handler.Abstract {
     private final String controlConnectorName;
     private final ObjectMapper mapper = new ObjectMapper();
     private final CliApplication.ImageLoader loader;
-    private final Set<String> availableRuntimes;
+    private final Set<RuntimeId> availableRuntimes;
     private final PullConcurrencyGuard concurrencyGuard;
     private final int maxRequestBodyBytes;
     private final Duration requestTimeout;
@@ -81,7 +82,7 @@ public final class PullHttpHandler extends Handler.Abstract {
     private final ImageLoadPipelineMetrics pipelineMetrics;
 
     public PullHttpHandler(String controlConnectorName, CliApplication.ImageLoader loader,
-            Set<String> availableRuntimes, PullConcurrencyGuard concurrencyGuard, int maxRequestBodyBytes,
+            Set<RuntimeId> availableRuntimes, PullConcurrencyGuard concurrencyGuard, int maxRequestBodyBytes,
             Duration requestTimeout, ExecutorService pullExecutor, DaemonPullHttpMetrics pullMetrics,
             ImageLoadPipelineMetrics pipelineMetrics) {
         this.controlConnectorName = Objects.requireNonNull(controlConnectorName, "controlConnectorName");
@@ -137,7 +138,8 @@ public final class PullHttpHandler extends Handler.Abstract {
                     new ErrorResponse(ERROR_INVALID_REQUEST, "repository, reference and runtimeId are required"));
             return true;
         }
-        if (!availableRuntimes.contains(pullRequest.runtimeId())) {
+        RuntimeId requestedRuntime = parseRuntimeId(pullRequest.runtimeId());
+        if (requestedRuntime == null || !availableRuntimes.contains(requestedRuntime)) {
             pullMetrics.record(t0, HttpStatus.UNPROCESSABLE_ENTITY_422, "unknown_runtime");
             writeJson(response, callback, HttpStatus.UNPROCESSABLE_ENTITY_422,
                     new ErrorResponse("unknown_runtime", "Unknown runtime: " + pullRequest.runtimeId()));
@@ -241,6 +243,14 @@ public final class PullHttpHandler extends Handler.Abstract {
         return updatedTotal;
     }
 
+    private static RuntimeId parseRuntimeId(String raw) {
+        try {
+            return RuntimeId.from(raw);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
     private static Throwable unwrapExecution(Throwable e) {
         Throwable u = e;
         while (u instanceof ExecutionException && u.getCause() != null) {
@@ -295,7 +305,8 @@ public final class PullHttpHandler extends Handler.Abstract {
             } else {
                 MDC.clear();
             }
-            return loader.load(pullRequest.repository(), pullRequest.reference(), pullRequest.runtimeId());
+            return loader.load(pullRequest.repository(), pullRequest.reference(),
+                    parseRuntimeId(pullRequest.runtimeId()));
         } finally {
             if (previous != null && !previous.isEmpty()) {
                 MDC.setContextMap(previous);

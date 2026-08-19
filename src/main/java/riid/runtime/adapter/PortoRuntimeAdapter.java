@@ -35,8 +35,8 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     private static final String INDEX_JSON = "index.json";
 
     @Override
-    public String runtimeId() {
-        return "porto";
+    public RuntimeId runtimeId() {
+        return RuntimeId.PORTO;
     }
 
     @Override

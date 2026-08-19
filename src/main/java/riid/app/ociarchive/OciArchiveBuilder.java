@@ -1,5 +1,6 @@
 package riid.app.ociarchive;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +25,7 @@ import riid.app.core.error.AppError;
 import riid.app.core.error.OciArchiveException;
 import riid.core.fs.HostFilesystem;
 import riid.cache.oci.ImageDigest;
+import riid.core.hash.Sha256Utils;
 import riid.core.fs.PathSupport;
 import riid.client.api.ManifestResult;
 import riid.core.model.manifest.Descriptor;
@@ -162,7 +164,7 @@ public final class OciArchiveBuilder {
 
         // Manifest blob
         byte[] manifestBytes = OBJECT_MAPPER.writeValueAsBytes(manifest);
-        String manifestDigest = manifestResult.digest().replace("sha256:", "");
+        String manifestDigest = Sha256Utils.digest(new ByteArrayInputStream(manifestBytes)).replace("sha256:", "");
         fs.write(blobsDir.resolve(manifestDigest), manifestBytes);
 
         // oci-layout
