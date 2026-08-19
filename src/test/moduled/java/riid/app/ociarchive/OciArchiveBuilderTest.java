@@ -1,5 +1,6 @@
 package riid.app.ociarchive;
 
+import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -62,7 +63,7 @@ class OciArchiveBuilderTest {
             assertTrue(Files.isRegularFile(blobFile), "manifest blob referenced by index.json must exist on disk");
 
             byte[] blobBytes = Files.readAllBytes(blobFile);
-            String actualDigest = Sha256Utils.digest(new java.io.ByteArrayInputStream(blobBytes));
+            String actualDigest = Sha256Utils.digest(new ByteArrayInputStream(blobBytes));
             assertEquals(actualDigest, manifestDigest,
                     "index.json manifest descriptor digest must match the actual blob content digest");
             return null;

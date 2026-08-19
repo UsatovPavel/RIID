@@ -26,6 +26,7 @@ import riid.core.config.TestRegistryConfig;
 import riid.dispatcher.RequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.runtime.adapter.DockerRuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 @Tag("filesystem")
 @Tag("local")
@@ -46,7 +47,7 @@ class DockerRuntimeAdapterIntegrationTest {
 
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
             ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(), REPO, REF);
-            LoadOutcome outcome = app.load(imageId, DOCKER);
+            LoadOutcome outcome = app.load(imageId, RuntimeId.DOCKER);
             loadedId = outcome.imageId();
         }
 
@@ -68,11 +69,12 @@ class DockerRuntimeAdapterIntegrationTest {
                 RegistryClientImpl client = new RegistryClientImpl(endpoint, new HttpClientConfig())) {
             RequestDispatcher dispatcher = new riid.dispatcher.SimpleRequestDispatcher(client, cache,
                     new P2PExecutor.NoOp(), fs);
-            RuntimeRegistry registry = new RuntimeRegistry(java.util.Map.of(DOCKER, new DockerRuntimeAdapter()));
+            RuntimeRegistry registry = new RuntimeRegistry(
+                    java.util.Map.of(RuntimeId.DOCKER, new DockerRuntimeAdapter()));
             try (ImageLoadingFacade app = new ImageLoadingFacade(dispatcher, registry, client, fs,
                     TestPaths.DEFAULT_BASE_DIR, java.util.List.of())) {
                 ImageId imageId = ImageId.fromRegistry(endpoint.registryName(), REPO, REF);
-                ImageId loadedId = app.load(imageId, DOCKER).imageId();
+                ImageId loadedId = app.load(imageId, RuntimeId.DOCKER).imageId();
                 run(List.of(DOCKER, "run", "--rm", loadedId.toString(), "true"));
             }
         }

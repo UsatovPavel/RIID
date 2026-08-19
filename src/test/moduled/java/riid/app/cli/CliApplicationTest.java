@@ -23,6 +23,7 @@ import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 import riid.core.config.TestRegistryConfig;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class CliApplicationTest {
@@ -83,7 +84,7 @@ class CliApplicationTest {
         ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication((options, meterRegistry) -> {
             throw new AssertionError("Service factory must not be invoked on invalid runtime");
-        }, Map.of(RUNTIME_PODMAN, new PodmanRuntimeAdapter()),
+        }, Map.of(RuntimeId.PODMAN, new PodmanRuntimeAdapter()),
                 new PrintWriter(new OutputStreamWriter(new ByteArrayOutputStream(), StandardCharsets.UTF_8), true),
                 new PrintWriter(new OutputStreamWriter(errBuf, StandardCharsets.UTF_8), true));
 
@@ -98,7 +99,7 @@ class CliApplicationTest {
         AtomicReference<Path> configSeen = new AtomicReference<>();
         AtomicReference<String> repoSeen = new AtomicReference<>();
         AtomicReference<String> refSeen = new AtomicReference<>();
-        AtomicReference<String> runtimeSeen = new AtomicReference<>();
+        AtomicReference<RuntimeId> runtimeSeen = new AtomicReference<>();
 
         riid.app.cli.CliApplication app = new riid.app.cli.CliApplication((options, meterRegistry) -> {
             configSeen.set(options.configPath());
@@ -119,7 +120,7 @@ class CliApplicationTest {
         assertEquals(Path.of("config/config.yaml"), configSeen.get());
         assertEquals(REPO_BUSYBOX, repoSeen.get());
         assertEquals("latest", refSeen.get());
-        assertEquals(RUNTIME_PODMAN, runtimeSeen.get());
+        assertEquals(RuntimeId.PODMAN, runtimeSeen.get());
     }
 
     @Test

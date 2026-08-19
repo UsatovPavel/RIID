@@ -13,6 +13,7 @@ import riid.app.service.LoadOutcome;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.config.TestRegistryConfig;
+import riid.runtime.adapter.RuntimeId;
 
 @Tag("filesystem")
 @Tag("local")
@@ -31,7 +32,7 @@ class PodmanRuntimeAdapterIntegrationTest {
                 PodmanRuntimeIntegrationSupport.REPO_JOBBER, PodmanRuntimeIntegrationSupport.REF_LATEST);
         ImageId loadedId;
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
-            LoadOutcome outcome = app.load(imageId, PodmanRuntimeIntegrationSupport.PODMAN);
+            LoadOutcome outcome = app.load(imageId, RuntimeId.PODMAN);
             loadedId = outcome.imageId();
         }
         String images = PodmanRuntimeIntegrationSupport.podmanImages();
@@ -49,7 +50,7 @@ class PodmanRuntimeAdapterIntegrationTest {
                 PodmanRuntimeIntegrationSupport.REPO_ALPINE, PodmanRuntimeIntegrationSupport.REF_EDGE);
         ImageId loadedId;
         try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
-            LoadOutcome outcome = app.load(imageId, PodmanRuntimeIntegrationSupport.PODMAN);
+            LoadOutcome outcome = app.load(imageId, RuntimeId.PODMAN);
             loadedId = outcome.imageId();
         }
         String images = PodmanRuntimeIntegrationSupport.podmanImages();

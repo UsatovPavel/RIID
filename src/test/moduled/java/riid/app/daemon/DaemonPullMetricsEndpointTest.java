@@ -24,6 +24,7 @@ import riid.app.core.config.AppConfig;
 import riid.app.core.model.ImageId;
 import riid.app.service.LoadOutcome;
 import riid.core.fs.TestFilesystemSupport;
+import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -58,7 +59,7 @@ class DaemonPullMetricsEndpointTest {
         DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0,
                 (repo, ref, rt) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref),
                         MOCK_TAR_BYTES),
-                Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
+                Set.of(RuntimeId.PODMAN), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         try {

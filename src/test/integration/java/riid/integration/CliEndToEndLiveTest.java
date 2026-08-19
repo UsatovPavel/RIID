@@ -62,14 +62,14 @@ class CliEndToEndLiveTest {
                 return (repo, ref, runtimeId) -> {
                     try (TempFileCacheAdapter cache = new TempFileCacheAdapter(fs);
                             ImageLoadingFacade svc = ImageLoadingFacade.createDefault(endpoint, cache,
-                                    new P2PExecutor.NoOp(), Map.of(runtime.runtimeId().value(), runtime), fs)) {
+                                    new P2PExecutor.NoOp(), Map.of(runtime.runtimeId(), runtime), fs)) {
                         String registry = endpoint.registryName();
                         return svc.load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
                     } catch (IOException e) {
                         throw new RuntimeException("Failed to load image", e);
                     }
                 };
-            }, Map.of(runtime.runtimeId().value(), runtime),
+            }, Map.of(runtime.runtimeId(), runtime),
                     new PrintWriter(new OutputStreamWriter(outBuf, java.nio.charset.StandardCharsets.UTF_8), true),
                     new PrintWriter(new OutputStreamWriter(errBuf, java.nio.charset.StandardCharsets.UTF_8), true));
 

@@ -28,6 +28,7 @@ import riid.app.core.model.ImageId;
 import riid.app.service.LoadOutcome;
 import riid.core.fs.TestFilesystemSupport;
 import riid.core.logging.LogContextKeys;
+import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -108,7 +109,7 @@ class DaemonPullUnixSocketTest {
         return new DaemonServer(socketPath.toString(), "127.0.0.1", 0, (repo, ref, rt) -> {
             traceInLoader.set(MDC.get(LogContextKeys.TRACE_ID));
             return new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L);
-        }, Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
+        }, Set.of(RuntimeId.PODMAN), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
     }
 
@@ -147,12 +148,12 @@ class DaemonPullUnixSocketTest {
 
         DaemonServer daemonA = new DaemonServer(socketPath.toString(), "127.0.0.1", 0,
                 (repo, ref, rt) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
-                Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
+                Set.of(RuntimeId.PODMAN), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         DaemonServer daemonB = new DaemonServer(socketPath.toString(), "127.0.0.1", 0,
                 (repo, ref, rt) -> new LoadOutcome(ImageId.fromRegistry("registry-1.docker.io", repo, ref), -1L),
-                Set.of("podman"), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
+                Set.of(RuntimeId.PODMAN), 4, 8192, Duration.ofSeconds(30), AppConfig.OverloadPolicy.REJECT,
                 new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
 
         try {

@@ -19,6 +19,7 @@ import riid.core.fs.TestPaths;
 import riid.core.config.TestConfigYaml;
 import riid.core.config.TestRegistryConfig;
 import riid.runtime.adapter.ContainerdRuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 /**
  * Requires a running containerd daemon reachable at the default
@@ -31,7 +32,7 @@ class ContainerdRuntimeAdapterIntegrationTest {
 
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
-    private static final String CONTAINERD = "containerd";
+    private static final RuntimeId CONTAINERD = RuntimeId.CONTAINERD;
     private static final String CTR = ContainerdRuntimeAdapter.CTR_BIN;
 
     @Test

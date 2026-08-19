@@ -33,6 +33,7 @@ import riid.app.core.error.AppException;
 import riid.app.daemon.guard.SemaphorePullConcurrencyGuard;
 import riid.client.core.error.ClientError;
 import riid.client.core.error.ClientException;
+import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,7 +66,7 @@ class PullHttpHandlerHttpStatusTest {
     private static final int SECOND_EXTRA_CONNECTOR = 2;
     private static final String CONTROL = "control";
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final Set<String> RUNTIMES = Set.of(PullRequest.PODMAN_RUNTIME_ID);
+    private static final Set<RuntimeId> RUNTIMES = Set.of(RuntimeId.PODMAN);
     private static final Duration LONG_TIMEOUT = Duration.ofSeconds(30);
     private static final int MAX_REQUEST_BODY_BYTES = 8192;
 

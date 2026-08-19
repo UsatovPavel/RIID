@@ -49,6 +49,7 @@ import riid.runtime.adapter.DockerRuntimeAdapter;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 import riid.runtime.RuntimeConfig;
 import riid.core.logging.MilestoneEventLogger.EventType;
 import riid.core.logging.MilestoneEventLogger.ResultType;
@@ -102,7 +103,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
      *
      * @return resolved image and payload size (bytes) passed to metrics
      */
-    public LoadOutcome load(ImageId imageId, String runtimeId) {
+    public LoadOutcome load(ImageId imageId, RuntimeId runtimeId) {
         Objects.requireNonNull(imageId, "imageId");
         ensureRegistryAllowed(imageId.registry());
         String previousOperation = MdcContext.getOperation();
@@ -183,12 +184,12 @@ public final class ImageLoadingFacade implements AutoCloseable {
     }
 
     public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint, CacheAdapter cache, P2PExecutor p2p,
-            Map<String, RuntimeAdapter> runtimes, HostFilesystem fs) {
+            Map<RuntimeId, RuntimeAdapter> runtimes, HostFilesystem fs) {
         return createDefault(endpoint, cache, p2p, runtimes, fs, null);
     }
 
     public static ImageLoadingFacade createDefault(RegistryEndpoint endpoint, CacheAdapter cache, P2PExecutor p2p,
-            Map<String, RuntimeAdapter> runtimes, HostFilesystem fs, MeterRegistry meterRegistry) {
+            Map<RuntimeId, RuntimeAdapter> runtimes, HostFilesystem fs, MeterRegistry meterRegistry) {
         HttpClientConfig httpConfig = new HttpClientConfig();
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig);
         DispatcherLayerSourceMetrics layerMetrics = meterRegistry == null
@@ -236,7 +237,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         RegistryClient client = new RegistryClientImpl(endpoint, httpConfig, authConfig, blobPartialDownloadConfig,
                 config.client().platformOrHostDefault());
 
-        Map<String, RuntimeAdapter> runtimes = new HashMap<>();
+        Map<RuntimeId, RuntimeAdapter> runtimes = new HashMap<>();
         registerRuntime(runtimes, new PodmanRuntimeAdapter());
         registerRuntime(runtimes, new PortoRuntimeAdapter());
         registerRuntime(runtimes, new ContainerdRuntimeAdapter());
@@ -314,8 +315,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
     /**
      * Default runtime adapters used by CLI and tests.
      */
-    public static Map<String, RuntimeAdapter> defaultRuntimes() {
-        Map<String, RuntimeAdapter> runtimes = new HashMap<>();
+    public static Map<RuntimeId, RuntimeAdapter> defaultRuntimes() {
+        Map<RuntimeId, RuntimeAdapter> runtimes = new HashMap<>();
         registerRuntime(runtimes, new PodmanRuntimeAdapter());
         registerRuntime(runtimes, new PortoRuntimeAdapter());
         registerRuntime(runtimes, new DockerRuntimeAdapter());
@@ -323,8 +324,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
         return Map.copyOf(runtimes);
     }
 
-    private static void registerRuntime(Map<String, RuntimeAdapter> runtimes, RuntimeAdapter adapter) {
-        runtimes.put(adapter.runtimeId().value(), adapter);
+    private static void registerRuntime(Map<RuntimeId, RuntimeAdapter> runtimes, RuntimeAdapter adapter) {
+        runtimes.put(adapter.runtimeId(), adapter);
     }
 
     @FunctionalInterface

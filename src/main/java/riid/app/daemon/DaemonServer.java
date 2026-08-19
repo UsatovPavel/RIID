@@ -30,6 +30,7 @@ import riid.app.daemon.handler.NotFoundHttpHandler;
 import riid.app.daemon.handler.PullHttpHandler;
 import riid.app.daemon.metrics.DaemonPullHttpMetrics;
 import riid.app.daemon.metrics.ImageLoadPipelineMetrics;
+import riid.runtime.adapter.RuntimeId;
 
 /**
  * Embedded Jetty daemon server for local IPC over HTTP.
@@ -43,7 +44,7 @@ public final class DaemonServer {
 
     @SuppressWarnings("PMD.CloseResource")
     public DaemonServer(String unixSocketPath, String metricsHost, int metricsPort, CliApplication.ImageLoader loader,
-            Set<String> availableRuntimes, int maxConcurrentPulls, int maxRequestBodyBytes, Duration requestTimeout,
+            Set<RuntimeId> availableRuntimes, int maxConcurrentPulls, int maxRequestBodyBytes, Duration requestTimeout,
             AppConfig.OverloadPolicy overloadPolicy, PrometheusMeterRegistry prometheusRegistry) {
         Objects.requireNonNull(unixSocketPath, "unixSocketPath");
         Objects.requireNonNull(metricsHost, "metricsHost");
