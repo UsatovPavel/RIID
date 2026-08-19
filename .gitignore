@@ -70,8 +70,10 @@ deploy/k8s/Selectel/*
 !deploy/k8s/Selectel/registry/init-performance-registry-images.sh
 ### Bench artifacts (AGENT-72) ###
 bench/results/
+bench/dfinit/results/
 bench/**/__pycache__/
 bench/_error.txt
 
 ### internalDocs: local-only AI/personal notes, never committed ###
 internalDocs/
+bench/log/changelogEnvVPN.md
