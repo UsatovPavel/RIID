@@ -19,6 +19,16 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="dragonfly-system"
+SERVICE_CIDR="10.96.0.0/12"
+KUBERNETES_SERVICE_URL="https://10.96.0.1:443/version"
+# Должно быть раньше policy rules, которые WireGuard/AmneziaWG обычно ставит.
+# История: 32763 оказывалось после catch-all VPN rule (никогда не работало) ->
+# 100 работало, пока VPN использовал catch-all на 32762 -> AmneziaWG стал
+# ставить fwmark-правило "not from all fwmark <mark> lookup <table>" на
+# приоритете 99, которое перехватывает трафик раньше 100 (у правил с fwmark-
+# условием обычно нет "src"/более специфичного match, они матчат всё, что не
+# помечено, поэтому наш bypass должен быть строго раньше). 90 запаса ради.
+SERVICE_CIDR_RULE_PRIORITY="90"
 CRI_DOCKERD_VERSION="v0.3.24"
 CRI_DOCKERD_DEB="cri-dockerd_0.3.24.3-0.debian-bookworm_amd64.deb"
 CNI_VERSION="v1.5.1"
@@ -43,6 +53,17 @@ fi
 export PATH="/usr/local/bin:$PATH"
 
 log() { printf '>>> %s\n' "$*"; }
+
+check_pod_dns() {
+  local pod_name="riid-dns-check"
+  local status=0
+  kubectl delete pod "$pod_name" -n kube-system --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  timeout 45s kubectl run "$pod_name" -n kube-system \
+    --image=docker.io/busybox:latest --restart=Never --rm --attach --quiet \
+    --command -- nslookup -type=A registry-1.docker.io >/dev/null 2>&1 || status=$?
+  kubectl delete pod "$pod_name" -n kube-system --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  return "$status"
+}
 
 # Ставит бинарник в /usr/local/bin: сначала из ~/.local/bin пользователя,
 # иначе скачивает.
@@ -146,11 +167,41 @@ kubectl cluster-info >/dev/null
 # недоступен, storage-provisioner не видит API, PVC висят Pending и Dragonfly
 # не поднимается. Правило добавляется только если проблема реально есть и
 # затрагивает исключительно service-CIDR.
-if ! curl -sk --noproxy '*' --max-time 5 -o /dev/null https://10.96.0.1:443/version; then
-  if ! ip rule show | grep -q "to 10.96.0.0/12 lookup main"; then
-    log "ClusterIP недоступен — возвращаю 10.96.0.0/12 в основную таблицу маршрутов"
-    sudo ip rule add to 10.96.0.0/12 lookup main priority 32763
+if ! curl -sk --noproxy '*' --max-time 5 -o /dev/null "$KUBERNETES_SERVICE_URL"; then
+  if ! ip rule show | grep -Eq "^${SERVICE_CIDR_RULE_PRIORITY}:.*to ${SERVICE_CIDR//./\\.} lookup main$"; then
+    log "ClusterIP недоступен — возвращаю $SERVICE_CIDR в main до VPN policy rules"
+    sudo ip rule add to "$SERVICE_CIDR" lookup main priority "$SERVICE_CIDR_RULE_PRIORITY"
   fi
+
+  for _ in $(seq 1 10); do
+    curl -sk --noproxy '*' --max-time 2 -o /dev/null "$KUBERNETES_SERVICE_URL" && break
+    sleep 1
+  done
+fi
+if ! curl -sk --noproxy '*' --max-time 5 -o /dev/null "$KUBERNETES_SERVICE_URL"; then
+  echo "ClusterIP Kubernetes всё ещё недоступен после VPN bypass rule" >&2
+  ip rule show >&2
+  ip route get 10.96.0.1 >&2 || true
+  exit 1
+fi
+
+# На некоторых конфигурациях AmneziaWG upstream из /etc/resolv.conf доступны
+# только через systemd-resolved хоста. Меняем CoreDNS лишь если A-запрос из
+# реального pod'а не проходит; на обычной сети конфигурация остаётся нетронутой.
+if ! check_pod_dns; then
+  COREDNS_CORE_FILE="$(kubectl get configmap coredns -n kube-system -o jsonpath='{.data.Corefile}')"
+  grep -q 'forward \. /etc/resolv\.conf' <<<"$COREDNS_CORE_FILE" || {
+    echo "DNS registry из pod'а не работает, но CoreDNS не использует /etc/resolv.conf" >&2
+    exit 1
+  }
+  log "CoreDNS: заменяю недоступные pod'ам host resolvers на public upstream"
+  COREDNS_CORE_FILE="${COREDNS_CORE_FILE//forward . \/etc\/resolv.conf/forward . 8.8.8.8 1.1.1.1}"
+  export COREDNS_CORE_FILE
+  yq -n -o=json '{"data":{"Corefile":strenv(COREDNS_CORE_FILE)}}' > "$WORK_DIR/coredns-patch.json"
+  kubectl patch configmap coredns -n kube-system --type merge --patch-file "$WORK_DIR/coredns-patch.json" >/dev/null
+  kubectl rollout restart deployment coredns -n kube-system >/dev/null
+  kubectl rollout status deployment coredns -n kube-system --timeout=2m
+  check_pod_dns || { echo "DNS registry из pod'а не заработал после CoreDNS patch" >&2; exit 1; }
 fi
 
 # --------------------------------------------------------------------------- #
@@ -174,8 +225,23 @@ helm uninstall dragonfly -n "$NAMESPACE" >/dev/null 2>&1 || true
 # (dragonfly.seed_clients=3) — это топология прод-кластера (10 workers), не бенч-стенда.
 # На одной ноде несколько seed-client реплик избыточны (качаем всё равно с одного узла),
 # поэтому здесь фиксируем 1, не трогая общий config.yaml.
-helm install --wait --timeout 15m --create-namespace --namespace "$NAMESPACE" \
-  dragonfly dragonfly/dragonfly --version "$CHART_VERSION" -f "$VALUES" --set seedClient.replicas=1
+# Кластер каждый раз пересоздаётся, а benchmark требует сохранять Dragonfly
+# cache только между итерациями одного запуска. emptyDir даёт именно такую
+# семантику и не ставит весь Helm release в зависимость от minikube
+# storage-provisioner (его CrashLoop раньше оставлял 4 PVC в Pending).
+if ! helm install --wait --timeout 7m --create-namespace --namespace "$NAMESPACE" \
+  dragonfly dragonfly/dragonfly --version "$CHART_VERSION" -f "$VALUES" \
+  --set seedClient.replicas=1 \
+  --set seedClient.persistence.enable=false \
+  --set mysql.primary.persistence.enabled=false \
+  --set redis.master.persistence.enabled=false \
+  --set redis.replica.persistence.enabled=false; then
+  echo ">>> helm install failed, dumping diagnostics:" >&2
+  kubectl get pods,pvc -n "$NAMESPACE" -o wide >&2 || true
+  kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp >&2 || true
+  kubectl logs -n kube-system storage-provisioner --tail=100 >&2 || true
+  exit 1
+fi
 
 log "ожидание сокета dfdaemon"
 for _ in $(seq 1 60); do
