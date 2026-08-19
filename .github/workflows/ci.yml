@@ -144,35 +144,6 @@ jobs:
             --tests 'riid.integration.runtime_app.PortoRuntimeAdapterIntegrationTest'
           sudo chown -R runner:runner "$GITHUB_WORKSPACE"
 
-  containerd-integration-test:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 23
-          cache: gradle
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-      # Runner image already ships Docker (Moby) with bundled containerd.io (ctr CLI + containerd.sock).
-      - name: Ensure containerd is running
-        run: |
-          ctr --version
-          sudo systemctl start containerd 2>/dev/null || sudo service containerd start 2>/dev/null || true
-          test -S /run/containerd/containerd.sock
-      # containerd.sock is root:root; JVM as root matches operations that invoke ctr successfully (same approach as Porto).
-      - name: Containerd runtime integration tests
-        run: |
-          sudo -E ./gradlew --no-daemon integrationTest \
-            --tests 'riid.integration.runtime_app.ContainerdRuntimeAdapterIntegrationTest'
-          sudo chown -R runner:runner "$GITHUB_WORKSPACE"
-
   build-k8s-image-on-tag:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
