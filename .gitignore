@@ -72,3 +72,6 @@ deploy/k8s/Selectel/*
 bench/results/
 bench/**/__pycache__/
 bench/_error.txt
+
+### internalDocs: local-only AI/personal notes, never committed ###
+internalDocs/
