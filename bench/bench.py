@@ -33,8 +33,10 @@ Dragonfly не чистится никогда — его слои остают�
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -63,6 +65,8 @@ from config.settings import (  # noqa: E402
 )
 from record import do_record  # noqa: E402
 from tsv import make_row, parse_trace, print_summary, sources_str, write_tsv  # noqa: E402
+
+BENCH_LOCK = Path("/tmp/riid-bench.lock")
 
 
 class Daemon:
@@ -106,7 +110,8 @@ class Daemon:
                 self.process.kill()
                 self.process.wait(timeout=30)
         self.process = None
-        subprocess.run(["pkill", "-f", f"[r]iid.jar.*--daemon.*{self.config_path.name}"], check=False)
+        config_pattern = re.escape(str(self.config_path))
+        subprocess.run(["pkill", "-f", f"[r]iid.jar.*--daemon.*{config_pattern}"], check=False)
         Path(DAEMON_SOCKET).unlink(missing_ok=True)
 
     @staticmethod
@@ -183,6 +188,21 @@ def render_config(run_dir: Path, registry: Registry) -> Path:
 
 
 def do_run(iterations: int) -> Path:
+    with BENCH_LOCK.open("a+", encoding="utf-8") as lock_handle:
+        try:
+            fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            lock_handle.seek(0)
+            owner = lock_handle.read().strip() or "unknown"
+            raise BenchError(f"другой benchmark уже запущен (pid={owner})") from exc
+        lock_handle.seek(0)
+        lock_handle.truncate()
+        lock_handle.write(str(os.getpid()))
+        lock_handle.flush()
+        return _do_run(iterations)
+
+
+def _do_run(iterations: int) -> Path:
     check_env(strict=True)
     env = load_env_file(ENV_FILE)
     registry = resolve_registry(env)

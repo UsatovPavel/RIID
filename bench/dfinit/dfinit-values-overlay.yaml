@@ -1,0 +1,63 @@
+# Helm values overlay for the dfinit-enabled arm of AGENT-89's bench.
+#
+# Deliberately kept out of scripts/values.yaml (base values has
+# client.dfinit.enable: false, used by the RIID+Dragonfly arm which never
+# touches podman's registries.conf) and out of bench/'s own RIID-specific
+# code, per the "no code in bench/ for this" constraint -- this only
+# configures the Dragonfly Helm release, same boundary as dfinit_bench.py.
+#
+# Apply on top of the base values (already rendered by
+# scripts/render-values-from-infra.sh) with --reuse-values, e.g.:
+#   helm upgrade --reuse-values -n dragonfly-system dragonfly dragonfly/dragonfly \
+#     -f bench/dfinit/dfinit-values-overlay.yaml
+#
+# Fixes baked in from this session's environment-repair chain
+# (zOptimization/SessionSummary_AGENT-89.md §3.1):
+#   - client.dfinit.config.containerRuntime.containerd is explicitly null:
+#     `helm upgrade --reuse-values` merges maps, so the base values' existing
+#     containerd block otherwise survives alongside this podman block, and
+#     dfinit's Rust config deserializer checks containerd first regardless
+#     of file order -- ends up rewriting containerd's config, not podman's.
+#   - client.config.proxy.registryMirror.addr is pinned to the real upstream
+#     (chart default is https://index.docker.io) -- dfdaemon's proxy uses
+#     this independently of what dfinit writes into podman's registries.conf;
+#     leaving it at the default means the proxy forwards every mirror
+#     request to Docker Hub regardless of what registry podman thinks it's
+#     mirroring.
+#   - client.config.proxy.rules is pinned explicitly (not just relying on the
+#     chart's own default of the same regex) -- dfdaemon's proxy only routes
+#     a request through P2P (proxy_via_dfdaemon) if it matches one of these
+#     regexes; anything that doesn't match falls through to a plain
+#     passthrough forward with NO P2P involvement at all (dragonfly-client/
+#     src/proxy/mod.rs, http_handler: find_matching_rule -> proxy_via_dfdaemon,
+#     else -> proxy_via_http/https). If this ever silently didn't apply
+#     (e.g. lost in a values merge, same class of bug as containerd above),
+#     every "dfinit" pull in this bench would just be plain podman pull with
+#     an extra hop through the local proxy -- pure overhead, no P2P benefit,
+#     which is consistent with the regression measured in the first
+#     (unverified) dfinit_bench.py run. Pinning it here removes that
+#     possibility as an explanation going forward.
+
+client:
+  dfinit:
+    enable: true
+    config:
+      containerRuntime:
+        containerd: null
+        podman:
+          # configPath has NO chart default (unlike containerd's) -- the
+          # entire `podman:` block in the chart's values.yaml is commented
+          # out, so omitting this causes a template type error
+          # ("expected string; got interface{}") at render time.
+          configPath: /etc/containers/registries.conf
+          unqualifiedSearchRegistries:
+            - cr.selcloud.ru
+          registries:
+            - prefix: cr.selcloud.ru
+              location: cr.selcloud.ru
+  config:
+    proxy:
+      registryMirror:
+        addr: https://cr.selcloud.ru
+      rules:
+        - regex: "blobs/sha256.*"
