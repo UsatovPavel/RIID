@@ -42,10 +42,12 @@ Two constraints shaped the design:
 
 ## Consequences
 
-- **Measured on the Porto VM** (`library/python:latest`, 395 MiB, 7 layers, 4 A/B
-  pairs): wall time 55.0s → 49.2s median (**−10.5%**); the work left after the last
-  byte is downloaded collapses from ~12.8s to ~4.9s. Details and the decomposition
-  of that win are in `zOptimization/Plan/PlanPrefixImport.md` §7.
+- **Measured on the Porto VM.** `library/python:latest` (395 MiB, 7 layers, 4 A/B
+  pairs): wall 55.0s → 49.2s median (**−10.5%**), prefix faster in every pair.
+  Widened to python plus the 9 images closest to it in size (one A/B pair each):
+  **faster on 10 of 10**, median **−10.9%**, and the work left after the layout is
+  assembled drops from 9.6s to 0.28s median. Details, the per-image table and the
+  decomposition of the win are in `zOptimization/Plan/PlanPrefixImport.md` §7.
 - Part of the win is not overlap: the incremental path also skips building a ~400 MiB
   `oci-archive` tar and re-extracting it inside the adapter. Both effects follow from
   the same change and are reported separately rather than attributed to overlap alone.
