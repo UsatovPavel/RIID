@@ -201,7 +201,7 @@ class RuntimeAdaptersTest {
         } finally {
             Files.deleteIfExists(layerTar);
             try (var walk = Files.walk(layerDir)) {
-                var list = walk.sorted((a, b) -> -a.compareTo(b)).toList();
+                var list = walk.sorted((a, b) -> b.compareTo(a)).toList();
                 for (Path p : list) {
                     Files.deleteIfExists(p);
                 }

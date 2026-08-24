@@ -29,6 +29,7 @@ import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestFilesystemSupport;
 import riid.core.fs.TestPaths;
+import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -84,8 +85,8 @@ class Daemon9ImagesPhasedPullTest {
         Path workDir = Files.createTempDirectory("riid-perf-popular-pull");
         Path socketPath = workDir.resolve("riid.sock");
         Duration requestTimeout = Duration.ofMinutes(30);
-        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RUNTIME), 8,
-                requestTimeout, AppConfig.OverloadPolicy.REJECT, prom);
+        DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RuntimeId.PODMAN),
+                8, 8192, requestTimeout, AppConfig.OverloadPolicy.REJECT, prom);
 
         long lastPullDurationMs = -1L;
         long lastCompletedEpochMs = -1L;

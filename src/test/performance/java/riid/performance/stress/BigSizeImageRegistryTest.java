@@ -46,6 +46,7 @@ class BigSizeImageRegistryTest {
      * @see PopularDockerImagesSizes.txt — {@code library/silverpeas} latest ~1.7
      *      GiB
      */
+    private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";
     private static final String REPOSITORY = "library/silverpeas";
     private static final String REFERENCE = "latest";
     private static final String RUNTIME = "podman";
@@ -84,7 +85,7 @@ class BigSizeImageRegistryTest {
 
     private static String podmanImageReference(String repository, String reference) {
         String reg = TestRegistryConfig.registryName();
-        if ("registry-1.docker.io".equals(reg)) {
+        if (DOCKER_HUB_REGISTRY.equals(reg)) {
             return "docker.io/" + repository + ":" + reference;
         }
         int port = TestRegistryConfig.port();

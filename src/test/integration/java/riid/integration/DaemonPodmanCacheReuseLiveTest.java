@@ -77,8 +77,7 @@ class DaemonPodmanCacheReuseLiveTest {
                 .load(ImageId.fromRegistry(registry, repo, ref), runtimeId);
 
         DaemonServer daemon = new DaemonServer(socketPath.toString(), "127.0.0.1", 0, loader, Set.of(RuntimeId.PODMAN),
-                4,
-                8192, Duration.ofMinutes(10), AppConfig.OverloadPolicy.REJECT, prom);
+                4, 8192, Duration.ofMinutes(10), AppConfig.OverloadPolicy.REJECT, prom);
 
         try {
             daemon.start();

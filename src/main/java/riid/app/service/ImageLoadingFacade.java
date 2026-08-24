@@ -46,6 +46,7 @@ import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
 import riid.runtime.adapter.ContainerdRuntimeAdapter;
 import riid.runtime.adapter.DockerRuntimeAdapter;
+import riid.runtime.adapter.IncrementalImageImport;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
 import riid.runtime.adapter.RuntimeAdapter;
@@ -65,6 +66,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
     };
     private static final CacheCleaner NOOP_P2P_CLEANER = () -> {
     };
+    private static final String INTO_RUNTIME = " into runtime ";
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
     private final RegistryClient client;
@@ -141,11 +143,18 @@ public final class ImageLoadingFacade implements AutoCloseable {
         long engineStartedNs = System.nanoTime();
         try {
             long payloadBytes = archiveBuilder.estimatePayloadBytes(manifestResult);
+            if (runtime.supportsIncrementalImport(manifestResult.manifest())) {
+                importIncrementally(manifestResult, runtime, imageId);
+                MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
+                        .addDurationMs(durationMs(engineStartedNs)).log("Loaded " + imageId + INTO_RUNTIME
+                                + runtime.runtimeId() + " layer by layer (~" + payloadBytes + " B payload)");
+                return new LoadOutcome(imageId, payloadBytes);
+            }
             if (runtime.prefersOciLayoutStreamImport()) {
                 return archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
                     runtime.importOciLayoutDirectory(ociDir);
                     MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
-                            .addDurationMs(durationMs(engineStartedNs)).log("Loaded " + imageId + " into runtime "
+                            .addDurationMs(durationMs(engineStartedNs)).log("Loaded " + imageId + INTO_RUNTIME
                                     + runtime.runtimeId() + " via OCI layout stream (~" + payloadBytes + " B payload)");
                     return new LoadOutcome(imageId, payloadBytes);
                 });
@@ -154,13 +163,13 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 runtime.importImage(archivePath);
                 MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
                         .addDurationMs(durationMs(engineStartedNs))
-                        .log("Loaded " + imageId + " into runtime " + runtime.runtimeId() + " at " + archivePath);
+                        .log("Loaded " + imageId + INTO_RUNTIME + runtime.runtimeId() + " at " + archivePath);
                 return new LoadOutcome(imageId, payloadBytes);
             });
         } catch (AppException e) {
             MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.ERROR)
                     .addDurationMs(durationMs(engineStartedNs)).addErrorKind("RUNTIME").addErrorCode(e.errorCode())
-                    .log("App error while loading " + imageId + " into runtime " + runtime.runtimeId() + ": "
+                    .log("App error while loading " + imageId + INTO_RUNTIME + runtime.runtimeId() + ": "
                             + e.getMessage());
             throw e;
         } catch (InterruptedException e) {
@@ -180,6 +189,21 @@ public final class ImageLoadingFacade implements AutoCloseable {
             throw new AppException(new AppError.RuntimeError(errorKind, msg), msg, e);
         } finally {
             MdcContext.restoreOperation(previousOperation);
+        }
+    }
+
+    /**
+     * Prefix import: layers go into the runtime as they are downloaded, so the
+     * import of the part already on disk overlaps the download of the rest. The
+     * image only becomes visible in the runtime once every layer is in
+     * ({@link IncrementalImageImport#finish()}).
+     */
+    private void importIncrementally(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId)
+            throws IOException, InterruptedException {
+        try (IncrementalImageImport session = runtime.beginIncrementalImport(imageId.referenceName(),
+                manifestResult.manifest())) {
+            archiveBuilder.streamLayers(imageId, manifestResult, session::importLayer);
+            session.finish();
         }
     }
 

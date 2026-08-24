@@ -50,6 +50,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("filesystem")
 class Daemon30ImagesSequentialPullTest {
 
+    private static final String REPO_TAG = " repo=";
     private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";
     private static final String RUNTIME = "podman";
     private static final int N = PopularDockerHubImagesFromProgramDocs.FIRST_30_REPOSITORIES.size();
@@ -81,12 +82,12 @@ class Daemon30ImagesSequentialPullTest {
                     long ms = (System.nanoTime() - t0) / 1_000_000L;
                     if (result.finished() && result.exitCode() == 0 && result.httpStatus() == 200) {
                         riidPullMsList.add(ms);
-                        System.out.println("[Daemon30ImagesSequentialPullTest] riid i=" + index + '/' + N + " repo="
+                        System.out.println("[Daemon30ImagesSequentialPullTest] riid i=" + index + '/' + N + REPO_TAG
                                 + repo + " pull_ms=" + ms);
                     } else {
                         String bodyOneLine = result.body().replace('\n', ' ').trim();
                         System.err.println("[Daemon30ImagesSequentialPullTest] riid FAILED i=" + index + '/' + N
-                                + " repo=" + repo + " exit=" + result.exitCode() + " http=" + result.httpStatus()
+                                + REPO_TAG + repo + " exit=" + result.exitCode() + " http=" + result.httpStatus()
                                 + " pull_wall_ms=" + ms + " stderr=" + result.stderr() + " body=" + bodyOneLine);
                         if (index == CLEFOS_INDEX) {
                             System.err
@@ -95,7 +96,7 @@ class Daemon30ImagesSequentialPullTest {
                         }
                     }
                 } catch (Exception e) {
-                    System.err.println("[Daemon30ImagesSequentialPullTest] riid FAILED i=" + index + '/' + N + " repo="
+                    System.err.println("[Daemon30ImagesSequentialPullTest] riid FAILED i=" + index + '/' + N + REPO_TAG
                             + repo + ": " + e.getMessage());
                     e.printStackTrace(System.err);
                 }
@@ -168,13 +169,13 @@ class Daemon30ImagesSequentialPullTest {
             ProcessResult r = runProcess("podman", "pull", podmanRef);
             long ms = (System.nanoTime() - t0) / 1_000_000L;
             if (r.exitCode() != 0) {
-                System.err.println("[Daemon30ImagesSequentialPullTest] podman FAILED i=" + index + '/' + N + " repo="
+                System.err.println("[Daemon30ImagesSequentialPullTest] podman FAILED i=" + index + '/' + N + REPO_TAG
                         + repo + " ref=" + podmanRef + " exit=" + r.exitCode() + " pull_wall_ms=" + ms + "\n"
                         + r.output());
                 continue;
             }
             podmanPullMsList.add(ms);
-            System.out.println("[Daemon30ImagesSequentialPullTest] podman i=" + index + '/' + N + " repo=" + repo
+            System.out.println("[Daemon30ImagesSequentialPullTest] podman i=" + index + '/' + N + REPO_TAG + repo
                     + " pull_ms=" + ms + " ref=" + podmanRef);
         }
         return podmanPullMsList;

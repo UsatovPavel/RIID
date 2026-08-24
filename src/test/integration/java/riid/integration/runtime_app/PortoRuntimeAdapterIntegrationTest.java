@@ -5,6 +5,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -24,10 +28,14 @@ import riid.core.fs.TestPaths;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
+import riid.runtime.adapter.IncrementalImageImport;
 import riid.runtime.adapter.PortoRuntimeAdapter;
 import riid.runtime.adapter.RuntimeId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("filesystem")
@@ -66,11 +74,10 @@ class PortoRuntimeAdapterIntegrationTest {
 
     /**
      * Synthetic two-layer OCI archive (no registry involved) - exercises
-     * {@code PortoRuntimeAdapter}'s per-layer import path
-     * (importLayersSeparately): each layer becomes its own
-     * {@code riid-layer-<digest>} Porto layer, and a marker layer named after
-     * the archive carries the ordered (top-first) layer chain as its private
-     * value.
+     * {@code PortoRuntimeAdapter}'s per-layer import path (importLayersSeparately):
+     * each layer becomes its own {@code riid-layer-<digest>} Porto layer, and a
+     * marker layer named after the archive carries the ordered (top-first) layer
+     * chain as its private value.
      */
     @Test
     void importsTwoLayerOciArchivePerLayer() throws Exception {
@@ -79,7 +86,7 @@ class PortoRuntimeAdapterIntegrationTest {
         Path archive = SyntheticOciArchives.buildTwoLayerArchive(workDir);
 
         PortoRuntimeAdapter adapter = new PortoRuntimeAdapter();
-        String layerName = archive.getFileName().toString();
+        String layerName = Objects.requireNonNull(archive.getFileName(), "archive has no file name").toString();
         runIgnoreErrors(List.of(PORTOCTL, LAYER, "-R", layerName));
 
         List<String> before = listLayers();
@@ -105,6 +112,66 @@ class PortoRuntimeAdapterIntegrationTest {
                 runIgnoreErrors(List.of(PORTOCTL, LAYER, "-R", layer));
             }
         }
+    }
+
+    /**
+     * Prefix import (AGENT-90) against real portoctl: layers are fed one at a time,
+     * the image marker appears only after the last one, and its private value
+     * carries the chain top-first.
+     */
+    @Test
+    void importsLayersIncrementally() throws Exception {
+        HostFilesystem fs = new NioHostFilesystem();
+        Path workDir = TestPaths.tempDir(fs, TestPaths.DEFAULT_BASE_DIR, "porto-incremental-");
+        SyntheticOciArchives.buildTwoLayerArchive(workDir);
+        Path layoutDir = SyntheticOciArchives.layoutDir(workDir);
+        Manifest manifest = readManifest(layoutDir);
+        String imageName = "riid-incremental-" + System.nanoTime();
+
+        List<String> before = listLayers();
+        PortoRuntimeAdapter adapter = new PortoRuntimeAdapter();
+        assertTrue(adapter.supportsIncrementalImport(manifest), "a two-layer image must take the incremental path");
+
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(imageName, manifest)) {
+            for (Descriptor layer : manifest.layers()) {
+                session.importLayer(layer, blobPath(layoutDir, layer));
+                assertFalse(listLayers().contains(imageName), "image must not be addressable before finish()");
+            }
+            session.finish();
+        }
+
+        try {
+            List<String> layers = listLayers();
+            assertTrue(layers.contains(imageName), "Expected marker layer " + imageName + " in: " + layers);
+            for (Descriptor layer : manifest.layers()) {
+                String expected = "riid-layer-" + layer.digest().substring("sha256:".length());
+                assertTrue(layers.contains(expected), "Expected per-layer entry " + expected + " in: " + layers);
+            }
+
+            Process p = new ProcessBuilder(PORTOCTL, LAYER, "-G", imageName).redirectErrorStream(true).start();
+            String chain = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            assertEquals(0, p.waitFor(), "portoctl layer -G failed: " + chain);
+            String topLayer = manifest.layers().getLast().digest().substring("sha256:".length());
+            assertTrue(chain.startsWith("[\"riid-layer-" + topLayer + "\""),
+                    "Chain must start with the top layer, got: " + chain);
+        } finally {
+            List<String> created = new ArrayList<>(listLayers());
+            created.removeAll(before);
+            for (String layer : created) {
+                runIgnoreErrors(List.of(PORTOCTL, LAYER, "-R", layer));
+            }
+        }
+    }
+
+    private static Manifest readManifest(Path layoutDir) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode index = mapper.readTree(layoutDir.resolve("index.json").toFile());
+        String digest = index.path("manifests").get(0).path("digest").asText().substring("sha256:".length());
+        return mapper.readValue(layoutDir.resolve("blobs").resolve("sha256").resolve(digest).toFile(), Manifest.class);
+    }
+
+    private static Path blobPath(Path layoutDir, Descriptor layer) {
+        return layoutDir.resolve("blobs").resolve("sha256").resolve(layer.digest().substring("sha256:".length()));
     }
 
     @Test

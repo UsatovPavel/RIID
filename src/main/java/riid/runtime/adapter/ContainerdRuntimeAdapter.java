@@ -25,12 +25,20 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
 
     /** Path/name of the {@code ctr} binary, for non-default installs. */
     private final String ctrCmd;
-    /** {@code -n}: containerd namespace; null uses {@code ctr}'s own default ({@code default}). */
+    /**
+     * {@code -n}: containerd namespace; null uses {@code ctr}'s own default
+     * ({@code default}).
+     */
     private final String namespace;
-    /** {@code -a}: daemon socket address; null uses {@code ctr}'s own default
-     * ({@code /run/containerd/containerd.sock}). */
+    /**
+     * {@code -a}: daemon socket address; null uses {@code ctr}'s own default
+     * ({@code /run/containerd/containerd.sock}).
+     */
     private final String address;
-    /** {@code --snapshotter}: snapshotter backend; null uses {@code ctr}'s own default (host-configured). */
+    /**
+     * {@code --snapshotter}: snapshotter backend; null uses {@code ctr}'s own
+     * default (host-configured).
+     */
     private final String snapshotter;
 
     public ContainerdRuntimeAdapter() {

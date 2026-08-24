@@ -23,8 +23,8 @@ import riid.runtime.adapter.RuntimeId;
 
 /**
  * Requires a running containerd daemon reachable at the default
- * {@code /run/containerd/containerd.sock} (root-owned; run the JVM as root, same
- * approach as {@code PortoRuntimeAdapterIntegrationTest}).
+ * {@code /run/containerd/containerd.sock} (root-owned; run the JVM as root,
+ * same approach as {@code PortoRuntimeAdapterIntegrationTest}).
  */
 @Tag("filesystem")
 @Tag("local")

@@ -41,10 +41,8 @@ class OciArchiveBuilderTest {
         Path layerFile = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer-", ".bin");
         fs.write(layerFile, new byte[]{1, 2, 3});
 
-        Descriptor config = new Descriptor("application/vnd.oci.image.config.v1+json",
-                "sha256:" + "b".repeat(64), 3);
-        Descriptor layer = new Descriptor("application/vnd.oci.image.layer.v1.tar+gzip",
-                "sha256:" + "c".repeat(64), 3);
+        Descriptor config = new Descriptor("application/vnd.oci.image.config.v1+json", "sha256:" + "b".repeat(64), 3);
+        Descriptor layer = new Descriptor("application/vnd.oci.image.layer.v1.tar+gzip", "sha256:" + "c".repeat(64), 3);
         Manifest manifest = new Manifest(2, "application/vnd.oci.image.manifest.v1+json", config, List.of(layer));
         ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST,
                 "application/vnd.oci.image.manifest.v1+json", 0L, manifest);

@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -48,6 +50,8 @@ import org.slf4j.MDC;
 public final class OciArchiveBuilder {
     private static final Logger LOGGER = LoggerFactory.getLogger(OciArchiveBuilder.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final BlobArrival IGNORE_ARRIVALS = (digestHex, blobPath) -> {
+    };
 
     private final RequestDispatcher dispatcher;
     private final HostFilesystem fs;
@@ -107,6 +111,39 @@ public final class OciArchiveBuilder {
     }
 
     /**
+     * Downloads the image and hands every layer to {@code sink} in manifest order
+     * as soon as it lands on disk, instead of waiting for the whole image: the
+     * runtime imports the prefix that already arrived while the tail is still
+     * downloading.
+     *
+     * <p>
+     * The sink runs on the calling thread; downloads keep running on virtual
+     * threads meanwhile, which is where the overlap comes from.
+     */
+    public void streamLayers(ImageId imageId, ManifestResult manifestResult, LayerSink sink)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(imageId, "imageId");
+        Objects.requireNonNull(manifestResult, "manifestResult");
+        Objects.requireNonNull(sink, "sink");
+        String previousOperation = MdcContext.getOperation();
+        MdcContext.putOperation(EventType.ARCHIVE_BUILD.value());
+        long startedNs = System.nanoTime();
+        try (OciArchive workspace = OciArchive.layoutOnly(createLayoutDirectory(), fs)) {
+            streamIntoLayout(workspace.ociDir(), imageId, manifestResult, sink);
+            MilestoneEventLogger.info(LOGGER).addEvent(EventType.ARCHIVE_BUILD).addResult(ResultType.SUCCESS)
+                    .addDurationMs(durationMs(startedNs))
+                    .log("OCI layout streamed to runtime layer by layer (incremental import)");
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.ARCHIVE_BUILD).addResult(ResultType.ERROR)
+                    .addDurationMs(durationMs(startedNs)).addErrorKind("INTERNAL").addErrorCode("ARCHIVE_BUILD_FAILED")
+                    .log("OCI layout streaming failed");
+            throw e;
+        } finally {
+            MdcContext.restoreOperation(previousOperation);
+        }
+    }
+
+    /**
      * Logical payload bytes for load metrics and comparisons across import paths.
      * This is not tar stream size: {@code config.size + sum(layer.size) +
      * manifestBytes.length}.
@@ -140,20 +177,9 @@ public final class OciArchiveBuilder {
         Objects.requireNonNull(manifestResult, "manifestResult");
 
         Manifest manifest = manifestResult.manifest();
-        Path ociDir = PathSupport.tempDirPath(tempRoot, "oci-layout-");
-        fs.createDirectory(ociDir);
-        Path blobsDir = ociDir.resolve("blobs").resolve("sha256");
-        fs.createDirectory(blobsDir);
-
-        String repository = imageId.name();
-        var cfg = manifest.config();
-        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        PullTaskPlanner pullTaskPlanner = new PullTaskPlanner(1 + manifest.layers().size(), mdcSnapshot, repository,
-                blobsDir);
-        pullTaskPlanner.addIfDigestNew(cfg.digest(), cfg.size(), MediaType.from(cfg.mediaType()));
-        for (var layer : manifest.layers()) {
-            pullTaskPlanner.addIfDigestNew(layer.digest(), layer.size(), MediaType.from(layer.mediaType()));
-        }
+        Path ociDir = createLayoutDirectory();
+        Path blobsDir = blobsDir(ociDir);
+        PullTaskPlanner pullTaskPlanner = planPulls(imageId, manifest, blobsDir, IGNORE_ARRIVALS);
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<Void>> futures = executor.invokeAll(pullTaskPlanner.pullTasks());
@@ -162,12 +188,99 @@ public final class OciArchiveBuilder {
             }
         }
 
-        // Manifest blob
+        writeLayoutMetadata(ociDir, blobsDir, imageId, manifestResult);
+        return ociDir;
+    }
+
+    /**
+     * Same downloads as {@link #buildOciDirectory}, minus the barrier: every pull
+     * runs on its own virtual thread and this thread walks the manifest, importing
+     * layer {@code k} the moment layers {@code 0..k} are on disk.
+     */
+    private void streamIntoLayout(Path ociDir, ImageId imageId, ManifestResult manifestResult, LayerSink sink)
+            throws IOException, InterruptedException {
+        Manifest manifest = manifestResult.manifest();
+        Path blobsDir = blobsDir(ociDir);
+        Map<String, CompletableFuture<Path>> arrivals = new ConcurrentHashMap<>();
+        for (Descriptor layer : manifest.layers()) {
+            arrivals.computeIfAbsent(ImageDigest.parse(layer.digest()).hex(), key -> new CompletableFuture<>());
+        }
+        PullTaskPlanner pullTaskPlanner = planPulls(imageId, manifest, blobsDir,
+                (digestHex, blobPath) -> completeArrival(arrivals, digestHex, blobPath));
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Void>> futures = new ArrayList<>(pullTaskPlanner.pullTasks().size());
+            for (Callable<Void> task : pullTaskPlanner.pullTasks()) {
+                futures.add(executor.submit(failArrivalsOnError(task, arrivals)));
+            }
+            try {
+                importLayerPrefix(manifest, arrivals, sink);
+                for (Future<Void> future : futures) {
+                    awaitPull(future);
+                }
+            } catch (IOException | InterruptedException | RuntimeException e) {
+                // Nothing left to wait for: the image is not going to be imported.
+                executor.shutdownNow();
+                throw e;
+            }
+        }
+
+        writeLayoutMetadata(ociDir, blobsDir, imageId, manifestResult);
+    }
+
+    /**
+     * Walks the manifest in order, blocking on each layer only until that layer is
+     * downloaded - so the runtime always holds the longest already-available prefix
+     * of the image.
+     */
+    private static void importLayerPrefix(Manifest manifest, Map<String, CompletableFuture<Path>> arrivals,
+            LayerSink sink) throws IOException, InterruptedException {
+        for (Descriptor layer : manifest.layers()) {
+            long waitStartedNs = System.nanoTime();
+            Path blobPath = awaitArrival(arrivals.get(ImageDigest.parse(layer.digest()).hex()));
+            long waitedMs = durationMs(waitStartedNs);
+            long importStartedNs = System.nanoTime();
+            sink.onLayer(layer, blobPath);
+            MilestoneEventLogger.info(LOGGER).addEvent(EventType.LAYER_IMPORT).addResult(ResultType.SUCCESS)
+                    .addDurationMs(durationMs(importStartedNs)).log("Layer " + layer.digest() + " imported ("
+                            + layer.size() + " B, waited " + waitedMs + " ms for its download)");
+        }
+    }
+
+    private Path createLayoutDirectory() throws IOException {
+        Path ociDir = PathSupport.tempDirPath(tempRoot, "oci-layout-");
+        fs.createDirectory(ociDir);
+        fs.createDirectory(blobsDir(ociDir));
+        return ociDir;
+    }
+
+    private static Path blobsDir(Path ociDir) {
+        return ociDir.resolve("blobs").resolve("sha256");
+    }
+
+    private PullTaskPlanner planPulls(ImageId imageId, Manifest manifest, Path blobsDir, BlobArrival onArrival) {
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+        PullTaskPlanner pullTaskPlanner = new PullTaskPlanner(1 + manifest.layers().size(), mdcSnapshot, imageId.name(),
+                blobsDir, onArrival);
+        var cfg = manifest.config();
+        pullTaskPlanner.addIfDigestNew(cfg.digest(), cfg.size(), MediaType.from(cfg.mediaType()));
+        for (var layer : manifest.layers()) {
+            pullTaskPlanner.addIfDigestNew(layer.digest(), layer.size(), MediaType.from(layer.mediaType()));
+        }
+        return pullTaskPlanner;
+    }
+
+    /**
+     * Writes what makes the downloaded blobs an OCI layout: the manifest blob,
+     * {@code oci-layout} and {@code index.json}.
+     */
+    private void writeLayoutMetadata(Path ociDir, Path blobsDir, ImageId imageId, ManifestResult manifestResult)
+            throws IOException {
+        Manifest manifest = manifestResult.manifest();
         byte[] manifestBytes = OBJECT_MAPPER.writeValueAsBytes(manifest);
         String manifestDigest = Sha256Utils.digest(new ByteArrayInputStream(manifestBytes)).replace("sha256:", "");
         fs.write(blobsDir.resolve(manifestDigest), manifestBytes);
 
-        // oci-layout
         fs.writeString(ociDir.resolve("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}");
 
         // index.json: descriptor mediaType must match the manifest blob (Docker v2 vs
@@ -177,8 +290,6 @@ public final class OciArchiveBuilder {
         String index = String.format(Locale.ROOT, template, indexMediaType, manifestBytes.length, manifestDigest,
                 imageId.referenceName());
         fs.writeString(ociDir.resolve("index.json"), index);
-
-        return ociDir;
     }
 
     @FunctionalInterface
@@ -189,6 +300,18 @@ public final class OciArchiveBuilder {
     @FunctionalInterface
     public interface LayoutUser<T> {
         T use(Path ociLayoutRoot) throws IOException, InterruptedException;
+    }
+
+    /** Consumer of layers delivered one at a time, in manifest order. */
+    @FunctionalInterface
+    public interface LayerSink {
+        void onLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException;
+    }
+
+    /** Called on the downloading thread once a blob is in the layout. */
+    @FunctionalInterface
+    private interface BlobArrival {
+        void accept(String digestHex, Path blobPath);
     }
 
     /**
@@ -225,13 +348,16 @@ public final class OciArchiveBuilder {
         private final Map<String, String> mdcSnapshot;
         private final String repository;
         private final Path blobsDir;
+        private final BlobArrival onArrival;
 
-        private PullTaskPlanner(int expectedTasks, Map<String, String> mdcSnapshot, String repository, Path blobsDir) {
+        private PullTaskPlanner(int expectedTasks, Map<String, String> mdcSnapshot, String repository, Path blobsDir,
+                BlobArrival onArrival) {
             this.pullTasks = new ArrayList<>(expectedTasks);
             this.scheduledDigests = new HashSet<>(expectedTasks);
             this.mdcSnapshot = mdcSnapshot;
             this.repository = repository;
             this.blobsDir = blobsDir;
+            this.onArrival = onArrival;
         }
 
         private void addIfDigestNew(String digest, long size, MediaType mediaType) {
@@ -239,7 +365,8 @@ public final class OciArchiveBuilder {
                 return;
             }
             pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
-                pullLayer(repository, ImageDigest.parse(digest), size, mediaType, blobsDir);
+                Path blobPath = pullLayer(repository, ImageDigest.parse(digest), size, mediaType, blobsDir);
+                onArrival.accept(ImageDigest.parse(digest).hex(), blobPath);
             }));
         }
 
@@ -248,11 +375,13 @@ public final class OciArchiveBuilder {
         }
     }
 
-    private void pullLayer(String repository, ImageDigest digest, long size, MediaType mediaType, Path blobsDir)
+    private Path pullLayer(String repository, ImageDigest digest, long size, MediaType mediaType, Path blobsDir)
             throws IOException {
         var fetched = dispatcher.fetchLayer(new RepositoryName(repository), digest, size, mediaType);
         File tmp = fetched.path().toFile();
-        fs.copy(tmp.toPath(), blobsDir.resolve(fetched.digest().hex()));
+        Path landed = blobsDir.resolve(fetched.digest().hex());
+        fs.copy(tmp.toPath(), landed);
+        return landed;
     }
 
     /**
@@ -301,24 +430,64 @@ public final class OciArchiveBuilder {
         return (System.nanoTime() - startedNs) / 1_000_000L;
     }
 
+    private static void completeArrival(Map<String, CompletableFuture<Path>> arrivals, String digestHex,
+            Path blobPath) {
+        CompletableFuture<Path> arrival = arrivals.get(digestHex);
+        if (arrival != null) {
+            arrival.complete(blobPath);
+        }
+    }
+
+    /**
+     * A pull that fails must fail the layer consumer too, or it waits forever for a
+     * blob that is never going to arrive.
+     */
+    private static Callable<Void> failArrivalsOnError(Callable<Void> task,
+            Map<String, CompletableFuture<Path>> arrivals) {
+        return () -> {
+            try {
+                return task.call();
+            } catch (IOException | InterruptedException | RuntimeException e) {
+                arrivals.values().forEach(arrival -> arrival.completeExceptionally(e));
+                throw e;
+            }
+        };
+    }
+
+    private static Path awaitArrival(CompletableFuture<Path> arrival) throws IOException, InterruptedException {
+        try {
+            return arrival.get();
+        } catch (ExecutionException e) {
+            throw unwrapPullFailure(e);
+        }
+    }
+
     private static void awaitPull(Future<Void> future) throws IOException, InterruptedException {
         try {
             future.get();
         } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof IOException io) {
-                throw io;
-            }
-            if (cause instanceof InterruptedException ie) {
-                throw ie;
-            }
-            if (cause instanceof Error err) {
-                throw err;
-            }
-            if (cause instanceof RuntimeException re) {
-                throw re;
-            }
-            throw new IOException(cause);
+            throw unwrapPullFailure(e);
         }
+    }
+
+    /**
+     * Rethrows what the pull task actually threw; the returned {@link IOException}
+     * is only the last resort for a cause with no better home.
+     */
+    private static IOException unwrapPullFailure(ExecutionException e) throws InterruptedException {
+        Throwable cause = e.getCause();
+        if (cause instanceof IOException io) {
+            return io;
+        }
+        if (cause instanceof InterruptedException ie) {
+            throw ie;
+        }
+        if (cause instanceof Error err) {
+            throw err;
+        }
+        if (cause instanceof RuntimeException re) {
+            throw re;
+        }
+        return new IOException(cause);
     }
 }

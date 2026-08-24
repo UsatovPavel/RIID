@@ -98,29 +98,7 @@ public final class PerformanceColdCacheHelper {
         p.waitFor();
     }
 
-    private static void runOrFail(String command, String arg1, String arg2) throws Exception {
-        Process p = new ProcessBuilder(command, arg1, arg2).redirectErrorStream(true).start();
-        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int code = p.waitFor();
-        assertEquals(0, code, "Command failed: " + String.join(" ", command, arg1, arg2) + "\n" + out);
-    }
-
-    private static void runOrFail(String command, String arg1, String arg2, String arg3) throws Exception {
-        Process p = new ProcessBuilder(command, arg1, arg2, arg3).redirectErrorStream(true).start();
-        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int code = p.waitFor();
-        assertEquals(0, code, "Command failed: " + String.join(" ", command, arg1, arg2, arg3) + "\n" + out);
-    }
-
     private static void runOrFail(String... command) throws Exception {
-        if (command.length == 3) {
-            runOrFail(command[0], command[1], command[2]);
-            return;
-        }
-        if (command.length == 4) {
-            runOrFail(command[0], command[1], command[2], command[3]);
-            return;
-        }
         Process p = new ProcessBuilder(command).redirectErrorStream(true).start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
