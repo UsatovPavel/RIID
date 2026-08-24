@@ -76,4 +76,5 @@ bench/_error.txt
 
 ### internalDocs: local-only AI/personal notes, never committed ###
 internalDocs/
+zOptimization/
 bench/log/changelogEnvVPN.md
