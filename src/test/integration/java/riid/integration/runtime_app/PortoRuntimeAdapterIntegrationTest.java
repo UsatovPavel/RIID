@@ -38,6 +38,8 @@ class PortoRuntimeAdapterIntegrationTest {
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final String PODMAN = "podman";
+    private static final String PORTOCTL = "portoctl";
+    private static final String LAYER = "layer";
 
     @Test
     void downloadsImageAndLoadsIntoPorto() throws Exception {
@@ -58,7 +60,50 @@ class PortoRuntimeAdapterIntegrationTest {
         assertTrue(!newLayers.isEmpty(), "Expected new layers after load, got: " + after);
 
         for (String layer : newLayers) {
-            runIgnoreErrors(List.of("portoctl", "layer", "-R", layer));
+            runIgnoreErrors(List.of(PORTOCTL, LAYER, "-R", layer));
+        }
+    }
+
+    /**
+     * Synthetic two-layer OCI archive (no registry involved) - exercises
+     * {@code PortoRuntimeAdapter}'s per-layer import path
+     * (importLayersSeparately): each layer becomes its own
+     * {@code riid-layer-<digest>} Porto layer, and a marker layer named after
+     * the archive carries the ordered (top-first) layer chain as its private
+     * value.
+     */
+    @Test
+    void importsTwoLayerOciArchivePerLayer() throws Exception {
+        HostFilesystem fs = new NioHostFilesystem();
+        Path workDir = TestPaths.tempDir(fs, TestPaths.DEFAULT_BASE_DIR, "porto-per-layer-");
+        Path archive = SyntheticOciArchives.buildTwoLayerArchive(workDir);
+
+        PortoRuntimeAdapter adapter = new PortoRuntimeAdapter();
+        String layerName = archive.getFileName().toString();
+        runIgnoreErrors(List.of(PORTOCTL, LAYER, "-R", layerName));
+
+        List<String> before = listLayers();
+        adapter.importImage(archive);
+        try {
+            List<String> layers = listLayers();
+            long perLayerCount = layers.stream().filter(name -> name.startsWith("riid-layer-")).count();
+            assertTrue(perLayerCount >= 2, "Expected at least 2 riid-layer-* entries, got: " + layers);
+            assertTrue(layers.contains(layerName), "Expected marker layer " + layerName + " in: " + layers);
+
+            Process p = new ProcessBuilder(PORTOCTL, LAYER, "-G", layerName).redirectErrorStream(true).start();
+            String chain = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            assertEquals(0, p.waitFor(), "portoctl layer -G failed: " + chain);
+            assertTrue(chain.startsWith("[") && chain.contains("riid-layer-"),
+                    "Expected JSON layer-name chain as private value, got: " + chain);
+        } finally {
+            // Remove the marker layer *and* every riid-layer-<digest> this run
+            // created - leaving them behind would make the next run silently
+            // exercise the reuse path instead of the import path.
+            List<String> created = new ArrayList<>(listLayers());
+            created.removeAll(before);
+            for (String layer : created) {
+                runIgnoreErrors(List.of(PORTOCTL, LAYER, "-R", layer));
+            }
         }
     }
 
@@ -103,15 +148,15 @@ class PortoRuntimeAdapterIntegrationTest {
             runIgnoreErrors(List.of(PODMAN, "rm", containerName));
         }
 
-        run(List.of("portoctl", "layer", "-I", layerName, tar.toString()));
+        run(List.of(PORTOCTL, LAYER, "-I", layerName, tar.toString()));
 
         List<String> layers = listLayers();
         assertTrue(layers.contains(layerName), "Expected new layer " + layerName + " in: " + layers);
-        runIgnoreErrors(List.of("portoctl", "layer", "-R", layerName));
+        runIgnoreErrors(List.of(PORTOCTL, LAYER, "-R", layerName));
     }
 
     private static List<String> listLayers() throws Exception {
-        Process p = new ProcessBuilder("portoctl", "layer", "-L").redirectErrorStream(true).start();
+        Process p = new ProcessBuilder(PORTOCTL, LAYER, "-L").redirectErrorStream(true).start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int code = p.waitFor();
         assertEquals(0, code, "portoctl layer -L failed: " + out);

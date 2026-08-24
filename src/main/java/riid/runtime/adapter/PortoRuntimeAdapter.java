@@ -4,9 +4,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +39,25 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     private static final String OCI_LAYOUT = "oci-layout";
     private static final String INDEX_JSON = "index.json";
 
+    /** Porto keys layers by name alone, so everything about them lives here. */
+    private static final class Layer {
+        /** {@code portoctl} subcommand behind every layer operation. */
+        private static final String CMD = "layer";
+        /** Name is derived from the digest: that is what makes a layer reusable. */
+        private static final String NAME_PREFIX = "riid-layer-";
+        /** Reported when the name is taken - someone imported this digest first. */
+        private static final String ALREADY_EXISTS = "LayerAlreadyExists";
+        /**
+         * Porto caps a private value at 4096 bytes but does not enforce it on import:
+         * an oversized value is stored silently, after which the layer can no longer
+         * be read or removed via portoctl. Stay under the cap with margin.
+         */
+        private static final int PRIVATE_VALUE_SAFE_LIMIT = 4000;
+
+        private Layer() {
+        }
+    }
+
     @Override
     public RuntimeId runtimeId() {
         return RuntimeId.PORTO;
@@ -51,16 +75,143 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         }
         String layerName = fileName.toString();
 
-        if (isOciArchive(imagePath, isGzip(imagePath))) {
-            Path rootfsTar = exportRootfsTar(imagePath, null);
-            try {
-                importRootfsTar(rootfsTar, layerName);
-            } finally {
-                Files.deleteIfExists(rootfsTar);
-            }
-        } else {
+        if (!isOciArchive(imagePath, isGzip(imagePath))) {
             importRootfsTar(imagePath, layerName);
+            return;
         }
+
+        Path ociDir = Files.createTempDirectory("porto-import-oci");
+        try {
+            untar(imagePath, ociDir, isGzip(imagePath));
+            Manifest manifest = readManifest(ociDir);
+
+            if (estimateChainJsonBytes(manifest) > Layer.PRIVATE_VALUE_SAFE_LIMIT) {
+                LOGGER.info("Layer chain too large for a Porto private value, flattening import for {}", layerName);
+                Path rootfsTar = exportRootfsTar(imagePath, null);
+                try {
+                    importRootfsTar(rootfsTar, layerName);
+                } finally {
+                    Files.deleteIfExists(rootfsTar);
+                }
+                return;
+            }
+
+            importLayersSeparately(ociDir, manifest, layerName);
+        } finally {
+            deleteRecursively(ociDir);
+        }
+    }
+
+    /**
+     * Imports every layer under its own digest-derived name, so one already present
+     * is reused rather than re-extracted, and records the resulting chain (top layer
+     * first) as the marker layer's private value for a later {@code vcreate}.
+     */
+    private void importLayersSeparately(Path ociDir, Manifest manifest, String layerName)
+            throws IOException, InterruptedException {
+        Set<String> existing = listExistingPortoLayers();
+        List<String> manifestOrderNames = new ArrayList<>();
+
+        Path workDir = Files.createTempDirectory("porto-import-layers");
+        try {
+            for (Descriptor layer : manifest.layers()) {
+                String digest = stripSha256(layer.digest());
+                if (digest.isBlank()) {
+                    throw new IOException("Layer digest missing in OCI manifest");
+                }
+                String portoLayerName = Layer.NAME_PREFIX + digest;
+                manifestOrderNames.add(portoLayerName);
+                if (existing.contains(portoLayerName)) {
+                    LOGGER.info("Porto layer already present, skipping import: {}", portoLayerName);
+                    continue;
+                }
+
+                // Sent compressed: portod detects gzip/zstd/xz/bzip2 by magic bytes, so
+                // decompressing here would only cost a round trip and drop the formats
+                // we failed to recognise.
+                Path layerBlob = blobPath(ociDir, digest);
+                LOGGER.info("portoctl layer import (per-layer): {} <- {}", portoLayerName, layerBlob);
+                List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-I", portoLayerName,
+                        layerBlob.toAbsolutePath().toString());
+                BoundedCommandExecution.ShellResult result = runCommand(cmd);
+                if (result.exitCode() != 0 && !isLayerAlreadyExists(result)) {
+                    throw new IOException("portoctl layer import failed for " + portoLayerName + " (exit "
+                            + result.exitCode() + EXIT_SUFFIX + result.stdout() + result.stderr());
+                }
+                if (result.exitCode() != 0) {
+                    LOGGER.info("Porto layer import raced with a concurrent import, reusing: {}", portoLayerName);
+                }
+            }
+
+            List<String> topFirstChain = new ArrayList<>(manifestOrderNames);
+            Collections.reverse(topFirstChain);
+            String chainJson = new ObjectMapper().writeValueAsString(topFirstChain);
+
+            Path emptyDir = Files.createTempDirectory(workDir, "empty-");
+            Path emptyTar = workDir.resolve("marker.tar");
+            tar(emptyDir, emptyTar);
+            List<String> metaCmd = List.of(PORTOCTL_BIN, Layer.CMD, "-S", chainJson, "-I", layerName,
+                    emptyTar.toString());
+            BoundedCommandExecution.ShellResult metaResult = runCommand(metaCmd);
+            if (metaResult.exitCode() != 0 && !isLayerAlreadyExists(metaResult)) {
+                throw new IOException("portoctl layer marker import failed (exit " + metaResult.exitCode()
+                        + EXIT_SUFFIX + metaResult.stdout() + metaResult.stderr());
+            }
+            if (metaResult.exitCode() != 0) {
+                LOGGER.info("Porto marker layer import raced with a concurrent import of the same image: {}",
+                        layerName);
+            }
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    /**
+     * Names Porto already holds. Only an optimization - anything missed here is still
+     * caught by the already-exists error at import time, so a failed listing degrades
+     * to "nothing is cached" instead of failing the import.
+     */
+    private Set<String> listExistingPortoLayers() throws IOException, InterruptedException {
+        List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-L");
+        BoundedCommandExecution.ShellResult result = runCommand(cmd);
+        if (result.exitCode() != 0) {
+            LOGGER.warn("portoctl layer -L failed (exit {}): {}{} - importing every layer without reuse",
+                    result.exitCode(), result.stdout(), result.stderr());
+            return Set.of();
+        }
+        return result.stdout().lines().map(String::trim).filter(line -> !line.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * Exact UTF-8 size of the JSON chain destined for the marker layer's private
+     * value, checked before any import so an oversized chain takes the flattened
+     * path instead of wedging a layer.
+     */
+    private static int estimateChainJsonBytes(Manifest manifest) {
+        int count = manifest.layers().size();
+        if (count == 0) {
+            return "[]".length();
+        }
+        int bytes = "[]".length() + (count - 1); // brackets + separating commas
+        for (Descriptor layer : manifest.layers()) {
+            bytes += 2 + Layer.NAME_PREFIX.length() + stripSha256(layer.digest()).length(); // quotes + name
+        }
+        return bytes;
+    }
+
+    /**
+     * True when the import failed only because the name is already taken - a
+     * concurrent importer won the race on the same content-addressed name.
+     */
+    private static boolean isLayerAlreadyExists(BoundedCommandExecution.ShellResult result) {
+        return result.stdout().contains(Layer.ALREADY_EXISTS)
+                || result.stderr().contains(Layer.ALREADY_EXISTS);
+    }
+
+    /** Path of a blob inside an extracted OCI layout directory. */
+    private static Path blobPath(Path ociDir, String digest) {
+        return ociDir.resolve("blobs").resolve("sha256").resolve(digest);
     }
 
     /**
@@ -101,7 +252,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 if (digest.isBlank()) {
                     throw new IOException("Layer digest missing in OCI manifest");
                 }
-                Path layerBlob = ociDir.resolve("blobs").resolve("sha256").resolve(digest);
+                Path layerBlob = blobPath(ociDir, digest);
                 boolean gzipLayer = isGzipLayer(layer.mediaType(), layerBlob);
                 LOGGER.info("Applying layer {} (gzip={})", digest, gzipLayer);
                 applyLayer(layerBlob, gzipLayer, rootfsDir);
@@ -121,7 +272,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         long bytes = Files.size(tar);
         LOGGER.info("portoctl layer import starting: layer={} tar={} (~{} MiB)", layerName, tar.toAbsolutePath(),
                 bytes / (1024 * 1024));
-        List<String> cmd = List.of(PORTOCTL_BIN, "layer", "-I", layerName, tar.toAbsolutePath().toString());
+        List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-I", layerName, tar.toAbsolutePath().toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         LOGGER.info("portoctl layer import finished: layer={} exit={}", layerName, shellResult.exitCode());
         if (shellResult.exitCode() != 0) {
@@ -148,7 +299,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         if (manifestDigest.isBlank()) {
             throw new IOException("OCI archive manifest digest missing");
         }
-        Path manifestPath = ociDir.resolve("blobs").resolve("sha256").resolve(manifestDigest);
+        Path manifestPath = blobPath(ociDir, manifestDigest);
         return mapper.readValue(manifestPath.toFile(), Manifest.class);
     }
 
