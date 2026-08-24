@@ -38,26 +38,25 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     private static final String WHITEOUT_OPAQUE = ".wh..wh..opq";
     private static final String OCI_LAYOUT = "oci-layout";
     private static final String INDEX_JSON = "index.json";
-    /**
-     * Content-addressed Porto layer name prefix for individually-imported OCI
-     * layers - shared across images so {@code portoctl layer -I} is skipped
-     * (real reuse) when the same digest was already imported for another pull.
-     */
-    private static final String LAYER_NAME_PREFIX = "riid-layer-";
-    /**
-     * Porto's private-value storage cap (PRIVATE_VALUE_MAX in upstream
-     * common.hpp) is 4096 bytes; TStorage::Load() hard-fails reading a value
-     * above that, and ImportArchiveSave bypasses the write-time length check
-     * SetPrivate normally does. Verified against a live portod: importing a
-     * 5000-byte private value returns exit 0, after which both
-     * {@code layer -G} and {@code layer -R} fail with "File too large: 5000" -
-     * i.e. the layer is wedged in storage and can only be removed by deleting
-     * it from /place/porto_layers by hand. So gate on size *before* importing
-     * anything, with margin for JSON overhead.
-     */
-    private static final int PRIVATE_VALUE_SAFE_LIMIT = 4000;
-    private static final String LAYER_ALREADY_EXISTS_MARKER = "LayerAlreadyExists";
-    private static final String LAYER_CMD = "layer";
+
+    /** Porto keys layers by name alone, so everything about them lives here. */
+    private static final class Layer {
+        /** {@code portoctl} subcommand behind every layer operation. */
+        private static final String CMD = "layer";
+        /** Name is derived from the digest: that is what makes a layer reusable. */
+        private static final String NAME_PREFIX = "riid-layer-";
+        /** Reported when the name is taken - someone imported this digest first. */
+        private static final String ALREADY_EXISTS = "LayerAlreadyExists";
+        /**
+         * Porto caps a private value at 4096 bytes but does not enforce it on import:
+         * an oversized value is stored silently, after which the layer can no longer
+         * be read or removed via portoctl. Stay under the cap with margin.
+         */
+        private static final int PRIVATE_VALUE_SAFE_LIMIT = 4000;
+
+        private Layer() {
+        }
+    }
 
     @Override
     public RuntimeId runtimeId() {
@@ -86,10 +85,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
             untar(imagePath, ociDir, isGzip(imagePath));
             Manifest manifest = readManifest(ociDir);
 
-            if (estimateChainJsonBytes(manifest) > PRIVATE_VALUE_SAFE_LIMIT) {
-                // The only case the per-layer path cannot express: a chain whose JSON
-                // would exceed Porto's private-value limit (see PRIVATE_VALUE_SAFE_LIMIT).
-                // Checked before any per-layer import happens.
+            if (estimateChainJsonBytes(manifest) > Layer.PRIVATE_VALUE_SAFE_LIMIT) {
                 LOGGER.info("Layer chain too large for a Porto private value, flattening import for {}", layerName);
                 Path rootfsTar = exportRootfsTar(imagePath, null);
                 try {
@@ -107,14 +103,9 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     /**
-     * Imports each OCI layer as its own Porto layer, named by digest so a
-     * shared layer already present (from a previous pull) is skipped instead
-     * of re-extracted. The ordered chain (top layer first, matching Porto's
-     * own native pullDockerImage convention - see upstream volume.cpp,
-     * TDockerImage.Layers reversed into TVolume::Layers) is stored as the
-     * private value of an empty marker layer named after the archive, so a
-     * later {@code vcreate ... layers=<chain>} can find it the same way
-     * callers already look up the flattened single-layer name today.
+     * Imports every layer under its own digest-derived name, so one already present
+     * is reused rather than re-extracted, and records the resulting chain (top layer
+     * first) as the marker layer's private value for a later {@code vcreate}.
      */
     private void importLayersSeparately(Path ociDir, Manifest manifest, String layerName)
             throws IOException, InterruptedException {
@@ -128,21 +119,19 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 if (digest.isBlank()) {
                     throw new IOException("Layer digest missing in OCI manifest");
                 }
-                String portoLayerName = LAYER_NAME_PREFIX + digest;
+                String portoLayerName = Layer.NAME_PREFIX + digest;
                 manifestOrderNames.add(portoLayerName);
                 if (existing.contains(portoLayerName)) {
                     LOGGER.info("Porto layer already present, skipping import: {}", portoLayerName);
                     continue;
                 }
 
-                // The compressed blob goes to portod as-is: TStorage::ImportArchive opens
-                // it and Compression() (storage.cpp) sniffs gzip/zstd/xz/bzip2/squashfs
-                // from the magic bytes, so an extension-less OCI blob is handled natively.
-                // Decompressing here would only add a needless extract + re-tar round trip
-                // and would silently narrow support to the one format we recognised.
+                // Sent compressed: portod detects gzip/zstd/xz/bzip2 by magic bytes, so
+                // decompressing here would only cost a round trip and drop the formats
+                // we failed to recognise.
                 Path layerBlob = blobPath(ociDir, digest);
                 LOGGER.info("portoctl layer import (per-layer): {} <- {}", portoLayerName, layerBlob);
-                List<String> cmd = List.of(PORTOCTL_BIN, LAYER_CMD, "-I", portoLayerName,
+                List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-I", portoLayerName,
                         layerBlob.toAbsolutePath().toString());
                 BoundedCommandExecution.ShellResult result = runCommand(cmd);
                 if (result.exitCode() != 0 && !isLayerAlreadyExists(result)) {
@@ -150,10 +139,6 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                             + result.exitCode() + EXIT_SUFFIX + result.stdout() + result.stderr());
                 }
                 if (result.exitCode() != 0) {
-                    // Two RIID processes (or two duplicate digests in the same manifest) raced
-                    // on this digest-named layer; whoever lost the race just reuses the winner's
-                    // import instead of failing the whole pull - listExistingPortoLayers() above
-                    // is a point-in-time snapshot, not a lock.
                     LOGGER.info("Porto layer import raced with a concurrent import, reusing: {}", portoLayerName);
                 }
             }
@@ -165,7 +150,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
             Path emptyDir = Files.createTempDirectory(workDir, "empty-");
             Path emptyTar = workDir.resolve("marker.tar");
             tar(emptyDir, emptyTar);
-            List<String> metaCmd = List.of(PORTOCTL_BIN, LAYER_CMD, "-S", chainJson, "-I", layerName,
+            List<String> metaCmd = List.of(PORTOCTL_BIN, Layer.CMD, "-S", chainJson, "-I", layerName,
                     emptyTar.toString());
             BoundedCommandExecution.ShellResult metaResult = runCommand(metaCmd);
             if (metaResult.exitCode() != 0 && !isLayerAlreadyExists(metaResult)) {
@@ -173,8 +158,6 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                         + EXIT_SUFFIX + metaResult.stdout() + metaResult.stderr());
             }
             if (metaResult.exitCode() != 0) {
-                // A concurrent pull of the same image already created this marker (with an
-                // equal chain, since it's the same manifest) - nothing left to do.
                 LOGGER.info("Porto marker layer import raced with a concurrent import of the same image: {}",
                         layerName);
             }
@@ -184,14 +167,12 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     /**
-     * Point-in-time snapshot of the layer names Porto already holds. Purely an
-     * optimization: it lets a shared layer skip decompression entirely, but a
-     * layer missed here is still caught by the {@code LayerAlreadyExists}
-     * handling at import time, so a failed listing degrades to "assume nothing
-     * is cached" rather than failing the whole import.
+     * Names Porto already holds. Only an optimization - anything missed here is still
+     * caught by the already-exists error at import time, so a failed listing degrades
+     * to "nothing is cached" instead of failing the import.
      */
     private Set<String> listExistingPortoLayers() throws IOException, InterruptedException {
-        List<String> cmd = List.of(PORTOCTL_BIN, LAYER_CMD, "-L");
+        List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-L");
         BoundedCommandExecution.ShellResult result = runCommand(cmd);
         if (result.exitCode() != 0) {
             LOGGER.warn("portoctl layer -L failed (exit {}): {}{} - importing every layer without reuse",
@@ -203,14 +184,9 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     /**
-     * Exact UTF-8 size of the JSON chain that would be stored as the marker
-     * layer's private value. Porto caps a private value at 4096 bytes
-     * (PRIVATE_VALUE_MAX, common.hpp), but {@code TStorage::ImportArchive}
-     * persists it via {@code SavePrivate()}, bypassing the length check that
-     * {@code SetPrivate()} performs - so an oversized value is written
-     * silently and then makes {@code TStorage::Load()} fail permanently on
-     * every later read. Checked before any import so such images take the
-     * flattened single-layer path instead.
+     * Exact UTF-8 size of the JSON chain destined for the marker layer's private
+     * value, checked before any import so an oversized chain takes the flattened
+     * path instead of wedging a layer.
      */
     private static int estimateChainJsonBytes(Manifest manifest) {
         int count = manifest.layers().size();
@@ -219,20 +195,18 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         }
         int bytes = "[]".length() + (count - 1); // brackets + separating commas
         for (Descriptor layer : manifest.layers()) {
-            bytes += 2 + LAYER_NAME_PREFIX.length() + stripSha256(layer.digest()).length(); // quotes + name
+            bytes += 2 + Layer.NAME_PREFIX.length() + stripSha256(layer.digest()).length(); // quotes + name
         }
         return bytes;
     }
 
     /**
-     * True when a failed {@code portoctl layer -I} failed only because the
-     * target layer name is already taken - i.e. a concurrent importer won the
-     * race on the same content-addressed name (see storage.cpp, ImportArchive
-     * rejecting an existing layer with {@code LayerAlreadyExists}).
+     * True when the import failed only because the name is already taken - a
+     * concurrent importer won the race on the same content-addressed name.
      */
     private static boolean isLayerAlreadyExists(BoundedCommandExecution.ShellResult result) {
-        return result.stdout().contains(LAYER_ALREADY_EXISTS_MARKER)
-                || result.stderr().contains(LAYER_ALREADY_EXISTS_MARKER);
+        return result.stdout().contains(Layer.ALREADY_EXISTS)
+                || result.stderr().contains(Layer.ALREADY_EXISTS);
     }
 
     /** Path of a blob inside an extracted OCI layout directory. */
@@ -298,7 +272,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         long bytes = Files.size(tar);
         LOGGER.info("portoctl layer import starting: layer={} tar={} (~{} MiB)", layerName, tar.toAbsolutePath(),
                 bytes / (1024 * 1024));
-        List<String> cmd = List.of(PORTOCTL_BIN, LAYER_CMD, "-I", layerName, tar.toAbsolutePath().toString());
+        List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-I", layerName, tar.toAbsolutePath().toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         LOGGER.info("portoctl layer import finished: layer={} exit={}", layerName, shellResult.exitCode());
         if (shellResult.exitCode() != 0) {
