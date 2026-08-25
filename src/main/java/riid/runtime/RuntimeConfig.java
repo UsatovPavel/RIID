@@ -9,10 +9,10 @@ import riid.runtime.adapter.RuntimeAdapter;
  */
 public record RuntimeConfig(@JsonProperty("output") OutputConfig output, @JsonProperty("dockerCmd") String dockerCmd,
         @JsonProperty("maxTasksCommandExecutor") Integer maxTasksCommandExecutor,
-        @JsonProperty("prefixImportStride") Integer prefixImportStride) {
+        @JsonProperty("prefixImport") Boolean prefixImport) {
     public static final String DEFAULT_DOCKER_BIN = "docker";
-    /** @see RuntimeAdapter#DEFAULT_PREFIX_IMPORT_STRIDE */
-    public static final int DEFAULT_PREFIX_IMPORT_STRIDE = RuntimeAdapter.DEFAULT_PREFIX_IMPORT_STRIDE;
+    /** @see RuntimeAdapter#PREFIX_IMPORT_ENABLED_BY_DEFAULT */
+    public static final boolean DEFAULT_PREFIX_IMPORT = RuntimeAdapter.PREFIX_IMPORT_ENABLED_BY_DEFAULT;
 
     public OutputConfig outputConfigOrDefault() {
         return output == null ? OutputConfig.defaults() : output;
@@ -27,12 +27,11 @@ public record RuntimeConfig(@JsonProperty("output") OutputConfig output, @JsonPr
     }
 
     /**
-     * How many layers the engine is given at a time while the rest still downloads;
-     * 0 keeps the single import of the finished image. Applies to the engines with
-     * no per-layer import command (podman, containerd); Porto imports layer by
-     * layer regardless.
+     * Whether the engine gets each layer as it lands instead of the whole image at
+     * the end. Only for engines with no per-layer import (podman, containerd);
+     * Porto imports layer by layer regardless.
      */
-    public int prefixImportStrideOrDefault() {
-        return prefixImportStride == null ? DEFAULT_PREFIX_IMPORT_STRIDE : prefixImportStride;
+    public boolean prefixImportOrDefault() {
+        return prefixImport == null ? DEFAULT_PREFIX_IMPORT : prefixImport;
     }
 }

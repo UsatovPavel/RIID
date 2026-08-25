@@ -30,20 +30,19 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     private static final int MAX_PROC_STDERR = 64 * 1024;
     private static final String PREFIX_REPOSITORY = "localhost/riid-prefix-";
 
-    private final int prefixImportStride;
+    private final boolean prefixImport;
 
     public PodmanRuntimeAdapter() {
-        this(DEFAULT_PREFIX_IMPORT_STRIDE);
+        this(PREFIX_IMPORT_ENABLED_BY_DEFAULT);
     }
 
     /**
-     * @param prefixImportStride
-     *            how many layers to accumulate before handing the prefix to podman;
-     *            {@link #PREFIX_IMPORT_OFF} keeps the single import of the whole
-     *            image.
+     * @param prefixImport
+     *            hand podman each layer as it lands, instead of the whole image at
+     *            the end
      */
-    public PodmanRuntimeAdapter(int prefixImportStride) {
-        this.prefixImportStride = Math.max(PREFIX_IMPORT_OFF, prefixImportStride);
+    public PodmanRuntimeAdapter(boolean prefixImport) {
+        this.prefixImport = prefixImport;
     }
 
     @Override
@@ -104,7 +103,7 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     @Override
     public boolean supportsIncrementalImport(Manifest manifest) {
         Objects.requireNonNull(manifest, "manifest");
-        return prefixImportStride > PREFIX_IMPORT_OFF && manifest.layers().size() > prefixImportStride;
+        return prefixImport && manifest.layers().size() > 1;
     }
 
     @Override
@@ -112,8 +111,8 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         Objects.requireNonNull(imageName, "imageName");
         Objects.requireNonNull(manifest, "manifest");
         if (!supportsIncrementalImport(manifest)) {
-            throw new IOException("Image " + imageName + " is not worth importing by prefix: stride "
-                    + prefixImportStride + ", " + manifest.layers().size() + " layers");
+            throw new IOException("Image " + imageName + " is not imported by prefix: prefixImport=" + prefixImport
+                    + ", " + manifest.layers().size() + " layers");
         }
         return new PodmanIncrementalImport(imageName, manifest);
     }
@@ -136,10 +135,15 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         }
 
         @Override
+        public void imageConfig(Path configBlob) throws IOException {
+            layouts.takeImageConfig(configBlob);
+        }
+
+        @Override
         public void importLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException {
             layouts.takeLayer(layer, blobPath);
             int count = layouts.layersTaken();
-            if (count < layouts.layersExpected() && count % prefixImportStride == 0) {
+            if (count < layouts.layersExpected()) {
                 String image = PREFIX_REPOSITORY + sessionId + ":" + count;
                 pull(layouts.prefixLayout(count, image, PrefixImportLayouts.LayerScope.ALL, 0), image);
                 prefixImages.add(image);

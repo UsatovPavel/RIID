@@ -115,9 +115,9 @@ class PortoRuntimeAdapterIntegrationTest {
     }
 
     /**
-     * Prefix import (AGENT-90) against real portoctl: layers are fed one at a time,
-     * the image marker appears only after the last one, and its private value
-     * carries the chain top-first.
+     * Prefix import against real portoctl: layers are fed one at a time, the image
+     * marker appears only after the last one, and its private value carries the
+     * chain top-first.
      */
     @Test
     void importsLayersIncrementally() throws Exception {

@@ -59,12 +59,12 @@ class OciArchiveBuilderStreamLayersTest {
         OciArchiveBuilder builder = new OciArchiveBuilder(blobs, fs, TestPaths.DEFAULT_BASE_DIR);
         List<String> delivered = new ArrayList<>();
 
-        builder.streamLayers(imageId(), manifestResult(), (layer, blobPath) -> {
+        builder.streamLayers(imageId(), manifestResult(), layersOnly((layer, blobPath) -> {
             delivered.add(layer.digest());
             assertTrue(Files.isRegularFile(blobPath), "layer must already be on disk when handed over: " + blobPath);
             assertEquals(blobs.contentOf(layer.digest()), Files.readString(blobPath),
                     "sink must get this layer's blob, not another one");
-        });
+        }));
 
         assertEquals(LAYER_DIGESTS, delivered, "layers must arrive in manifest order");
     }
@@ -87,11 +87,11 @@ class OciArchiveBuilderStreamLayersTest {
         OciArchiveBuilder builder = new OciArchiveBuilder(blobs, fs, TestPaths.DEFAULT_BASE_DIR);
 
         AtomicInteger tailDownloadedWhenFirstImported = new AtomicInteger(-1);
-        builder.streamLayers(imageId(), manifestResult(), (layer, blobPath) -> {
+        builder.streamLayers(imageId(), manifestResult(), layersOnly((layer, blobPath) -> {
             if (layer.digest().equals(LAYER_DIGESTS.getFirst())) {
                 tailDownloadedWhenFirstImported.set((int) tailDownloaded.getCount());
             }
-        });
+        }));
 
         assertEquals(0, tailDownloadedWhenFirstImported.get(),
                 "every other layer must already be downloaded while the consumer waits for the first one");
@@ -109,11 +109,11 @@ class OciArchiveBuilderStreamLayersTest {
         blobs.beforeFetch(LAYER_DIGESTS.getLast(), () -> awaitOrFail(prefixImported));
         OciArchiveBuilder builder = new OciArchiveBuilder(blobs, fs, TestPaths.DEFAULT_BASE_DIR);
 
-        builder.streamLayers(imageId(), manifestResult(), (layer, blobPath) -> {
+        builder.streamLayers(imageId(), manifestResult(), layersOnly((layer, blobPath) -> {
             if (!layer.digest().equals(LAYER_DIGESTS.getLast())) {
                 prefixImported.countDown();
             }
-        });
+        }));
 
         assertEquals(0, prefixImported.getCount(), "the first two layers must be imported while the last downloads");
     }
@@ -128,8 +128,8 @@ class OciArchiveBuilderStreamLayersTest {
         OciArchiveBuilder builder = new OciArchiveBuilder(blobs, fs, TestPaths.DEFAULT_BASE_DIR);
 
         assertThrows(IllegalStateException.class,
-                () -> builder.streamLayers(imageId(), manifestResult(), (layer, blobPath) -> {
-                }));
+                () -> builder.streamLayers(imageId(), manifestResult(), layersOnly((layer, blobPath) -> {
+                })));
     }
 
     private static void awaitOrFail(CountDownLatch latch) {
@@ -208,5 +208,25 @@ class OciArchiveBuilderStreamLayersTest {
                 throw new IllegalStateException(e);
             }
         }
+    }
+
+    @FunctionalInterface
+    private interface LayerCallback {
+        void onLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException;
+    }
+
+    /** The sink is two methods now; these tests only care about the layers. */
+    private static OciArchiveBuilder.LayerSink layersOnly(LayerCallback layers) {
+        return new OciArchiveBuilder.LayerSink() {
+            @Override
+            public void onImageConfig(Path configBlob) {
+                // the config is not what these tests are about
+            }
+
+            @Override
+            public void onLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException {
+                layers.onLayer(layer, blobPath);
+            }
+        };
     }
 }

@@ -111,14 +111,10 @@ public final class OciArchiveBuilder {
     }
 
     /**
-     * Downloads the image and hands every layer to {@code sink} in manifest order
-     * as soon as it lands on disk, instead of waiting for the whole image: the
-     * runtime imports the prefix that already arrived while the tail is still
-     * downloading.
-     *
-     * <p>
-     * The sink runs on the calling thread; downloads keep running on virtual
-     * threads meanwhile, which is where the overlap comes from.
+     * Hands every layer to {@code sink} in manifest order as soon as it lands, so
+     * the runtime imports the prefix already downloaded while the tail is still in
+     * flight. The sink runs on the calling thread; the pulls run on virtual
+     * threads, which is where the overlap comes from.
      */
     public void streamLayers(ImageId imageId, ManifestResult manifestResult, LayerSink sink)
             throws IOException, InterruptedException {
@@ -202,8 +198,8 @@ public final class OciArchiveBuilder {
         Manifest manifest = manifestResult.manifest();
         Path blobsDir = blobsDir(ociDir);
         Map<String, CompletableFuture<Path>> arrivals = new ConcurrentHashMap<>();
-        for (Descriptor layer : manifest.layers()) {
-            arrivals.computeIfAbsent(ImageDigest.parse(layer.digest()).hex(), key -> new CompletableFuture<>());
+        for (Descriptor blob : withConfig(manifest)) {
+            arrivals.computeIfAbsent(ImageDigest.parse(blob.digest()).hex(), key -> new CompletableFuture<>());
         }
         PullTaskPlanner pullTaskPlanner = planPulls(imageId, manifest, blobsDir,
                 (digestHex, blobPath) -> completeArrival(arrivals, digestHex, blobPath));
@@ -214,12 +210,12 @@ public final class OciArchiveBuilder {
                 futures.add(executor.submit(failArrivalsOnError(task, arrivals)));
             }
             try {
+                sink.onImageConfig(awaitArrival(arrivals.get(ImageDigest.parse(manifest.config().digest()).hex())));
                 importLayerPrefix(manifest, arrivals, sink);
                 for (Future<Void> future : futures) {
                     awaitPull(future);
                 }
             } catch (IOException | InterruptedException | RuntimeException e) {
-                // Nothing left to wait for: the image is not going to be imported.
                 executor.shutdownNow();
                 throw e;
             }
@@ -245,6 +241,16 @@ public final class OciArchiveBuilder {
                     .addDurationMs(durationMs(importStartedNs)).log("Layer " + layer.digest() + " imported ("
                             + layer.size() + " B, waited " + waitedMs + " ms for its download)");
         }
+    }
+
+    /**
+     * The config blob is awaited like a layer, so nobody has to poll the disk for
+     * it.
+     */
+    private static List<Descriptor> withConfig(Manifest manifest) {
+        List<Descriptor> blobs = new ArrayList<>(manifest.layers());
+        blobs.add(manifest.config());
+        return blobs;
     }
 
     private Path createLayoutDirectory() throws IOException {
@@ -303,8 +309,13 @@ public final class OciArchiveBuilder {
     }
 
     /** Consumer of layers delivered one at a time, in manifest order. */
-    @FunctionalInterface
+    /**
+     * Where {@link #streamLayers} delivers the image, blob by blob, as it lands.
+     */
     public interface LayerSink {
+        /** Called once, before the first layer. */
+        void onImageConfig(Path configBlob) throws IOException, InterruptedException;
+
         void onLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException;
     }
 

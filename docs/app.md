@@ -13,21 +13,11 @@ CLI and dependency wiring layer for loading container images: parse flags, valid
 
 ## Policy: how an image reaches the runtime
 
-`ImageLoadingFacade.load(...)` picks one of three paths, in this order:
+`ImageLoadingFacade.load(...)` picks the first path the adapter supports:
 
-1. **Prefix (incremental) import** — when `runtime.supportsIncrementalImport(manifest)` is `true`.
-   `OciArchiveBuilder.streamLayers(...)` downloads blobs on virtual threads as before, but without
-   the "wait for all layers" barrier: the calling thread walks the manifest and hands layer *k* to
-   the runtime as soon as layers *0..k* are on disk, so importing the already-downloaded prefix
-   overlaps downloading the rest. No `oci-archive` tar is built. The image is published only after
-   the last layer, so an aborted pull leaves no half-imported image. Today only the Porto adapter
-   answers `true` — see `internalDocs/moduledocs/runtime.md`.
-2. **OCI layout stream import** — `prefersOciLayoutStreamImport()`; the layout directory is built in
-   full and handed to the runtime (`importOciLayoutDirectory`).
-3. **Archive import** — the default: build an `oci-archive` tar and call `importImage(path)`.
-
-Per-layer progress of path 1 is visible in the logs as `layer.import` milestones, each carrying its
-import duration and how long the importer waited for that layer's download.
+1. **Prefix import** (`supportsIncrementalImport`) — each layer goes to the engine as it lands, overlapping the rest of the download; the image is published only after the last one.
+2. **OCI layout stream** (`prefersOciLayoutStreamImport`) — the whole layout directory is handed over.
+3. **Archive** — the default: build an `oci-archive` tar and call `importImage(path)`.
 
 ## Policy: ImageId vs ImageRef
 - `ImageId` (app-level): full identity with registry + name + tag/digest; used in App/OCI/Runtime flows.

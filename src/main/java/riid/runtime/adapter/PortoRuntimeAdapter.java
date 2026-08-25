@@ -38,10 +38,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     private static final String WHITEOUT_OPAQUE = ".wh..wh..opq";
     private static final String OCI_LAYOUT = "oci-layout";
     private static final String INDEX_JSON = "index.json";
-    /**
-     * Everything Porto accepts in a layer name ({@code PORTO_NAME_CHARS},
-     * storage.cpp {@code CheckName}).
-     */
+    /** Everything Porto accepts in a layer name; it rejects anything else. */
     private static final String NAME_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-@:.";
 
     /** Porto keys layers by name alone, so everything about them lives here. */

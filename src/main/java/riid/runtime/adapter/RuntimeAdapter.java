@@ -48,26 +48,15 @@ public interface RuntimeAdapter {
     }
 
     /**
-     * Can this runtime take the layers of <em>this</em> image one at a time, while
-     * the rest of it is still downloading? Answered per manifest because an adapter
-     * may support the incremental path only for some images (e.g. Porto falls back
-     * to a flattened import once the layer chain no longer fits its metadata).
-     *
-     * <p>
-     * When {@code true}, the app layer drives
-     * {@link #beginIncrementalImport(String, Manifest)} instead of building a whole
-     * archive/layout first. Default {@code false}.
+     * Can this runtime take <em>this</em> image's layers one at a time, while the
+     * rest still downloads? Per manifest, because an adapter may accept only some
+     * images (Porto falls back to a flattened import for a long layer chain).
      */
-    /** Prefix import off: the engine gets the whole image in one import. */
-    int PREFIX_IMPORT_OFF = 0;
-
     /**
-     * Production default for the engines that have no per-layer import command:
-     * hand over one more layer at a time while the rest still downloads. Measured
-     * over 10 images on podman: faster on 10 of 10, median -7.2%; stride 2 was no
-     * better (zOptimization/Plan/PlanPrefixImportPodman.md).
+     * Prefix import is on unless configured off: measured faster on 10 images of
+     * 10.
      */
-    int DEFAULT_PREFIX_IMPORT_STRIDE = 1;
+    boolean PREFIX_IMPORT_ENABLED_BY_DEFAULT = true;
 
     default boolean supportsIncrementalImport(Manifest manifest) {
         return false;

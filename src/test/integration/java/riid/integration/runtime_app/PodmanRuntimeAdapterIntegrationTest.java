@@ -1,5 +1,6 @@
 package riid.integration.runtime_app;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -18,6 +19,28 @@ import riid.runtime.adapter.RuntimeId;
 @Tag("filesystem")
 @Tag("local")
 class PodmanRuntimeAdapterIntegrationTest {
+
+    /**
+     * Prefix import against real podman on a small multi-layer image (~11 MiB, 5
+     * layers): each prefix is loaded as its own image, and once the real one is in,
+     * only it is left behind.
+     */
+    @Test
+    void importsJobberByPrefixIntoPodman() throws Exception {
+        PodmanRuntimeIntegrationSupport.rmiJobberIgnoreErrors();
+        HostFilesystem fs = new NioHostFilesystem();
+        Path configPath = PodmanRuntimeIntegrationSupport.writeDockerHubConfig(fs);
+        ImageId imageId = ImageId.fromRegistry(TestRegistryConfig.registryName(),
+                PodmanRuntimeIntegrationSupport.REPO_JOBBER, PodmanRuntimeIntegrationSupport.REF_LATEST);
+
+        try (ImageLoadingFacade app = ImageLoadingFacade.createFromConfig(configPath)) {
+            app.load(imageId, RuntimeId.PODMAN);
+        }
+
+        String images = PodmanRuntimeIntegrationSupport.podmanImages();
+        assertTrue(images.contains("jobber"), "the image itself must be in podman: " + images);
+        assertFalse(images.contains("riid-prefix-"), "intermediate prefix images must not survive: " + images);
+    }
 
     /**
      * Regression: OCI archive must match manifest mediaType for {@code podman load}

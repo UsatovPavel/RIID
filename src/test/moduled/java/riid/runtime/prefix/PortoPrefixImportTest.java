@@ -1,4 +1,4 @@
-package riid.runtime;
+package riid.runtime.prefix;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -28,7 +28,7 @@ import riid.runtime.adapter.PortoRuntimeAdapter;
  * last one.
  */
 @Tag("filesystem")
-class PortoIncrementalImportTest {
+class PortoPrefixImportTest {
 
     private static final String LAYER_MEDIA_TYPE = "application/vnd.oci.image.layer.v1.tar+gzip";
     private static final String CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json";

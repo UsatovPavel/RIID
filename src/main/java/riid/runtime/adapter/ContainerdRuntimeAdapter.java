@@ -50,26 +50,26 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
      */
     private final String snapshotter;
     /**
-     * How many layers to accumulate before handing the prefix over; 0 keeps the
-     * single import.
+     * Hand containerd each layer as it lands, instead of the whole image at the
+     * end.
      */
-    private final int prefixImportStride;
+    private final boolean prefixImport;
 
     public ContainerdRuntimeAdapter() {
         this(CTR_BIN, null, null, null);
     }
 
     public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, String snapshotter) {
-        this(ctrCmd, namespace, address, snapshotter, DEFAULT_PREFIX_IMPORT_STRIDE);
+        this(ctrCmd, namespace, address, snapshotter, PREFIX_IMPORT_ENABLED_BY_DEFAULT);
     }
 
     public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, String snapshotter,
-            int prefixImportStride) {
+            boolean prefixImport) {
         this.ctrCmd = ctrCmd == null || ctrCmd.isBlank() ? CTR_BIN : ctrCmd;
         this.namespace = namespace;
         this.address = address;
         this.snapshotter = snapshotter;
-        this.prefixImportStride = Math.max(PREFIX_IMPORT_OFF, prefixImportStride);
+        this.prefixImport = prefixImport;
     }
 
     @Override
@@ -137,7 +137,7 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     @Override
     public boolean supportsIncrementalImport(Manifest manifest) {
         Objects.requireNonNull(manifest, "manifest");
-        return prefixImportStride > PREFIX_IMPORT_OFF && manifest.layers().size() > prefixImportStride;
+        return prefixImport && manifest.layers().size() > 1;
     }
 
     @Override
@@ -145,8 +145,8 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
         Objects.requireNonNull(imageName, "imageName");
         Objects.requireNonNull(manifest, "manifest");
         if (!supportsIncrementalImport(manifest)) {
-            throw new IOException("Image " + imageName + " is not worth importing by prefix: stride "
-                    + prefixImportStride + ", " + manifest.layers().size() + " layers");
+            throw new IOException("Image " + imageName + " is not imported by prefix: prefixImport=" + prefixImport
+                    + ", " + manifest.layers().size() + " layers");
         }
         return new ContainerdIncrementalImport(imageName, manifest);
     }
@@ -171,10 +171,15 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
         }
 
         @Override
+        public void imageConfig(Path configBlob) throws IOException {
+            layouts.takeImageConfig(configBlob);
+        }
+
+        @Override
         public void importLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException {
             layouts.takeLayer(layer, blobPath);
             int count = layouts.layersTaken();
-            if (count < layouts.layersExpected() && count % prefixImportStride == 0) {
+            if (count < layouts.layersExpected()) {
                 String image = PREFIX_REPOSITORY + sessionId + ":" + count;
                 importLayout(layouts.prefixLayout(count, image, PrefixImportLayouts.LayerScope.ADDED_ONLY, sentLayers));
                 sentLayers = count;

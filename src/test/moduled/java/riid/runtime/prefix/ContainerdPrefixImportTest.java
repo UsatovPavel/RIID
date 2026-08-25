@@ -1,12 +1,9 @@
-package riid.runtime;
+package riid.runtime.prefix;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -16,6 +13,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import static riid.runtime.prefix.PrefixImportFixtures.hex;
+import static riid.runtime.prefix.PrefixImportFixtures.layerDigestHex;
+import static riid.runtime.prefix.PrefixImportFixtures.layoutWithBlobs;
+import static riid.runtime.prefix.PrefixImportFixtures.manifest;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -23,7 +25,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.runtime.BoundedCommandExecution.ShellResult;
 import riid.runtime.adapter.ContainerdRuntimeAdapter;
@@ -37,11 +38,8 @@ import riid.runtime.adapter.IncrementalImageImport;
 @Tag("filesystem")
 class ContainerdPrefixImportTest {
 
-    private static final String LAYER_MEDIA_TYPE = "application/vnd.oci.image.layer.v1.tar+gzip";
-    private static final String CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json";
-    private static final String MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json";
     private static final String IMAGE_NAME = "docker.io/library/python:latest";
-    private static final String SHA256 = "sha256:";
+    private static final int LAYERS = 3;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @TempDir
@@ -49,14 +47,12 @@ class ContainerdPrefixImportTest {
 
     @Test
     void importsEveryGrowingPrefixAndThenTheRealImage() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(1);
-        Manifest manifest = manifest(3);
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest, 3);
+        runSession(adapter, manifest(LAYERS), LAYERS);
 
-        assertEquals(List.of(1, 2, 3), adapter.manifestLayerCounts(),
-                "the engine is offered 1, then 2, then all 3 layers");
-        assertEquals(IMAGE_NAME, adapter.importedNames().get(2),
+        assertEquals(List.of(1, 2, LAYERS), adapter.manifestLayerCounts(), "1, then 2, then all layers");
+        assertEquals(IMAGE_NAME, adapter.importedNames().get(LAYERS - 1),
                 "containerd keeps the ref.name annotation, so the image name is left untouched");
     }
 
@@ -66,57 +62,44 @@ class ContainerdPrefixImportTest {
      */
     @Test
     void everyLayerBlobIsStreamedExactlyOnce() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(1);
-        Manifest manifest = manifest(4);
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest, 4);
+        runSession(adapter, manifest(LAYERS), LAYERS);
 
-        assertEquals(List.of(1, 1, 1, 1), adapter.blobsPerImport(),
+        assertEquals(List.of(1, 1, 1), adapter.blobsPerImport(),
                 "each import carries only the layer it adds, never the prefix under it");
-        assertEquals(4, adapter.distinctLayerBlobsStreamed(), "and every layer is streamed once overall");
-    }
-
-    @Test
-    void strideGroupsLayersInsteadOfImportingEachOne() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(2);
-        Manifest manifest = manifest(5);
-
-        runSession(adapter, manifest, 5);
-
-        assertEquals(List.of(2, 4, 5), adapter.manifestLayerCounts(), "stride 2 hands over {L0,L1}, {L0..L3}, all");
-        assertEquals(List.of(2, 2, 1), adapter.blobsPerImport(), "carrying two, two and the last one");
+        assertEquals(LAYERS, adapter.distinctLayerBlobsStreamed(), "and every layer is streamed once overall");
     }
 
     @Test
     void everyPrefixCarriesAConfigCutToItsOwnLength() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(1);
-        Manifest manifest = manifest(3);
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest, 3);
+        runSession(adapter, manifest(LAYERS), LAYERS);
 
-        assertEquals(List.of(1, 2, 3), adapter.diffIdCounts(),
+        assertEquals(List.of(1, 2, LAYERS), adapter.diffIdCounts(),
                 "a config whose diff_ids outnumber the layers would be rejected");
     }
 
     @Test
     void dropsIntermediateImagesOnceTheRealOneIsIn() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(1);
-        Manifest manifest = manifest(3);
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest, 3);
+        runSession(adapter, manifest(LAYERS), LAYERS);
 
-        assertEquals(adapter.importedNames().subList(0, 2), adapter.removedImages(),
+        assertEquals(adapter.importedNames().subList(0, LAYERS - 1), adapter.removedImages(),
                 "exactly the intermediate images are dropped");
     }
 
     @Test
     void abortedSessionPublishesNoImage() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(1);
-        Manifest manifest = manifest(3);
-        Path blobs = layoutWithBlobs(manifest);
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
+        Manifest manifest = manifest(LAYERS);
+        Path blobs = layoutWithBlobs(workDir, manifest);
 
         try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
-            session.importLayer(manifest.layers().get(0), blobs.resolve(digestHex(0)));
+            session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
+            session.importLayer(manifest.layers().get(0), blobs.resolve(layerDigestHex(0)));
         }
 
         assertFalse(adapter.importedNames().contains(IMAGE_NAME), "half an image must never be published");
@@ -125,104 +108,47 @@ class ContainerdPrefixImportTest {
 
     @Test
     void rejectsLayersOfferedOutOfManifestOrder() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(1);
-        Manifest manifest = manifest(3);
-        Path blobs = layoutWithBlobs(manifest);
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
+        Manifest manifest = manifest(LAYERS);
+        Path blobs = layoutWithBlobs(workDir, manifest);
 
         try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+            session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             assertThrows(IOException.class,
-                    () -> session.importLayer(manifest.layers().get(1), blobs.resolve(digestHex(1))));
+                    () -> session.importLayer(manifest.layers().get(1), blobs.resolve(layerDigestHex(1))));
         }
     }
 
     @Test
     void finishBeforeTheLastLayerFails() throws Exception {
-        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(1);
-        Manifest manifest = manifest(3);
-        Path blobs = layoutWithBlobs(manifest);
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
+        Manifest manifest = manifest(LAYERS);
+        Path blobs = layoutWithBlobs(workDir, manifest);
 
         try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
-            session.importLayer(manifest.layers().get(0), blobs.resolve(digestHex(0)));
+            session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
+            session.importLayer(manifest.layers().get(0), blobs.resolve(layerDigestHex(0)));
             assertThrows(IOException.class, session::finish);
         }
     }
 
     @Test
     void onByDefaultButDeclinedWhenThereIsNoPrefixToSplitOff() {
-        Manifest threeLayers = manifest(3);
-
-        assertTrue(new ContainerdRuntimeAdapter().supportsIncrementalImport(threeLayers),
-                "stride 1 is the production default");
-        assertFalse(new RecordingContainerdAdapter(0).supportsIncrementalImport(threeLayers), "0 turns it off");
-        assertFalse(new RecordingContainerdAdapter(3).supportsIncrementalImport(threeLayers),
-                "a stride as long as the image leaves nothing to overlap");
+        assertTrue(new ContainerdRuntimeAdapter().supportsIncrementalImport(manifest(LAYERS)), "on by default");
+        assertFalse(new RecordingContainerdAdapter(false).supportsIncrementalImport(manifest(LAYERS)), "switched off");
+        assertFalse(new RecordingContainerdAdapter(true).supportsIncrementalImport(manifest(1)),
+                "a one-layer image has no prefix to overlap with");
     }
 
     private void runSession(RecordingContainerdAdapter adapter, Manifest manifest, int layers) throws Exception {
-        Path blobs = layoutWithBlobs(manifest);
+        Path blobs = layoutWithBlobs(workDir, manifest);
         try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+            session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             for (int i = 0; i < layers; i++) {
-                session.importLayer(manifest.layers().get(i), blobs.resolve(digestHex(i)));
+                session.importLayer(manifest.layers().get(i), blobs.resolve(layerDigestHex(i)));
             }
             session.finish();
         }
-    }
-
-    /**
-     * An OCI layout holding the layer blobs and the image config, as RIID fills it
-     * in.
-     */
-    private Path layoutWithBlobs(Manifest manifest) throws IOException {
-        Path blobs = Files.createDirectories(workDir.resolve("oci").resolve("blobs").resolve("sha256"));
-        for (int i = 0; i < manifest.layers().size(); i++) {
-            Files.writeString(blobs.resolve(digestHex(i)), "layer-" + i);
-        }
-        Files.write(blobs.resolve(hex(manifest.config().digest())), configJson(manifest.layers().size()));
-        return blobs;
-    }
-
-    private static Manifest manifest(int layerCount) {
-        List<Descriptor> layers = new ArrayList<>(layerCount);
-        for (int i = 0; i < layerCount; i++) {
-            layers.add(new Descriptor(LAYER_MEDIA_TYPE, SHA256 + digestHex(i), 8));
-        }
-        byte[] config = configJson(layerCount);
-        // content-addressed like the real thing: the layout stores the config under
-        // the hash of its bytes, so a made-up digest would simply not be found
-        return new Manifest(2, MANIFEST_MEDIA_TYPE,
-                new Descriptor(CONFIG_MEDIA_TYPE, SHA256 + sha256Hex(config), config.length), layers);
-    }
-
-    private static byte[] configJson(int layerCount) {
-        try {
-            var root = OBJECT_MAPPER.createObjectNode();
-            var rootfs = root.putObject("rootfs");
-            rootfs.put("type", "layers");
-            var diffIds = rootfs.putArray("diff_ids");
-            for (int i = 0; i < layerCount; i++) {
-                diffIds.add(SHA256 + "d".repeat(63) + i);
-            }
-            root.putArray("history").addObject().put("created_by", "test");
-            return OBJECT_MAPPER.writeValueAsBytes(root);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static String sha256Hex(byte[] content) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static String digestHex(int index) {
-        return Integer.toHexString(index + 10).repeat(64).substring(0, 64);
-    }
-
-    private static String hex(String digest) {
-        return digest.substring(SHA256.length());
     }
 
     /**
@@ -237,8 +163,8 @@ class ContainerdPrefixImportTest {
         private final List<String> streamedBlobs = new CopyOnWriteArrayList<>();
         private final List<String> removed = new CopyOnWriteArrayList<>();
 
-        private RecordingContainerdAdapter(int stride) {
-            super(CTR_BIN, null, null, null, stride);
+        private RecordingContainerdAdapter(boolean prefixImport) {
+            super(CTR_BIN, null, null, null, prefixImport);
         }
 
         private List<String> importedNames() {
@@ -293,7 +219,7 @@ class ContainerdPrefixImportTest {
         @Override
         protected ShellResult runCommand(List<String> command) {
             if (command.contains("rm")) {
-                removed.addAll(command.subList(command.indexOf("rm") + 1, command.size()));
+                removed.addAll(new ArrayList<>(command.subList(command.indexOf("rm") + 1, command.size())));
             }
             return new ShellResult(0, "", "");
         }

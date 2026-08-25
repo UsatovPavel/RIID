@@ -19,6 +19,7 @@ import riid.app.core.error.AppException;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.app.ociarchive.OciArchiveBuilder;
+import riid.core.model.manifest.Descriptor;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.TempFileCacheAdapter;
 import riid.client.api.ManifestResult;
@@ -202,7 +203,17 @@ public final class ImageLoadingFacade implements AutoCloseable {
             throws IOException, InterruptedException {
         try (IncrementalImageImport session = runtime.beginIncrementalImport(imageId.referenceName(),
                 manifestResult.manifest())) {
-            archiveBuilder.streamLayers(imageId, manifestResult, session::importLayer);
+            archiveBuilder.streamLayers(imageId, manifestResult, new OciArchiveBuilder.LayerSink() {
+                @Override
+                public void onImageConfig(Path configBlob) throws IOException, InterruptedException {
+                    session.imageConfig(configBlob);
+                }
+
+                @Override
+                public void onLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException {
+                    session.importLayer(layer, blobPath);
+                }
+            });
             session.finish();
         }
     }
@@ -263,13 +274,13 @@ public final class ImageLoadingFacade implements AutoCloseable {
 
         Map<RuntimeId, RuntimeAdapter> runtimes = new HashMap<>();
         RuntimeConfig runtimeConfig = config.runtime();
-        int prefixImportStride = runtimeConfig == null
-                ? RuntimeConfig.DEFAULT_PREFIX_IMPORT_STRIDE
-                : runtimeConfig.prefixImportStrideOrDefault();
-        registerRuntime(runtimes, new PodmanRuntimeAdapter(prefixImportStride));
+        boolean prefixImport = runtimeConfig == null
+                ? RuntimeConfig.DEFAULT_PREFIX_IMPORT
+                : runtimeConfig.prefixImportOrDefault();
+        registerRuntime(runtimes, new PodmanRuntimeAdapter(prefixImport));
         registerRuntime(runtimes, new PortoRuntimeAdapter());
         registerRuntime(runtimes,
-                new ContainerdRuntimeAdapter(ContainerdRuntimeAdapter.CTR_BIN, null, null, null, prefixImportStride));
+                new ContainerdRuntimeAdapter(ContainerdRuntimeAdapter.CTR_BIN, null, null, null, prefixImport));
         String dockerCmd = runtimeConfig != null
                 ? runtimeConfig.dockerCmdOrDefault()
                 : RuntimeConfig.DEFAULT_DOCKER_BIN;

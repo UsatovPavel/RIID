@@ -24,6 +24,14 @@ import riid.core.model.manifest.Descriptor;
 public interface IncrementalImageImport extends AutoCloseable {
 
     /**
+     * Hands over the image config blob, once, before the first layer. An engine
+     * that has to describe a partial image needs it; Porto ignores it.
+     */
+    default void imageConfig(Path configBlob) throws IOException, InterruptedException {
+        // nothing to do for a runtime that imports layers without a config
+    }
+
+    /**
      * Imports a single layer blob.
      *
      * @param layer

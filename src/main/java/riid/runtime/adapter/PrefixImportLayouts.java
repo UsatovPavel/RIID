@@ -5,20 +5,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 
@@ -52,12 +51,9 @@ final class PrefixImportLayouts implements AutoCloseable {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String SHA256 = "sha256:";
     private static final String OCI_IMAGE_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
-    /**
-     * Config blobs are kilobytes and pulled alongside the layers; this is a safety
-     * net, not a wait.
-     */
-    private static final long CONFIG_WAIT_TIMEOUT_MS = 60_000;
-    private static final long CONFIG_POLL_MS = 10;
+    /** {@code <layout>/blobs/sha256} -> layout root. */
+    private static final int BLOBS_DIR_DEPTH = 3;
+    private static final HostFilesystem FS = new NioHostFilesystem();
 
     private final String reference;
     private final Manifest manifest;
@@ -77,7 +73,7 @@ final class PrefixImportLayouts implements AutoCloseable {
      * next, and puts it where the layouts can still reach it once the download
      * directory is gone.
      */
-    void takeLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException {
+    void takeLayer(Descriptor layer, Path blobPath) throws IOException {
         Objects.requireNonNull(layer, "layer");
         Objects.requireNonNull(blobPath, "blobPath");
         if (delivered >= manifest.layers().size()) {
@@ -132,13 +128,8 @@ final class PrefixImportLayouts implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
-        if (workRoot == null || !Files.exists(workRoot)) {
-            return;
-        }
-        try (var paths = Files.walk(workRoot)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
+        if (workRoot != null) {
+            FS.deleteRecursively(workRoot);
         }
     }
 
@@ -149,15 +140,16 @@ final class PrefixImportLayouts implements AutoCloseable {
         }
     }
 
+    /**
+     * The image config with {@code rootfs.diff_ids} cut to {@code count}: an engine
+     * rejects a config that claims more layers than the manifest hands it. Every
+     * other field is left as the registry wrote it, so the prefix stays a valid
+     * image.
+     */
     private byte[] configCutTo(int count) throws IOException {
-        JsonNode config = OBJECT_MAPPER.readTree(configBytes);
-        if (!(config instanceof ObjectNode configObject)) {
-            throw new IOException("Image config of " + reference + " is not a JSON object");
-        }
-        if (!(configObject.get("rootfs") instanceof ObjectNode rootfs)
-                || !(rootfs.get("diff_ids") instanceof ArrayNode diffIds)) {
-            throw new IOException("Image config of " + reference + " has no rootfs.diff_ids");
-        }
+        ObjectNode config = OBJECT_MAPPER.readValue(configBytes, ObjectNode.class);
+        ObjectNode rootfs = (ObjectNode) config.required("rootfs");
+        ArrayNode diffIds = (ArrayNode) rootfs.required("diff_ids");
         if (diffIds.size() < count) {
             throw new IOException("Image config of " + reference + " declares " + diffIds.size()
                     + " diff_ids, fewer than the " + count + " layers imported");
@@ -167,13 +159,17 @@ final class PrefixImportLayouts implements AutoCloseable {
             kept.add(diffIds.get(i));
         }
         rootfs.set("diff_ids", kept);
-        // history describes the whole image and is not worth truncating consistently;
-        // the intermediate images are thrown away once the real one is in.
-        configObject.remove("history");
-        return OBJECT_MAPPER.writeValueAsBytes(configObject);
+        // history describes the whole image; the prefixes are thrown away anyway
+        config.remove("history");
+        return OBJECT_MAPPER.writeValueAsBytes(config);
     }
 
-    private void openStore(Path blobPath) throws IOException, InterruptedException {
+    /** Copies the config out while the layout that holds it still exists. */
+    void takeImageConfig(Path configBlob) throws IOException {
+        configBytes = Files.readAllBytes(configBlob);
+    }
+
+    private void openStore(Path blobPath) throws IOException {
         if (blobsDir != null) {
             return;
         }
@@ -181,10 +177,12 @@ final class PrefixImportLayouts implements AutoCloseable {
         if (parent == null) {
             throw new IOException("Layer blob has no directory: " + blobPath);
         }
+        if (configBytes == null) {
+            throw new IOException("Image config of " + reference + " was not handed over before its layers");
+        }
         blobsDir = parent;
         workRoot = Files.createTempDirectory(outsideLayout(parent), "riid-prefix-");
         store = Files.createDirectories(workRoot.resolve("blobs"));
-        configBytes = awaitConfigBlob();
     }
 
     /**
@@ -193,27 +191,10 @@ final class PrefixImportLayouts implements AutoCloseable {
      */
     private static Path outsideLayout(Path layoutBlobs) {
         Path path = layoutBlobs;
-        for (int up = 0; up < 3 && path.getParent() != null; up++) {
+        for (int up = 0; up < BLOBS_DIR_DEPTH && path.getParent() != null; up++) {
             path = path.getParent();
         }
         return path;
-    }
-
-    /**
-     * The config blob is pulled together with the layers, so by the time a layer
-     * lands it is normally already there; this only covers the reverse order.
-     */
-    private byte[] awaitConfigBlob() throws IOException, InterruptedException {
-        Path config = blobsDir.resolve(digestHex(manifest.config().digest()));
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CONFIG_WAIT_TIMEOUT_MS);
-        while (!Files.isRegularFile(config) || Files.size(config) < manifest.config().size()) {
-            if (System.nanoTime() > deadline) {
-                throw new IOException("Image config " + manifest.config().digest() + " of " + reference
-                        + " did not arrive within " + CONFIG_WAIT_TIMEOUT_MS + " ms");
-            }
-            TimeUnit.MILLISECONDS.sleep(CONFIG_POLL_MS);
-        }
-        return Files.readAllBytes(config);
     }
 
     private Path layoutDir(String name) throws IOException {

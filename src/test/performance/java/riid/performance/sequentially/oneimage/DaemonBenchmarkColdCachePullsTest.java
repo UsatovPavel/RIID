@@ -43,7 +43,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("filesystem")
 class DaemonBenchmarkColdCachePullsTest {
 
-    private static final int HALVES = 2;
     private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";
     private static final String RUNTIME = "podman";
     /**
@@ -136,11 +135,12 @@ class DaemonBenchmarkColdCachePullsTest {
     private static long median(List<Long> values) {
         List<Long> sorted = new ArrayList<>(values);
         Collections.sort(sorted);
-        int n = sorted.size();
-        if (n % HALVES != 0) {
-            return sorted.get(n / HALVES);
+        int middle = sorted.size() / 2;
+        boolean oddCount = sorted.size() % 2 != 0;
+        if (oddCount) {
+            return sorted.get(middle);
         }
-        return (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
+        return (sorted.get(middle - 1) + sorted.get(middle)) / 2;
     }
 
     private static void runOrFail(String... command) throws Exception {
