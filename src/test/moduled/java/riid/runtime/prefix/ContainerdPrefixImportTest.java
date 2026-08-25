@@ -83,6 +83,19 @@ class ContainerdPrefixImportTest {
                 "a config whose diff_ids outnumber the layers would be rejected");
     }
 
+    /**
+     * Only an intermediate prefix may skip unpacking, so the last import has to be
+     * told apart from the ones before it.
+     */
+    @Test
+    void onlyTheIntermediatePrefixesAreOfferedAsPrefixSteps() throws Exception {
+        RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
+
+        runSession(adapter, manifest(LAYERS_COUNT), LAYERS_COUNT);
+
+        assertEquals(List.of(true, true, false), adapter.prefixStepFlags(), "the published image is not a prefix step");
+    }
+
     @Test
     void dropsIntermediateImagesOnceTheRealOneIsIn() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
@@ -165,6 +178,7 @@ class ContainerdPrefixImportTest {
         private final List<Integer> blobs = new CopyOnWriteArrayList<>();
         private final List<String> streamedBlobs = new CopyOnWriteArrayList<>();
         private final List<String> removed = new CopyOnWriteArrayList<>();
+        private final List<Boolean> prefixSteps = new CopyOnWriteArrayList<>();
 
         private RecordingContainerdAdapter(boolean prefixImport) {
             super(prefixImport);
@@ -195,8 +209,14 @@ class ContainerdPrefixImportTest {
             return removed;
         }
 
+        /** Which imports were offered as intermediate prefixes. */
+        private List<Boolean> prefixStepFlags() {
+            return prefixSteps;
+        }
+
         @Override
-        public void importOciLayoutDirectory(Path layout) throws IOException {
+        protected void importOciLayoutDirectory(Path layout, boolean prefixStep) throws IOException {
+            prefixSteps.add(prefixStep);
             JsonNode index = OBJECT_MAPPER.readTree(layout.resolve(OciLayout.INDEX_JSON).toFile());
             JsonNode descriptor = index.get(OciLayout.MANIFESTS).get(0);
             imported.add(descriptor.get(OciLayout.ANNOTATIONS).get(OciLayout.REF_NAME_ANNOTATION).asText());

@@ -54,12 +54,35 @@ app:
 runtime:
   dockerCmd: "/usr/bin/docker" 
   maxTasksCommandExecutor: 16  
+  prefixImport: true
+  containerdSnapshotter: "overlayfs"
+  containerdDiscardUnpackedLayers: false
+  containerdPrefixNoUnpack: false
   output:
     maxStdoutBytes: 32768
     maxStderrBytes: 32768
     captureStdout: true
     captureStderr: false
 ```
+
+#### containerd import switches
+All three are off by default, so the emitted `ctr images import` is unchanged unless
+you set them. Measurements behind the defaults: `zOptimization/Plan/PlanEngineSideOptimizations.md` §6.
+
+- `containerdSnapshotter` — value for `ctr images import --snapshotter`. Left unset,
+  `ctr` uses the host-configured default. A non-default snapshotter also forces
+  `--local`, because only the default one has an unpack platform in the transfer
+  service. On the reference stand `native` cost +85% time and 4x the disk of
+  `overlayfs`, so switching away from the default is rarely worth it.
+- `containerdDiscardUnpackedLayers` — lets the GC drop layer blobs from the content
+  store once they are unpacked, since RIID Cache already holds them. Measured
+  -27% total store (content store 390 MiB -> 76 KiB) at no cost in time. Implies
+  `--local`, which `ctr` requires for this flag. **Price:** `ctr images export` and
+  pushing that image stop working, the blobs being gone.
+- `containerdPrefixNoUnpack` — skips unpacking for the intermediate prefixes of a
+  prefix import. Off deliberately: it moves the unpack work out of the window that
+  overlaps the download and into the final import, growing the non-overlapped tail
+  from 0.7 s to 11.6 s for no gain in total time.
 
 ### Optional P2P Dragonfly section
 ```yaml
@@ -109,6 +132,7 @@ p2p:
 - `app.daemon`: if present, `unixSocketPath` (if set) non-blank and &lt; 108 bytes; `metricsHost` (if set) non-blank; `metricsPort` (if set) in 1..65535; `maxConcurrentPulls` (if set) &gt; 0; `requestTimeout` (if set) positive; `overloadPolicy` (if set) only `REJECT`.
 - `runtime.dockerCmd`, if present, must not be blank.
 - `runtime.maxTasksCommandExecutor`, if present, must be > 0.
+- `runtime.containerdSnapshotter`, if present, must not be blank.
 - `runtime.output.maxStdoutBytes`/`runtime.output.maxStderrBytes` must be > 0 when capture is enabled.
 - `p2p.dragonfly.dfdaemonAddr` must not be blank when enabled; `schedulerAddr` must not be blank when set; `maxRetries` must be >= 0; `requestTimeout` must be positive when set.
 

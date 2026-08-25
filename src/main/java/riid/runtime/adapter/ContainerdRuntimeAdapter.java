@@ -28,6 +28,7 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     private static final int MAX_PROC_STDERR = 64 * 1024;
     private static final String IMAGES = "images";
     private static final String IMPORT = "import";
+    private static final String LOCAL = "--local";
     private static final String PREFIX_REPOSITORY = "riid-prefix-";
 
     /** Path/name of the {@code ctr} binary, for non-default installs. */
@@ -42,16 +43,23 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
      * ({@code /run/containerd/containerd.sock}).
      */
     private final String address;
-    /**
-     * {@code --snapshotter}: snapshotter backend; null uses {@code ctr}'s own
-     * default (host-configured).
-     */
-    private final String snapshotter;
+    /** Extra {@code ctr images import} switches; all off unless configured. */
+    private final ImportOptions options;
     /**
      * Hand containerd each layer as it lands, instead of the whole image at the
      * end.
      */
     private final boolean prefixImport;
+
+    /**
+     * Optional {@code ctr images import} switches. {@code snapshotter} null means
+     * {@code ctr}'s own default (host-configured).
+     */
+    public record ImportOptions(String snapshotter, boolean discardUnpackedLayers, boolean prefixNoUnpack) {
+        public static ImportOptions defaults() {
+            return new ImportOptions(null, false, false);
+        }
+    }
 
     public ContainerdRuntimeAdapter() {
         this(PREFIX_IMPORT_ENABLED_BY_DEFAULT);
@@ -63,19 +71,20 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
      *            at the end
      */
     public ContainerdRuntimeAdapter(boolean prefixImport) {
-        this(CTR_BIN, null, null, null, prefixImport);
+        this(CTR_BIN, null, null, ImportOptions.defaults(), prefixImport);
     }
 
     public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, String snapshotter) {
-        this(ctrCmd, namespace, address, snapshotter, PREFIX_IMPORT_ENABLED_BY_DEFAULT);
+        this(ctrCmd, namespace, address, new ImportOptions(snapshotter, false, false),
+                PREFIX_IMPORT_ENABLED_BY_DEFAULT);
     }
 
-    public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, String snapshotter,
+    public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, ImportOptions options,
             boolean prefixImport) {
         this.ctrCmd = ctrCmd == null || ctrCmd.isBlank() ? CTR_BIN : ctrCmd;
         this.namespace = namespace;
         this.address = address;
-        this.snapshotter = snapshotter;
+        this.options = options == null ? ImportOptions.defaults() : options;
         this.prefixImport = prefixImport;
     }
 
@@ -117,6 +126,16 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
      */
     @Override
     public void importOciLayoutDirectory(Path ociLayoutRoot) throws IOException, InterruptedException {
+        importOciLayoutDirectory(ociLayoutRoot, false);
+    }
+
+    /**
+     * @param prefixStep
+     *            an intermediate prefix import, the only one allowed to skip
+     *            unpacking
+     */
+    protected void importOciLayoutDirectory(Path ociLayoutRoot, boolean prefixStep)
+            throws IOException, InterruptedException {
         Objects.requireNonNull(ociLayoutRoot, "ociLayoutRoot");
         Path root = ociLayoutRoot.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
@@ -124,7 +143,7 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
         }
 
         List<String> tarCmd = List.of("tar", "-cf", "-", "-C", root.toString(), ".");
-        List<String> importCmd = importCommand();
+        List<String> importCmd = importCommand(prefixStep);
         importCmd.add("-");
         BoundedCommandExecution.PipedShellResult result = BoundedCommandExecution.runWithStdoutPipedToStdin(tarCmd,
                 importCmd, MAX_PROC_STDERR, this::startProcess);
@@ -185,7 +204,8 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
             int count = layouts.layersTaken();
             if (count < layouts.layersExpected()) {
                 String image = PREFIX_REPOSITORY + sessionId + ":" + count;
-                importLayout(layouts.prefixLayout(count, image, PrefixImportLayouts.LayerScope.ADDED_ONLY, sentLayers));
+                importLayout(layouts.prefixLayout(count, image, PrefixImportLayouts.LayerScope.ADDED_ONLY, sentLayers),
+                        true);
                 sentLayers = count;
                 prefixImages.add(image);
                 LOGGER.info("Prefix of {} layers handed to containerd as {}", count, image);
@@ -198,7 +218,8 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
                 throw new IOException("Prefix import of " + reference + " finished with " + layouts.layersTaken()
                         + " of " + layouts.layersExpected() + " layers");
             }
-            importLayout(layouts.fullLayout(reference.name(), PrefixImportLayouts.LayerScope.ADDED_ONLY, sentLayers));
+            importLayout(layouts.fullLayout(reference.name(), PrefixImportLayouts.LayerScope.ADDED_ONLY, sentLayers),
+                    false);
             finished = true;
             dropPrefixImages();
         }
@@ -213,8 +234,8 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
             layouts.close();
         }
 
-        private void importLayout(Path layout) throws IOException, InterruptedException {
-            importOciLayoutDirectory(layout);
+        private void importLayout(Path layout, boolean prefixStep) throws IOException, InterruptedException {
+            importOciLayoutDirectory(layout, prefixStep);
         }
 
         private void dropPrefixImages() throws IOException, InterruptedException {
@@ -243,10 +264,31 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     }
 
     private List<String> importCommand() {
+        return importCommand(false);
+    }
+
+    /**
+     * @param prefixStep
+     *            an intermediate prefix import, the only one allowed to skip
+     *            unpacking
+     */
+    private List<String> importCommand(boolean prefixStep) {
         List<String> cmd = imagesCommand(IMPORT);
+        String snapshotter = options.snapshotter();
         if (snapshotter != null && !snapshotter.isBlank()) {
             cmd.add("--snapshotter");
             cmd.add(snapshotter);
+        }
+        // ctr refuses --no-unpack together with --discard-unpacked-layers, so the
+        // two are chosen here rather than combined: a prefix that is not unpacked
+        // has nothing to discard, and the final import always unpacks.
+        if (prefixStep && options.prefixNoUnpack()) {
+            cmd.add("--no-unpack");
+        } else if (options.discardUnpackedLayers()) {
+            // ctr 2.2 rejects the flag on its own: discarding is only implemented by
+            // the local importer, not by the transfer service the import defaults to.
+            cmd.add(LOCAL);
+            cmd.add("--discard-unpacked-layers");
         }
         return cmd;
     }
