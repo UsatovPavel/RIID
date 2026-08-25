@@ -3,6 +3,7 @@ package riid.runtime;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import riid.runtime.adapter.RuntimeAdapter;
+import riid.runtime.adapter.RuntimeId;
 
 /**
  * Runtime module configuration.
@@ -10,7 +11,7 @@ import riid.runtime.adapter.RuntimeAdapter;
 public record RuntimeConfig(@JsonProperty("output") OutputConfig output, @JsonProperty("dockerCmd") String dockerCmd,
         @JsonProperty("maxTasksCommandExecutor") Integer maxTasksCommandExecutor,
         @JsonProperty("prefixImport") Boolean prefixImport) {
-    public static final String DEFAULT_DOCKER_BIN = "docker";
+    public static final String DEFAULT_DOCKER_BIN = RuntimeId.DOCKER.bin();
     /** @see RuntimeAdapter#PREFIX_IMPORT_ENABLED_BY_DEFAULT */
     public static final boolean DEFAULT_PREFIX_IMPORT = RuntimeAdapter.PREFIX_IMPORT_ENABLED_BY_DEFAULT;
 

@@ -18,7 +18,9 @@ import org.junit.jupiter.api.Test;
 
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.TestManifests;
 import riid.runtime.BoundedCommandExecution.ShellResult;
+import riid.runtime.adapter.ImageReference;
 import riid.runtime.adapter.IncrementalImageImport;
 import riid.runtime.adapter.PortoRuntimeAdapter;
 
@@ -30,9 +32,7 @@ import riid.runtime.adapter.PortoRuntimeAdapter;
 @Tag("filesystem")
 class PortoPrefixImportTest {
 
-    private static final String LAYER_MEDIA_TYPE = "application/vnd.oci.image.layer.v1.tar+gzip";
-    private static final String CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json";
-    private static final String IMAGE_NAME = "library/alpine:edge";
+    private static final ImageReference IMAGE = new ImageReference("library/alpine", "edge");
     private static final String SANITIZED_IMAGE_NAME = "library_alpine:edge";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -42,7 +42,7 @@ class PortoPrefixImportTest {
         Manifest manifest = manifest(2);
 
         assertTrue(adapter.supportsIncrementalImport(manifest));
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.importLayer(manifest.layers().get(0), blobPath(0));
             assertTrue(adapter.markerImports().isEmpty(), "image must not exist in Porto before its last layer");
             session.importLayer(manifest.layers().get(1), blobPath(1));
@@ -64,7 +64,7 @@ class PortoPrefixImportTest {
         RecordingPortoAdapter adapter = new RecordingPortoAdapter();
         adapter.pretendPortoHas(layerName(0));
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.importLayer(manifest.layers().get(0), blobPath(0));
             session.importLayer(manifest.layers().get(1), blobPath(1));
             session.finish();
@@ -81,7 +81,7 @@ class PortoPrefixImportTest {
         RecordingPortoAdapter adapter = new RecordingPortoAdapter();
         Manifest manifest = manifest(2);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             assertThrows(IOException.class, () -> session.importLayer(manifest.layers().get(1), blobPath(1)));
         }
     }
@@ -91,7 +91,7 @@ class PortoPrefixImportTest {
         RecordingPortoAdapter adapter = new RecordingPortoAdapter();
         Manifest manifest = manifest(2);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.importLayer(manifest.layers().get(0), blobPath(0));
         }
 
@@ -103,7 +103,7 @@ class PortoPrefixImportTest {
         RecordingPortoAdapter adapter = new RecordingPortoAdapter();
         Manifest manifest = manifest(2);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.importLayer(manifest.layers().get(0), blobPath(0));
             assertThrows(IOException.class, session::finish);
         }
@@ -144,10 +144,9 @@ class PortoPrefixImportTest {
     private static Manifest manifest(int layerCount) {
         List<Descriptor> layers = new ArrayList<>(layerCount);
         for (int i = 0; i < layerCount; i++) {
-            layers.add(new Descriptor(LAYER_MEDIA_TYPE, "sha256:" + digestHex(i), 3));
+            layers.add(TestManifests.gzipLayer(TestManifests.SHA256 + digestHex(i), 3));
         }
-        Descriptor config = new Descriptor(CONFIG_MEDIA_TYPE, "sha256:" + "f".repeat(64), 3);
-        return new Manifest(2, "application/vnd.oci.image.manifest.v1+json", config, layers);
+        return TestManifests.manifest(TestManifests.config(TestManifests.digest('f'), 3), layers);
     }
 
     /** Records {@code portoctl} invocations instead of running them. */

@@ -25,7 +25,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.OciLayout;
 import riid.runtime.BoundedCommandExecution.ShellResult;
+import riid.runtime.adapter.ImageReference;
 import riid.runtime.adapter.IncrementalImageImport;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 
@@ -37,9 +39,9 @@ import riid.runtime.adapter.PodmanRuntimeAdapter;
 @Tag("filesystem")
 class PodmanPrefixImportTest {
 
-    private static final String IMAGE_NAME = "library/python:latest";
+    private static final ImageReference IMAGE = new ImageReference("library/python", "latest");
     private static final String LOCAL_IMAGE_NAME = "localhost/library/python:latest";
-    private static final int LAYERS = 3;
+    private static final int LAYERS_COUNT = 3;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @TempDir
@@ -48,16 +50,16 @@ class PodmanPrefixImportTest {
     @Test
     void importsEveryGrowingPrefixAndThenTheRealImage() throws Exception {
         RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
 
         assertTrue(adapter.supportsIncrementalImport(manifest));
-        runSession(adapter, manifest, LAYERS);
+        runSession(adapter, manifest, LAYERS_COUNT);
 
         List<String> pulled = adapter.pulledImages();
-        assertEquals(LAYERS, pulled.size(), "two prefixes plus the real image");
+        assertEquals(LAYERS_COUNT, pulled.size(), "two prefixes plus the real image");
         assertTrue(pulled.get(0).endsWith(":1") && pulled.get(1).endsWith(":2"),
                 "prefixes grow one layer at a time: " + pulled);
-        assertEquals(LOCAL_IMAGE_NAME, pulled.get(LAYERS - 1),
+        assertEquals(LOCAL_IMAGE_NAME, pulled.get(LAYERS_COUNT - 1),
                 "the real image must be named exactly as a plain podman load names it");
     }
 
@@ -69,38 +71,38 @@ class PodmanPrefixImportTest {
     void everyPrefixCarriesAConfigCutToItsOwnLength() throws Exception {
         RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
 
-        runSession(adapter, manifest(LAYERS), LAYERS);
+        runSession(adapter, manifest(LAYERS_COUNT), LAYERS_COUNT);
 
-        assertEquals(List.of(1, 2, LAYERS), adapter.manifestLayerCounts(), "1, then 2, then the whole image");
-        assertEquals(List.of(1, 2, LAYERS), adapter.diffIdCounts(), "configs must match layer for layer");
+        assertEquals(List.of(1, 2, LAYERS_COUNT), adapter.manifestLayerCounts(), "1, then 2, then the whole image");
+        assertEquals(List.of(1, 2, LAYERS_COUNT), adapter.diffIdCounts(), "configs must match layer for layer");
     }
 
     @Test
     void dropsIntermediateImagesOnceTheRealOneIsIn() throws Exception {
         RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
-            for (int i = 0; i < LAYERS; i++) {
+            for (int i = 0; i < LAYERS_COUNT; i++) {
                 session.importLayer(manifest.layers().get(i), blobs.resolve(layerDigestHex(i)));
             }
             assertTrue(adapter.removedImages().isEmpty(), "nothing may be removed while the image is incomplete");
             session.finish();
         }
 
-        assertEquals(adapter.pulledImages().subList(0, LAYERS - 1), adapter.removedImages(),
+        assertEquals(adapter.pulledImages().subList(0, LAYERS_COUNT - 1), adapter.removedImages(),
                 "exactly the intermediate images are dropped, and only after the real one is in");
     }
 
     @Test
     void abortedSessionPublishesNoImage() throws Exception {
         RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             session.importLayer(manifest.layers().get(0), blobs.resolve(layerDigestHex(0)));
         }
@@ -112,10 +114,10 @@ class PodmanPrefixImportTest {
     @Test
     void rejectsLayersOfferedOutOfManifestOrder() throws Exception {
         RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             assertThrows(IOException.class,
                     () -> session.importLayer(manifest.layers().get(1), blobs.resolve(layerDigestHex(1))));
@@ -125,10 +127,10 @@ class PodmanPrefixImportTest {
     @Test
     void finishBeforeTheLastLayerFails() throws Exception {
         RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             session.importLayer(manifest.layers().get(0), blobs.resolve(layerDigestHex(0)));
             assertThrows(IOException.class, session::finish);
@@ -139,10 +141,10 @@ class PodmanPrefixImportTest {
     @Test
     void refusesLayersBeforeTheConfigArrives() throws Exception {
         RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             assertThrows(IOException.class,
                     () -> session.importLayer(manifest.layers().get(0), blobs.resolve(layerDigestHex(0))));
         }
@@ -154,15 +156,16 @@ class PodmanPrefixImportTest {
      */
     @Test
     void onByDefaultButDeclinedWhenThereIsNoPrefixToSplitOff() {
-        assertTrue(new PodmanRuntimeAdapter().supportsIncrementalImport(manifest(LAYERS)), "on by default");
-        assertFalse(new RecordingPodmanAdapter(false).supportsIncrementalImport(manifest(LAYERS)), "switched off");
+        assertTrue(new PodmanRuntimeAdapter().supportsIncrementalImport(manifest(LAYERS_COUNT)), "on by default");
+        assertFalse(new RecordingPodmanAdapter(false).supportsIncrementalImport(manifest(LAYERS_COUNT)),
+                "switched off");
         assertFalse(new RecordingPodmanAdapter(true).supportsIncrementalImport(manifest(1)),
                 "a one-layer image has no prefix to overlap with");
     }
 
     private void runSession(RecordingPodmanAdapter adapter, Manifest manifest, int layers) throws Exception {
         Path blobs = layoutWithBlobs(workDir, manifest);
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             for (int i = 0; i < layers; i++) {
                 session.importLayer(manifest.layers().get(i), blobs.resolve(layerDigestHex(i)));
@@ -201,16 +204,18 @@ class PodmanPrefixImportTest {
         }
 
         private void recordLayout(Path layout) throws IOException {
-            JsonNode index = OBJECT_MAPPER.readTree(layout.resolve("index.json").toFile());
-            JsonNode manifest = OBJECT_MAPPER
-                    .readTree(blobOf(layout, index.get("manifests").get(0).get("digest").asText()));
-            layerCounts.add(manifest.get("layers").size());
-            diffIds.add(OBJECT_MAPPER.readTree(blobOf(layout, manifest.get("config").get("digest").asText()))
-                    .get("rootfs").get("diff_ids").size());
+            JsonNode index = OBJECT_MAPPER.readTree(layout.resolve(OciLayout.INDEX_JSON).toFile());
+            JsonNode descriptor = index.get(OciLayout.MANIFESTS).get(0);
+            JsonNode manifest = OBJECT_MAPPER.readTree(blobOf(layout, descriptor.get(OciLayout.DIGEST).asText()));
+            layerCounts.add(manifest.get(OciLayout.LAYERS).size());
+            String configDigest = manifest.get(OciLayout.CONFIG).get(OciLayout.DIGEST).asText();
+            diffIds.add(OBJECT_MAPPER.readTree(blobOf(layout, configDigest)).get(OciLayout.ROOTFS)
+                    .get(OciLayout.DIFF_IDS).size());
         }
 
         private static byte[] blobOf(Path layout, String digest) throws IOException {
-            return Files.readAllBytes(layout.resolve("blobs").resolve("sha256").resolve(hex(digest)));
+            return Files.readAllBytes(
+                    layout.resolve(OciLayout.BLOBS_DIR).resolve(OciLayout.SHA256_DIR).resolve(hex(digest)));
         }
 
         @Override

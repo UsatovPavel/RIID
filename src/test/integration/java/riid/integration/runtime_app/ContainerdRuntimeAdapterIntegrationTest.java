@@ -33,7 +33,7 @@ class ContainerdRuntimeAdapterIntegrationTest {
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final RuntimeId CONTAINERD = RuntimeId.CONTAINERD;
-    private static final String CTR = ContainerdRuntimeAdapter.CTR_BIN;
+    private static final String CTR = RuntimeId.CONTAINERD.bin();
 
     @Test
     void downloadsImageAndImportsIntoContainerd() throws Exception {

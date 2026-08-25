@@ -22,6 +22,7 @@ import riid.core.fs.TestPaths;
 import riid.client.api.ManifestResult;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.TestManifests;
 import riid.core.model.manifest.MediaType;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
@@ -84,9 +85,9 @@ class ImageLoadingFacadeErrorTest {
     }
 
     private static ManifestResult minimalManifestResult() {
-        Descriptor config = new Descriptor("application/vnd.oci.image.config.v1+json", DIGEST, 3);
-        Manifest manifest = new Manifest(2, "application/vnd.oci.image.manifest.v1+json", config, List.of());
-        return new ManifestResult(DIGEST, "application/vnd.oci.image.manifest.v1+json", 3L, manifest);
+        Descriptor config = TestManifests.config(DIGEST, 3);
+        Manifest manifest = TestManifests.manifest(config, List.of());
+        return new ManifestResult(DIGEST, TestManifests.MANIFEST_MEDIA_TYPE, 3L, manifest);
     }
 
     private static final class NoopRegistryClient implements riid.client.api.RegistryClient {

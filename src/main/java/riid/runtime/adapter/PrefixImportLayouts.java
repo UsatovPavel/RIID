@@ -20,18 +20,18 @@ import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.MediaTypes;
+import riid.core.model.manifest.OciLayout;
 
 /**
  * Builds the OCI layouts a prefix import hands to a runtime that has no
  * per-layer import command: each prefix is a complete little image made of the
  * layers that arrived so far, and the engine reuses what it already unpacked.
- *
- * <p>
- * The layout RIID downloads into is deleted as soon as the last layer lands -
- * before the import is finished - so every blob is hard linked into a directory
- * this object owns as it arrives, and the image config is read while it is
- * still there.
  */
+// The layout RIID downloads into is deleted as soon as the last layer lands -
+// before the import is finished - so every blob is hard linked into a directory
+// this object owns as it arrives, and the config is read while it is still
+// there.
 final class PrefixImportLayouts implements AutoCloseable {
 
     /** Which layer blobs a prefix layout must physically contain. */
@@ -49,8 +49,7 @@ final class PrefixImportLayouts implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PrefixImportLayouts.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String SHA256 = "sha256:";
-    private static final String OCI_IMAGE_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
+    private static final String SHA256 = OciLayout.DIGEST_PREFIX;
     /** {@code <layout>/blobs/sha256} -> layout root. */
     private static final int BLOBS_DIR_DEPTH = 3;
     private static final HostFilesystem FS = new NioHostFilesystem();
@@ -148,8 +147,8 @@ final class PrefixImportLayouts implements AutoCloseable {
      */
     private byte[] configCutTo(int count) throws IOException {
         ObjectNode config = OBJECT_MAPPER.readValue(configBytes, ObjectNode.class);
-        ObjectNode rootfs = (ObjectNode) config.required("rootfs");
-        ArrayNode diffIds = (ArrayNode) rootfs.required("diff_ids");
+        ObjectNode rootfs = (ObjectNode) config.required(OciLayout.ROOTFS);
+        ArrayNode diffIds = (ArrayNode) rootfs.required(OciLayout.DIFF_IDS);
         if (diffIds.size() < count) {
             throw new IOException("Image config of " + reference + " declares " + diffIds.size()
                     + " diff_ids, fewer than the " + count + " layers imported");
@@ -158,9 +157,9 @@ final class PrefixImportLayouts implements AutoCloseable {
         for (int i = 0; i < count; i++) {
             kept.add(diffIds.get(i));
         }
-        rootfs.set("diff_ids", kept);
+        rootfs.set(OciLayout.DIFF_IDS, kept);
         // history describes the whole image; the prefixes are thrown away anyway
-        config.remove("history");
+        config.remove(OciLayout.HISTORY);
         return OBJECT_MAPPER.writeValueAsBytes(config);
     }
 
@@ -226,17 +225,20 @@ final class PrefixImportLayouts implements AutoCloseable {
 
     private void writeLayout(Path layout, byte[] manifestBytes, String imageName) throws IOException {
         String manifestDigest = writeBlob(layout, manifestBytes);
-        Files.writeString(layout.resolve("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}");
+        Files.writeString(layout.resolve(OciLayout.MARKER_FILE), OciLayout.MARKER_CONTENT);
         String declared = manifest.mediaType();
-        String mediaType = declared == null || declared.isBlank() ? OCI_IMAGE_MANIFEST : declared;
-        Files.writeString(layout.resolve("index.json"), String.format(Locale.ROOT,
-                "{\"schemaVersion\":2,\"manifests\":[{\"mediaType\":\"%s\",\"size\":%d,\"digest\":\"sha256:%s\","
-                        + "\"annotations\":{\"org.opencontainers.image.ref.name\":\"%s\"}}]}",
-                mediaType, manifestBytes.length, manifestDigest, imageName));
+        String mediaType = declared == null || declared.isBlank() ? MediaTypes.OCI_IMAGE_MANIFEST : declared;
+        Files.writeString(layout.resolve(OciLayout.INDEX_JSON),
+                String.format(Locale.ROOT,
+                        "{\"schemaVersion\":2,\"%s\":[{\"%s\":\"%s\",\"%s\":%d,\"%s\":\"%s%s\","
+                                + "\"%s\":{\"%s\":\"%s\"}}]}",
+                        OciLayout.MANIFESTS, OciLayout.MEDIA_TYPE, mediaType, OciLayout.SIZE, manifestBytes.length,
+                        OciLayout.DIGEST, SHA256, manifestDigest, OciLayout.ANNOTATIONS, OciLayout.REF_NAME_ANNOTATION,
+                        imageName));
     }
 
     private static Path blobsOf(Path layout) {
-        return layout.resolve("blobs").resolve("sha256");
+        return layout.resolve(OciLayout.BLOBS_DIR).resolve(OciLayout.SHA256_DIR);
     }
 
     private static String digestHex(String digest) {
@@ -249,21 +251,5 @@ final class PrefixImportLayouts implements AutoCloseable {
         } catch (NoSuchAlgorithmException e) {
             throw new IOException("SHA-256 unavailable", e);
         }
-    }
-
-    /**
-     * A reference without a registry host is local to an engine that loads an
-     * archive; spelling that out keeps prefix import naming an image exactly as the
-     * ordinary path names it.
-     */
-    static String localReference(String reference) {
-        int slash = reference.indexOf('/');
-        if (slash > 0) {
-            String host = reference.substring(0, slash);
-            if (host.indexOf('.') >= 0 || host.indexOf(':') >= 0 || "localhost".equals(host)) {
-                return reference;
-            }
-        }
-        return "localhost/" + reference;
     }
 }

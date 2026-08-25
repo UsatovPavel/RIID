@@ -30,6 +30,7 @@ import riid.dispatcher.SimpleRequestDispatcher;
 import riid.p2p.P2PExecutor;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.runtime.adapter.ImageReference;
 import riid.runtime.adapter.IncrementalImageImport;
 import riid.runtime.adapter.PortoRuntimeAdapter;
 import riid.runtime.adapter.RuntimeId;
@@ -126,13 +127,14 @@ class PortoRuntimeAdapterIntegrationTest {
         SyntheticOciArchives.buildTwoLayerArchive(workDir);
         Path layoutDir = SyntheticOciArchives.layoutDir(workDir);
         Manifest manifest = readManifest(layoutDir);
-        String imageName = "riid-incremental-" + System.nanoTime();
+        ImageReference image = new ImageReference("riid-incremental-" + System.nanoTime(), null);
+        String imageName = image.name();
 
         List<String> before = listLayers();
         PortoRuntimeAdapter adapter = new PortoRuntimeAdapter();
         assertTrue(adapter.supportsIncrementalImport(manifest), "a two-layer image must take the incremental path");
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(imageName, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(image, manifest)) {
             for (Descriptor layer : manifest.layers()) {
                 session.importLayer(layer, blobPath(layoutDir, layer));
                 assertFalse(listLayers().contains(imageName), "image must not be addressable before finish()");

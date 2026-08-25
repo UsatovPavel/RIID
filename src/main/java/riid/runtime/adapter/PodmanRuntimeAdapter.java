@@ -16,16 +16,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Podman adapter (WSL2-friendly): {@code podman load -q -i path} for a file;
- * piped layout import uses {@code podman load -q} (stdin is the default input
- * per {@code podman load --help}).
- *
- * <p>
- * Optionally imports a growing prefix of the image while the tail still
- * downloads - see {@link #supportsIncrementalImport(Manifest)}.
+ * Podman adapter (WSL2-friendly): {@code podman load -q -i path} for a file, or
+ * {@code podman load -q} reading a layout from stdin. Optionally imports a
+ * growing prefix while the tail downloads, see
+ * {@link #supportsIncrementalImport(Manifest)}.
  */
 public class PodmanRuntimeAdapter implements RuntimeAdapter {
-    public static final String PODMAN_BIN = "podman";
+    private static final String PODMAN_BIN = RuntimeId.PODMAN.bin();
     private static final Logger LOGGER = LoggerFactory.getLogger(PodmanRuntimeAdapter.class);
     private static final int MAX_PROC_STDERR = 64 * 1024;
     private static final String PREFIX_REPOSITORY = "localhost/riid-prefix-";
@@ -94,27 +91,26 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
 
     /**
      * Podman has no per-layer import command, so a prefix is handed over as a whole
-     * small image built from the layers that already arrived. Nothing is
-     * re-extracted: {@code containers/storage} keys a layer by chain-id
-     * ({@code storage_dest.go:1043}) and reuses one it already holds, so every
-     * prefix costs only its new top layers and the final import costs almost
-     * nothing.
+     * small image built from the layers that already arrived.
      */
     @Override
     public boolean supportsIncrementalImport(Manifest manifest) {
         Objects.requireNonNull(manifest, "manifest");
+        // Nothing is re-extracted: containers/storage keys a layer by chain-id
+        // (storage_dest.go:1043) and reuses one it already holds, so a prefix costs
+        // only its new top layers and the final import costs almost nothing.
         return prefixImport && manifest.layers().size() > 1;
     }
 
     @Override
-    public IncrementalImageImport beginIncrementalImport(String imageName, Manifest manifest) throws IOException {
-        Objects.requireNonNull(imageName, "imageName");
+    public IncrementalImageImport beginIncrementalImport(ImageReference image, Manifest manifest) throws IOException {
+        Objects.requireNonNull(image, "image");
         Objects.requireNonNull(manifest, "manifest");
         if (!supportsIncrementalImport(manifest)) {
-            throw new IOException("Image " + imageName + " is not imported by prefix: prefixImport=" + prefixImport
-                    + ", " + manifest.layers().size() + " layers");
+            throw new IOException("Image " + image + " is not imported by prefix: prefixImport=" + prefixImport + ", "
+                    + manifest.layers().size() + " layers");
         }
-        return new PodmanIncrementalImport(imageName, manifest);
+        return new PodmanIncrementalImport(image, manifest);
     }
 
     /**
@@ -123,15 +119,15 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
      * session and dropped in {@link #finish()}.
      */
     private final class PodmanIncrementalImport implements IncrementalImageImport {
-        private final String reference;
+        private final ImageReference reference;
         private final PrefixImportLayouts layouts;
         private final List<String> prefixImages = new ArrayList<>();
         private final String sessionId = UUID.randomUUID().toString().substring(0, 8);
         private boolean finished;
 
-        private PodmanIncrementalImport(String reference, Manifest manifest) {
+        private PodmanIncrementalImport(ImageReference reference, Manifest manifest) {
             this.reference = reference;
-            this.layouts = new PrefixImportLayouts(reference, manifest);
+            this.layouts = new PrefixImportLayouts(reference.name(), manifest);
         }
 
         @Override
@@ -157,7 +153,9 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
                 throw new IOException("Prefix import of " + reference + " finished with " + layouts.layersTaken()
                         + " of " + layouts.layersExpected() + " layers");
             }
-            String image = PrefixImportLayouts.localReference(reference);
+            // podman resolves an unqualified name against Docker Hub; `podman load`
+            // qualifies it with localhost/, and prefix import must name it the same.
+            String image = reference.localName();
             pull(layouts.fullLayout(image, PrefixImportLayouts.LayerScope.ALL, 0), image);
             finished = true;
             dropPrefixImages();

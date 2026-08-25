@@ -17,15 +17,13 @@ import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 
 /**
- * containerd adapter: {@code ctr images import path} for a file; piped layout
- * import streams a tar into {@code ctr images import -} (stdin, per
- * {@code ctr images import --help}). containerd's OCI v1 importer keeps an
- * existing {@code org.opencontainers.image.ref.name} annotation untouched, so
- * RIID-built archives (see {@code OciArchiveBuilder}) do not need
- * {@code --base-name}.
+ * containerd adapter: {@code ctr images import path} for a file, or a tar
+ * streamed into {@code ctr images import -}. Its OCI v1 importer keeps an
+ * existing {@code org.opencontainers.image.ref.name} annotation, so RIID-built
+ * archives need no {@code --base-name}.
  */
 public class ContainerdRuntimeAdapter implements RuntimeAdapter {
-    public static final String CTR_BIN = "ctr";
+    private static final String CTR_BIN = RuntimeId.CONTAINERD.bin();
     private static final Logger LOGGER = LoggerFactory.getLogger(ContainerdRuntimeAdapter.class);
     private static final int MAX_PROC_STDERR = 64 * 1024;
     private static final String IMAGES = "images";
@@ -56,7 +54,16 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     private final boolean prefixImport;
 
     public ContainerdRuntimeAdapter() {
-        this(CTR_BIN, null, null, null);
+        this(PREFIX_IMPORT_ENABLED_BY_DEFAULT);
+    }
+
+    /**
+     * @param prefixImport
+     *            hand containerd each layer as it lands, instead of the whole image
+     *            at the end
+     */
+    public ContainerdRuntimeAdapter(boolean prefixImport) {
+        this(CTR_BIN, null, null, null, prefixImport);
     }
 
     public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, String snapshotter) {
@@ -125,49 +132,46 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     }
 
     /**
-     * containerd unpacks a layer into a snapshot keyed by chain-id, so a prefix
-     * already unpacked is reused rather than applied again. Unlike podman, its
-     * importer reads a tar - but it ingests only what the tar contains and never
-     * checks that every referenced blob is there
-     * ({@code core/images/archive/importer.go}), so a prefix tar carries only the
-     * layers added since the previous one and the rest is resolved from the content
-     * store. That keeps the bytes streamed linear in image size instead of
-     * quadratic.
+     * containerd unpacks a layer into a snapshot keyed by chain-id, so a prefix it
+     * already holds is reused rather than applied again.
      */
     @Override
     public boolean supportsIncrementalImport(Manifest manifest) {
         Objects.requireNonNull(manifest, "manifest");
+        // A prefix tar carries only the layers added since the previous one: the
+        // importer ingests what the tar contains and never checks that every
+        // referenced blob is there (core/images/archive/importer.go), so the rest
+        // resolves from the content store and the bytes streamed stay linear.
         return prefixImport && manifest.layers().size() > 1;
     }
 
     @Override
-    public IncrementalImageImport beginIncrementalImport(String imageName, Manifest manifest) throws IOException {
-        Objects.requireNonNull(imageName, "imageName");
+    public IncrementalImageImport beginIncrementalImport(ImageReference image, Manifest manifest) throws IOException {
+        Objects.requireNonNull(image, "image");
         Objects.requireNonNull(manifest, "manifest");
         if (!supportsIncrementalImport(manifest)) {
-            throw new IOException("Image " + imageName + " is not imported by prefix: prefixImport=" + prefixImport
-                    + ", " + manifest.layers().size() + " layers");
+            throw new IOException("Image " + image + " is not imported by prefix: prefixImport=" + prefixImport + ", "
+                    + manifest.layers().size() + " layers");
         }
-        return new ContainerdIncrementalImport(imageName, manifest);
+        return new ContainerdIncrementalImport(image, manifest);
     }
 
     /**
      * Imports {@code {L0}}, then {@code {L0,L1}}, ... as the layers land, and the
-     * real image once the last one is in. containerd keeps the
-     * {@code org.opencontainers.image.ref.name} annotation untouched, so the image
-     * ends up named exactly as the ordinary import names it.
+     * real image once the last one is in - named exactly as an ordinary import
+     * would name it, the ref.name annotation being kept.
      */
     private final class ContainerdIncrementalImport implements IncrementalImageImport {
-        private final String reference;
+        private final ImageReference reference;
         private final PrefixImportLayouts layouts;
         private final List<String> prefixImages = new ArrayList<>();
         private final String sessionId = UUID.randomUUID().toString().substring(0, 8);
         private int sentLayers;
         private boolean finished;
 
-        private ContainerdIncrementalImport(String reference, Manifest manifest) {
+        private ContainerdIncrementalImport(ImageReference reference, Manifest manifest) {
             this.reference = reference;
-            this.layouts = new PrefixImportLayouts(reference, manifest);
+            this.layouts = new PrefixImportLayouts(reference.name(), manifest);
         }
 
         @Override
@@ -194,7 +198,7 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
                 throw new IOException("Prefix import of " + reference + " finished with " + layouts.layersTaken()
                         + " of " + layouts.layersExpected() + " layers");
             }
-            importLayout(layouts.fullLayout(reference, PrefixImportLayouts.LayerScope.ADDED_ONLY, sentLayers));
+            importLayout(layouts.fullLayout(reference.name(), PrefixImportLayouts.LayerScope.ADDED_ONLY, sentLayers));
             finished = true;
             dropPrefixImages();
         }

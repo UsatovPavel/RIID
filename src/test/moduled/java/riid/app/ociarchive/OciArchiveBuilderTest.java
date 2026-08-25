@@ -23,6 +23,8 @@ import riid.core.fs.TestPaths;
 import riid.core.hash.Sha256Utils;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.OciLayout;
+import riid.core.model.manifest.TestManifests;
 import riid.core.model.manifest.MediaType;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.FetchResult;
@@ -41,18 +43,18 @@ class OciArchiveBuilderTest {
         Path layerFile = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-layer-", ".bin");
         fs.write(layerFile, new byte[]{1, 2, 3});
 
-        Descriptor config = new Descriptor("application/vnd.oci.image.config.v1+json", "sha256:" + "b".repeat(64), 3);
-        Descriptor layer = new Descriptor("application/vnd.oci.image.layer.v1.tar+gzip", "sha256:" + "c".repeat(64), 3);
-        Manifest manifest = new Manifest(2, "application/vnd.oci.image.manifest.v1+json", config, List.of(layer));
-        ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST,
-                "application/vnd.oci.image.manifest.v1+json", 0L, manifest);
+        Descriptor config = TestManifests.config(TestManifests.digest('b'), 3);
+        Descriptor layer = TestManifests.gzipLayer(TestManifests.digest('c'), 3);
+        Manifest manifest = TestManifests.manifest(config, List.of(layer));
+        ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST, TestManifests.MANIFEST_MEDIA_TYPE,
+                0L, manifest);
 
         RequestDispatcher dispatcher = new FixedLayerDispatcher(layerFile.toString());
         OciArchiveBuilder builder = new OciArchiveBuilder(dispatcher, fs, TestPaths.DEFAULT_BASE_DIR);
         ImageId imageId = ImageId.fromRegistry("registry.example", "library/app", "latest");
 
         builder.withOciLayout(imageId, manifestResult, ociDir -> {
-            byte[] indexBytes = Files.readAllBytes(ociDir.resolve("index.json"));
+            byte[] indexBytes = Files.readAllBytes(ociDir.resolve(OciLayout.INDEX_JSON));
             JsonNode index = OBJECT_MAPPER.readTree(indexBytes);
             String manifestDigest = index.get("manifests").get(0).get("digest").asText();
 

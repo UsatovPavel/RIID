@@ -26,8 +26,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.OciLayout;
 import riid.runtime.BoundedCommandExecution.ShellResult;
 import riid.runtime.adapter.ContainerdRuntimeAdapter;
+import riid.runtime.adapter.ImageReference;
 import riid.runtime.adapter.IncrementalImageImport;
 
 /**
@@ -38,8 +40,8 @@ import riid.runtime.adapter.IncrementalImageImport;
 @Tag("filesystem")
 class ContainerdPrefixImportTest {
 
-    private static final String IMAGE_NAME = "docker.io/library/python:latest";
-    private static final int LAYERS = 3;
+    private static final ImageReference IMAGE = new ImageReference("library/python", "latest");
+    private static final int LAYERS_COUNT = 3;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @TempDir
@@ -49,10 +51,10 @@ class ContainerdPrefixImportTest {
     void importsEveryGrowingPrefixAndThenTheRealImage() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest(LAYERS), LAYERS);
+        runSession(adapter, manifest(LAYERS_COUNT), LAYERS_COUNT);
 
-        assertEquals(List.of(1, 2, LAYERS), adapter.manifestLayerCounts(), "1, then 2, then all layers");
-        assertEquals(IMAGE_NAME, adapter.importedNames().get(LAYERS - 1),
+        assertEquals(List.of(1, 2, LAYERS_COUNT), adapter.manifestLayerCounts(), "1, then 2, then all layers");
+        assertEquals(IMAGE.name(), adapter.importedNames().get(LAYERS_COUNT - 1),
                 "containerd keeps the ref.name annotation, so the image name is left untouched");
     }
 
@@ -64,20 +66,20 @@ class ContainerdPrefixImportTest {
     void everyLayerBlobIsStreamedExactlyOnce() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest(LAYERS), LAYERS);
+        runSession(adapter, manifest(LAYERS_COUNT), LAYERS_COUNT);
 
         assertEquals(List.of(1, 1, 1), adapter.blobsPerImport(),
                 "each import carries only the layer it adds, never the prefix under it");
-        assertEquals(LAYERS, adapter.distinctLayerBlobsStreamed(), "and every layer is streamed once overall");
+        assertEquals(LAYERS_COUNT, adapter.distinctLayerBlobsStreamed(), "and every layer is streamed once overall");
     }
 
     @Test
     void everyPrefixCarriesAConfigCutToItsOwnLength() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest(LAYERS), LAYERS);
+        runSession(adapter, manifest(LAYERS_COUNT), LAYERS_COUNT);
 
-        assertEquals(List.of(1, 2, LAYERS), adapter.diffIdCounts(),
+        assertEquals(List.of(1, 2, LAYERS_COUNT), adapter.diffIdCounts(),
                 "a config whose diff_ids outnumber the layers would be rejected");
     }
 
@@ -85,34 +87,34 @@ class ContainerdPrefixImportTest {
     void dropsIntermediateImagesOnceTheRealOneIsIn() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
 
-        runSession(adapter, manifest(LAYERS), LAYERS);
+        runSession(adapter, manifest(LAYERS_COUNT), LAYERS_COUNT);
 
-        assertEquals(adapter.importedNames().subList(0, LAYERS - 1), adapter.removedImages(),
+        assertEquals(adapter.importedNames().subList(0, LAYERS_COUNT - 1), adapter.removedImages(),
                 "exactly the intermediate images are dropped");
     }
 
     @Test
     void abortedSessionPublishesNoImage() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             session.importLayer(manifest.layers().get(0), blobs.resolve(layerDigestHex(0)));
         }
 
-        assertFalse(adapter.importedNames().contains(IMAGE_NAME), "half an image must never be published");
+        assertFalse(adapter.importedNames().contains(IMAGE.name()), "half an image must never be published");
         assertEquals(adapter.importedNames(), adapter.removedImages(), "an aborted session cleans up after itself");
     }
 
     @Test
     void rejectsLayersOfferedOutOfManifestOrder() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             assertThrows(IOException.class,
                     () -> session.importLayer(manifest.layers().get(1), blobs.resolve(layerDigestHex(1))));
@@ -122,10 +124,10 @@ class ContainerdPrefixImportTest {
     @Test
     void finishBeforeTheLastLayerFails() throws Exception {
         RecordingContainerdAdapter adapter = new RecordingContainerdAdapter(true);
-        Manifest manifest = manifest(LAYERS);
+        Manifest manifest = manifest(LAYERS_COUNT);
         Path blobs = layoutWithBlobs(workDir, manifest);
 
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             session.importLayer(manifest.layers().get(0), blobs.resolve(layerDigestHex(0)));
             assertThrows(IOException.class, session::finish);
@@ -134,15 +136,16 @@ class ContainerdPrefixImportTest {
 
     @Test
     void onByDefaultButDeclinedWhenThereIsNoPrefixToSplitOff() {
-        assertTrue(new ContainerdRuntimeAdapter().supportsIncrementalImport(manifest(LAYERS)), "on by default");
-        assertFalse(new RecordingContainerdAdapter(false).supportsIncrementalImport(manifest(LAYERS)), "switched off");
+        assertTrue(new ContainerdRuntimeAdapter().supportsIncrementalImport(manifest(LAYERS_COUNT)), "on by default");
+        assertFalse(new RecordingContainerdAdapter(false).supportsIncrementalImport(manifest(LAYERS_COUNT)),
+                "switched off");
         assertFalse(new RecordingContainerdAdapter(true).supportsIncrementalImport(manifest(1)),
                 "a one-layer image has no prefix to overlap with");
     }
 
     private void runSession(RecordingContainerdAdapter adapter, Manifest manifest, int layers) throws Exception {
         Path blobs = layoutWithBlobs(workDir, manifest);
-        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE_NAME, manifest)) {
+        try (IncrementalImageImport session = adapter.beginIncrementalImport(IMAGE, manifest)) {
             session.imageConfig(blobs.resolve(hex(manifest.config().digest())));
             for (int i = 0; i < layers; i++) {
                 session.importLayer(manifest.layers().get(i), blobs.resolve(layerDigestHex(i)));
@@ -164,7 +167,7 @@ class ContainerdPrefixImportTest {
         private final List<String> removed = new CopyOnWriteArrayList<>();
 
         private RecordingContainerdAdapter(boolean prefixImport) {
-            super(CTR_BIN, null, null, null, prefixImport);
+            super(prefixImport);
         }
 
         private List<String> importedNames() {
@@ -194,26 +197,34 @@ class ContainerdPrefixImportTest {
 
         @Override
         public void importOciLayoutDirectory(Path layout) throws IOException {
-            JsonNode index = OBJECT_MAPPER.readTree(layout.resolve("index.json").toFile());
-            JsonNode descriptor = index.get("manifests").get(0);
-            imported.add(descriptor.get("annotations").get("org.opencontainers.image.ref.name").asText());
-            JsonNode manifest = OBJECT_MAPPER.readTree(blobOf(layout, descriptor.get("digest").asText()));
-            layerCounts.add(manifest.get("layers").size());
-            diffIds.add(OBJECT_MAPPER.readTree(blobOf(layout, manifest.get("config").get("digest").asText()))
-                    .get("rootfs").get("diff_ids").size());
+            JsonNode index = OBJECT_MAPPER.readTree(layout.resolve(OciLayout.INDEX_JSON).toFile());
+            JsonNode descriptor = index.get(OciLayout.MANIFESTS).get(0);
+            imported.add(descriptor.get(OciLayout.ANNOTATIONS).get(OciLayout.REF_NAME_ANNOTATION).asText());
+            JsonNode manifest = OBJECT_MAPPER.readTree(blobOf(layout, descriptor.get(OciLayout.DIGEST).asText()));
+            layerCounts.add(manifest.get(OciLayout.LAYERS).size());
+            diffIds.add(OBJECT_MAPPER.readTree(blobOf(layout, configDigest(manifest))).get(OciLayout.ROOTFS)
+                    .get(OciLayout.DIFF_IDS).size());
             int present = 0;
-            for (JsonNode layer : manifest.get("layers")) {
-                Path blob = layout.resolve("blobs").resolve("sha256").resolve(hex(layer.get("digest").asText()));
-                if (Files.exists(blob)) {
+            for (JsonNode layer : manifest.get(OciLayout.LAYERS)) {
+                String digest = layer.get(OciLayout.DIGEST).asText();
+                if (Files.exists(blobPath(layout, digest))) {
                     present++;
-                    streamedBlobs.add(layer.get("digest").asText());
+                    streamedBlobs.add(digest);
                 }
             }
             blobs.add(present);
         }
 
+        private static String configDigest(JsonNode manifest) {
+            return manifest.get(OciLayout.CONFIG).get(OciLayout.DIGEST).asText();
+        }
+
         private static byte[] blobOf(Path layout, String digest) throws IOException {
-            return Files.readAllBytes(layout.resolve("blobs").resolve("sha256").resolve(hex(digest)));
+            return Files.readAllBytes(blobPath(layout, digest));
+        }
+
+        private static Path blobPath(Path layout, String digest) {
+            return layout.resolve(OciLayout.BLOBS_DIR).resolve(OciLayout.SHA256_DIR).resolve(hex(digest));
         }
 
         @Override

@@ -1,19 +1,31 @@
 package riid.runtime.adapter;
 
 /**
- * Identifiers for the container runtimes RIID can import images into.
+ * Identifiers for the container runtimes RIID can import images into, each with
+ * the binary RIID drives it through - the two differ for Porto
+ * ({@code portoctl}) and containerd ({@code ctr}).
  */
 public enum RuntimeId {
-    PODMAN("podman"), PORTO("porto"), DOCKER("docker"), CONTAINERD("containerd");
+    PODMAN("podman", "podman"), PORTO("porto", "portoctl"), DOCKER("docker", "docker"), CONTAINERD("containerd", "ctr");
 
     private final String rawValue;
+    private final String binary;
 
-    RuntimeId(String rawValue) {
+    RuntimeId(String rawValue, String binary) {
         this.rawValue = rawValue;
+        this.binary = binary;
     }
 
     public String value() {
         return rawValue;
+    }
+
+    /**
+     * Default name of the command-line tool for this runtime; a non-default install
+     * overrides it through the adapter's constructor.
+     */
+    public String bin() {
+        return binary;
     }
 
     public static RuntimeId from(String raw) {

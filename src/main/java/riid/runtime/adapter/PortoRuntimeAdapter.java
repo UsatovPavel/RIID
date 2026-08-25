@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.OciLayout;
 import riid.runtime.BoundedCommandExecution;
 
 /**
@@ -31,13 +32,11 @@ import riid.runtime.BoundedCommandExecution;
 public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PortoRuntimeAdapter.class);
-    private static final String PORTOCTL_BIN = "portoctl";
+    private static final String PORTOCTL_BIN = RuntimeId.PORTO.bin();
     private static final String TAR_BIN = "tar";
     private static final String EXIT_SUFFIX = "): ";
     private static final String WHITEOUT_PREFIX = ".wh.";
     private static final String WHITEOUT_OPAQUE = ".wh..wh..opq";
-    private static final String OCI_LAYOUT = "oci-layout";
-    private static final String INDEX_JSON = "index.json";
     /** Everything Porto accepts in a layer name; it rejects anything else. */
     private static final String NAME_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-@:.";
 
@@ -106,8 +105,8 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     /**
      * Imports every layer under its own digest-derived name, so one already present
-     * is reused rather than re-extracted, and records the resulting chain (top
-     * layer first) as the marker layer's private value for a later {@code vcreate}.
+     * is reused rather than re-extracted, and records the chain as the marker
+     * layer's private value for a later {@code vcreate}.
      */
     private void importLayersSeparately(Path ociDir, Manifest manifest, String layerName)
             throws IOException, InterruptedException {
@@ -150,16 +149,13 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     /**
      * Publishes the image: an empty layer named after it, carrying the ordered
-     * (top-first) chain of layer names as its private value.
-     *
-     * @param replaceExisting
-     *            drop a marker of the same name first - required when the name
-     *            comes from the image reference rather than its content, or a
-     *            re-pushed tag would keep resolving to the chain imported under
-     *            that name first
+     * (top-first) chain of layer names as its private value. {@code
+     * replaceExisting} drops a marker of that name first.
      */
     private void writeMarkerLayer(String layerName, List<String> manifestOrderNames, boolean replaceExisting)
             throws IOException, InterruptedException {
+        // The marker name comes from the image reference, not from its content: a
+        // re-pushed tag would otherwise keep resolving to the chain imported first.
         List<String> topFirstChain = new ArrayList<>(manifestOrderNames);
         Collections.reverse(topFirstChain);
         String chainJson = new ObjectMapper().writeValueAsString(topFirstChain);
@@ -211,15 +207,15 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     @Override
-    public IncrementalImageImport beginIncrementalImport(String imageName, Manifest manifest)
+    public IncrementalImageImport beginIncrementalImport(ImageReference image, Manifest manifest)
             throws IOException, InterruptedException {
-        Objects.requireNonNull(imageName, "imageName");
+        Objects.requireNonNull(image, "image");
         Objects.requireNonNull(manifest, "manifest");
         if (!supportsIncrementalImport(manifest)) {
-            throw new IOException("Image " + imageName + " cannot be imported layer by layer: its chain does not fit"
+            throw new IOException("Image " + image + " cannot be imported layer by layer: its chain does not fit"
                     + " a Porto private value, use importImage instead");
         }
-        return new PortoIncrementalImport(imageName, manifest);
+        return new PortoIncrementalImport(image, manifest);
     }
 
     /**
@@ -234,8 +230,9 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         private final Set<String> alreadyInPorto;
         private boolean finished;
 
-        private PortoIncrementalImport(String imageName, Manifest manifest) throws IOException, InterruptedException {
-            this.imageName = sanitizeLayerName(imageName);
+        private PortoIncrementalImport(ImageReference image, Manifest manifest)
+                throws IOException, InterruptedException {
+            this.imageName = sanitizeLayerName(image.name());
             this.expected = List.copyOf(manifest.layers());
             this.alreadyInPorto = listExistingPortoLayers();
         }
@@ -339,7 +336,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     /** Path of a blob inside an extracted OCI layout directory. */
     private static Path blobPath(Path ociDir, String digest) {
-        return ociDir.resolve("blobs").resolve("sha256").resolve(digest);
+        return ociDir.resolve(OciLayout.BLOBS_DIR).resolve(OciLayout.SHA256_DIR).resolve(digest);
     }
 
     /**
@@ -411,19 +408,19 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     private static boolean isOciArchive(Path archive, boolean gzip) throws IOException, InterruptedException {
         List<String> entries = listTarEntries(archive, gzip);
-        boolean hasIndex = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(INDEX_JSON));
-        boolean hasLayout = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(OCI_LAYOUT));
+        boolean hasIndex = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(OciLayout.INDEX_JSON));
+        boolean hasLayout = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(OciLayout.MARKER_FILE));
         return hasIndex && hasLayout;
     }
 
     private static Manifest readManifest(Path ociDir) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode index = mapper.readTree(ociDir.resolve(INDEX_JSON).toFile());
-        JsonNode manifestNode = index.path("manifests").get(0);
+        JsonNode index = mapper.readTree(ociDir.resolve(OciLayout.INDEX_JSON).toFile());
+        JsonNode manifestNode = index.path(OciLayout.MANIFESTS).get(0);
         if (manifestNode == null || manifestNode.isMissingNode()) {
             throw new IOException("OCI archive missing manifests");
         }
-        String manifestDigest = stripSha256(manifestNode.path("digest").asText(""));
+        String manifestDigest = stripSha256(manifestNode.path(OciLayout.DIGEST).asText(""));
         if (manifestDigest.isBlank()) {
             throw new IOException("OCI archive manifest digest missing");
         }
@@ -561,6 +558,9 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     private static String stripSha256(String digest) {
-        return digest == null ? "" : (digest.startsWith("sha256:") ? digest.substring("sha256:".length()) : digest);
+        if (digest == null) {
+            return "";
+        }
+        return digest.startsWith(OciLayout.DIGEST_PREFIX) ? digest.substring(OciLayout.DIGEST_PREFIX.length()) : digest;
     }
 }

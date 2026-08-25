@@ -13,7 +13,8 @@ import java.util.StringJoiner;
 
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
-import riid.core.model.manifest.MediaTypes;
+import riid.core.model.manifest.OciLayout;
+import riid.core.model.manifest.TestManifests;
 
 /**
  * Fake but self-consistent images for prefix-import tests: the config is stored
@@ -22,7 +23,7 @@ import riid.core.model.manifest.MediaTypes;
  */
 public final class PrefixImportFixtures {
 
-    public static final String SHA256 = "sha256:";
+    public static final String SHA256 = TestManifests.SHA256;
 
     private PrefixImportFixtures() {
     }
@@ -30,18 +31,18 @@ public final class PrefixImportFixtures {
     public static Manifest manifest(int layerCount) {
         List<Descriptor> layers = new ArrayList<>(layerCount);
         for (int i = 0; i < layerCount; i++) {
-            layers.add(new Descriptor(MediaTypes.OCI_IMAGE_LAYER_GZIP, SHA256 + layerDigestHex(i), 8));
+            layers.add(TestManifests.gzipLayer(SHA256 + layerDigestHex(i), 8));
         }
         byte[] config = configJson(layerCount);
-        return new Manifest(2, MediaTypes.OCI_IMAGE_MANIFEST,
-                new Descriptor(MediaTypes.OCI_IMAGE_CONFIG, SHA256 + sha256Hex(config), config.length), layers);
+        return TestManifests.manifest(TestManifests.config(SHA256 + sha256Hex(config), config.length), layers);
     }
 
     /**
      * An OCI layout holding the layer blobs and the config, as RIID fills it in.
      */
     public static Path layoutWithBlobs(Path root, Manifest manifest) throws IOException {
-        Path blobs = Files.createDirectories(root.resolve("oci").resolve("blobs").resolve("sha256"));
+        Path blobs = Files
+                .createDirectories(root.resolve("oci").resolve(OciLayout.BLOBS_DIR).resolve(OciLayout.SHA256_DIR));
         for (int i = 0; i < manifest.layers().size(); i++) {
             Files.writeString(blobs.resolve(layerDigestHex(i)), "layer-" + i);
         }
@@ -58,8 +59,8 @@ public final class PrefixImportFixtures {
         for (int i = 0; i < layerCount; i++) {
             diffIds.add("\"" + SHA256 + "d".repeat(63) + i + "\"");
         }
-        String json = "{\"rootfs\":{\"type\":\"layers\",\"diff_ids\":" + diffIds
-                + "},\"history\":[{\"created_by\":\"test\"}]}";
+        String json = "{\"" + OciLayout.ROOTFS + "\":{\"type\":\"layers\",\"" + OciLayout.DIFF_IDS + "\":" + diffIds
+                + "},\"" + OciLayout.HISTORY + "\":[{\"created_by\":\"test\"}]}";
         return json.getBytes(StandardCharsets.UTF_8);
     }
 

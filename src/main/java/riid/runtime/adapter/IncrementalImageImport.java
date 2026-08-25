@@ -6,20 +6,10 @@ import java.nio.file.Path;
 import riid.core.model.manifest.Descriptor;
 
 /**
- * One in-flight import of an image whose layers arrive one at a time, before
- * the whole image is downloaded.
- *
- * <p>
- * Layers are fed in manifest order (bottom-first): the caller hands over layer
- * {@code k} as soon as layers {@code 0..k} are on disk, so the runtime does its
- * work while the tail of the image is still being fetched. {@link #finish()}
- * turns the imported layers into an addressable image and must be called
- * exactly once, after the last layer.
- *
- * <p>
- * {@link #close()} releases whatever the session holds; it never publishes a
- * half-imported image, so an aborted session leaves no image behind (already
- * imported layers may stay - they are content-addressed and reusable).
+ * One in-flight import of an image whose layers arrive one at a time, in
+ * manifest order: layer {@code k} is handed over as soon as layers {@code 0..k}
+ * are on disk, so the runtime works while the tail still downloads. Never
+ * publishes a half-imported image.
  */
 public interface IncrementalImageImport extends AutoCloseable {
 
@@ -32,17 +22,14 @@ public interface IncrementalImageImport extends AutoCloseable {
     }
 
     /**
-     * Imports a single layer blob.
-     *
-     * @param layer
-     *            descriptor of this layer from the image manifest
-     * @param blobPath
-     *            compressed layer blob on local disk
+     * Imports one layer: {@code layer} as the manifest describes it,
+     * {@code blobPath} its compressed blob on local disk.
      */
     void importLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException;
 
     /**
-     * Publishes the image built from the layers imported so far.
+     * Publishes the image built from the layers imported so far; called exactly
+     * once, after the last layer.
      */
     void finish() throws IOException, InterruptedException;
 

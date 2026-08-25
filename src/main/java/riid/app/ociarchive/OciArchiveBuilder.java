@@ -34,6 +34,7 @@ import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.MediaType;
 import riid.core.model.manifest.MediaTypes;
+import riid.core.model.manifest.OciLayout;
 import riid.core.logging.MdcContext;
 import riid.core.logging.MilestoneEventLogger;
 import riid.core.logging.MilestoneEventLogger.EventType;
@@ -284,10 +285,11 @@ public final class OciArchiveBuilder {
             throws IOException {
         Manifest manifest = manifestResult.manifest();
         byte[] manifestBytes = OBJECT_MAPPER.writeValueAsBytes(manifest);
-        String manifestDigest = Sha256Utils.digest(new ByteArrayInputStream(manifestBytes)).replace("sha256:", "");
+        String manifestDigest = Sha256Utils.digest(new ByteArrayInputStream(manifestBytes))
+                .replace(OciLayout.DIGEST_PREFIX, "");
         fs.write(blobsDir.resolve(manifestDigest), manifestBytes);
 
-        fs.writeString(ociDir.resolve("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}");
+        fs.writeString(ociDir.resolve(OciLayout.MARKER_FILE), OciLayout.MARKER_CONTENT);
 
         // index.json: descriptor mediaType must match the manifest blob (Docker v2 vs
         // OCI), or podman load fails.
@@ -295,7 +297,7 @@ public final class OciArchiveBuilder {
         String indexMediaType = indexManifestMediaType(manifestResult, manifest);
         String index = String.format(Locale.ROOT, template, indexMediaType, manifestBytes.length, manifestDigest,
                 imageId.referenceName());
-        fs.writeString(ociDir.resolve("index.json"), index);
+        fs.writeString(ociDir.resolve(OciLayout.INDEX_JSON), index);
     }
 
     @FunctionalInterface

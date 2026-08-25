@@ -47,6 +47,7 @@ import riid.p2p.P2PExecutor;
 import riid.runtime.BoundedCommandExecution;
 import riid.runtime.adapter.ContainerdRuntimeAdapter;
 import riid.runtime.adapter.DockerRuntimeAdapter;
+import riid.runtime.adapter.ImageReference;
 import riid.runtime.adapter.IncrementalImageImport;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
@@ -201,8 +202,8 @@ public final class ImageLoadingFacade implements AutoCloseable {
      */
     private void importIncrementally(ManifestResult manifestResult, RuntimeAdapter runtime, ImageId imageId)
             throws IOException, InterruptedException {
-        try (IncrementalImageImport session = runtime.beginIncrementalImport(imageId.referenceName(),
-                manifestResult.manifest())) {
+        ImageReference image = new ImageReference(imageId.name(), imageId.tag());
+        try (IncrementalImageImport session = runtime.beginIncrementalImport(image, manifestResult.manifest())) {
             archiveBuilder.streamLayers(imageId, manifestResult, new OciArchiveBuilder.LayerSink() {
                 @Override
                 public void onImageConfig(Path configBlob) throws IOException, InterruptedException {
@@ -279,8 +280,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
                 : runtimeConfig.prefixImportOrDefault();
         registerRuntime(runtimes, new PodmanRuntimeAdapter(prefixImport));
         registerRuntime(runtimes, new PortoRuntimeAdapter());
-        registerRuntime(runtimes,
-                new ContainerdRuntimeAdapter(ContainerdRuntimeAdapter.CTR_BIN, null, null, null, prefixImport));
+        registerRuntime(runtimes, new ContainerdRuntimeAdapter(prefixImport));
         String dockerCmd = runtimeConfig != null
                 ? runtimeConfig.dockerCmdOrDefault()
                 : RuntimeConfig.DEFAULT_DOCKER_BIN;

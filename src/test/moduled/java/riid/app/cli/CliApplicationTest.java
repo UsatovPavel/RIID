@@ -27,7 +27,7 @@ import riid.runtime.adapter.RuntimeId;
 
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 class CliApplicationTest {
-    private static final String RUNTIME_PODMAN = PodmanRuntimeAdapter.PODMAN_BIN;
+    private static final String RUNTIME_PODMAN = RuntimeId.PODMAN.value();
     private static final String REPO_BUSYBOX = "library/busybox";
 
     private static LoadOutcome mockLoadOutcome(String repo, String ref) {

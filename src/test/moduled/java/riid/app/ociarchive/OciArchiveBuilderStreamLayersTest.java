@@ -28,6 +28,7 @@ import riid.core.fs.TestPaths;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.MediaType;
+import riid.core.model.manifest.TestManifests;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.FetchResult;
 import riid.dispatcher.model.ImageRef;
@@ -41,14 +42,10 @@ import riid.dispatcher.model.RepositoryName;
 @Tag("filesystem")
 class OciArchiveBuilderStreamLayersTest {
 
-    private static final String CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json";
-    private static final String LAYER_MEDIA_TYPE = "application/vnd.oci.image.layer.v1.tar+gzip";
-    private static final String MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json";
     private static final String NOT_USED = "Not used";
-    private static final String SHA256 = "sha256:";
-    private static final String CONFIG_DIGEST = SHA256 + "b".repeat(64);
-    private static final List<String> LAYER_DIGESTS = List.of(SHA256 + "1".repeat(64), SHA256 + "2".repeat(64),
-            SHA256 + "3".repeat(64));
+    private static final String CONFIG_DIGEST = TestManifests.digest('b');
+    private static final List<String> LAYER_DIGESTS = List.of(TestManifests.digest('1'), TestManifests.digest('2'),
+            TestManifests.digest('3'));
 
     private final HostFilesystem fs = new NioHostFilesystem();
 
@@ -148,11 +145,10 @@ class OciArchiveBuilderStreamLayersTest {
     }
 
     private static ManifestResult manifestResult() {
-        Descriptor config = new Descriptor(CONFIG_MEDIA_TYPE, CONFIG_DIGEST, 3);
-        List<Descriptor> layers = LAYER_DIGESTS.stream().map(digest -> new Descriptor(LAYER_MEDIA_TYPE, digest, 3))
-                .toList();
-        Manifest manifest = new Manifest(2, MANIFEST_MEDIA_TYPE, config, layers);
-        return new ManifestResult(SHA256 + "a".repeat(64), MANIFEST_MEDIA_TYPE, 0L, manifest);
+        Descriptor config = TestManifests.config(CONFIG_DIGEST, 3);
+        List<Descriptor> layers = LAYER_DIGESTS.stream().map(digest -> TestManifests.gzipLayer(digest, 3)).toList();
+        Manifest manifest = TestManifests.manifest(config, layers);
+        return new ManifestResult(TestManifests.digest('a'), TestManifests.MANIFEST_MEDIA_TYPE, 0L, manifest);
     }
 
     /**
