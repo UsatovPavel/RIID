@@ -61,12 +61,15 @@ Two constraints shaped the design:
   path removes the old marker first; otherwise a re-pushed tag would keep resolving to
   the chain imported under that name first.
 - Adding the capability to another runtime is a per-adapter decision and needs no
-  change in the app layer. Podman is **deferred, not ruled out**: calling `podman load`
-  once per growing prefix would work, because `containers/storage` keys a layer by
-  chain-id (`storage_dest.go:1043` — `layerID(parentLayer, trusted)`) and reuses a
-  layer already in the store instead of re-extracting it. That trades the overlap
-  against N runs of `copy.Image()` with its per-blob reuse checks — the same checks
-  that produced AGENT-73's regression — so it needs its own measurement on the podman
-  stand (`bench/`), not this VM. Open questions and the distinction between *overlap*
-  and *chain-id reuse* are written up in
-  `zOptimization/Research/ResearchPipelineOverlapPrecedent.md` §6.
+  change in the app layer. Podman has since been **measured and implemented** on
+  exactly that contract: it has no per-layer command, so a prefix is handed over
+  as a whole small image built from the layers that arrived, and
+  `containers/storage` keys a layer by chain-id (`storage_dest.go:1043` -
+  `layerID(parentLayer, trusted)`) so nothing is extracted twice. Measured on
+  podman 5.7.0 against the registry: faster on 10 of 10 images, median **-7.2%**
+  wall. Less than Porto's -10.9%, because every prefix re-runs the whole
+  `copy.Image()` and extracts one layer at a time instead of podman's six
+  parallel copies. It is **off by default** (`runtime.podmanPrefixImportStride:
+  0`) - the extra imports only pay for themselves when a download is there to
+  hide them. Numbers, the stride-2 arm and the caveats are in
+  `zOptimization/Plan/PlanPrefixImportPodman.md`.
