@@ -3,7 +3,10 @@ package riid.runtime;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -161,15 +164,16 @@ class PodmanPrefixImportTest {
     }
 
     /**
-     * The extra imports only pay off if a download hides them, so they stay off
-     * until a stride is configured, and an image with nothing to split is left to
-     * the ordinary path.
+     * The extra imports only pay off if a download hides them, so an image with
+     * nothing to split off is left to the ordinary path.
      */
     @Test
-    void offByDefaultAndDeclinedWhenThereIsNoPrefixToSplitOff() {
+    void onByDefaultButDeclinedWhenThereIsNoPrefixToSplitOff() {
         Manifest threeLayers = manifest(3);
 
-        assertFalse(new PodmanRuntimeAdapter().supportsIncrementalImport(threeLayers), "off unless configured");
+        assertTrue(new PodmanRuntimeAdapter().supportsIncrementalImport(threeLayers),
+                "stride 1 is the production default");
+        assertFalse(new RecordingPodmanAdapter(0).supportsIncrementalImport(threeLayers), "0 turns it off");
         assertFalse(new RecordingPodmanAdapter(3).supportsIncrementalImport(threeLayers),
                 "a stride as long as the image leaves nothing to overlap");
         assertTrue(new RecordingPodmanAdapter(2).supportsIncrementalImport(threeLayers));
@@ -188,25 +192,40 @@ class PodmanPrefixImportTest {
         return blobs;
     }
 
-    private static byte[] configJson(int layerCount) throws IOException {
-        var root = OBJECT_MAPPER.createObjectNode();
-        var rootfs = root.putObject("rootfs");
-        rootfs.put("type", "layers");
-        var diffIds = rootfs.putArray("diff_ids");
-        for (int i = 0; i < layerCount; i++) {
-            diffIds.add(SHA256 + "d".repeat(63) + i);
-        }
-        root.putArray("history").addObject().put("created_by", "test");
-        return OBJECT_MAPPER.writeValueAsBytes(root);
-    }
-
     private static Manifest manifest(int layerCount) {
         List<Descriptor> layers = new ArrayList<>(layerCount);
         for (int i = 0; i < layerCount; i++) {
             layers.add(new Descriptor(LAYER_MEDIA_TYPE, SHA256 + digestHex(i), 8));
         }
-        Descriptor config = new Descriptor(CONFIG_MEDIA_TYPE, SHA256 + "c".repeat(64), 64);
-        return new Manifest(2, MANIFEST_MEDIA_TYPE, config, layers);
+        byte[] config = configJson(layerCount);
+        // content-addressed like the real thing: the layout stores the config under
+        // the hash of its bytes, so a made-up digest would simply not be found
+        return new Manifest(2, MANIFEST_MEDIA_TYPE,
+                new Descriptor(CONFIG_MEDIA_TYPE, SHA256 + sha256Hex(config), config.length), layers);
+    }
+
+    private static byte[] configJson(int layerCount) {
+        try {
+            var root = OBJECT_MAPPER.createObjectNode();
+            var rootfs = root.putObject("rootfs");
+            rootfs.put("type", "layers");
+            var diffIds = rootfs.putArray("diff_ids");
+            for (int i = 0; i < layerCount; i++) {
+                diffIds.add(SHA256 + "d".repeat(63) + i);
+            }
+            root.putArray("history").addObject().put("created_by", "test");
+            return OBJECT_MAPPER.writeValueAsBytes(root);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String sha256Hex(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static String digestHex(int index) {

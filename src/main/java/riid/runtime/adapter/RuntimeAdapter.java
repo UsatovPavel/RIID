@@ -58,6 +58,17 @@ public interface RuntimeAdapter {
      * {@link #beginIncrementalImport(String, Manifest)} instead of building a whole
      * archive/layout first. Default {@code false}.
      */
+    /** Prefix import off: the engine gets the whole image in one import. */
+    int PREFIX_IMPORT_OFF = 0;
+
+    /**
+     * Production default for the engines that have no per-layer import command:
+     * hand over one more layer at a time while the rest still downloads. Measured
+     * over 10 images on podman: faster on 10 of 10, median -7.2%; stride 2 was no
+     * better (zOptimization/Plan/PlanPrefixImportPodman.md).
+     */
+    int DEFAULT_PREFIX_IMPORT_STRIDE = 1;
+
     default boolean supportsIncrementalImport(Manifest manifest) {
         return false;
     }

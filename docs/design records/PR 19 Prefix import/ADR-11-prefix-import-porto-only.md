@@ -73,3 +73,16 @@ Two constraints shaped the design:
   0`) - the extra imports only pay for themselves when a download is there to
   hide them. Numbers, the stride-2 arm and the caveats are in
   `zOptimization/Plan/PlanPrefixImportPodman.md`.
+- **containerd followed, on the same contract.** It has no per-layer import
+  either, but it keeps a content store, and its importer ingests only what the
+  tar holds without checking that every referenced blob is present
+  (`core/images/archive/importer.go`, `ImportIndex`). So a prefix tar carries
+  only the layers added since the last one and the rest resolves from the store,
+  keeping bytes streamed linear in image size rather than quadratic; reuse then
+  happens on snapshots, which are keyed by chain-id. Measured on containerd
+  2.2.1: faster on 10 of 10 images, median **-8.3%** wall.
+- **Stride 1 is the production default** (`RuntimeAdapter.DEFAULT_PREFIX_IMPORT_STRIDE`,
+  overridable as `runtime.prefixImportStride`; 0 turns prefix import off). A
+  stride of 2 was measured on both engines and was worse on both (-6.3% podman,
+  -6.6% containerd) and the only arm that produced regressions: what it saves in
+  engine invocations it loses by starting the import later.
