@@ -12,6 +12,7 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import riid.core.model.manifest.OciLayout;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.PathSupport;
@@ -22,7 +23,7 @@ import riid.runtime.BoundedCommandExecution;
  * `docker load`.
  */
 public class DockerRuntimeAdapter implements RuntimeAdapter {
-    private static final String DEFAULT_DOCKER_BIN = "docker";
+    private static final String DEFAULT_DOCKER_BIN = RuntimeId.DOCKER.bin();
     private static final String DIGEST_FIELD = "digest";
     private final HostFilesystem fs;
     private final Path tempRoot;
@@ -66,7 +67,7 @@ public class DockerRuntimeAdapter implements RuntimeAdapter {
         // read index and manifest
         ObjectMapper mapper = new ObjectMapper();
         JsonNode index;
-        try (InputStream in = fs.newInputStream(workDir.resolve("index.json"))) {
+        try (InputStream in = fs.newInputStream(workDir.resolve(OciLayout.INDEX_JSON))) {
             index = mapper.readTree(in);
         }
         JsonNode manifestNode = index.path("manifests").get(0);

@@ -43,9 +43,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("filesystem")
 class DaemonBenchmarkColdCachePullsTest {
 
-    /** @see PerformanceColdCacheHelper#ENV_RIID_PERF_CACHE_DIR */
-    public static final String ENV_RIID_PERF_CACHE_DIR = PerformanceColdCacheHelper.ENV_RIID_PERF_CACHE_DIR;
-
+    private static final String DOCKER_HUB_REGISTRY = "registry-1.docker.io";
     private static final String RUNTIME = "podman";
     /**
      * ~50 MiB tier from {@code PopularDockerImagesSizes.txt}
@@ -116,7 +114,7 @@ class DaemonBenchmarkColdCachePullsTest {
 
     private static String podmanImageReference(String repository, String reference) {
         String reg = TestRegistryConfig.registryName();
-        if ("registry-1.docker.io".equals(reg)) {
+        if (DOCKER_HUB_REGISTRY.equals(reg)) {
             return "docker.io/" + repository + ":" + reference;
         }
         int port = TestRegistryConfig.port();
@@ -137,11 +135,12 @@ class DaemonBenchmarkColdCachePullsTest {
     private static long median(List<Long> values) {
         List<Long> sorted = new ArrayList<>(values);
         Collections.sort(sorted);
-        int n = sorted.size();
-        if (n % 2 == 1) {
-            return sorted.get(n / 2);
+        int middle = sorted.size() / 2;
+        boolean oddCount = sorted.size() % 2 != 0;
+        if (oddCount) {
+            return sorted.get(middle);
         }
-        return (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
+        return (sorted.get(middle - 1) + sorted.get(middle)) / 2;
     }
 
     private static void runOrFail(String... command) throws Exception {

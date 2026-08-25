@@ -11,6 +11,14 @@ CLI and dependency wiring layer for loading container images: parse flags, valid
 - `RuntimeRegistry`: registry of runtime adapters (`podman`, `porto`), throws a clear error for unknown runtime.
 - `RiidEnv`: helpers for env-based launching without CLI.
 
+## Policy: how an image reaches the runtime
+
+`ImageLoadingFacade.load(...)` picks the first path the adapter supports:
+
+1. **Prefix import** (`supportsIncrementalImport`) — each layer goes to the engine as it lands, overlapping the rest of the download; the image is published only after the last one.
+2. **OCI layout stream** (`prefersOciLayoutStreamImport`) — the whole layout directory is handed over.
+3. **Archive** — the default: build an `oci-archive` tar and call `importImage(path)`.
+
 ## Policy: ImageId vs ImageRef
 - `ImageId` (app-level): full identity with registry + name + tag/digest; used in App/OCI/Runtime flows.
 - `ImageRef` (dispatcher-level): repository + tag/digest only; used inside dispatcher/registry fetch logic.

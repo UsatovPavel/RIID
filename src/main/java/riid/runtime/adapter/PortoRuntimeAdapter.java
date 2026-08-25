@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.OciLayout;
 import riid.runtime.BoundedCommandExecution;
 
 /**
@@ -31,13 +32,13 @@ import riid.runtime.BoundedCommandExecution;
 public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PortoRuntimeAdapter.class);
-    private static final String PORTOCTL_BIN = "portoctl";
+    private static final String PORTOCTL_BIN = RuntimeId.PORTO.bin();
     private static final String TAR_BIN = "tar";
     private static final String EXIT_SUFFIX = "): ";
     private static final String WHITEOUT_PREFIX = ".wh.";
     private static final String WHITEOUT_OPAQUE = ".wh..wh..opq";
-    private static final String OCI_LAYOUT = "oci-layout";
-    private static final String INDEX_JSON = "index.json";
+    /** Everything Porto accepts in a layer name; it rejects anything else. */
+    private static final String NAME_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-@:.";
 
     /** Porto keys layers by name alone, so everything about them lives here. */
     private static final class Layer {
@@ -49,8 +50,8 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         private static final String ALREADY_EXISTS = "LayerAlreadyExists";
         /**
          * Porto caps a private value at 4096 bytes but does not enforce it on import:
-         * an oversized value is stored silently, after which the layer can no longer
-         * be read or removed via portoctl. Stay under the cap with margin.
+         * an oversized value is stored silently, after which the layer can no longer be
+         * read or removed via portoctl. Stay under the cap with margin.
          */
         private static final int PRIVATE_VALUE_SAFE_LIMIT = 4000;
 
@@ -104,58 +105,75 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     /**
      * Imports every layer under its own digest-derived name, so one already present
-     * is reused rather than re-extracted, and records the resulting chain (top layer
-     * first) as the marker layer's private value for a later {@code vcreate}.
+     * is reused rather than re-extracted, and records the chain as the marker
+     * layer's private value for a later {@code vcreate}.
      */
     private void importLayersSeparately(Path ociDir, Manifest manifest, String layerName)
             throws IOException, InterruptedException {
         Set<String> existing = listExistingPortoLayers();
         List<String> manifestOrderNames = new ArrayList<>();
 
-        Path workDir = Files.createTempDirectory("porto-import-layers");
-        try {
-            for (Descriptor layer : manifest.layers()) {
-                String digest = stripSha256(layer.digest());
-                if (digest.isBlank()) {
-                    throw new IOException("Layer digest missing in OCI manifest");
-                }
-                String portoLayerName = Layer.NAME_PREFIX + digest;
-                manifestOrderNames.add(portoLayerName);
-                if (existing.contains(portoLayerName)) {
-                    LOGGER.info("Porto layer already present, skipping import: {}", portoLayerName);
-                    continue;
-                }
-
-                // Sent compressed: portod detects gzip/zstd/xz/bzip2 by magic bytes, so
-                // decompressing here would only cost a round trip and drop the formats
-                // we failed to recognise.
-                Path layerBlob = blobPath(ociDir, digest);
-                LOGGER.info("portoctl layer import (per-layer): {} <- {}", portoLayerName, layerBlob);
-                List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-I", portoLayerName,
-                        layerBlob.toAbsolutePath().toString());
-                BoundedCommandExecution.ShellResult result = runCommand(cmd);
-                if (result.exitCode() != 0 && !isLayerAlreadyExists(result)) {
-                    throw new IOException("portoctl layer import failed for " + portoLayerName + " (exit "
-                            + result.exitCode() + EXIT_SUFFIX + result.stdout() + result.stderr());
-                }
-                if (result.exitCode() != 0) {
-                    LOGGER.info("Porto layer import raced with a concurrent import, reusing: {}", portoLayerName);
-                }
+        for (Descriptor layer : manifest.layers()) {
+            String portoLayerName = portoLayerName(layer);
+            manifestOrderNames.add(portoLayerName);
+            if (existing.contains(portoLayerName)) {
+                LOGGER.info("Porto layer already present, skipping import: {}", portoLayerName);
+                continue;
             }
+            importOneLayer(portoLayerName, blobPath(ociDir, stripSha256(layer.digest())));
+        }
 
-            List<String> topFirstChain = new ArrayList<>(manifestOrderNames);
-            Collections.reverse(topFirstChain);
-            String chainJson = new ObjectMapper().writeValueAsString(topFirstChain);
+        writeMarkerLayer(layerName, manifestOrderNames, false);
+    }
 
+    /**
+     * Imports one layer blob under its content-addressed name. A name taken by a
+     * concurrent importer is not an error - the content behind it is identical.
+     */
+    private void importOneLayer(String portoLayerName, Path layerBlob) throws IOException, InterruptedException {
+        // Sent compressed: portod detects gzip/zstd/xz/bzip2 by magic bytes, so
+        // decompressing here would only cost a round trip and drop the formats
+        // we failed to recognise.
+        LOGGER.info("portoctl layer import (per-layer): {} <- {}", portoLayerName, layerBlob);
+        List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-I", portoLayerName,
+                layerBlob.toAbsolutePath().toString());
+        BoundedCommandExecution.ShellResult result = runCommand(cmd);
+        if (result.exitCode() != 0 && !isLayerAlreadyExists(result)) {
+            throw new IOException("portoctl layer import failed for " + portoLayerName + " (exit " + result.exitCode()
+                    + EXIT_SUFFIX + result.stdout() + result.stderr());
+        }
+        if (result.exitCode() != 0) {
+            LOGGER.info("Porto layer import raced with a concurrent import, reusing: {}", portoLayerName);
+        }
+    }
+
+    /**
+     * Publishes the image: an empty layer named after it, carrying the ordered
+     * (top-first) chain of layer names as its private value. {@code
+     * replaceExisting} drops a marker of that name first.
+     */
+    private void writeMarkerLayer(String layerName, List<String> manifestOrderNames, boolean replaceExisting)
+            throws IOException, InterruptedException {
+        // The marker name comes from the image reference, not from its content: a
+        // re-pushed tag would otherwise keep resolving to the chain imported first.
+        List<String> topFirstChain = new ArrayList<>(manifestOrderNames);
+        Collections.reverse(topFirstChain);
+        String chainJson = new ObjectMapper().writeValueAsString(topFirstChain);
+
+        Path workDir = Files.createTempDirectory("porto-import-marker");
+        try {
             Path emptyDir = Files.createTempDirectory(workDir, "empty-");
             Path emptyTar = workDir.resolve("marker.tar");
             tar(emptyDir, emptyTar);
+            if (replaceExisting) {
+                runIgnoringFailure(List.of(PORTOCTL_BIN, Layer.CMD, "-R", layerName));
+            }
             List<String> metaCmd = List.of(PORTOCTL_BIN, Layer.CMD, "-S", chainJson, "-I", layerName,
                     emptyTar.toString());
             BoundedCommandExecution.ShellResult metaResult = runCommand(metaCmd);
             if (metaResult.exitCode() != 0 && !isLayerAlreadyExists(metaResult)) {
-                throw new IOException("portoctl layer marker import failed (exit " + metaResult.exitCode()
-                        + EXIT_SUFFIX + metaResult.stdout() + metaResult.stderr());
+                throw new IOException("portoctl layer marker import failed (exit " + metaResult.exitCode() + EXIT_SUFFIX
+                        + metaResult.stdout() + metaResult.stderr());
             }
             if (metaResult.exitCode() != 0) {
                 LOGGER.info("Porto marker layer import raced with a concurrent import of the same image: {}",
@@ -166,10 +184,118 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
         }
     }
 
+    /** Content-addressed Porto name of a manifest layer. */
+    private static String portoLayerName(Descriptor layer) throws IOException {
+        String digest = stripSha256(layer.digest());
+        if (digest.isBlank()) {
+            throw new IOException("Layer digest missing in OCI manifest");
+        }
+        return Layer.NAME_PREFIX + digest;
+    }
+
+    private void runIgnoringFailure(List<String> cmd) throws IOException, InterruptedException {
+        BoundedCommandExecution.ShellResult result = runCommand(cmd);
+        if (result.exitCode() != 0) {
+            LOGGER.debug("Ignoring failed command {} (exit {})", cmd, result.exitCode());
+        }
+    }
+
+    @Override
+    public boolean supportsIncrementalImport(Manifest manifest) {
+        Objects.requireNonNull(manifest, "manifest");
+        return !manifest.layers().isEmpty() && estimateChainJsonBytes(manifest) <= Layer.PRIVATE_VALUE_SAFE_LIMIT;
+    }
+
+    @Override
+    public IncrementalImageImport beginIncrementalImport(ImageReference image, Manifest manifest)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(image, "image");
+        Objects.requireNonNull(manifest, "manifest");
+        if (!supportsIncrementalImport(manifest)) {
+            throw new IOException("Image " + image + " cannot be imported layer by layer: its chain does not fit"
+                    + " a Porto private value, use importImage instead");
+        }
+        return new PortoIncrementalImport(image, manifest);
+    }
+
     /**
-     * Names Porto already holds. Only an optimization - anything missed here is still
-     * caught by the already-exists error at import time, so a failed listing degrades
-     * to "nothing is cached" instead of failing the import.
+     * Feeds layers to {@code portoctl} as they are downloaded and publishes the
+     * marker layer only once the last one is in, so a half-downloaded image never
+     * resolves as a finished one.
+     */
+    private final class PortoIncrementalImport implements IncrementalImageImport {
+        private final String imageName;
+        private final List<Descriptor> expected;
+        private final List<String> imported = new ArrayList<>();
+        private final Set<String> alreadyInPorto;
+        private boolean finished;
+
+        private PortoIncrementalImport(ImageReference image, Manifest manifest)
+                throws IOException, InterruptedException {
+            this.imageName = sanitizeLayerName(image.name());
+            this.expected = List.copyOf(manifest.layers());
+            this.alreadyInPorto = listExistingPortoLayers();
+        }
+
+        @Override
+        public void importLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException {
+            Objects.requireNonNull(layer, "layer");
+            Objects.requireNonNull(blobPath, "blobPath");
+            int position = imported.size();
+            if (position >= expected.size()) {
+                throw new IOException("More layers offered than the manifest of " + imageName + " declares");
+            }
+            String declaredDigest = expected.get(position).digest();
+            if (!Objects.equals(declaredDigest, layer.digest())) {
+                throw new IOException("Layer " + position + " of " + imageName + " arrived out of manifest order:"
+                        + " expected " + declaredDigest + ", got " + layer.digest());
+            }
+            String portoLayerName = portoLayerName(layer);
+            imported.add(portoLayerName);
+            if (alreadyInPorto.contains(portoLayerName)) {
+                LOGGER.info("Porto layer already present, skipping import: {}", portoLayerName);
+                return;
+            }
+            importOneLayer(portoLayerName, blobPath);
+        }
+
+        @Override
+        public void finish() throws IOException, InterruptedException {
+            if (imported.size() != expected.size()) {
+                throw new IOException("Incremental import of " + imageName + " finished with " + imported.size()
+                        + " of " + expected.size() + " layers");
+            }
+            writeMarkerLayer(imageName, imported, true);
+            finished = true;
+        }
+
+        @Override
+        public void close() {
+            if (!finished) {
+                LOGGER.warn(
+                        "Incremental Porto import of {} aborted after {} of {} layers; no image published,"
+                                + " imported layers stay (content-addressed, reusable)",
+                        imageName, imported.size(), expected.size());
+            }
+        }
+    }
+
+    /**
+     * Porto rejects a layer name with any character outside {@link #NAME_CHARS}.
+     */
+    private static String sanitizeLayerName(String name) {
+        StringBuilder sanitized = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            sanitized.append(NAME_CHARS.indexOf(c) >= 0 ? c : '_');
+        }
+        return sanitized.toString();
+    }
+
+    /**
+     * Names Porto already holds. Only an optimization - anything missed here is
+     * still caught by the already-exists error at import time, so a failed listing
+     * degrades to "nothing is cached" instead of failing the import.
      */
     private Set<String> listExistingPortoLayers() throws IOException, InterruptedException {
         List<String> cmd = List.of(PORTOCTL_BIN, Layer.CMD, "-L");
@@ -205,13 +331,12 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
      * concurrent importer won the race on the same content-addressed name.
      */
     private static boolean isLayerAlreadyExists(BoundedCommandExecution.ShellResult result) {
-        return result.stdout().contains(Layer.ALREADY_EXISTS)
-                || result.stderr().contains(Layer.ALREADY_EXISTS);
+        return result.stdout().contains(Layer.ALREADY_EXISTS) || result.stderr().contains(Layer.ALREADY_EXISTS);
     }
 
     /** Path of a blob inside an extracted OCI layout directory. */
     private static Path blobPath(Path ociDir, String digest) {
-        return ociDir.resolve("blobs").resolve("sha256").resolve(digest);
+        return ociDir.resolve(OciLayout.BLOBS_DIR).resolve(OciLayout.SHA256_DIR).resolve(digest);
     }
 
     /**
@@ -283,19 +408,19 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
 
     private static boolean isOciArchive(Path archive, boolean gzip) throws IOException, InterruptedException {
         List<String> entries = listTarEntries(archive, gzip);
-        boolean hasIndex = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(INDEX_JSON));
-        boolean hasLayout = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(OCI_LAYOUT));
+        boolean hasIndex = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(OciLayout.INDEX_JSON));
+        boolean hasLayout = entries.stream().anyMatch(entry -> normalizeTarEntry(entry).equals(OciLayout.MARKER_FILE));
         return hasIndex && hasLayout;
     }
 
     private static Manifest readManifest(Path ociDir) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode index = mapper.readTree(ociDir.resolve(INDEX_JSON).toFile());
-        JsonNode manifestNode = index.path("manifests").get(0);
+        JsonNode index = mapper.readTree(ociDir.resolve(OciLayout.INDEX_JSON).toFile());
+        JsonNode manifestNode = index.path(OciLayout.MANIFESTS).get(0);
         if (manifestNode == null || manifestNode.isMissingNode()) {
             throw new IOException("OCI archive missing manifests");
         }
-        String manifestDigest = stripSha256(manifestNode.path("digest").asText(""));
+        String manifestDigest = stripSha256(manifestNode.path(OciLayout.DIGEST).asText(""));
         if (manifestDigest.isBlank()) {
             throw new IOException("OCI archive manifest digest missing");
         }
@@ -433,6 +558,9 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
     }
 
     private static String stripSha256(String digest) {
-        return digest == null ? "" : (digest.startsWith("sha256:") ? digest.substring("sha256:".length()) : digest);
+        if (digest == null) {
+            return "";
+        }
+        return digest.startsWith(OciLayout.DIGEST_PREFIX) ? digest.substring(OciLayout.DIGEST_PREFIX.length()) : digest;
     }
 }

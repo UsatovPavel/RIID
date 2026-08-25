@@ -23,8 +23,8 @@ import riid.runtime.adapter.RuntimeId;
 
 /**
  * Requires a running containerd daemon reachable at the default
- * {@code /run/containerd/containerd.sock} (root-owned; run the JVM as root, same
- * approach as {@code PortoRuntimeAdapterIntegrationTest}).
+ * {@code /run/containerd/containerd.sock} (root-owned; run the JVM as root,
+ * same approach as {@code PortoRuntimeAdapterIntegrationTest}).
  */
 @Tag("filesystem")
 @Tag("local")
@@ -33,7 +33,7 @@ class ContainerdRuntimeAdapterIntegrationTest {
     private static final String REPO = "library/alpine";
     private static final String REF = "edge";
     private static final RuntimeId CONTAINERD = RuntimeId.CONTAINERD;
-    private static final String CTR = ContainerdRuntimeAdapter.CTR_BIN;
+    private static final String CTR = RuntimeId.CONTAINERD.bin();
 
     @Test
     void downloadsImageAndImportsIntoContainerd() throws Exception {

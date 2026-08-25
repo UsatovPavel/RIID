@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Builds a minimal synthetic OCI archive for the Porto per-layer import test:
- * a real multi-layer image without touching a registry. Lives next to its only
+ * Builds a minimal synthetic OCI archive for the Porto per-layer import test: a
+ * real multi-layer image without touching a registry. Lives next to its only
  * consumer rather than in shared testFixtures - nothing outside the Porto
  * adapter tests needs it.
  */
@@ -22,13 +22,17 @@ final class SyntheticOciArchives {
     }
 
     /**
-     * Two-layer OCI archive (plain, non-gzip blobs): layer 1 adds
-     * {@code base.txt}, layer 2 adds {@code top.txt}. Neither layer deletes
-     * or overwrites a path from the other, so it is safe for adapters that
-     * require whiteout-free input for a per-layer import path.
+     * Two-layer OCI archive (plain, non-gzip blobs): layer 1 adds {@code base.txt},
+     * layer 2 adds {@code top.txt}. Neither layer deletes or overwrites a path from
+     * the other, so it is safe for adapters that require whiteout-free input for a
+     * per-layer import path.
      */
+    static Path layoutDir(Path workDir) {
+        return workDir.resolve("layout");
+    }
+
     static Path buildTwoLayerArchive(Path workDir) throws IOException, InterruptedException {
-        Path root = Files.createDirectory(workDir.resolve("layout"));
+        Path root = Files.createDirectory(layoutDir(workDir));
         Path blobsDir = Files.createDirectories(root.resolve("blobs").resolve("sha256"));
 
         byte[] layer1Tar = tarSingleFile("base.txt", "BASE");
@@ -46,10 +50,10 @@ final class SyntheticOciArchives {
                 + "\"application/vnd.docker.distribution.manifest.v2+json\",\"config\":{\"mediaType\":"
                 + "\"application/vnd.docker.container.image.v1+json\",\"digest\":\"sha256:" + configDigest
                 + "\",\"size\":" + configBytes.length + "},\"layers\":["
-                + "{\"mediaType\":\"application/vnd.docker.image.rootfs.diff.tar\",\"digest\":\"sha256:"
-                + layer1Digest + "\",\"size\":" + layer1Tar.length + "},"
-                + "{\"mediaType\":\"application/vnd.docker.image.rootfs.diff.tar\",\"digest\":\"sha256:"
-                + layer2Digest + "\",\"size\":" + layer2Tar.length + "}]}";
+                + "{\"mediaType\":\"application/vnd.docker.image.rootfs.diff.tar\",\"digest\":\"sha256:" + layer1Digest
+                + "\",\"size\":" + layer1Tar.length + "},"
+                + "{\"mediaType\":\"application/vnd.docker.image.rootfs.diff.tar\",\"digest\":\"sha256:" + layer2Digest
+                + "\",\"size\":" + layer2Tar.length + "}]}";
         byte[] manifestBytes = manifestJson.getBytes(StandardCharsets.UTF_8);
         String manifestDigest = sha256(manifestBytes);
         Files.write(blobsDir.resolve(manifestDigest), manifestBytes);
@@ -68,10 +72,10 @@ final class SyntheticOciArchives {
     }
 
     /**
-     * Byte-for-byte reproducible tar of a single file. Determinism matters:
-     * these bytes are hashed into the layer digest, which becomes the Porto
-     * layer name - a digest that changed per run would defeat the reuse path
-     * under test and leak a fresh riid-layer-* entry on every execution.
+     * Byte-for-byte reproducible tar of a single file. Determinism matters: these
+     * bytes are hashed into the layer digest, which becomes the Porto layer name -
+     * a digest that changed per run would defeat the reuse path under test and leak
+     * a fresh riid-layer-* entry on every execution.
      */
     private static byte[] tarSingleFile(String name, String content) throws IOException, InterruptedException {
         Path dir = Files.createTempDirectory("synthetic-layer-");
@@ -82,8 +86,8 @@ final class SyntheticOciArchives {
             Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwxr-xr-x"));
             Path tar = Files.createTempFile("synthetic-layer-", ".tar");
             try {
-                runTar(List.of("tar", "-cf", tar.toString(), "--format=gnu", "--sort=name", "--mtime=@0",
-                        "--owner=0", "--group=0", "--numeric-owner", "-C", dir.toString(), "."));
+                runTar(List.of("tar", "-cf", tar.toString(), "--format=gnu", "--sort=name", "--mtime=@0", "--owner=0",
+                        "--group=0", "--numeric-owner", "-C", dir.toString(), "."));
                 return Files.readAllBytes(tar);
             } finally {
                 Files.deleteIfExists(tar);

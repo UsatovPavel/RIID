@@ -1,21 +1,46 @@
 package riid.runtime.adapter;
 
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
 import riid.runtime.BoundedCommandExecution;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * Podman adapter (WSL2-friendly): {@code podman load -q -i path} for a file;
- * piped layout import uses {@code podman load -q} (stdin is the default input
- * per {@code podman load --help}).
+ * Podman adapter (WSL2-friendly): {@code podman load -q -i path} for a file, or
+ * {@code podman load -q} reading a layout from stdin. Optionally imports a
+ * growing prefix while the tail downloads, see
+ * {@link #supportsIncrementalImport(Manifest)}.
  */
 public class PodmanRuntimeAdapter implements RuntimeAdapter {
-    public static final String PODMAN_BIN = "podman";
+    private static final String PODMAN_BIN = RuntimeId.PODMAN.bin();
+    private static final Logger LOGGER = LoggerFactory.getLogger(PodmanRuntimeAdapter.class);
     private static final int MAX_PROC_STDERR = 64 * 1024;
+    private static final String PREFIX_REPOSITORY = "localhost/riid-prefix-";
+
+    private final boolean prefixImport;
+
+    public PodmanRuntimeAdapter() {
+        this(PREFIX_IMPORT_ENABLED_BY_DEFAULT);
+    }
+
+    /**
+     * @param prefixImport
+     *            hand podman each layer as it lands, instead of the whole image at
+     *            the end
+     */
+    public PodmanRuntimeAdapter(boolean prefixImport) {
+        this.prefixImport = prefixImport;
+    }
 
     @Override
     public RuntimeId runtimeId() {
@@ -62,6 +87,122 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         BoundedCommandExecution.PipedShellResult result = BoundedCommandExecution.runWithStdoutPipedToStdin(tarCmd,
                 loadCmd, MAX_PROC_STDERR, this::startProcess);
         result.throwIfFailed("tar", "podman load");
+    }
+
+    /**
+     * Podman has no per-layer import command, so a prefix is handed over as a whole
+     * small image built from the layers that already arrived.
+     */
+    @Override
+    public boolean supportsIncrementalImport(Manifest manifest) {
+        Objects.requireNonNull(manifest, "manifest");
+        // Nothing is re-extracted: containers/storage keys a layer by chain-id
+        // (storage_dest.go:1043) and reuses one it already holds, so a prefix costs
+        // only its new top layers and the final import costs almost nothing.
+        return prefixImport && manifest.layers().size() > 1;
+    }
+
+    @Override
+    public IncrementalImageImport beginIncrementalImport(ImageReference image, Manifest manifest) throws IOException {
+        Objects.requireNonNull(image, "image");
+        Objects.requireNonNull(manifest, "manifest");
+        if (!supportsIncrementalImport(manifest)) {
+            throw new IOException("Image " + image + " is not imported by prefix: prefixImport=" + prefixImport + ", "
+                    + manifest.layers().size() + " layers");
+        }
+        return new PodmanIncrementalImport(image, manifest);
+    }
+
+    /**
+     * Imports {@code {L0}}, then {@code {L0,L1}}, ... as the layers land, and the
+     * real image once the last one is in. Intermediate images are named after the
+     * session and dropped in {@link #finish()}.
+     */
+    private final class PodmanIncrementalImport implements IncrementalImageImport {
+        private final ImageReference reference;
+        private final PrefixImportLayouts layouts;
+        private final List<String> prefixImages = new ArrayList<>();
+        private final String sessionId = UUID.randomUUID().toString().substring(0, 8);
+        private boolean finished;
+
+        private PodmanIncrementalImport(ImageReference reference, Manifest manifest) {
+            this.reference = reference;
+            this.layouts = new PrefixImportLayouts(reference.name(), manifest);
+        }
+
+        @Override
+        public void imageConfig(Path configBlob) throws IOException {
+            layouts.takeImageConfig(configBlob);
+        }
+
+        @Override
+        public void importLayer(Descriptor layer, Path blobPath) throws IOException, InterruptedException {
+            layouts.takeLayer(layer, blobPath);
+            int count = layouts.layersTaken();
+            if (count < layouts.layersExpected()) {
+                String image = PREFIX_REPOSITORY + sessionId + ":" + count;
+                pull(layouts.prefixLayout(count, image, PrefixImportLayouts.LayerScope.ALL, 0), image);
+                prefixImages.add(image);
+                LOGGER.info("Prefix of {} layers handed to podman as {}", count, image);
+            }
+        }
+
+        @Override
+        public void finish() throws IOException, InterruptedException {
+            if (layouts.layersTaken() != layouts.layersExpected()) {
+                throw new IOException("Prefix import of " + reference + " finished with " + layouts.layersTaken()
+                        + " of " + layouts.layersExpected() + " layers");
+            }
+            // podman resolves an unqualified name against Docker Hub; `podman load`
+            // qualifies it with localhost/, and prefix import must name it the same.
+            String image = reference.localName();
+            pull(layouts.fullLayout(image, PrefixImportLayouts.LayerScope.ALL, 0), image);
+            finished = true;
+            dropPrefixImages();
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (!finished) {
+                LOGGER.warn("Prefix import of {} aborted after {} of {} layers; no image published", reference,
+                        layouts.layersTaken(), layouts.layersExpected());
+                dropPrefixImagesQuietly();
+            }
+            layouts.close();
+        }
+
+        private void pull(Path layout, String image) throws IOException, InterruptedException {
+            List<String> cmd = List.of(PODMAN_BIN, "pull", "-q", "oci:" + layout.toAbsolutePath() + ":" + image);
+            BoundedCommandExecution.ShellResult result = runCommand(cmd);
+            if (result.exitCode() != 0) {
+                throw new IOException("podman pull of " + image + " failed (exit " + result.exitCode() + "): "
+                        + result.stdout() + result.stderr());
+            }
+        }
+
+        private void dropPrefixImages() throws IOException, InterruptedException {
+            if (prefixImages.isEmpty()) {
+                return;
+            }
+            List<String> cmd = new ArrayList<>(List.of(PODMAN_BIN, "rmi", "-f"));
+            cmd.addAll(prefixImages);
+            BoundedCommandExecution.ShellResult result = runCommand(cmd);
+            if (result.exitCode() != 0) {
+                // The layers survive in the store under the image that was just imported.
+                LOGGER.warn("Could not drop intermediate prefix images {} (exit {}): {}", prefixImages,
+                        result.exitCode(), result.stderr());
+            }
+        }
+
+        private void dropPrefixImagesQuietly() {
+            try {
+                dropPrefixImages();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (IOException e) {
+                LOGGER.warn("Could not drop intermediate prefix images {}: {}", prefixImages, e.toString());
+            }
+        }
     }
 
     /**
