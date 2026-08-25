@@ -2,6 +2,7 @@ package riid.runtime;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import riid.runtime.adapter.ContainerdRuntimeAdapter;
 import riid.runtime.adapter.RuntimeAdapter;
 import riid.runtime.adapter.RuntimeId;
 
@@ -10,7 +11,9 @@ import riid.runtime.adapter.RuntimeId;
  */
 public record RuntimeConfig(@JsonProperty("output") OutputConfig output, @JsonProperty("dockerCmd") String dockerCmd,
         @JsonProperty("maxTasksCommandExecutor") Integer maxTasksCommandExecutor,
-        @JsonProperty("prefixImport") Boolean prefixImport) {
+        @JsonProperty("prefixImport") Boolean prefixImport,
+        @JsonProperty("containerdSnapshotter") String containerdSnapshotter,
+        @JsonProperty("containerdDiscardUnpackedLayers") Boolean containerdDiscardUnpackedLayers) {
     public static final String DEFAULT_DOCKER_BIN = RuntimeId.DOCKER.bin();
     /** @see RuntimeAdapter#PREFIX_IMPORT_ENABLED_BY_DEFAULT */
     public static final boolean DEFAULT_PREFIX_IMPORT = RuntimeAdapter.PREFIX_IMPORT_ENABLED_BY_DEFAULT;
@@ -34,5 +37,14 @@ public record RuntimeConfig(@JsonProperty("output") OutputConfig output, @JsonPr
      */
     public boolean prefixImportOrDefault() {
         return prefixImport == null ? DEFAULT_PREFIX_IMPORT : prefixImport;
+    }
+
+    /**
+     * Optional {@code ctr images import} switches for containerd. All off by
+     * default, so the emitted command is byte for byte the current one.
+     */
+    public ContainerdRuntimeAdapter.ImportOptions containerdImportOptions() {
+        return new ContainerdRuntimeAdapter.ImportOptions(containerdSnapshotter,
+                Boolean.TRUE.equals(containerdDiscardUnpackedLayers));
     }
 }

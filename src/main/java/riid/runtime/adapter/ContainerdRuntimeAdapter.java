@@ -28,6 +28,7 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
     private static final int MAX_PROC_STDERR = 64 * 1024;
     private static final String IMAGES = "images";
     private static final String IMPORT = "import";
+    private static final String LOCAL = "--local";
     private static final String PREFIX_REPOSITORY = "riid-prefix-";
 
     /** Path/name of the {@code ctr} binary, for non-default installs. */
@@ -42,16 +43,23 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
      * ({@code /run/containerd/containerd.sock}).
      */
     private final String address;
-    /**
-     * {@code --snapshotter}: snapshotter backend; null uses {@code ctr}'s own
-     * default (host-configured).
-     */
-    private final String snapshotter;
+    /** Extra {@code ctr images import} switches; all off unless configured. */
+    private final ImportOptions options;
     /**
      * Hand containerd each layer as it lands, instead of the whole image at the
      * end.
      */
     private final boolean prefixImport;
+
+    /**
+     * Optional {@code ctr images import} switches. {@code snapshotter} null means
+     * {@code ctr}'s own default (host-configured).
+     */
+    public record ImportOptions(String snapshotter, boolean discardUnpackedLayers) {
+        public static ImportOptions defaults() {
+            return new ImportOptions(null, false);
+        }
+    }
 
     public ContainerdRuntimeAdapter() {
         this(PREFIX_IMPORT_ENABLED_BY_DEFAULT);
@@ -63,19 +71,19 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
      *            at the end
      */
     public ContainerdRuntimeAdapter(boolean prefixImport) {
-        this(CTR_BIN, null, null, null, prefixImport);
+        this(CTR_BIN, null, null, ImportOptions.defaults(), prefixImport);
     }
 
     public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, String snapshotter) {
-        this(ctrCmd, namespace, address, snapshotter, PREFIX_IMPORT_ENABLED_BY_DEFAULT);
+        this(ctrCmd, namespace, address, new ImportOptions(snapshotter, false), PREFIX_IMPORT_ENABLED_BY_DEFAULT);
     }
 
-    public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, String snapshotter,
+    public ContainerdRuntimeAdapter(String ctrCmd, String namespace, String address, ImportOptions options,
             boolean prefixImport) {
         this.ctrCmd = ctrCmd == null || ctrCmd.isBlank() ? CTR_BIN : ctrCmd;
         this.namespace = namespace;
         this.address = address;
-        this.snapshotter = snapshotter;
+        this.options = options == null ? ImportOptions.defaults() : options;
         this.prefixImport = prefixImport;
     }
 
@@ -244,9 +252,16 @@ public class ContainerdRuntimeAdapter implements RuntimeAdapter {
 
     private List<String> importCommand() {
         List<String> cmd = imagesCommand(IMPORT);
+        String snapshotter = options.snapshotter();
         if (snapshotter != null && !snapshotter.isBlank()) {
             cmd.add("--snapshotter");
             cmd.add(snapshotter);
+        }
+        if (options.discardUnpackedLayers()) {
+            // ctr 2.2 rejects the flag on its own: discarding is only implemented by
+            // the local importer, not by the transfer service the import defaults to.
+            cmd.add(LOCAL);
+            cmd.add("--discard-unpacked-layers");
         }
         return cmd;
     }

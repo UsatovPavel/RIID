@@ -197,6 +197,10 @@ public final class ConfigValidator {
             throw new ConfigValidationException(
                     ConfigValidationException.Runtime.MAX_TASKS_COMMAND_EXECUTOR_POSITIVE.message());
         }
+        String containerdSnapshotter = runtime.containerdSnapshotter();
+        if (containerdSnapshotter != null && containerdSnapshotter.isBlank()) {
+            throw new ConfigValidationException("runtime.containerdSnapshotter must not be blank");
+        }
         OutputConfig output = runtime.output();
         if (output == null) {
             return;
