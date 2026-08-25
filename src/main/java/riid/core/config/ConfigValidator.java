@@ -197,6 +197,10 @@ public final class ConfigValidator {
             throw new ConfigValidationException(
                     ConfigValidationException.Runtime.MAX_TASKS_COMMAND_EXECUTOR_POSITIVE.message());
         }
+        Integer prefixStride = runtime.podmanPrefixImportStride();
+        if (prefixStride != null && prefixStride < 0) {
+            throw new ConfigValidationException("runtime.podmanPrefixImportStride must not be negative");
+        }
         OutputConfig output = runtime.output();
         if (output == null) {
             return;
