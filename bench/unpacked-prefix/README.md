@@ -8,6 +8,10 @@ OCI-layout'ов, меряется только передача движку. Р
 Layout'ы те же, что у `bench/agent95` (`fetch_layout.py` оттуда), и лежат в
 `$LAB/layouts`.
 
+Два стенда: containerd на Porto_VM (root), podman на хосте (rootless,
+изолированный store). Сравнивать движки между собой по этим числам нельзя —
+каждый сравнивается сам с собой.
+
 ## Армы
 
 `unpacked_layouts.py <src-layout> <out-dir> <session-id> <arm>` строит ровно то,
@@ -17,17 +21,37 @@ Layout'ы те же, что у `bench/agent95` (`fetch_layout.py` оттуда),
 - `gzip` — как RIID делает сегодня;
 - `tar` — пункт 2.2: префиксы несут распакованный слой, дескриптор переписан на
   (diff_id, несжатый размер, `application/vnd.oci.image.layer.v1.tar`);
-- `tar-fullall` — те же префиксы, но финальный layout несёт все gzip-блобы.
+- `tar-fullall` — те же префиксы, но финальный layout несёт все gzip-блобы;
+- `tar-final` — несжато всё, включая финальный layout (не то, что предлагает
+  тикет, но показывает, во что обходится оригинальный финальный манифест);
+- `tar-thin` — несжатые префиксы и нетронутый финальный манифест, но в финальном
+  layout только последний слой. Падает на podman: транспорт `oci:` читает каждый
+  блоб из layout и в локальное хранилище не заглядывает.
+
+Пятый аргумент — `scope` (`added` для containerd, `all` для podman), шестой —
+`engine` (`containerd` | `podman`): podman дописывает `localhost/` к неполному
+имени, а ссылка при `pull` обязана совпадать с аннотацией в layout.
 
 Скрипт падает, если `sha256(tar)` не равен `diff_id`: на этом равенстве держится
 весь пункт, проверять его надо на каждом слое, а не один раз рассуждением.
 
-## Запуск (VM, root)
+## Запуск
+
+containerd — в VM, под root:
 
 ```bash
 sudo ./unpacked_bench.sh                      # 3 образа x 3 раунда x 3 арма
 sudo ARMS='gzip tar' ROUNDS=5 ./unpacked_bench.sh
 ```
+
+podman — на хосте, rootless, против изолированного store:
+
+```bash
+./unpacked_bench_podman.sh
+ARMS='gzip tar-final' ROUNDS=5 ./unpacked_bench_podman.sh
+```
+
+`LAB` (по умолчанию `~/.cache/riid-unpack22`) должен содержать `layouts/`.
 
 Между замерами `/var/lib/containerd` стирается и containerd перезапускается, так
 что каждый арм стартует на чистой ноде. Помимо времени пишется `ctr images check`:

@@ -10,8 +10,21 @@ cut to `count` diff_ids, history dropped), in three arms:
               ...image.layer.v1.tar); the final layout is the untouched manifest
               with ADDED_ONLY, exactly as today
   tar-fullall same prefixes, but the final layout carries every gzip blob
+  tar-final   everything uncompressed, the final layout included - not what the
+              ticket proposes (it keeps the final image original), but it bounds
+              the win by showing what the original final layout costs
+  tar-thin    uncompressed prefixes, untouched final manifest, but only the last
+              layer's blob in the final layout - tests whether podman really
+              needs every layer present the way LayerScope.ALL assumes
 
-usage: unpacked_layouts.py <src-layout> <out-dir> <session-id> <arm>
+The scope is the adapter's LayerScope: containerd has a content store and gets
+only what each step adds, podman needs every layer in every layout.
+
+usage: unpacked_layouts.py <src-layout> <out-dir> <session-id> <arm> [scope] [engine]
+       scope:  added (default) | all
+       engine: containerd (default) | podman - only names the images, but podman
+               qualifies an unqualified name with localhost/ and the pull
+               reference has to match the annotation, so it is not cosmetic
 """
 import gzip
 import hashlib
@@ -84,8 +97,15 @@ def gunzip_to_store(src_blob, store):
 
 def main():
     src, out, session, arm = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-    if arm not in ("gzip", "tar", "tar-fullall"):
+    scope = sys.argv[5] if len(sys.argv) > 5 else "added"
+    engine = sys.argv[6] if len(sys.argv) > 6 else "containerd"
+    if arm not in ("gzip", "tar", "tar-fullall", "tar-final", "tar-thin"):
         sys.exit("unknown arm: " + arm)
+    if scope not in ("added", "all"):
+        sys.exit("unknown scope: " + scope)
+    if engine not in ("containerd", "podman"):
+        sys.exit("unknown engine: " + engine)
+    qualify = "localhost/" if engine == "podman" else ""
     idx = json.load(open(os.path.join(src, "index.json")))
     ref = idx["manifests"][0]["annotations"]["org.opencontainers.image.ref.name"]
     manifest = json.load(open(blob_path(src, idx["manifests"][0]["digest"])))
@@ -101,7 +121,7 @@ def main():
     os.makedirs(store, exist_ok=True)
     step_layers = layers
     unpack_s = 0.0
-    if arm != "gzip":
+    if arm != "gzip":  # every tar-* arm hands the prefixes over decompressed
         step_layers = []
         for i, layer in enumerate(layers):
             digest, size, secs = gunzip_to_store(blob_path(src, layer["digest"]), store)
@@ -116,7 +136,9 @@ def main():
         if not os.path.exists(dst):
             os.link(src_file, dst)
 
-    def link_step_layers(layout, lo, hi):  # ADDED_ONLY: only what this step adds
+    def link_step_layers(layout, lo, hi):
+        if scope == "all":
+            lo = 0
         for i in range(lo, hi):
             if arm == "gzip":
                 link(blob_path(src, layers[i]["digest"]), layout, layers[i]["digest"])
@@ -141,18 +163,29 @@ def main():
             "layers": step_layers[:count],
         }
         write_index(layout, json.dumps(pm, separators=(",", ":")).encode(),
-                    "%s%s:%d" % (PREFIX_REPO, session, count))
+                    "%s%s%s:%d" % (qualify, PREFIX_REPO, session, count))
         sent = count
 
-    # The final layout is the untouched manifest in every arm - that is the
-    # property fullLayout() promises. Only which blobs it carries differs.
+    # The final layout is the untouched manifest in every arm but tar-final -
+    # that is the property fullLayout() promises. Only which blobs it carries
+    # differs. The config is untouched everywhere, diff_ids being compression
+    # independent, so the image id an engine derives from it does not move.
     layout = new_layout(out, "full")
-    first = 0 if arm == "tar-fullall" else sent
-    for i in range(first, n):
-        link(blob_path(src, layers[i]["digest"]), layout, layers[i]["digest"])
+    first = 0 if (arm == "tar-fullall" or scope == "all") else sent
+    if arm == "tar-thin":
+        first = n - 1
+    if arm == "tar-final":
+        for i in range(first, n):
+            link(os.path.join(store, diff_ids[i].split(":")[1]), layout, diff_ids[i])
+        final_manifest = dict(manifest, layers=step_layers)
+    else:
+        for i in range(first, n):
+            link(blob_path(src, layers[i]["digest"]), layout, layers[i]["digest"])
+        final_manifest = manifest
     write_blob(layout, config_bytes)
-    write_index(layout, json.dumps(manifest, separators=(",", ":")).encode(), ref)
-    print("%s arm=%s prefixes=%d unpack_s=%.2f ref=%s" % (out, arm, n - 1, unpack_s, ref))
+    write_index(layout, json.dumps(final_manifest, separators=(",", ":")).encode(), qualify + ref)
+    print("%s arm=%s scope=%s engine=%s prefixes=%d unpack_s=%.2f ref=%s"
+          % (out, arm, scope, engine, n - 1, unpack_s, qualify + ref))
 
 
 main()
