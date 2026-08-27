@@ -16,6 +16,9 @@ cut to `count` diff_ids, history dropped), in three arms:
   tar-thin    uncompressed prefixes, untouched final manifest, but only the last
               layer's blob in the final layout - tests whether podman really
               needs every layer present the way LayerScope.ALL assumes
+  gzip-thin   the same thin final layout, but everything compressed: the control
+              that separates "podman needs the blob" from "podman cannot match
+              this digest to a layer it holds"
 
 The scope is the adapter's LayerScope: containerd has a content store and gets
 only what each step adds, podman needs every layer in every layout.
@@ -99,7 +102,7 @@ def main():
     src, out, session, arm = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
     scope = sys.argv[5] if len(sys.argv) > 5 else "added"
     engine = sys.argv[6] if len(sys.argv) > 6 else "containerd"
-    if arm not in ("gzip", "tar", "tar-fullall", "tar-final", "tar-thin"):
+    if arm not in ("gzip", "tar", "tar-fullall", "tar-final", "tar-thin", "gzip-thin"):
         sys.exit("unknown arm: " + arm)
     if scope not in ("added", "all"):
         sys.exit("unknown scope: " + scope)
@@ -121,7 +124,8 @@ def main():
     os.makedirs(store, exist_ok=True)
     step_layers = layers
     unpack_s = 0.0
-    if arm != "gzip":  # every tar-* arm hands the prefixes over decompressed
+    prefixes_uncompressed = arm.startswith("tar")  # every tar-* arm decompresses
+    if prefixes_uncompressed:
         step_layers = []
         for i, layer in enumerate(layers):
             digest, size, secs = gunzip_to_store(blob_path(src, layer["digest"]), store)
@@ -140,7 +144,7 @@ def main():
         if scope == "all":
             lo = 0
         for i in range(lo, hi):
-            if arm == "gzip":
+            if not prefixes_uncompressed:
                 link(blob_path(src, layers[i]["digest"]), layout, layers[i]["digest"])
             else:
                 link(os.path.join(store, diff_ids[i].split(":")[1]), layout, diff_ids[i])
@@ -172,7 +176,7 @@ def main():
     # independent, so the image id an engine derives from it does not move.
     layout = new_layout(out, "full")
     first = 0 if (arm == "tar-fullall" or scope == "all") else sent
-    if arm == "tar-thin":
+    if arm in ("tar-thin", "gzip-thin"):
         first = n - 1
     if arm == "tar-final":
         for i in range(first, n):
