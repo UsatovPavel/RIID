@@ -30,6 +30,14 @@
 # Дописать блок в unsuccessfule_downloads.txt: REGISTRY_MIRROR_APPEND_FAIL_LOG=1.
 #
 # library/clefos: на Docker Hub нет манифеста linux/amd64 — в скрипте пропуск. Доп. пропуски: REGISTRY_MIRROR_SKIP="ns/repo ns/repo2"
+#
+# Второе плечо — zstd (REGISTRY_MIRROR_ZSTD=1): тот же образ дополнительно кладётся
+# в реестр REGISTRY_SELECTEL_ZSTD_NAME с перепаковкой слоёв в zstd. Метод — из AGENT-97
+# (bench/zstd_bench.py): podman push --format oci --compression-format zstd --force-compression.
+# docker push здесь не годится: он не умеет --compression-format, поэтому плечо требует podman.
+# Источник для перепаковки — уже залитое gzip-зеркало, а не Docker Hub: байты те же,
+# а лимиты на pull у Hub не тратятся. Уровень: REGISTRY_MIRROR_ZSTD_LEVEL (по умолчанию 3).
+# Результат — out/performance-registry-zstd-map.tsv (repo, zstd-путь, тег, manifest digest).
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -75,6 +83,42 @@ if [[ -z "${REGISTRY_PUSH_REPO_STRIP_LIBRARY:-}" ]]; then
   else
     REGISTRY_PUSH_REPO_STRIP_LIBRARY=0
   fi
+fi
+
+MIRROR_ZSTD="${REGISTRY_MIRROR_ZSTD:-0}"
+ZSTD_LEVEL="${REGISTRY_MIRROR_ZSTD_LEVEL:-3}"
+ZSTD_AUTHFILE=""
+if [[ "$MIRROR_ZSTD" == 1 ]]; then
+  command -v podman >/dev/null 2>&1 || {
+    echo "init-performance-registry-images: REGISTRY_MIRROR_ZSTD=1 требует podman (docker push не умеет --compression-format)" >&2
+    exit 1
+  }
+  riid_registry_zstd_prefix_from_env
+  : "${RIID_SELECTEL_ZSTD_USER:?в $ENV_FILE нужен RIID_SELECTEL_ZSTD_USER}"
+  ZSTD_PASS="${RIID_SELECTEL_ZSTD_TOKEN:-${RIID_SELECTEL_ZSTD_PASSWORD:-}}"
+  : "${ZSTD_PASS:?в $ENV_FILE нужен RIID_SELECTEL_ZSTD_TOKEN (или RIID_SELECTEL_ZSTD_PASSWORD)}"
+
+  # Оба реестра живут на одном хосте, а podman login хранит креды по хосту — токен
+  # основного реестра затёр бы токен zstd-реестра и push падал бы на blob upload.
+  # containers-auth.json допускает ключ с namespace (host/registry), он приоритетнее
+  # ключа по хосту, поэтому пишем authfile с обоими явно.
+  ZSTD_AUTHFILE="$(mktemp -t riid-zstd-auth-XXXXXX.json)"
+  chmod 600 "$ZSTD_AUTHFILE"
+  trap 'rm -f "$ZSTD_AUTHFILE"' EXIT
+  RIID_SELECTEL_USER="$RIID_SELECTEL_USER" SELECTEL_PASS="$SELECTEL_PASS" \
+  RIID_SELECTEL_ZSTD_USER="$RIID_SELECTEL_ZSTD_USER" ZSTD_PASS="$ZSTD_PASS" \
+  REG_PREFIX="$REG_PREFIX" REG_ZSTD_PREFIX="$REG_ZSTD_PREFIX" \
+  python3 -c '
+import base64, json, os
+def entry(u, p):
+    return {"auth": base64.b64encode(f"{u}:{p}".encode()).decode()}
+auths = {
+    os.environ["REG_PREFIX"]: entry(os.environ["RIID_SELECTEL_USER"], os.environ["SELECTEL_PASS"]),
+    os.environ["REG_ZSTD_PREFIX"]: entry(os.environ["RIID_SELECTEL_ZSTD_USER"], os.environ["ZSTD_PASS"]),
+}
+print(json.dumps({"auths": auths}, indent=2))
+' > "$ZSTD_AUTHFILE"
+  echo ">>> zstd-зеркало включено: $REG_ZSTD_PREFIX (level $ZSTD_LEVEL)" >&2
 fi
 
 REF="$(grep -E '^\s*public static final String POPULAR_IMAGES_REFERENCE' "$JAVA_LIST" | sed -n 's/.*= *"\([^"]*\)".*/\1/p')"
@@ -184,6 +228,56 @@ _log_fail() {
   printf '%s\t%s\t%s\t%s\n' "$repo" "$tuse" "$step" "$msg" >> "$FAIL_LOG"
 }
 
+declare -A _zstd_digest=()
+n_zstd=0
+n_zstd_fail=0
+
+# Перепаковывает уже зеркалированный образ в zstd и кладёт во второй реестр.
+# Источник — gzip-зеркало ($mirror_dst): оно только что залито, поэтому содержимое
+# гарантированно то же, а лимиты Docker Hub не расходуются.
+_mirror_zstd_variant() {
+  local repo="$1" tuse="$2" mirror_dst="$3" zstd_repo="$4"
+  local dst="${REG_ZSTD_PREFIX}/${zstd_repo}:${tuse}"
+  local digest_file step_log img
+  digest_file="$(mktemp -t riid-zstd-digest-XXXXXX)"
+  step_log="$(mktemp)"
+
+  if ! img=$(podman pull -q --authfile "$ZSTD_AUTHFILE" "docker://${mirror_dst}" 2>"$step_log"); then
+    _log_fail "$repo" "$tuse" "zstd-pull" "$(tail -n 1 "$step_log")"
+    rm -f "$digest_file" "$step_log"
+    n_zstd_fail=$((n_zstd_fail + 1))
+    echo ">>> FAIL zstd-pull $mirror_dst" >&2
+    return 1
+  fi
+  img="$(echo "$img" | tail -n 1)"
+
+  echo ">>> zstd push $dst (level $ZSTD_LEVEL)" >&2
+  if ! podman push --authfile "$ZSTD_AUTHFILE" --format oci \
+        --compression-format zstd --compression-level "$ZSTD_LEVEL" \
+        --force-compression --digestfile "$digest_file" \
+        "$img" "docker://${dst}" 2>"$step_log"; then
+    _log_fail "$repo" "$tuse" "zstd-push" "$(tail -n 1 "$step_log")"
+    podman rmi -f "$img" >/dev/null 2>&1 || true
+    rm -f "$digest_file" "$step_log"
+    n_zstd_fail=$((n_zstd_fail + 1))
+    echo ">>> FAIL zstd-push $dst" >&2
+    return 1
+  fi
+
+  local zdigest
+  zdigest="$(tr -d '[:space:]' < "$digest_file")"
+  podman rmi -f "$img" >/dev/null 2>&1 || true
+  rm -f "$digest_file" "$step_log"
+  if [[ "$zdigest" != sha256:* ]]; then
+    _log_fail "$repo" "$tuse" "zstd-push" "podman не вернул manifest digest"
+    n_zstd_fail=$((n_zstd_fail + 1))
+    return 1
+  fi
+  _zstd_digest["$repo"]="$zdigest"
+  n_zstd=$((n_zstd + 1))
+  return 0
+}
+
 for i in "${!REPOS[@]}"; do
   repo="${REPOS[i]}"
   tuse="${REPO_REFS[i]:-}"
@@ -239,6 +333,9 @@ for i in "${!REPOS[@]}"; do
   rm -f "$_step_log"
   _mirror_ok["$repo"]=1
   n_done=$((n_done + 1))
+  if [[ "$MIRROR_ZSTD" == 1 ]]; then
+    _mirror_zstd_variant "$repo" "$tuse" "$dst" "$push_repo" || true
+  fi
 done
 
 emit_performance_registry_smoke_map_rows() {
@@ -288,5 +385,42 @@ else
 fi
 echo ">>> smoke map (Docker Hub name to RIID repository on mirror): $MAP_OUT" >&2
 
+emit_zstd_map_rows() {
+  local i repo push_repo zstd_repo tuse
+  for i in "${!REPOS[@]}"; do
+    repo="${REPOS[i]}"
+    tuse="${REPO_REFS[i]:-}"
+    [[ -z "$tuse" ]] && tuse="$REF"
+    [[ -z "${_zstd_digest[$repo]:-}" ]] && continue
+    push_repo="$repo"
+    if [[ "$REGISTRY_PUSH_REPO_STRIP_LIBRARY" == 1 ]] && [[ "$repo" == library/* ]]; then
+      push_repo="${repo#library/}"
+    fi
+    if _is_fully_qualified_repo "$repo"; then
+      push_repo="${push_repo#*/}"
+    fi
+    zstd_repo="${REG_ZSTD_REPO_PREFIX}/${push_repo}"
+    printf '%s\t%s\t%s\t%s\n' "$repo" "$zstd_repo" "$tuse" "${_zstd_digest[$repo]}"
+  done
+}
+
+if [[ "$MIRROR_ZSTD" == 1 ]]; then
+  ZSTD_MAP_OUT="$OUT_DIR/performance-registry-zstd-map.tsv"
+  if [[ "${REGISTRY_MIRROR_APPEND_SMOKE_MAP:-}" == 1 ]] && [[ -f "$ZSTD_MAP_OUT" ]]; then
+    emit_zstd_map_rows >> "$ZSTD_MAP_OUT"
+  else
+    {
+      echo "# Generated by init-performance-registry-images.sh ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+      echo "# zstd mirror: REG_ZSTD_PREFIX=$REG_ZSTD_PREFIX  level=$ZSTD_LEVEL  (podman --compression-format zstd --force-compression)"
+      echo "# Columns: docker_hub_repository<TAB>zstd_registry_path<TAB>reference<TAB>zstd_manifest_digest"
+      emit_zstd_map_rows
+    } > "$ZSTD_MAP_OUT"
+  fi
+  echo ">>> zstd map: $ZSTD_MAP_OUT" >&2
+fi
+
 echo ">>> готово: $n_done образов в $REG_PREFIX (в списке ${#REPOS[@]}, пропущено зеркалированием $n_skipped, ошибок $n_fail)" >&2
-[[ "$n_fail" -eq 0 ]] || echo ">>> журнал ошибок зеркала: $FAIL_LOG" >&2
+if [[ "$MIRROR_ZSTD" == 1 ]]; then
+  echo ">>> zstd: $n_zstd образов в $REG_ZSTD_PREFIX, ошибок $n_zstd_fail" >&2
+fi
+[[ "$n_fail" -eq 0 && "${n_zstd_fail:-0}" -eq 0 ]] || echo ">>> журнал ошибок зеркала: $FAIL_LOG" >&2
