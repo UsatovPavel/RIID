@@ -390,12 +390,11 @@ public final class OciArchiveBuilder {
 
     private Path pullLayer(String repository, ImageDigest digest, long size, MediaType mediaType, Path blobsDir)
             throws IOException {
-        return dispatcher.withFetchedLayer(new RepositoryName(repository), digest, size, mediaType, fetched -> {
-            File tmp = fetched.path().toFile();
-            Path landed = blobsDir.resolve(fetched.digest().hex());
-            fs.copy(tmp.toPath(), landed);
-            return landed;
-        });
+        var fetched = dispatcher.fetchLayer(new RepositoryName(repository), digest, size, mediaType);
+        File tmp = fetched.path().toFile();
+        Path landed = blobsDir.resolve(fetched.digest().hex());
+        fs.copy(tmp.toPath(), landed);
+        return landed;
     }
 
     /**

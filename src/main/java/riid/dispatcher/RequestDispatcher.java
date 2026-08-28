@@ -1,6 +1,5 @@
 package riid.dispatcher;
 
-import java.io.IOException;
 import java.util.Objects;
 
 import riid.cache.oci.ImageDigest;
@@ -22,19 +21,6 @@ public interface RequestDispatcher {
      * Fetch a specific layer/config digest for a repository.
      */
     FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType);
-
-    /**
-     * Keep a fetched layer valid while the caller consumes its path.
-     */
-    default <T> T withFetchedLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType,
-            FetchedLayerUser<T> user) throws IOException {
-        return user.use(fetchLayer(repository, digest, sizeBytes, mediaType));
-    }
-
-    @FunctionalInterface
-    interface FetchedLayerUser<T> {
-        T use(FetchResult fetched) throws IOException;
-    }
 
     /**
      * Base no-op implementation (placeholder).

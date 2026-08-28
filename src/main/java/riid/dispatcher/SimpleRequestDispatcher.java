@@ -16,7 +16,6 @@ import riid.core.fs.PathSupport;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
-import riid.cache.oci.CachePin;
 import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
 import riid.cache.oci.ValidationException;
@@ -207,17 +206,6 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 stepLogger.sourceFetchFromRegistry(fetchStartedNs);
             }
             releaseRegistry();
-        }
-    }
-
-    @Override
-    public <T> T withFetchedLayer(RepositoryName repository, ImageDigest digest, long sizeBytes, MediaType mediaType,
-            FetchedLayerUser<T> user) throws IOException {
-        CachePin pin = cache == null ? CachePin.NOOP : cache.pin(digest);
-        try {
-            return user.use(fetchLayer(repository, digest, sizeBytes, mediaType));
-        } finally {
-            pin.close();
         }
     }
 

@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -22,7 +21,6 @@ import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.CacheEntry;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.CachePayload;
-import riid.cache.oci.CachePin;
 import riid.cache.oci.ImageDigest;
 import riid.client.api.BlobRequest;
 import riid.client.api.BlobResult;
@@ -125,31 +123,6 @@ class SimpleRequestDispatcherTest {
         }
     }
 
-    @Test
-    void withFetchedLayerPinsDigestUntilConsumerFinishes() throws Exception {
-        try (RecordingRegistryClient registry = new RecordingRegistryClient();
-                RecordingP2PExecutor p2p = new RecordingP2PExecutor()) {
-            RecordingCacheAdapter cache = new RecordingCacheAdapter();
-            cache.hasEntry = true;
-            cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
-            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p,
-                    new NioHostFilesystem());
-
-            IOException failure = assertThrows(IOException.class,
-                    () -> dispatcher.withFetchedLayer(new riid.dispatcher.model.RepositoryName(REPO),
-                            ImageDigest.parse(DIGEST), 10, riid.core.model.manifest.MediaType.from(MEDIA_LAYER),
-                            fetched -> {
-                                assertEquals(1, cache.activePins);
-                                assertEquals(Path.of("/tmp/cached"), fetched.path());
-                                throw new IOException("copy failed");
-                            }));
-
-            assertEquals("copy failed", failure.getMessage());
-            assertEquals(1, cache.pinCalls);
-            assertEquals(0, cache.activePins, "pin must close even when OCI workspace copy fails");
-        }
-    }
-
     /**
      * Minimal in-memory registry stub that returns a manifest with one layer.
      */
@@ -206,8 +179,6 @@ class SimpleRequestDispatcherTest {
         boolean hasEntry;
         CacheEntry entry;
         boolean putCalled;
-        int pinCalls;
-        int activePins;
         private final Path resolvedPath;
 
         private RecordingCacheAdapter() {
@@ -216,13 +187,6 @@ class SimpleRequestDispatcherTest {
 
         private RecordingCacheAdapter(Path resolvedPath) {
             this.resolvedPath = resolvedPath;
-        }
-
-        @Override
-        public CachePin pin(ImageDigest digest) {
-            pinCalls++;
-            activePins++;
-            return () -> activePins--;
         }
 
         @Override
