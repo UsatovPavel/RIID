@@ -12,6 +12,7 @@ PROVIDER_APPLY_SH ?= bash "$(K8S)/providers/registry/image/provider-apply.sh" --
 PERF_REGISTRY_DATASET ?= $(K8S)/performance/input/dataset_a.tsv
 INIT_WORKER_IMAGE_SCRIPT ?= $(REGISTRY_DIR)/init/init-worker-image.sh
 ENV_FILE ?= $(K8S)/config/.env
+REGISTRY_MIRROR_ZSTD_LEVEL ?= 3
 # Не перегенерировать dataset под все профили: SKIP_REGISTRY_PROVIDER_PERF_SYNC=1
 PROVIDERS_MAKE_DIR := $(K8S)/providers
 
@@ -24,6 +25,7 @@ DRAGONFLY_SELECTEL_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-selecte
 	install-local-registry wait-local-registry init-worker-tooling-image load-performance-registry-dataset \
 	calc-worker-to-worker-speed \
 	init-performance-registry-images init-performance-registry-images-state-init init-performance-registry-images-incremental \
+	init-performance-registry-images-zstd \
 	dragonfly-dockerhub-pull-secret dragonfly-selectel-registry-pull-secret
 
 dragonfly-dockerhub-pull-secret:
@@ -202,6 +204,12 @@ calc-worker-to-worker-speed:
 
 init-performance-registry-images:
 	@"$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
+
+# То же зеркало плюс zstd-вариант каждого образа во втором реестре (REGISTRY_SELECTEL_ZSTD_NAME).
+# Требует podman: docker push не поддерживает --compression-format.
+init-performance-registry-images-zstd:
+	@REGISTRY_MIRROR_ZSTD=1 REGISTRY_MIRROR_ZSTD_LEVEL="$(REGISTRY_MIRROR_ZSTD_LEVEL)" \
+	"$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
 
 init-performance-registry-images-state-init:
 	@"$(REGISTRY_DIR)/init/init-performance-registry-images-incremental.sh" --init-state "$(ENV_FILE)"
