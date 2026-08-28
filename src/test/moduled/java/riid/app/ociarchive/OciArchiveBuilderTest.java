@@ -49,7 +49,7 @@ class OciArchiveBuilderTest {
         ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST, TestManifests.MANIFEST_MEDIA_TYPE,
                 0L, manifest);
 
-        RequestDispatcher dispatcher = new FixedLayerDispatcher(layerFile.toString());
+        FixedLayerDispatcher dispatcher = new FixedLayerDispatcher(layerFile.toString());
         OciArchiveBuilder builder = new OciArchiveBuilder(dispatcher, fs, TestPaths.DEFAULT_BASE_DIR);
         ImageId imageId = ImageId.fromRegistry("registry.example", "library/app", "latest");
 
@@ -68,10 +68,12 @@ class OciArchiveBuilderTest {
                     "index.json manifest descriptor digest must match the actual blob content digest");
             return null;
         });
+        assertEquals(2, dispatcher.scopedFetches, "config and layer copies must both use a scoped fetched path");
     }
 
     private static final class FixedLayerDispatcher implements RequestDispatcher {
         private final String path;
+        private int scopedFetches;
 
         private FixedLayerDispatcher(String path) {
             this.path = path;
@@ -86,6 +88,13 @@ class OciArchiveBuilderTest {
         public FetchResult fetchLayer(RepositoryName repository, ImageDigest digest, long sizeBytes,
                 MediaType mediaType) {
             return new FetchResult(digest, mediaType, Path.of(path));
+        }
+
+        @Override
+        public <T> T withFetchedLayer(RepositoryName repository, ImageDigest digest, long sizeBytes,
+                MediaType mediaType, FetchedLayerUser<T> user) throws java.io.IOException {
+            scopedFetches++;
+            return RequestDispatcher.super.withFetchedLayer(repository, digest, sizeBytes, mediaType, user);
         }
     }
 }

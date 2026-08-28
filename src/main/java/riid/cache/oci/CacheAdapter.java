@@ -8,6 +8,13 @@ import java.util.Optional;
  * Interface to an external cache module.
  */
 public interface CacheAdapter {
+    /**
+     * Protect a digest from eviction until the returned scope is closed.
+     */
+    default CachePin pin(ImageDigest digest) {
+        return CachePin.NOOP;
+    }
+
     boolean has(ImageDigest digest);
 
     Optional<CacheEntry> get(ImageDigest digest);
