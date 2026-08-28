@@ -49,6 +49,9 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
         this(fs, -1L);
     }
 
+    /**
+     * Create a temporary cache; a non-positive limit leaves it unbounded.
+     */
     public TempFileCacheAdapter(HostFilesystem fs, long maxCacheBytes) {
         try {
             this.fs = fs;
@@ -182,6 +185,9 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
         return result;
     }
 
+    /**
+     * Claim LRU records under CAS, then delete files without a global lock.
+     */
     private void evictIfNeeded() {
         if (maxCacheBytes <= 0 || currentCacheBytes.get() < highWatermarkBytes()) {
             return;
@@ -229,6 +235,9 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
         logIncompleteEviction(finalBytes);
     }
 
+    /**
+     * Prevent concurrent cleaners from jointly evicting past the low watermark.
+     */
     private boolean reserveEviction(long size) {
         while (true) {
             long reserved = reservedEvictionBytes.get();

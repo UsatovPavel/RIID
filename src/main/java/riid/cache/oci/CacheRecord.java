@@ -47,6 +47,9 @@ final class CacheRecord {
         return current.phase() != Phase.READY || current.readers() > 0;
     }
 
+    /**
+     * Atomically add a reader only while the record is ready.
+     */
     Optional<CacheLease> acquire(long accessOrder) {
         while (true) {
             AccessState current = access.get();
@@ -61,6 +64,9 @@ final class CacheRecord {
         }
     }
 
+    /**
+     * Publish a completed write and retain its first reader in one transition.
+     */
     CacheLease publishAndAcquire(CacheEntry publishedEntry, Path publishedPath, long accessOrder) {
         entry = publishedEntry;
         path = publishedPath;
@@ -93,6 +99,9 @@ final class CacheRecord {
         return CompletableFuture.completedFuture(null);
     }
 
+    /**
+     * Claim an idle record before deletion; file I/O happens after this CAS.
+     */
     EvictionClaim tryStartEviction() {
         while (true) {
             AccessState current = access.get();

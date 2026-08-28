@@ -22,10 +22,16 @@ public final class CacheLease implements AutoCloseable {
         this.releaser = Objects.requireNonNull(releaser, "releaser");
     }
 
+    /**
+     * Create a lease whose close action releases cache-owned state.
+     */
     public static CacheLease managed(CacheEntry entry, Path path, Runnable releaser) {
         return new CacheLease(entry, path, releaser);
     }
 
+    /**
+     * Create a lease for storage that does not require reader tracking.
+     */
     public static CacheLease unmanaged(CacheEntry entry, Path path) {
         return new CacheLease(entry, path, NOOP);
     }
@@ -38,6 +44,9 @@ public final class CacheLease implements AutoCloseable {
         return path;
     }
 
+    /**
+     * Release this lease once; repeated calls are safe.
+     */
     @Override
     public void close() {
         if (closed.compareAndSet(false, true)) {

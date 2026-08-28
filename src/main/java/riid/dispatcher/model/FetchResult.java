@@ -19,6 +19,9 @@ public final class FetchResult implements AutoCloseable {
         this(digest, mediaType, path, null);
     }
 
+    /**
+     * Create a result that owns the supplied cache lease.
+     */
     public static FetchResult leased(ImageDigest digest, MediaType mediaType, CacheLease cacheLease) {
         return new FetchResult(digest, mediaType, cacheLease.path(), cacheLease);
     }
@@ -42,6 +45,9 @@ public final class FetchResult implements AutoCloseable {
         return path;
     }
 
+    /**
+     * Copy result metadata without transferring ownership of the cache lease.
+     */
     public FetchResult detached() {
         return new FetchResult(digest, mediaType, path);
     }
