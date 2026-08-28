@@ -2,13 +2,8 @@ package riid.cache.oci;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Optional;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.stream.Stream;
 
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
@@ -16,22 +11,14 @@ import riid.core.fs.PathSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
- * Temporary filesystem cache, useful for tests and ephemeral runs. Bounded
- * instances evict least-recently-used entries during {@link #put} when
- * projected usage reaches 90%, stopping at 50%.
+ * Temporary filesystem cache, useful for tests and ephemeral runs.
  */
 public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TempFileCacheAdapter.class);
-    private static final int HIGH_WATERMARK_PERCENT = 90;
-    private static final int LOW_WATERMARK_PERCENT = 50;
-
     private final Path rootPath;
     private final FileCacheAdapter delegate;
     @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "HostFilesystem is stateless")
     private final HostFilesystem fs;
     private final long maxCacheBytes;
-    private final Map<ImageDigest, CacheEntry> entriesByRecency = new LinkedHashMap<>(16, 0.75F, true);
-    private long currentCacheBytes;
     private boolean cleaned;
 
     public TempFileCacheAdapter() {
@@ -55,23 +42,13 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     }
 
     @Override
-    public synchronized boolean has(ImageDigest digest) {
-        boolean present = delegate.has(digest);
-        if (!present) {
-            forget(digest);
-        }
-        return present;
+    public boolean has(ImageDigest digest) {
+        return delegate.has(digest);
     }
 
     @Override
-    public synchronized Optional<CacheEntry> get(ImageDigest digest) {
-        Optional<CacheEntry> entry = delegate.get(digest);
-        if (entry.isPresent()) {
-            remember(entry.orElseThrow());
-        } else {
-            forget(digest);
-        }
-        return entry;
+    public Optional<CacheEntry> get(ImageDigest digest) {
+        return delegate.get(digest);
     }
 
     @Override
@@ -80,26 +57,30 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     }
 
     @Override
-    public synchronized CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType)
-            throws IOException {
+    public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException {
         long payloadSize = payload.sizeBytes();
         if (maxCacheBytes > 0 && payloadSize > 0 && payloadSize > maxCacheBytes) {
             throw new IOException(
                     "cache payload exceeds configured maxCacheBytes: " + payloadSize + " > " + maxCacheBytes);
         }
         if (maxCacheBytes > 0 && payloadSize > 0) {
-            evictBeforePut(digest, payloadSize);
+            long used = currentCacheBytes();
+            if (used + payloadSize > maxCacheBytes) {
+                throw new IOException(
+                        "cache quota exceeded: used=" + used + ", payload=" + payloadSize + ", limit=" + maxCacheBytes);
+            }
         }
 
         CacheEntry entry = delegate.put(digest, payload, mediaType);
-        remember(entry);
-        if (maxCacheBytes > 0 && entry.sizeBytes() > maxCacheBytes) {
-            removeEntry(entry);
-            throw new IOException("cache payload exceeds configured maxCacheBytes after write: " + entry.sizeBytes()
-                    + " > " + maxCacheBytes);
-        }
-        if (maxCacheBytes > 0 && currentCacheBytes >= highWatermarkBytes()) {
-            evictOldestUntil(lowWatermarkBytes(), digest);
+        if (maxCacheBytes > 0 && currentCacheBytes() > maxCacheBytes) {
+            resolve(entry.key()).ifPresent(path -> {
+                try {
+                    fs.deleteIfExists(path);
+                } catch (IOException ignored) {
+                    // best-effort cleanup of just written file
+                }
+            });
+            throw new IOException("cache quota exceeded after write, entry rolled back");
         }
         return entry;
     }
@@ -107,13 +88,11 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     /**
      * Delete all temp files. Safe to call multiple times.
      */
-    public synchronized void cleanup() throws IOException {
+    public void cleanup() throws IOException {
         if (cleaned) {
             return;
         }
         fs.deleteRecursively(rootPath);
-        entriesByRecency.clear();
-        currentCacheBytes = 0L;
         cleaned = true;
     }
 
@@ -126,77 +105,18 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
         return rootPath;
     }
 
-    private void evictBeforePut(ImageDigest digest, long payloadSize) throws IOException {
-        CacheEntry replaced = entriesByRecency.get(digest);
-        long replacedBytes = replaced == null ? 0L : replaced.sizeBytes();
-        long projectedBytes = currentCacheBytes - replacedBytes + payloadSize;
-        if (projectedBytes < highWatermarkBytes()) {
-            return;
-        }
-
-        long targetBytes = lowWatermarkBytes();
-        evictOldestUntilProjected(targetBytes, digest, projectedBytes);
-    }
-
-    private void evictOldestUntil(long targetBytes, ImageDigest protectedDigest) throws IOException {
-        evictOldestUntilProjected(targetBytes, protectedDigest, currentCacheBytes);
-    }
-
-    private void evictOldestUntilProjected(long targetBytes, ImageDigest protectedDigest, long projectedBytes)
-            throws IOException {
-        long initialProjectedBytes = projectedBytes;
-        int evictedEntries = 0;
-        Iterator<Map.Entry<ImageDigest, CacheEntry>> iterator = entriesByRecency.entrySet().iterator();
-        while (projectedBytes > targetBytes && iterator.hasNext()) {
-            Map.Entry<ImageDigest, CacheEntry> candidate = iterator.next();
-            if (candidate.getKey().equals(protectedDigest)) {
-                continue;
+    private long currentCacheBytes() throws IOException {
+        long total = 0L;
+        try (Stream<Path> files = fs.walk(rootPath)) {
+            var iterator = files.iterator();
+            while (iterator.hasNext()) {
+                Path path = iterator.next();
+                if (fs.isRegularFile(path)) {
+                    total += fs.size(path);
+                }
             }
-            CacheEntry entry = candidate.getValue();
-            Path path = delegate.resolve(entry.key()).orElseThrow(() -> new IOException("Invalid cache entry key"));
-            fs.deleteIfExists(path);
-            iterator.remove();
-            currentCacheBytes -= entry.sizeBytes();
-            projectedBytes -= entry.sizeBytes();
-            evictedEntries++;
         }
-        if (evictedEntries > 0) {
-            LOGGER.info("LRU cache eviction removed {} entries ({} bytes); projected usage {} -> {} bytes",
-                    evictedEntries, initialProjectedBytes - projectedBytes, initialProjectedBytes, projectedBytes);
-        }
-    }
-
-    private void remember(CacheEntry entry) {
-        CacheEntry previous = entriesByRecency.put(entry.digest(), entry);
-        if (previous != null) {
-            currentCacheBytes -= previous.sizeBytes();
-        }
-        currentCacheBytes += entry.sizeBytes();
-    }
-
-    private void forget(ImageDigest digest) {
-        CacheEntry removed = entriesByRecency.remove(digest);
-        if (removed != null) {
-            currentCacheBytes -= removed.sizeBytes();
-        }
-    }
-
-    private void removeEntry(CacheEntry entry) throws IOException {
-        Path path = delegate.resolve(entry.key()).orElseThrow(() -> new IOException("Invalid cache entry key"));
-        fs.deleteIfExists(path);
-        forget(entry.digest());
-    }
-
-    private long highWatermarkBytes() {
-        return percentage(maxCacheBytes, HIGH_WATERMARK_PERCENT);
-    }
-
-    private long lowWatermarkBytes() {
-        return percentage(maxCacheBytes, LOW_WATERMARK_PERCENT);
-    }
-
-    private static long percentage(long value, int percent) {
-        return value / 100L * percent + value % 100L * percent / 100L;
+        return total;
     }
 
 }
