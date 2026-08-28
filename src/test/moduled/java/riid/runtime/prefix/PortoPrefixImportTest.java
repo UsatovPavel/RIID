@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.OciLayout;
 import riid.core.model.manifest.TestManifests;
 import riid.runtime.BoundedCommandExecution.ShellResult;
 import riid.runtime.adapter.ImageReference;
@@ -144,7 +145,7 @@ class PortoPrefixImportTest {
     private static Manifest manifest(int layerCount) {
         List<Descriptor> layers = new ArrayList<>(layerCount);
         for (int i = 0; i < layerCount; i++) {
-            layers.add(TestManifests.gzipLayer(TestManifests.SHA256 + digestHex(i), 3));
+            layers.add(TestManifests.gzipLayer(OciLayout.DIGEST_PREFIX + digestHex(i), 3));
         }
         return TestManifests.manifest(TestManifests.config(TestManifests.digest('f'), 3), layers);
     }

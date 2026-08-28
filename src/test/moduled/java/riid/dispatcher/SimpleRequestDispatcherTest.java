@@ -81,6 +81,23 @@ class SimpleRequestDispatcherTest {
     }
 
     @Test
+    void forwardsZstdMediaTypeToP2PAndCache() throws Exception {
+        try (RecordingRegistryClient registry = new RecordingRegistryClient();
+                RecordingP2PExecutor p2p = new RecordingP2PExecutor()) {
+            registry.layerMediaType = "application/vnd.oci.image.layer.v1.tar+zstd";
+            p2p.fetchResult = Optional.of(Path.of("/tmp/p2p-zstd-layer"));
+            RecordingCacheAdapter cache = new RecordingCacheAdapter();
+
+            SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p,
+                    new NioHostFilesystem());
+            dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
+
+            assertEquals(CacheMediaType.OCI_LAYER_ZSTD, p2p.fetchMediaType);
+            assertEquals(CacheMediaType.OCI_LAYER_ZSTD, cache.putMediaType);
+        }
+    }
+
+    @Test
     void downloadsFromRegistryAndPublishes() throws Exception {
         try (RecordingRegistryClient registry = new RecordingRegistryClient();
                 RecordingP2PExecutor p2p = new RecordingP2PExecutor()) {
@@ -129,11 +146,12 @@ class SimpleRequestDispatcherTest {
     private static final class RecordingRegistryClient implements RegistryClient {
         int manifestCalls;
         int blobCalls;
+        String layerMediaType = MEDIA_LAYER;
 
         @Override
         public ManifestResult fetchManifest(String repository, String reference) {
             manifestCalls++;
-            Descriptor layer = new Descriptor(MEDIA_LAYER, DIGEST, 10);
+            Descriptor layer = new Descriptor(layerMediaType, DIGEST, 10);
             Manifest manifest = new Manifest(2, "application/vnd.oci.image.manifest.v1+json",
                     new Descriptor("application/json", DIGEST, 1), List.of(layer));
             return new ManifestResult(DIGEST, manifest.mediaType(), 42, manifest);
@@ -179,6 +197,7 @@ class SimpleRequestDispatcherTest {
         boolean hasEntry;
         CacheEntry entry;
         boolean putCalled;
+        CacheMediaType putMediaType;
         private final Path resolvedPath;
 
         private RecordingCacheAdapter() {
@@ -210,6 +229,7 @@ class SimpleRequestDispatcherTest {
         @Override
         public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) {
             putCalled = true;
+            putMediaType = mediaType;
             long size;
             try {
                 size = payload.sizeBytes();
@@ -226,11 +246,13 @@ class SimpleRequestDispatcherTest {
     private static final class RecordingP2PExecutor implements P2PExecutor {
         boolean fetchCalled;
         boolean publishCalled;
+        CacheMediaType fetchMediaType;
         Optional<Path> fetchResult = Optional.empty();
 
         @Override
         public Optional<Path> fetch(String repository, ImageDigest digest, long size, CacheMediaType mediaType) {
             fetchCalled = true;
+            fetchMediaType = mediaType;
             return fetchResult;
         }
 
