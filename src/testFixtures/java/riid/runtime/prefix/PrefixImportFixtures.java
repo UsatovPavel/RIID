@@ -23,18 +23,17 @@ import riid.core.model.manifest.TestManifests;
  */
 public final class PrefixImportFixtures {
 
-    public static final String SHA256 = TestManifests.SHA256;
-
     private PrefixImportFixtures() {
     }
 
     public static Manifest manifest(int layerCount) {
         List<Descriptor> layers = new ArrayList<>(layerCount);
         for (int i = 0; i < layerCount; i++) {
-            layers.add(TestManifests.gzipLayer(SHA256 + layerDigestHex(i), 8));
+            layers.add(TestManifests.gzipLayer(OciLayout.DIGEST_PREFIX + layerDigestHex(i), 8));
         }
         byte[] config = configJson(layerCount);
-        return TestManifests.manifest(TestManifests.config(SHA256 + sha256Hex(config), config.length), layers);
+        return TestManifests.manifest(TestManifests.config(OciLayout.DIGEST_PREFIX + sha256Hex(config), config.length),
+                layers);
     }
 
     /**
@@ -57,7 +56,7 @@ public final class PrefixImportFixtures {
     public static byte[] configJson(int layerCount) {
         StringJoiner diffIds = new StringJoiner(",", "[", "]");
         for (int i = 0; i < layerCount; i++) {
-            diffIds.add("\"" + SHA256 + "d".repeat(63) + i + "\"");
+            diffIds.add("\"" + OciLayout.DIGEST_PREFIX + "d".repeat(63) + i + "\"");
         }
         String json = "{\"" + OciLayout.ROOTFS + "\":{\"type\":\"layers\",\"" + OciLayout.DIFF_IDS + "\":" + diffIds
                 + "},\"" + OciLayout.HISTORY + "\":[{\"created_by\":\"test\"}]}";
@@ -69,7 +68,7 @@ public final class PrefixImportFixtures {
     }
 
     public static String hex(String digest) {
-        return digest.substring(SHA256.length());
+        return digest.substring(OciLayout.DIGEST_PREFIX.length());
     }
 
     private static String sha256Hex(byte[] content) {

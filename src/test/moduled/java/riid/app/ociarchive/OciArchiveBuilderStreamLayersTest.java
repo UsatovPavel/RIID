@@ -28,6 +28,7 @@ import riid.core.fs.TestPaths;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.MediaType;
+import riid.core.model.manifest.MediaTypes;
 import riid.core.model.manifest.TestManifests;
 import riid.dispatcher.RequestDispatcher;
 import riid.dispatcher.model.FetchResult;
@@ -148,7 +149,7 @@ class OciArchiveBuilderStreamLayersTest {
         Descriptor config = TestManifests.config(CONFIG_DIGEST, 3);
         List<Descriptor> layers = LAYER_DIGESTS.stream().map(digest -> TestManifests.gzipLayer(digest, 3)).toList();
         Manifest manifest = TestManifests.manifest(config, layers);
-        return new ManifestResult(TestManifests.digest('a'), TestManifests.MANIFEST_MEDIA_TYPE, 0L, manifest);
+        return new ManifestResult(TestManifests.digest('a'), MediaTypes.OCI_IMAGE_MANIFEST, 0L, manifest);
     }
 
     /**

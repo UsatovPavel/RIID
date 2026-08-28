@@ -24,6 +24,7 @@ import riid.core.fs.TestPaths;
 import riid.core.hash.Sha256Utils;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.MediaTypes;
 import riid.core.model.manifest.OciLayout;
 import riid.core.model.manifest.TestManifests;
 import riid.core.model.manifest.MediaType;
@@ -47,8 +48,8 @@ class OciArchiveBuilderTest {
         Descriptor config = TestManifests.config(TestManifests.digest('b'), 3);
         Descriptor layer = TestManifests.gzipLayer(TestManifests.digest('c'), 3);
         Manifest manifest = TestManifests.manifest(config, List.of(layer));
-        ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST, TestManifests.MANIFEST_MEDIA_TYPE,
-                0L, manifest);
+        ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST, MediaTypes.OCI_IMAGE_MANIFEST, 0L,
+                manifest);
 
         RequestDispatcher dispatcher = new FixedLayerDispatcher(layerFile.toString());
         OciArchiveBuilder builder = new OciArchiveBuilder(dispatcher, fs, TestPaths.DEFAULT_BASE_DIR);
@@ -81,8 +82,8 @@ class OciArchiveBuilderTest {
         Descriptor config = TestManifests.config(TestManifests.digest('b'), zstdBytes.length);
         Descriptor layer = TestManifests.zstdLayer(TestManifests.digest('c'), zstdBytes.length);
         Manifest manifest = TestManifests.manifest(config, List.of(layer));
-        ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST, TestManifests.MANIFEST_MEDIA_TYPE,
-                0L, manifest);
+        ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST, MediaTypes.OCI_IMAGE_MANIFEST, 0L,
+                manifest);
 
         RequestDispatcher dispatcher = new FixedLayerDispatcher(layerFile.toString());
         OciArchiveBuilder builder = new OciArchiveBuilder(dispatcher, fs, TestPaths.DEFAULT_BASE_DIR);
@@ -95,7 +96,7 @@ class OciArchiveBuilderTest {
                     .resolve(manifestDigest.substring("sha256:".length()));
             JsonNode writtenManifest = OBJECT_MAPPER.readTree(Files.readAllBytes(manifestBlob));
 
-            assertEquals(TestManifests.LAYER_ZSTD_MEDIA_TYPE,
+            assertEquals(MediaTypes.OCI_IMAGE_LAYER_ZSTD,
                     writtenManifest.get("layers").get(0).get("mediaType").asText());
             Path writtenLayer = ociDir.resolve("blobs").resolve("sha256").resolve(layer.digest().substring(7));
             assertArrayEquals(zstdBytes, Files.readAllBytes(writtenLayer),
