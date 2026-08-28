@@ -1,21 +1,16 @@
 package riid.cache.oci;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.Optional;
 
 /**
  * Interface to an external cache module.
  */
 public interface CacheAdapter {
-    boolean has(ImageDigest digest);
-
-    Optional<CacheEntry> get(ImageDigest digest);
-
     /**
-     * Resolve cache entry key to an absolute path.
+     * Acquire an existing entry. Its path remains available until the lease closes.
      */
-    Optional<Path> resolve(String key);
+    Optional<CacheLease> acquire(ImageDigest digest);
 
     /**
      * Store blob stream under digest. Implementation is responsible for closing the
@@ -25,7 +20,7 @@ public interface CacheAdapter {
      *            source of bytes
      * @param mediaType
      *            blob media type (typed)
-     * @return cache entry/locator (if available)
+     * @return a lease for the stored entry
      */
-    CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException;
+    CacheLease put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException;
 }

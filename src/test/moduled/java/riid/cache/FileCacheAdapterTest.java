@@ -2,7 +2,7 @@ package riid.cache;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import riid.cache.oci.CacheEntry;
+import riid.cache.oci.CacheLease;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.CachePayload;
 import riid.cache.oci.FileCacheAdapter;
@@ -40,13 +40,11 @@ class FileCacheAdapterTest {
 
         Path tmp = TestPaths.tempFile(fs, "cache-file-", ".bin");
         fs.writeString(tmp, "hello");
-        CacheEntry entry = cache.put(digest, FilesystemCachePayload.of(fs, tmp, fs.size(tmp)),
-                CacheMediaType.OCI_LAYER);
-
-        assertTrue(cache.has(digest));
-        CacheEntry loaded = cache.get(digest).orElseThrow();
-        assertEquals(cache.resolve(entry.key()).orElseThrow(), cache.resolve(loaded.key()).orElseThrow());
-        assertEquals(fs.size(tmp), loaded.sizeBytes());
+        try (CacheLease stored = cache.put(digest, FilesystemCachePayload.of(fs, tmp, fs.size(tmp)),
+                CacheMediaType.OCI_LAYER); CacheLease loaded = cache.acquire(digest).orElseThrow()) {
+            assertEquals(stored.path(), loaded.path());
+            assertEquals(fs.size(tmp), loaded.entry().sizeBytes());
+        }
     }
 
     @Test
@@ -54,8 +52,7 @@ class FileCacheAdapterTest {
         root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString(), fs);
         ImageDigest digest = ImageDigest.parse("sha256:" + "e".repeat(64));
-        assertFalse(cache.has(digest));
-        assertTrue(cache.get(digest).isEmpty());
+        assertTrue(cache.acquire(digest).isEmpty());
     }
 
     @Test
@@ -78,7 +75,8 @@ class FileCacheAdapterTest {
             }
         };
 
-        CacheEntry entry = cache.put(digest, payload, CacheMediaType.UNKNOWN);
-        assertEquals(fs.size(tmp), entry.sizeBytes());
+        try (CacheLease stored = cache.put(digest, payload, CacheMediaType.UNKNOWN)) {
+            assertEquals(fs.size(tmp), stored.entry().sizeBytes());
+        }
     }
 }

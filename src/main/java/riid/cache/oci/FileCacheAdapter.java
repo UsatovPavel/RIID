@@ -41,12 +41,7 @@ public final class FileCacheAdapter implements CacheAdapter {
     }
 
     @Override
-    public boolean has(ImageDigest digest) {
-        return fs.exists(pathFor(digest));
-    }
-
-    @Override
-    public Optional<CacheEntry> get(ImageDigest digest) {
+    public Optional<CacheLease> acquire(ImageDigest digest) {
         Path p = pathFor(digest);
         if (!fs.exists(p)) {
             return Optional.empty();
@@ -71,19 +66,11 @@ public final class FileCacheAdapter implements CacheAdapter {
             mediaType = CacheMediaType.UNKNOWN;
         }
         String key = root.relativize(p).toString();
-        return Optional.of(new CacheEntry(digest, sizeBytes, mediaType, key));
+        return Optional.of(CacheLease.unmanaged(new CacheEntry(digest, sizeBytes, mediaType, key), p));
     }
 
     @Override
-    public Optional<Path> resolve(String key) {
-        if (key == null || key.isBlank()) {
-            return Optional.empty();
-        }
-        return Optional.of(root.resolve(key));
-    }
-
-    @Override
-    public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException {
+    public CacheLease put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) throws IOException {
         Path target = pathFor(digest);
         Path temp = PathSupport.temporaryPath(root, "cache-", ".tmp");
         fs.createFile(temp);
@@ -96,6 +83,6 @@ public final class FileCacheAdapter implements CacheAdapter {
         long size = payload.sizeBytes() > 0 ? payload.sizeBytes() : fs.size(temp);
         fs.atomicMove(temp, target);
         String key = root.relativize(target).toString();
-        return new CacheEntry(digest, size, mediaType, key);
+        return CacheLease.unmanaged(new CacheEntry(digest, size, mediaType, key), target);
     }
 }

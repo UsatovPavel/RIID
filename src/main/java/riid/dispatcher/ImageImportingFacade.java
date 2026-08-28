@@ -45,14 +45,12 @@ public final class ImageImportingFacade {
         Objects.requireNonNull(ref, "ref");
         Objects.requireNonNull(runtime, "runtime");
 
-        FetchResult result = dispatcher.fetchImage(ref);
-        validateResult(result);
-
-        Path imagePath = result.path();
-        try {
+        try (FetchResult result = dispatcher.fetchImage(ref)) {
+            validateResult(result);
+            Path imagePath = result.path();
             LOGGER.info("Importing digest {} into runtime {}", result.digest(), runtime.runtimeId());
             runtime.importImage(imagePath);
-            return result;
+            return result.detached();
         } catch (IOException e) {
             throw new DispatcherRuntimeException("Failed to import image into runtime " + runtime.runtimeId(), e);
         } catch (InterruptedException e) {
