@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -66,6 +67,39 @@ class OciArchiveBuilderTest {
             String actualDigest = Sha256Utils.digest(new ByteArrayInputStream(blobBytes));
             assertEquals(actualDigest, manifestDigest,
                     "index.json manifest descriptor digest must match the actual blob content digest");
+            return null;
+        });
+    }
+
+    @Test
+    void preservesZstdLayerDescriptorAndCompressedBytes() throws Exception {
+        HostFilesystem fs = new NioHostFilesystem();
+        byte[] zstdBytes = new byte[]{0x28, (byte) 0xb5, 0x2f, (byte) 0xfd, 1, 2, 3};
+        Path layerFile = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, "riid-zstd-layer-", ".bin");
+        fs.write(layerFile, zstdBytes);
+
+        Descriptor config = TestManifests.config(TestManifests.digest('b'), zstdBytes.length);
+        Descriptor layer = TestManifests.zstdLayer(TestManifests.digest('c'), zstdBytes.length);
+        Manifest manifest = TestManifests.manifest(config, List.of(layer));
+        ManifestResult manifestResult = new ManifestResult(UNRELATED_REGISTRY_DIGEST, TestManifests.MANIFEST_MEDIA_TYPE,
+                0L, manifest);
+
+        RequestDispatcher dispatcher = new FixedLayerDispatcher(layerFile.toString());
+        OciArchiveBuilder builder = new OciArchiveBuilder(dispatcher, fs, TestPaths.DEFAULT_BASE_DIR);
+        ImageId imageId = ImageId.fromRegistry("registry.example", "library/app", "zstd");
+
+        builder.withOciLayout(imageId, manifestResult, ociDir -> {
+            JsonNode index = OBJECT_MAPPER.readTree(Files.readAllBytes(ociDir.resolve(OciLayout.INDEX_JSON)));
+            String manifestDigest = index.get("manifests").get(0).get("digest").asText();
+            Path manifestBlob = ociDir.resolve("blobs").resolve("sha256")
+                    .resolve(manifestDigest.substring("sha256:".length()));
+            JsonNode writtenManifest = OBJECT_MAPPER.readTree(Files.readAllBytes(manifestBlob));
+
+            assertEquals(TestManifests.LAYER_ZSTD_MEDIA_TYPE,
+                    writtenManifest.get("layers").get(0).get("mediaType").asText());
+            Path writtenLayer = ociDir.resolve("blobs").resolve("sha256").resolve(layer.digest().substring(7));
+            assertArrayEquals(zstdBytes, Files.readAllBytes(writtenLayer),
+                    "RIID must hand the registry's zstd blob to Podman byte-for-byte");
             return null;
         });
     }

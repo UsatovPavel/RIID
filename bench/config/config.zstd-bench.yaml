@@ -1,0 +1,50 @@
+# AGENT-97: generated into bench/results for each real RIID -> Podman sample.
+# The benchmark replaces the registry/socket placeholders; this template contains
+# no credentials. P2P is deliberately disabled: this benchmark isolates the
+# gzip/plain-zstd artifact difference, not Dragonfly cache state.
+client:
+  http:
+    connectTimeout: "PT5S"
+    requestTimeout: "PT30M"
+    imageTimeoutMin: "PT2M"
+    imageTimeoutMax: "PT30M"
+    maxRetries: 2
+    initialBackoff: "PT0.2S"
+    maxBackoff: "PT2S"
+    backoffExponentBase: 2
+    retryIdempotentOnly: true
+    userAgent: "riid-zstd-bench"
+    followRedirects: true
+  partialDownloading:
+    mode: AUTO
+    partialDigestValidation: SKIP
+    retryWithoutRangeOnUnsatisfiableRange: true
+  auth:
+    defaultTokenTtlSeconds: 300
+    maxTokenCacheEntries: 4096
+    certPath: null
+    keyPath: null
+    caPath: null
+  registries:
+    - scheme: "__REGISTRY_SCHEME__"
+      host: "__REGISTRY_HOST__"
+      port: __REGISTRY_PORT__
+      credentials: null
+
+dispatcher:
+  maxConcurrentRegistry: 4
+
+p2p:
+  dragonfly:
+    enabled: false
+
+app:
+  daemon:
+    unixSocketPath: "__DAEMON_SOCKET__"
+    metricsHost: "127.0.0.1"
+    metricsPort: __METRICS_PORT__
+    maxConcurrentPulls: 1
+    maxRequestBodyBytes: 8192
+    requestTimeout: "PT30M"
+    overloadPolicy: REJECT
+    maxCacheBytes: 10737418240
