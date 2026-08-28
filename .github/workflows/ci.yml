@@ -14,8 +14,17 @@ on:
       - "gradlew.bat"
       - ".github/workflows/ci.yml"
   push:
+    branches:
+      - main
     tags:
       - "*"
+    paths:
+      - "src/**"
+      - "buildSrc/**"
+      - "gradle/**"
+      - "config/**"
+      - "scripts/**"
+      - "deploy/**"
 
 permissions:
   contents: read
@@ -180,16 +189,49 @@ jobs:
             --tests 'riid.integration.runtime_app.ContainerdRuntimeAdapterIntegrationTest'
           sudo chown -R runner:runner "$GITHUB_WORKSPACE"
 
-  build-k8s-image-on-tag:
-    if: startsWith(github.ref, 'refs/tags/')
+  # Выпуск образа. Мерж в main поднимает patch у последнего тега vX.Y.Z, push самого тега
+  # публикует ровно его. Git-тег ставится только после успешного push образа, чтобы упавшая
+  # сборка не сжигала номер версии. Тег, отправленный GITHUB_TOKEN, не порождает новый прогон
+  # workflow, поэтому повторного запуска этой же джобы по триггеру tags не происходит.
+  release-image:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-image
+      cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
       packages: write
     env:
       REGISTRY: ghcr.io
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: ver
+        run: |
+          set -eu
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            LATEST="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+            [ -n "$LATEST" ] || LATEST="v0.0.0"
+            BASE="${LATEST#v}"
+            MAJ="$(printf '%s' "$BASE" | cut -d. -f1)"
+            MIN="$(printf '%s' "$BASE" | cut -d. -f2)"
+            PAT="$(printf '%s' "$BASE" | cut -d. -f3)"
+            # Занятые номера пропускаются: у части старых тегов четыре компонента (v0.3.6.1),
+            # и усечение до трёх может попасть в уже существующий тег.
+            PAT=$((PAT + 1))
+            while git rev-parse -q --verify "refs/tags/v${MAJ}.${MIN}.${PAT}" >/dev/null; do
+              PAT=$((PAT + 1))
+            done
+            TAG="v${MAJ}.${MIN}.${PAT}"
+            echo "Последний тег $LATEST -> новый $TAG"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -199,10 +241,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push k8s image
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           OWNER_LC="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           IMAGE="${REGISTRY}/${OWNER_LC}/riid"
-          TAG="${GITHUB_REF_NAME}"
           docker build -f deploy/k8s/src/riid/Dockerfile.k8s \
             --build-arg GITHUB_ACTOR="${GITHUB_ACTOR}" \
             --build-arg GITHUB_PACKAGES_TOKEN="${GITHUB_PACKAGES_TOKEN}" \
@@ -213,3 +256,12 @@ jobs:
           docker push "${IMAGE}:${TAG}"
           echo "Pushed ${IMAGE}:${TAG}"
           sudo chown -R runner:runner "$GITHUB_WORKSPACE"
+
+      - name: Tag the released commit
+        if: github.ref_type != 'tag'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -eu
+          git tag "$TAG"
+          git push origin "refs/tags/$TAG"
