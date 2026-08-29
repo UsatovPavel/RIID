@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build and push worker tooling image (Podman stack + diagnostics; no RIID JAR here).
 #
-# Matches bootstrap/registry notes: podman/fuse-overlayfs + storage.conf,
+# Matches bootstrap/registry notes: podman/fuse-overlayfs + its own storage.conf
+# (this image does unpack in-container, unlike the RIID pod),
 # curl/jq/iproute2/netcat, registries scaffold for HTTP local-registry + HTTPS Selectel
 # host (no credentials in-layer).
 #

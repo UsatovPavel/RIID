@@ -7,9 +7,16 @@ LABEL_SELECTOR="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="${BACKEND_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)/backend}"
 
-MODE="${MODE:-rolling}"              # rolling | recreate
-BACKEND="${BACKEND:-riid}"           # riid | podman
-CONCURRENCY="${CONCURRENCY:-2}"      # used in rolling mode
+# One scenario only — recreate: every pod pulls the image at the same time.
+# Rolling is gone entirely, and CONCURRENCY with it: the AGENT-99 matrix compares
+# the arms under simultaneous load only. An old MODE=rolling is caught by an
+# explicit error so that saved commands do not quietly run with other semantics.
+if [[ -n "${MODE:-}" && "${MODE}" != "recreate" ]]; then
+  echo "MODE=${MODE} is not supported: only recreate is left (rolling was removed)." >&2
+  exit 2
+fi
+MODE="recreate"
+BACKEND="${BACKEND:-riid}"           # riid | bare | dfinit
 
 K8S_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLUSTER_CONFIG="${CLUSTER_CONFIG:-$K8S_ROOT/config/config.yaml}"
@@ -25,7 +32,14 @@ EXPECTED_RIID_PODS="${EXPECTED_RIID_PODS//[[:space:]]/}"
 SCENARIO="${SCENARIO:-scenario-unnamed}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-}"
 IMAGE_REFERENCE="${IMAGE_REFERENCE:-latest}"
-RUNTIME_ID="${RUNTIME_ID:-podman}"
+# Engine of the arm, one vocabulary for every backend: bare/dfinit pick the
+# driver in backend/engine/ by this name, riid sends it to the daemon as
+# runtimeId. Both accept podman | containerd | porto.
+ENGINE="${ENGINE:-}"
+# Arm label in the TSV: source plus engine. Without the engine the arms of the
+# matrix are indistinguishable in the summaries — "bare" reads the same for
+# podman and for containerd.
+BACKEND_LABEL="$BACKEND${ENGINE:+-$ENGINE}"
 OUTPUT_TSV="${OUTPUT_TSV:-${OUTPUT_CSV:-}}"
 BACKEND_CMD="$BACKEND_DIR/${BACKEND}.sh"
 DATASET_FILE="${DATASET_FILE:-}"
@@ -34,20 +48,9 @@ REGISTRY_TX_POD_NAME="${REGISTRY_TX_POD_NAME:-riid-registry-node-tx-bytes}"
 REGISTRY_TX_IMAGE="${REGISTRY_TX_IMAGE:-ubuntu:24.04}"
 REGISTRY_TX_HELPER="${REGISTRY_TX_HELPER:-$SCRIPT_DIR/registry-tx.sh}"
 
-if [[ "$MODE" != "rolling" && "$MODE" != "recreate" ]]; then
-  echo "Unsupported MODE=$MODE. Use rolling|recreate." >&2
-  exit 2
-fi
-
-if [[ "$BACKEND" != "riid" && "$BACKEND" != "podman" ]]; then
-  echo "Unsupported BACKEND=$BACKEND. Use riid|podman." >&2
-  exit 2
-fi
-
-if ! [[ "$CONCURRENCY" =~ ^[0-9]+$ ]] || [[ "$CONCURRENCY" -le 0 ]]; then
-  echo "CONCURRENCY must be a positive integer, got: $CONCURRENCY" >&2
-  exit 2
-fi
+# The backend list is not hardcoded: it is whatever backend/*.sh exists, and a
+# missing one is caught by the BACKEND_CMD check below. The engine for
+# bare/dfinit comes from its own ENGINE variable, see backend/engine/.
 
 if ! [[ "$EXPECTED_RIID_PODS" =~ ^[0-9]+$ ]]; then
   echo "EXPECTED_RIID_PODS must be a non-negative integer (or empty for config), got: $EXPECTED_RIID_PODS" >&2
@@ -64,6 +67,20 @@ if [[ ! -f "$BACKEND_CMD" ]]; then
   exit 2
 fi
 
+# An engine that runs on the node (podman via CONTAINER_HOST, containerd, Porto)
+# resolves the registry in the host netns, which has no cluster resolver. The
+# ClusterIP lookup that fixes it costs a kubectl call, so it happens once here
+# rather than per image inside the timed section. RIID pulls in the pod and does
+# not need it.
+if [[ "$BACKEND" != "riid" ]]; then
+  RIID_K8S_ROOT="$K8S_ROOT"
+  export RIID_K8S_ROOT
+  # shellcheck source=../backend/engine/common.inc.sh
+  source "$BACKEND_DIR/engine/common.inc.sh"
+  REGISTRY_NODE_PULL_HOST="$(riid_registry_node_host)" || exit 1
+  export REGISTRY_NODE_PULL_HOST
+fi
+
 if [[ -n "$DATASET_FILE" && ! -f "$DATASET_FILE" ]]; then
   echo "Dataset file not found: $DATASET_FILE" >&2
   exit 2
@@ -77,8 +94,23 @@ fi
 # shellcheck source=/dev/null
 source "$REGISTRY_TX_HELPER"
 
+# Milliseconds since the epoch. Not `date +%s%3N`: only GNU coreutils honours the
+# width on %N, while the uutils implementation (shipped in Ubuntu 26) silently
+# ignores it and returns nanoseconds — duration_ms is then inflated 10^6 times
+# and, when a leading zero of the fraction is lost, sometimes goes negative.
+# Hence %s.%N and the arithmetic by hand.
 now_ms() {
-  date +%s%3N
+  local t s ns
+  t="$(date +%s.%N)"
+  s="${t%%.*}"
+  ns="${t#*.}"
+  if [[ "$ns" == "$t" ]] || ! [[ "$ns" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$((s * 1000))"
+    return
+  fi
+  ns="${ns}00000000"
+  ns="${ns:0:9}"
+  printf '%s\n' "$((s * 1000 + 10#$ns / 1000000))"
 }
 
 list_running_pods() {
@@ -95,7 +127,7 @@ run_one() {
     CONTAINER="$CONTAINER" \
     IMAGE_REPOSITORY="$IMAGE_REPOSITORY" \
     IMAGE_REFERENCE="$IMAGE_REFERENCE" \
-    RUNTIME_ID="$RUNTIME_ID" \
+    ENGINE="$ENGINE" \
     bash "$BACKEND_CMD" "$pod"; then
     code=0
   else
@@ -105,7 +137,7 @@ run_one() {
   duration=$((end - start))
 
   printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
-    "$SCENARIO" "$MODE" "$IMAGE_REPOSITORY:$IMAGE_REFERENCE" "$pod" "$BACKEND" \
+    "$SCENARIO" "$MODE" "$IMAGE_REPOSITORY:$IMAGE_REFERENCE" "$pod" "$BACKEND_LABEL" \
     "$start" "$end" "$duration" "$code"
 
   return "$code"
@@ -113,36 +145,6 @@ run_one() {
 
 emit_header() {
   printf 'scenario,mode,image,pod,backend,start_ms,end_ms,duration_ms,exit_code\n'
-}
-
-run_rolling() {
-  local -a pods=("$@")
-  local failed=0
-  local i=0
-  while ((i < ${#pods[@]})); do
-    local -a pids=()
-    local -a batch_pods=()
-    local limit=$((i + CONCURRENCY))
-    while ((i < ${#pods[@]} && i < limit)); do
-      local pod="${pods[$i]}"
-      batch_pods+=("$pod")
-      (
-        run_one "$pod"
-      ) &
-      pids+=("$!")
-      ((i++))
-    done
-
-    local idx=0
-    for pid in "${pids[@]}"; do
-      if ! wait "$pid"; then
-        echo "FAILED pod=${batch_pods[$idx]} mode=rolling backend=$BACKEND" >&2
-        failed=1
-      fi
-      ((idx++))
-    done
-  done
-  return "$failed"
 }
 
 run_recreate() {
@@ -161,7 +163,7 @@ run_recreate() {
   local idx=0
   for pid in "${pids[@]}"; do
     if ! wait "$pid"; then
-      echo "FAILED pod=${pods[$idx]} mode=recreate backend=$BACKEND" >&2
+      echo "FAILED pod=${pods[$idx]} mode=recreate backend=$BACKEND_LABEL" >&2
       failed=1
     fi
     ((idx++))
@@ -170,7 +172,7 @@ run_recreate() {
   duration_ms=$((end_ms - start_ms))
 
   printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
-    "$SCENARIO" "$MODE" "$IMAGE_REPOSITORY:$IMAGE_REFERENCE" "AGGREGATE" "$BACKEND" \
+    "$SCENARIO" "$MODE" "$IMAGE_REPOSITORY:$IMAGE_REFERENCE" "AGGREGATE" "$BACKEND_LABEL" \
     "$start_ms" "$end_ms" "$duration_ms" "$failed"
 
   return "$failed"
@@ -189,12 +191,8 @@ fi
 
 run_for_current_image() {
   local run_failed=0
-  echo "Running scenario=$SCENARIO mode=$MODE backend=$BACKEND pods=${#pods[@]} image=${IMAGE_REPOSITORY}:${IMAGE_REFERENCE}" >&2
-  if [[ "$MODE" == "rolling" ]]; then
-    run_rolling "${pods[@]}" || run_failed=1
-  else
-    run_recreate "${pods[@]}" || run_failed=1
-  fi
+  echo "Running scenario=$SCENARIO mode=$MODE backend=$BACKEND_LABEL pods=${#pods[@]} image=${IMAGE_REPOSITORY}:${IMAGE_REFERENCE}" >&2
+  run_recreate "${pods[@]}" || run_failed=1
   return "$run_failed"
 }
 

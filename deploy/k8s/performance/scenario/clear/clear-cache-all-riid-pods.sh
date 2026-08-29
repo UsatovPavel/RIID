@@ -2,8 +2,12 @@
 # Кластер: на каждом Running-поде RIID и подах Dragonfly client/seed-client:
 #
 # RIID (namespace по умолчанию riid-system):
-#   • Podman: podman system prune -af --volumes (полный prune, включая анонимные volumes).
-#   • RIID OCI-темп-кэш: каталоги riid-cache-tmp-* (TempFileCacheAdapter) и сироты layer-*.bin во /tmp.
+#   • Podman: podman system prune -af --volumes. Podman теперь демон НОДЫ
+#     (CONTAINER_HOST, см. src/engines/podman-node.yaml), поэтому prune чистит
+#     стор ноды — тот самый, куда пишут и baseline-арм, и импорт RIID.
+#   • RIID OCI-темп-кэш: каталоги riid-cache-tmp-* / riid-prefix-* и сироты
+#     layer-*.bin. Лежат в RIID_WORK_DIR (app.tempDirectory), а это hostPath на
+#     ноде — рестарт пода их больше НЕ чистит, только этот скрипт.
 #
 # Dragonfly (namespace по умолчанию dragonfly-system, см. DRAGONFLY_NAMESPACE):
 #   • Поды app=dragonfly, component=client | seed-client (Helm OSS): очистить содержимое
@@ -20,6 +24,8 @@
 #   RIID_NAMESPACE        — default: riid-system
 #   RIID_CONTAINER        — default: riid
 #   RIID_LABEL_SELECTOR   — default: app.kubernetes.io/name=riid
+#   RIID_WORK_DIR         — default: /var/lib/riid/work (== app.tempDirectory
+#                           в configmap.yaml и hostPath riid-work-host)
 #
 #   DRAGONFLY_NAMESPACE           — default: dragonfly-system
 #   DRAGONFLY_CACHE_DIRS           — пробел‑разделённый список каталогов (default: см. ниже)
@@ -37,6 +43,7 @@ set -euo pipefail
 NS="${RIID_NAMESPACE:-riid-system}"
 CONTAINER="${RIID_CONTAINER:-riid}"
 LABEL="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
+WORK_DIR="${RIID_WORK_DIR:-/var/lib/riid/work}"
 
 DFS="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
 # По умолчанию: дерево dfget/dfdaemon (часто /var/cache/dragonfly/dfdaemon под этим корнем)
@@ -71,11 +78,15 @@ for pod in "${pods[@]}"; do
     echo ">>> skip RIID $pod (phase=$phase)" >&2
     continue
   fi
-  echo ">>> RIID podman prune + RIID tmp cache: $pod" >&2
-  if ! kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- sh -ec '
+  echo ">>> RIID podman prune (node store) + RIID work cache [$WORK_DIR]: $pod" >&2
+  if ! kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- env RIID_WORK_DIR="$WORK_DIR" sh -ec '
       podman system prune -af --volumes
-      find /tmp -maxdepth 1 -type d -name '"'"'riid-cache-tmp-*'"'"' -exec rm -rf {} +
-      find /tmp -maxdepth 1 -type f -name '"'"'layer-*.bin'"'"' -delete
+      for d in "$RIID_WORK_DIR" /tmp; do
+        [ -d "$d" ] || continue
+        find "$d" -maxdepth 1 -type d -name '"'"'riid-cache-tmp-*'"'"' -exec rm -rf {} +
+        find "$d" -maxdepth 1 -type d -name '"'"'riid-prefix-*'"'"' -exec rm -rf {} +
+        find "$d" -maxdepth 1 -type f -name '"'"'layer-*.bin'"'"' -delete
+      done
     '; then
     echo "clear-cache-all-riid-pods: FAILED RIID pod=$pod" >&2
     failed=1

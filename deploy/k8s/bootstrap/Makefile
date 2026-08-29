@@ -10,16 +10,25 @@ DOCKERHUB_IMAGELIST := $(K8S)/config/imagelist/dockerhub.yaml
 DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
 
-# OpenStack Cinder: класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
+# Default class for PVCs with no storageClass (Helm Dragonfly / Bitnami
+# MySQL+Redis). fast.ru-3b is a Cinder class created by the CSI of the managed
+# MKS cluster. The self-managed stand (terraform-porto, Ubuntu 22.04) has no CSI,
+# so it uses STORAGE_CLASS=local-path and storage-default brings the provisioner
+# up itself.
 STORAGE_CLASS ?= fast.ru-3b ## Санкт-Петербург
+LOCAL_PATH_STORAGE_CLASS := local-path
+LOCAL_PATH_MANIFEST := $(K8S)/.resolved/src/storage/local-path-storage.yaml
+LOCAL_PATH_ROLLOUT_TIMEOUT ?= 300s
 RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
 OBSERVER_ROLLOUT_TIMEOUT ?= 600s
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
-# Образ DaemonSet должен уже содержать podman+fuse-overlayfs+curl+jq (+ storage/registries как в Dockerfile.worker или экв.).
-# На нодах ничего не ставим; worker-tooling, local-registry и профили registry — bootstrap/registry/Makefile.
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests
+# Образ DaemonSet должен уже содержать podman+curl+jq — podman в поде только
+# REMOTE-клиент, движок живёт на ноде (install-podman-node). local-registry и
+# профили registry — bootstrap/registry/Makefile.
+PODMAN_NODE_WAIT_TIMEOUT ?= 900
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -100,12 +109,25 @@ mark-registry-node-auto:
 	echo "registry node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.registry/p'
 
-# Пометить Cinder StorageClass как default (нужно для Dragonfly Helm на этом стенде).
+# Mark the StorageClass as default (Dragonfly's Helm chart needs it on this
+# stand). If the class is missing and it is local-path, the provisioner from
+# src/storage is installed first: on a cluster without a CSI nothing else can
+# create a single PVC, and Dragonfly never comes up.
 storage-default:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	if ! kubectl get storageclass "$(STORAGE_CLASS)" >/dev/null 2>&1; then \
+	  [ "$(STORAGE_CLASS)" = "$(LOCAL_PATH_STORAGE_CLASS)" ] || { \
+	    echo "storageclass $(STORAGE_CLASS) not found; on a cluster without a CSI use STORAGE_CLASS=$(LOCAL_PATH_STORAGE_CLASS)" >&2; \
+	    exit 1; \
+	  }; \
+	  $(RUN_PROVIDER_APPLY); \
+	  kubectl apply -f "$(LOCAL_PATH_MANIFEST)"; \
+	  kubectl -n local-path-storage rollout status deploy/local-path-provisioner \
+	    --timeout=$(LOCAL_PATH_ROLLOUT_TIMEOUT); \
+	fi; \
 	kubectl patch storageclass $(STORAGE_CLASS) \
 		-p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
@@ -125,6 +147,42 @@ install-dragonfly:
 
 # Работает из любой cwd; манифесты: $(K8S)/…
 # Secret riid-config-secret из $(K8S)/config/.env — только bootstrap/registry/Makefile (secret-config-riid / registry-apply-profile).
+# podman как демон ноды: та же форма, что containerd.sock и portod.socket.
+# Обязательно ДО install-riid — DaemonSet монтирует /run/podman/podman.sock с
+# type: Socket, и без сокета под не стартует вовсе.
+install-podman-node:
+	@$(RUN_PROVIDER_APPLY)
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	kubectl apply -f "$(K8S)/.resolved/src/namespace.yaml"; \
+	kubectl apply -f "$(K8S)/.resolved/src/engines/podman-node.yaml"
+
+# Ждём готовности podman на всех нодах и печатаем версии — окружение AGENT-99
+# должно быть записано, а не запомнено.
+wait-podman-node:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	deadline=$$(( $$(date +%s) + $(PODMAN_NODE_WAIT_TIMEOUT) )); \
+	while :; do \
+	  desired=$$(kubectl -n riid-system get daemonset podman-node -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo 0); \
+	  ready=$$(kubectl -n riid-system get daemonset podman-node -o jsonpath='{.status.numberReady}' 2>/dev/null || echo 0); \
+	  desired=$${desired:-0}; ready=$${ready:-0}; \
+	  echo "wait-podman-node: ready=$$ready/$$desired"; \
+	  if [ "$$desired" -gt 0 ] && [ "$$ready" -eq "$$desired" ]; then break; fi; \
+	  if [ $$(date +%s) -ge "$$deadline" ]; then \
+	    echo "wait-podman-node: timeout after $(PODMAN_NODE_WAIT_TIMEOUT)s" >&2; \
+	    kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node -o wide >&2 || true; \
+	    exit 1; \
+	  fi; \
+	  sleep $(RIID_WAIT_INTERVAL); \
+	done; \
+	echo ">>> engine versions per node:"; \
+	kubectl -n riid-system logs -l app.kubernetes.io/name=podman-node --tail=3 --prefix
+
 install-riid:
 	@$(RUN_PROVIDER_APPLY)
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -176,8 +234,9 @@ verify-riid-pod-tooling:
 	printf '%s\n' "$$pods" | while IFS= read -r pod; do \
 	  echo ">>> $$pod"; \
 	  kubectl -n riid-system exec -c riid "$$pod" -- sh -c \
-	    'podman --version >/dev/null && test -x /usr/bin/fuse-overlayfs \
-	      && grep -q fuse-overlayfs /etc/containers/storage.conf \
+	    'podman --version >/dev/null \
+	      && test -S /run/podman/podman.sock \
+	      && podman info --format "{{.Host.ServiceIsRemote}}" | grep -qx true \
 	      && command -v curl >/dev/null && curl --version | head -n1 \
 	      && command -v jq >/dev/null && jq --version'; \
 	done; \
@@ -293,6 +352,8 @@ install-all:
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-monitoring-node-auto
 	@$(MAKE) -C "$(SELECTEL_DIR)" mark-registry-node-auto
 	@$(MAKE) -C "$(SELECTEL_DIR)/registry" registry-apply-profile K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)" SELECTEL_DIR="$(SELECTEL_DIR)"
+	@$(MAKE) -C "$(SELECTEL_DIR)" install-podman-node
+	@$(MAKE) -C "$(SELECTEL_DIR)" wait-podman-node
 	@$(MAKE) -C "$(SELECTEL_DIR)" install-riid
 	@$(MAKE) -C "$(SELECTEL_DIR)" wait-riid-ready
 	@$(MAKE) -C "$(SELECTEL_DIR)" verify-riid-pod-tooling

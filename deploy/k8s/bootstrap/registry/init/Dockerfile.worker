@@ -21,7 +21,19 @@ RUN apt-get update \
     procps \
  && rm -rf /var/lib/apt/lists/*
 
-COPY deploy/k8s/src/riid/storage.conf /etc/containers/storage.conf
+# This image really does run podman inside the container (registry mirroring,
+# dataset loads), so it keeps a fuse-overlayfs store of its own. The RIID pod no
+# longer has one — there podman is a remote client of the node daemon — so the
+# config lives here instead of being borrowed from src/riid/.
+RUN printf '%s\n' \
+      '[storage]' \
+      'driver = "overlay"' \
+      'runroot = "/var/run/containers/storage"' \
+      'graphroot = "/var/lib/containers/storage"' \
+      '' \
+      '[storage.options.overlay]' \
+      'mount_program = "/usr/bin/fuse-overlayfs"' \
+      > /etc/containers/storage.conf
 
 RUN mkdir -p /etc/containers/registries.conf.d \
  && printf '%s\n' \

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# podman driver. The engine is a daemon on the node (podman.socket, installed by
+# src/engines/podman-node.yaml) and everything here is a remote client, the same
+# shape as containerd's containerd.sock and Porto's portod.socket.
+#
+# There is no --remote flag anywhere on purpose: CONTAINER_HOST alone switches
+# podman into client mode (cmd/podman/registry/remote.go:33 in podman 6.1.0), and
+# that variable is set on the RIID container in daemonset.yaml. So the bench and
+# PodmanRuntimeAdapter reach the same daemon without either of them knowing.
+#
+# Two consequences of the engine living on the node, both of which used to be
+# handled in the pod and are now checked instead:
+#
+#   1. The pull happens in the HOST netns, where the cluster resolver does not
+#      exist. The reference therefore carries the registry's ClusterIP, not its
+#      *.svc.cluster.local name — see riid_registry_node_host in common.inc.sh.
+#   2. dfinit edits the node's own /etc/containers/registries.conf, which is the
+#      file the daemon reads. The baseline arm can no longer be pointed at a
+#      private copy through CONTAINERS_REGISTRIES_CONF, because that variable
+#      would be set on the client while the pull runs in the service. So the
+#      baseline asserts the mirror is absent instead of arranging for it.
+#
+# Env:
+#   PODMAN_TLS_VERIFY  force true|false; defaults to false for the local HTTP
+#                        registry, true otherwise
+
+_podman_tls_verify() {
+  local v="${PODMAN_TLS_VERIFY:-${REGISTRY_TLS_VERIFY:-}}"
+  if [[ -z "$v" ]]; then
+    if riid_registry_is_plain_http; then v=false; else v=true; fi
+  fi
+  printf '%s\n' "$v"
+}
+
+# What the daemon resolved, not what some file says: this is the engine's own
+# view of its registries, mirrors included (libpod/info.go:53 fills it from
+# sysregistriesv2.GetRegistries).
+_podman_registries() {
+  riid_engine_exec "$1" podman info --format '{{json .Registries}}'
+}
+
+engine_preflight() {
+  local pod="$1" remote
+  riid_engine_exec "$pod" sh -ec 'command -v podman >/dev/null'
+  remote="$(riid_engine_exec "$pod" podman info --format '{{.Host.ServiceIsRemote}}' 2>/dev/null || true)"
+  if [[ "$remote" != "true" ]]; then
+    echo "podman in pod=$pod is not talking to the node daemon (ServiceIsRemote=$remote)" >&2
+    echo "  expected CONTAINER_HOST=unix:///run/podman/podman.sock and a live podman.socket" >&2
+    echo "  check: make -C deploy/k8s/bootstrap wait-podman-node" >&2
+    return 1
+  fi
+}
+
+# With no host the reference stays short: podman completes it through
+# unqualified-search-registries, so this is a working case, not an error.
+engine_ref() {
+  local repo="$1" tag="$2" host
+  host="$(riid_registry_node_host)" || return 1
+  if [[ -n "$host" ]]; then
+    printf '%s/%s:%s\n' "${host%/}" "$repo" "$tag"
+  else
+    printf '%s:%s\n' "$repo" "$tag"
+  fi
+}
+
+engine_pull() {
+  local pod="$1" ref="$2"
+  riid_engine_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
+}
+
+engine_pull_mirrored() {
+  local pod="$1" ref="$2"
+  riid_engine_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
+}
+
+# Without this check the dfinit arm silently degrades into a plain pull and
+# measures overhead instead of P2P — exactly how one run was already lost.
+engine_mirror_check() {
+  local pod="$1"
+  if ! _podman_registries "$pod" | grep -qF "$RIID_DFINIT_PROXY_LOCATION"; then
+    echo "dfinit mirror not found: the node daemon behind pod=$pod has no '$RIID_DFINIT_PROXY_LOCATION'" >&2
+    echo "  dfinit writes /etc/containers/registries.conf on the NODE; check client.dfinit in values" >&2
+    return 1
+  fi
+}
+
+# The mirror image of the check above, for the baseline arm: the same node file
+# serves both arms now, so a leftover dfinit mirror would turn this arm into a
+# second dfinit run without anything looking wrong.
+engine_no_mirror_check() {
+  local pod="$1"
+  if _podman_registries "$pod" | grep -qF "$RIID_DFINIT_PROXY_LOCATION"; then
+    echo "baseline arm is contaminated: the node daemon behind pod=$pod still mirrors through" >&2
+    echo "  '$RIID_DFINIT_PROXY_LOCATION'. Disable client.dfinit and let the node's" >&2
+    echo "  /etc/containers/registries.conf go back to the pristine copy taken at install:" >&2
+    echo "  /etc/containers/registries.conf.riid-baseline (src/engines/podman-node.yaml)" >&2
+    return 1
+  fi
+}
+
+# --volumes: a pull creates no anonymous volumes, so it does not affect the
+# measurement, but it matches scenario/clear/clear-cache-all-riid-pods.sh —
+# one meaning of "clean". Now wipes the node's store, which is the store both
+# the baseline and the RIID import write into.
+engine_clear_cache() {
+  riid_engine_exec "$1" podman system prune -af --volumes >/dev/null
+}

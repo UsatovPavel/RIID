@@ -38,14 +38,13 @@ observers + registry_nodes), so `make stand` alone builds the configured size.
 Then hand the stand to the bootstrap chain:
 
 ```bash
-make -C ../../../../bootstrap install-all \
-  CONFIG_FILE=../providers/cluster/Selectel/serverConfig-porto.yaml \
-  STORAGE_CLASS=local-path
+make bootstrap            # bootstrap install-all against this stand
 ```
 
-`STORAGE_CLASS` matters: `fast.ru-3b` is a Cinder class the MKS CSI creates, and
-a self-managed cluster has no CSI. `src/storage/local-path-storage.yaml` is what
-provides a class here.
+That target passes this stand's kubeconfig and `STORAGE_CLASS=local-path`.
+The class matters: `fast.ru-3b` is a Cinder class the MKS CSI creates, and a
+self-managed cluster has no CSI, so `bootstrap`'s `storage-default` step installs
+`src/storage/local-path-storage.yaml` when the requested class is missing.
 
 ## What cloud-init does
 

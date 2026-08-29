@@ -1,0 +1,96 @@
+# podman as a node daemon, so that every engine in the AGENT-99 matrix has the
+# same shape: a daemon on the node, reached from the bench pod over a host
+# socket. containerd has /run/containerd/containerd.sock and Porto has
+# /run/portod.socket already; podman is daemonless by design, so the node runs
+# `podman system service` (the packaged podman.socket unit) and the pod talks to
+# it through CONTAINER_HOST.
+#
+# What this buys, beyond symmetry: the pod stops unpacking images into its own
+# writable layer through fuse-overlayfs (overlay on overlay). Unpacking is the
+# dominant cost of an import — ADR-11 measured engine.import at 76% of a cold
+# request — so measuring it through a FUSE store measured the test rig.
+#
+# Installation goes through `chroot /host` rather than nsenter: busybox's nsenter
+# applet is not guaranteed to be compiled in, while chroot always is, and with
+# the host root mounted the host's own systemctl and apt are the ones that run.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: podman-node
+  namespace: riid-system
+  labels:
+    app.kubernetes.io/name: podman-node
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: podman-node
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: podman-node
+    spec:
+      # The same nodes RIID runs on, and only those: no control plane, no
+      # monitoring VM, no registry node.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+                  - key: riid.monitoring
+                    operator: DoesNotExist
+                  - key: riid.registry
+                    operator: DoesNotExist
+      hostPID: true
+      containers:
+        - name: installer
+          image: riid.daemonset.init_busybox
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              chroot /host /bin/sh -ec '
+                if ! command -v podman >/dev/null 2>&1; then
+                  export DEBIAN_FRONTEND=noninteractive
+                  apt-get update
+                  apt-get install -y --no-install-recommends podman
+                fi
+                systemctl enable --now podman.socket
+                # A pristine copy, taken before dfinit ever edits this file, so
+                # the baseline arm can be told apart from a dfinit-mirrored one.
+                if [ ! -f /etc/containers/registries.conf.riid-baseline ] \
+                   && [ -f /etc/containers/registries.conf ]; then
+                  cp /etc/containers/registries.conf /etc/containers/registries.conf.riid-baseline
+                fi
+              '
+              # AGENT-99 wants the environment recorded, not remembered: the
+              # versions the arms actually ran against end up in this pod log.
+              echo "podman-node: node=$NODE_NAME"
+              chroot /host /bin/sh -c 'podman --version; . /etc/os-release; echo "os=$PRETTY_NAME kernel=$(uname -r)"'
+              # Re-check instead of sleeping blind: if the socket goes away the
+              # pod crash-loops, which is visible, rather than the arms silently
+              # failing one image at a time.
+              while chroot /host /bin/sh -c 'test -S /run/podman/podman.sock'; do
+                sleep 60
+              done
+              echo "podman-node: /run/podman/podman.sock disappeared on $NODE_NAME" >&2
+              exit 1
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory

@@ -59,14 +59,18 @@ spec:
         - name: riid
           image: riid.daemonset.riid
           imagePullPolicy: IfNotPresent
-          securityContext:
-            capabilities:
-              add:
-                - SYS_ADMIN
-                - MKNOD
+          # No added capabilities: SYS_ADMIN/MKNOD were there for the in-pod
+          # podman graph driver (overlay mounts, device nodes). The pod no
+          # longer unpacks anything — every engine is a daemon on the node.
           env:
             - name: RIID_CONFIG
               value: /etc/riid/config.yaml
+            # Remote podman. CONTAINER_HOST alone puts podman in client mode —
+            # no --remote flag anywhere (cmd/podman/registry/remote.go:33 in
+            # podman 6.1.0), so PodmanRuntimeAdapter and the bench drivers both
+            # reach the node daemon without any code knowing about it.
+            - name: CONTAINER_HOST
+              value: unix:///run/podman/podman.sock
           ports:
             - name: metrics
               containerPort: 9090
@@ -77,8 +81,14 @@ spec:
               subPath: config.yaml
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
-            - name: fuse-device
-              mountPath: /dev/fuse
+            - name: podman-sock
+              mountPath: /run/podman/podman.sock
+            # Same path inside and outside: the prefix-import path hands podman
+            # an `oci:<dir>` reference, and a remote podman resolves that
+            # directory on the NODE. A different mountPath here would make the
+            # daemon look for a directory that only exists in the pod.
+            - name: riid-work-host
+              mountPath: /var/lib/riid/work
       volumes:
         - name: riid-work
           emptyDir: {}
@@ -93,7 +103,11 @@ spec:
           hostPath:
             path: /var/run/dragonfly
             type: DirectoryOrCreate
-        - name: fuse-device
+        - name: podman-sock
           hostPath:
-            path: /dev/fuse
-            type: CharDevice
+            path: /run/podman/podman.sock
+            type: Socket
+        - name: riid-work-host
+          hostPath:
+            path: /var/lib/riid/work
+            type: DirectoryOrCreate
