@@ -19,6 +19,7 @@ import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
 import riid.cache.oci.CacheAdapter;
 import riid.cache.oci.CacheEntry;
+import riid.cache.oci.CacheLease;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.CachePayload;
 import riid.cache.oci.ImageDigest;
@@ -51,12 +52,12 @@ class SimpleRequestDispatcherTest {
             cache.entry = new CacheEntry(ImageDigest.parse(DIGEST), 10, CacheMediaType.OCI_LAYER, "/tmp/cached");
 
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
-            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
-
-            assertEquals(Path.of("/tmp/cached"), result.path());
-            assertEquals(1, registry.manifestCalls);
-            assertEquals(0, registry.blobCalls);
-            assertFalse(p2p.fetchCalled, "p2p should not be used on cache hit");
+            try (FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null))) {
+                assertEquals(Path.of("/tmp/cached"), result.path());
+                assertEquals(1, registry.manifestCalls);
+                assertEquals(0, registry.blobCalls);
+                assertFalse(p2p.fetchCalled, "p2p should not be used on cache hit");
+            }
         }
     }
 
@@ -69,14 +70,14 @@ class SimpleRequestDispatcherTest {
             p2p.fetchResult = Optional.of(Path.of("/tmp/p2p-layer"));
 
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
-            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
-
-            // Dispatcher puts P2P result into cache and returns cache path
-            assertEquals(Path.of("/tmp/cache/" + ImageDigest.parse(DIGEST).hex()), result.path());
-            assertEquals(1, registry.manifestCalls);
-            assertEquals(0, registry.blobCalls);
-            assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
-            assertTrue(cache.putCalled, "cache should be populated after P2P fetch");
+            try (FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null))) {
+                // Dispatcher puts P2P result into cache and returns cache path
+                assertEquals(Path.of("/tmp/cache/" + ImageDigest.parse(DIGEST).hex()), result.path());
+                assertEquals(1, registry.manifestCalls);
+                assertEquals(0, registry.blobCalls);
+                assertTrue(p2p.fetchCalled, "p2p fetch should be attempted");
+                assertTrue(cache.putCalled, "cache should be populated after P2P fetch");
+            }
         }
     }
 
@@ -108,14 +109,14 @@ class SimpleRequestDispatcherTest {
 
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p,
                     new riid.dispatcher.core.config.DispatcherConfig(1), fs);
-            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
-
-            assertEquals(cachedPath, result.path());
-            assertTrue(fs.exists(result.path()), "downloaded layer should exist");
-            assertTrue(fs.size(result.path()) > 0, "downloaded layer should not be empty");
-            assertEquals(1, registry.blobCalls);
-            assertTrue(cache.putCalled, "cache should be populated after registry download");
-            assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
+            try (FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null))) {
+                assertEquals(cachedPath, result.path());
+                assertTrue(fs.exists(result.path()), "downloaded layer should exist");
+                assertTrue(fs.size(result.path()) > 0, "downloaded layer should not be empty");
+                assertEquals(1, registry.blobCalls);
+                assertTrue(cache.putCalled, "cache should be populated after registry download");
+                assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
+            }
         }
     }
 
@@ -130,13 +131,14 @@ class SimpleRequestDispatcherTest {
 
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p,
                     new DispatcherConfig(1), trackingFs);
-            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null));
-
-            assertEquals(cachedPath, result.path());
-            assertTrue(cache.putCalled, "cache should be populated after registry download");
-            assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
-            assertNotNull(trackingFs.lastTemp.get(), "temp file should be created");
-            assertFalse(trackingFs.exists(trackingFs.lastTemp.get()), "temp file should be deleted after cache write");
+            try (FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, TAG, null))) {
+                assertEquals(cachedPath, result.path());
+                assertTrue(cache.putCalled, "cache should be populated after registry download");
+                assertTrue(p2p.publishCalled, "p2p should be notified after registry download");
+                assertNotNull(trackingFs.lastTemp.get(), "temp file should be created");
+                assertFalse(trackingFs.exists(trackingFs.lastTemp.get()),
+                        "temp file should be deleted after cache write");
+            }
         }
     }
 
@@ -209,25 +211,16 @@ class SimpleRequestDispatcherTest {
         }
 
         @Override
-        public boolean has(ImageDigest digest) {
-            return hasEntry;
-        }
-
-        @Override
-        public Optional<CacheEntry> get(ImageDigest digest) {
-            return Optional.ofNullable(entry);
-        }
-
-        @Override
-        public Optional<Path> resolve(String key) {
-            if (resolvedPath != null) {
-                return Optional.of(resolvedPath);
+        public Optional<CacheLease> acquire(ImageDigest digest) {
+            if (!hasEntry || entry == null) {
+                return Optional.empty();
             }
-            return key == null ? Optional.empty() : Optional.of(Path.of(key));
+            Path path = resolvedPath != null ? resolvedPath : Path.of(entry.key());
+            return Optional.of(CacheLease.unmanaged(entry, path));
         }
 
         @Override
-        public CacheEntry put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) {
+        public CacheLease put(ImageDigest digest, CachePayload payload, CacheMediaType mediaType) {
             putCalled = true;
             putMediaType = mediaType;
             long size;
@@ -237,9 +230,11 @@ class SimpleRequestDispatcherTest {
                 throw new RuntimeException(e);
             }
             if (resolvedPath != null) {
-                return new CacheEntry(digest, size, mediaType, resolvedPath.toString());
+                CacheEntry stored = new CacheEntry(digest, size, mediaType, resolvedPath.toString());
+                return CacheLease.unmanaged(stored, resolvedPath);
             }
-            return new CacheEntry(digest, size, mediaType, "/tmp/cache/" + digest.hex());
+            Path path = Path.of("/tmp/cache/" + digest.hex());
+            return CacheLease.unmanaged(new CacheEntry(digest, size, mediaType, path.toString()), path);
         }
     }
 

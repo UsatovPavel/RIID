@@ -182,6 +182,19 @@ public final class ConfigValidator {
         if (maxCacheBytes != null && maxCacheBytes <= 0) {
             throw new ConfigValidationException("app.daemon.maxCacheBytes must be positive");
         }
+        int highWatermarkPercent = daemon.cacheHighWatermarkPercentOrDefault();
+        if (highWatermarkPercent < 1 || highWatermarkPercent > 100) {
+            throw new ConfigValidationException(
+                    "app.daemon.cacheHighWatermarkPercent must be in range 1..100");
+        }
+        int lowWatermarkPercent = daemon.cacheLowWatermarkPercentOrDefault();
+        if (lowWatermarkPercent < 1 || lowWatermarkPercent > 100) {
+            throw new ConfigValidationException(
+                    "app.daemon.cacheLowWatermarkPercent must be in range 1..100");
+        }
+        if (lowWatermarkPercent >= highWatermarkPercent) {
+            throw new ConfigValidationException("app.daemon cache watermarks must satisfy low < high");
+        }
     }
 
     private static void validateRuntime(RuntimeConfig runtime) {

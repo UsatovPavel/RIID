@@ -14,7 +14,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.PathSupport;
 import riid.cache.oci.CacheAdapter;
-import riid.cache.oci.CacheEntry;
+import riid.cache.oci.CacheLease;
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.FilesystemCachePayload;
 import riid.cache.oci.ImageDigest;
@@ -85,18 +85,17 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
         long selectStartedNs = System.nanoTime();
 
         // 1) cache
-        Path cachedPath = null;
-        if (cache != null && cache.has(digest)) {
-            cachedPath = cache.get(digest).flatMap(entry -> cache.resolve(entry.key())).orElse(null);
-        }
-        if (cachedPath != null) {
+        Optional<CacheLease> cached = cache == null ? Optional.empty() : cache.acquire(digest);
+        if (cached.isPresent()) {
+            CacheLease lease = cached.orElseThrow();
+            Path cachedPath = lease.path();
             stepLogger.sourceSelectFromCache(selectStartedNs);
             long fetchStartedNs = System.nanoTime();
             LOGGER.info("cache hit for layer {}", digest);
             stepLogger.sourceFetchFromCache(fetchStartedNs);
             layerSourceMetrics.recordLayerFetch("cache");
             recordLayerBytes("cache", sizeBytes, cachedPath);
-            return new FetchResult(digest, mediaType, cachedPath);
+            return FetchResult.leased(digest, mediaType, lease);
         }
 
         // 2) P2P
@@ -107,20 +106,17 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                 if (p2pPath.isPresent()) {
                     LOGGER.info("p2p hit for layer {}", digest);
                     Path resultPath = p2pPath.get();
+                    CacheLease resultLease = null;
                     if (cache != null) {
                         try {
                             long size = sizeBytes > 0 ? sizeBytes : fs.size(resultPath);
-                            CacheEntry entry = cache.put(digest, FilesystemCachePayload.of(fs, resultPath, size),
+                            resultLease = cache.put(digest, FilesystemCachePayload.of(fs, resultPath, size),
                                     CacheMediaType.from(mediaType.value()));
-                            Path resolvedPath = cache.resolve(entry.key()).orElse(null);
-                            if (resolvedPath != null) {
-                                resultPath = resolvedPath;
-                                try {
-                                    fs.deleteIfExists(p2pPath.get());
-                                } catch (Exception ex) {
-                                    LOGGER.warn("Failed to delete temp p2p file {}: {}", p2pPath.get(),
-                                            ex.getMessage());
-                                }
+                            resultPath = resultLease.path();
+                            try {
+                                fs.deleteIfExists(p2pPath.get());
+                            } catch (Exception ex) {
+                                LOGGER.warn("Failed to delete temp p2p file {}: {}", p2pPath.get(), ex.getMessage());
                             }
                         } catch (ValidationException ve) {
                             LOGGER.warn("Validation error for cache put ({}): {}", mediaType, ve.getMessage());
@@ -134,7 +130,9 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
                     stepLogger.sourceFetchFromP2p(fetchStartedNs);
                     layerSourceMetrics.recordLayerFetch("p2p");
                     recordLayerBytes("p2p", sizeBytes, resultPath);
-                    return new FetchResult(digest, mediaType, resultPath);
+                    return resultLease == null
+                            ? new FetchResult(digest, mediaType, resultPath)
+                            : FetchResult.leased(digest, mediaType, resultLease);
                 }
             } catch (IOException ex) {
                 LOGGER.warn("P2P fetch failed for layer {}: {}", digest, ex.getMessage());
@@ -155,16 +153,14 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
 
             Path resultPath = tempPath;
             boolean deleteTemp = false;
+            CacheLease resultLease = null;
             if (cache != null) {
                 try {
-                    CacheEntry entry = cache.put(ImageDigest.parse(blob.digest()),
+                    resultLease = cache.put(ImageDigest.parse(blob.digest()),
                             FilesystemCachePayload.of(fs, tempPath, tmp.length()),
                             CacheMediaType.from(blob.mediaType()));
-                    Path resolvedPath = cache.resolve(entry.key()).orElse(null);
-                    if (resolvedPath != null) {
-                        resultPath = resolvedPath;
-                        deleteTemp = true;
-                    }
+                    resultPath = resultLease.path();
+                    deleteTemp = true;
                 } catch (ValidationException ve) {
                     LOGGER.warn("Validation error for cache put ({}): {}", blob.mediaType(), ve.getMessage());
                 } catch (IllegalArgumentException iae) {
@@ -194,7 +190,10 @@ public class SimpleRequestDispatcher implements RequestDispatcher {
             layerSourceMetrics.recordLayerFetch("registry");
             long registryBytes = blob.size() > 0 ? blob.size() : tmp.length();
             layerSourceMetrics.recordLayerFetchedBytes("registry", registryBytes);
-            return new FetchResult(ImageDigest.parse(blob.digest()), MediaType.from(blob.mediaType()), resultPath);
+            return resultLease == null
+                    ? new FetchResult(ImageDigest.parse(blob.digest()), MediaType.from(blob.mediaType()), resultPath)
+                    : FetchResult.leased(ImageDigest.parse(blob.digest()), MediaType.from(blob.mediaType()),
+                            resultLease);
         } catch (RuntimeException e) {
             stepLogger.sourceFetchFailed(fetchStartedNs, e);
             throw e;

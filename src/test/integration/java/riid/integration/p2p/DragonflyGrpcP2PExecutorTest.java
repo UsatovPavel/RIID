@@ -91,11 +91,11 @@ class DragonflyGrpcP2PExecutorTest {
             assertTrue(seedRequests > 0, "warmup should hit registry server at least once");
 
             SimpleRequestDispatcher dispatcher = new SimpleRequestDispatcher(registry, cache, p2p, fs);
-            FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, "tag", null));
-
-            assertNotNull(result);
-            assertTrue(fs.exists(result.path()), "downloaded file should exist");
-            assertEquals(payload.length, fs.size(result.path()), "downloaded size should match");
+            try (FetchResult result = dispatcher.fetchImage(new ImageRef(REPO, "tag", null))) {
+                assertNotNull(result);
+                assertTrue(fs.exists(result.path()), "downloaded file should exist");
+                assertEquals(payload.length, fs.size(result.path()), "downloaded size should match");
+            }
             assertEquals(1, registry.manifestCalls, "manifest should be fetched once");
             assertEquals(0, registry.blobCalls, "registry blob fetch should not be used when p2p hit");
             assertEquals(seedRequests, blobRequests.get(),
