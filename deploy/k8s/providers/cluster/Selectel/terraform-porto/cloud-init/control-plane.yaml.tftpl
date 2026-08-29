@@ -1,0 +1,68 @@
+#cloud-config
+# Control plane стенда под Porto. Сам Porto здесь не нужен: на control plane
+# нагрузка не едет, он только держит kube-apiserver.
+users:
+  - default
+  - name: riid
+    gecos: RIID benchmark stand
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /opt/riid/common-node.sh
+    permissions: "0755"
+    content: |
+      ${indent(6, common)}
+
+  - path: /opt/riid/kubeadm-init.yaml
+    permissions: "0600"
+    content: |
+      apiVersion: kubeadm.k8s.io/v1beta4
+      kind: InitConfiguration
+      bootstrapTokens:
+        - token: ${kubeadm_token}
+          ttl: ${token_ttl}
+      localAPIEndpoint:
+        advertiseAddress: ${api_advertise}
+        bindPort: 6443
+      nodeRegistration:
+        criSocket: unix:///run/containerd/containerd.sock
+      ---
+      apiVersion: kubeadm.k8s.io/v1beta4
+      kind: ClusterConfiguration
+      networking:
+        podSubnet: ${pod_cidr}
+      apiServer:
+        certSANs:
+          - ${api_advertise}
+          - ${api_extra_san}
+
+  - path: /opt/riid/bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euxo pipefail
+      /opt/riid/common-node.sh
+
+      kubeadm init --config /opt/riid/kubeadm-init.yaml
+
+      export KUBECONFIG=/etc/kubernetes/admin.conf
+      install -d -m 0700 -o riid -g riid /home/riid/.kube
+      install -m 0600 -o riid -g riid /etc/kubernetes/admin.conf /home/riid/.kube/config
+
+      # flannel: манифест по умолчанию зашит на 10.244.0.0/16, поэтому сеть
+      # подменяется под podSubnet кластера, а не наоборот.
+      curl -fsSLo /opt/riid/kube-flannel.yml \
+        https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+      sed -i "s#10.244.0.0/16#${pod_cidr}#g" /opt/riid/kube-flannel.yml
+      kubectl apply -f /opt/riid/kube-flannel.yml
+
+      touch /run/riid-control-plane-ready
+
+runcmd:
+  - [bash, /opt/riid/bootstrap.sh]
+
+output:
+  all: "| tee -a /var/log/riid-bootstrap.log"
