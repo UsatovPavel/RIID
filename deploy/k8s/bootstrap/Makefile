@@ -10,8 +10,14 @@ DOCKERHUB_IMAGELIST := $(K8S)/config/imagelist/dockerhub.yaml
 DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
 
-# OpenStack Cinder: класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
+# Класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
+# fast.ru-3b — Cinder-класс, его создаёт CSI управляемого кластера MKS. На
+# самоуправляемом стенде (terraform-porto, Ubuntu 22.04) CSI нет, поэтому там
+# STORAGE_CLASS=local-path, и storage-default сам поднимает провижнер.
 STORAGE_CLASS ?= fast.ru-3b ## Санкт-Петербург
+LOCAL_PATH_STORAGE_CLASS := local-path
+LOCAL_PATH_MANIFEST := $(K8S)/.resolved/src/storage/local-path-storage.yaml
+LOCAL_PATH_ROLLOUT_TIMEOUT ?= 300s
 RIID_WAIT_INTERVAL ?= 15
 RIID_WAIT_TIMEOUT ?= 600
 OBSERVER_ROLLOUT_TIMEOUT ?= 600s
@@ -100,12 +106,24 @@ mark-registry-node-auto:
 	echo "registry node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.registry/p'
 
-# Пометить Cinder StorageClass как default (нужно для Dragonfly Helm на этом стенде).
+# Пометить StorageClass как default (нужно для Dragonfly Helm на этом стенде).
+# Если класса нет и это local-path, сначала ставится провижнер из src/storage:
+# на кластере без CSI иначе некому создать ни один PVC, и Dragonfly не встаёт.
 storage-default:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	if ! kubectl get storageclass "$(STORAGE_CLASS)" >/dev/null 2>&1; then \
+	  [ "$(STORAGE_CLASS)" = "$(LOCAL_PATH_STORAGE_CLASS)" ] || { \
+	    echo "storageclass $(STORAGE_CLASS) not found; on a cluster without a CSI use STORAGE_CLASS=$(LOCAL_PATH_STORAGE_CLASS)" >&2; \
+	    exit 1; \
+	  }; \
+	  $(RUN_PROVIDER_APPLY); \
+	  kubectl apply -f "$(LOCAL_PATH_MANIFEST)"; \
+	  kubectl -n local-path-storage rollout status deploy/local-path-provisioner \
+	    --timeout=$(LOCAL_PATH_ROLLOUT_TIMEOUT); \
+	fi; \
 	kubectl patch storageclass $(STORAGE_CLASS) \
 		-p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 

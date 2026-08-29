@@ -14,6 +14,10 @@ SSH_KEY ?= $(TF_DIR)/.ssh/id_ed25519
 # получает аргументом, поэтому TF раскрывается в два слова.
 COMMON_DIR := $(abspath $(TF_DIR)/../stand-common)
 TF := $(COMMON_DIR)/tf.sh $(TF_DIR)
+BOOTSTRAP_DIR := $(K8S_ROOT)/bootstrap
+# bootstrap/Makefile склеивает CONFIG_FILE со своей директорией, поэтому путь
+# сюда передаётся относительным, а не абсолютным.
+BOOTSTRAP_CONFIG_FILE := ../providers/cluster/Selectel/$(notdir $(KUBECONFIG_OUT))
 
 # Same single source of truth as the MKS stand: cluster_topology in config.yaml.
 NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers + .cluster_topology.registry_nodes' "$(CONFIG_YAML)" 2>/dev/null)
@@ -24,7 +28,7 @@ SSH_OPTS := -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLe
 NODE_READY_TIMEOUT ?= 1800
 
 .PHONY: help init fmt validate plan apply destroy output project-id stand stand-6 stand-12 \
-        ssh-key kubeconfig wait ssh smoke nodes
+        ssh-key kubeconfig wait ssh smoke nodes bootstrap
 
 help:
 	@echo "make init          — download the openstack provider"
@@ -37,6 +41,7 @@ help:
 	@echo "make wait          — block until every node is Ready"
 	@echo "make smoke         — portoctl --version on every worker"
 	@echo "make ssh           — shell on the control plane"
+	@echo "make bootstrap     — bootstrap install-all against this stand"
 	@echo "make destroy       — delete the stand"
 
 init:
@@ -106,6 +111,14 @@ kubeconfig: ssh-key
 
 nodes:
 	@KUBECONFIG="$(KUBECONFIG_OUT)" kubectl get nodes -o wide
+
+# Тот же bootstrap, что и для MKS, но со своим kubeconfig и без Cinder:
+# класс fast.ru-3b здесь создавать некому, storage-default сам поднимет
+# local-path provisioner из src/storage.
+bootstrap:
+	@$(MAKE) -C "$(BOOTSTRAP_DIR)" install-all \
+	  CONFIG_FILE="$(BOOTSTRAP_CONFIG_FILE)" \
+	  STORAGE_CLASS=local-path
 
 # cloud-init ставит containerd, kubeadm и Porto на каждой ноде, поэтому первый
 # boot длится минуты. Control plane отбрасывается селектором по

@@ -143,4 +143,4 @@ RIID and the Helm Dragonfly client run on workers; node `riid.monitoring=true` h
 
 **Observer stack:** Delivered with Helm and synced Grafana assets via the monitoring-observer install path—not by applying stale standalone observer YAML.
 
-**Other clusters:** Without Cinder’s default SC, install the local-path provisioner manifest from `src/storage/` instead of the storage-default step; otherwise keep using the same bootstrap Makefile with your kube context.
+**Other clusters:** Without Cinder’s default SC pass `STORAGE_CLASS=local-path`; the storage-default step then installs the local-path provisioner from `src/storage/` itself. Otherwise keep using the same bootstrap Makefile with your kube context.
