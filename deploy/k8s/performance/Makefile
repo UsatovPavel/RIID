@@ -65,7 +65,18 @@ REGISTRY_URL ?=
 DELETE_DATASET_RUN_GC ?= 0
 DELETE_DATASET_DRY_RUN ?= 0
 
+# P2P-меш проверяется перед каждым армом, а не только после очистки кэшей:
+# dfdaemon берёт адрес scheduler из dynconfig манагера по IP пода, и пока адрес
+# устарел, весь прогон тихо уходит back-to-source — pull не падает, а цифры
+# перестают быть про P2P. Отключается P2P_READY_CHECK=0 (baseline-армы bare-*,
+# где Dragonfly в пути нет вообще).
+P2P_READY_CHECK ?= 1
+WAIT_P2P_READY_SCRIPT := $(PERF_DIR)/scenario/clear/wait-dragonfly-p2p-ready.sh
+
 run:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	if [ "$(P2P_READY_CHECK)" = "1" ]; then bash "$(WAIT_P2P_READY_SCRIPT)"; fi
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
@@ -117,11 +128,13 @@ set-prefix-import:
 	kubectl -n riid-system rollout restart daemonset riid; \
 	kubectl -n riid-system rollout status daemonset riid
 
+# baseline: движок тянет напрямую из реестра, Dragonfly в пути нет вообще —
+# поэтому и ждать схождения меша здесь нечего (P2P_READY_CHECK=0).
 bare-podman:
-	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=podman
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=podman P2P_READY_CHECK=0
 
 bare-containerd:
-	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=containerd
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=containerd P2P_READY_CHECK=0
 
 dfinit-podman:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=dfinit ENGINE=podman
@@ -137,7 +150,7 @@ riid-porto:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=porto
 
 bare-porto:
-	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=porto
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=porto P2P_READY_CHECK=0
 
 clear-cluster-cache:
 	@export KUBECONFIG="$(KUBECONFIG)"; \

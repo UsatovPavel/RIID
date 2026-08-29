@@ -38,7 +38,7 @@ PODMAN_NODE_WAIT_TIMEOUT ?= 900
 # in performance/backend/engine/common.inc.sh (RIID_LOCAL_REGISTRY_HOST) so that
 # dfinit mirrors exactly the address the arms use.
 REGISTRY_PULL_HOST ?=
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -161,6 +161,19 @@ install-dragonfly:
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
+	@$(MAKE) -C "$(SELECTEL_DIR)" dragonfly-ready
+
+# helm --wait говорит только «поды Ready». dfdaemon при этом ещё может
+# держать адрес scheduler от прошлого пода: адрес приходит из dynconfig
+# манагера по IP пода и обновляется с задержкой. Прогон в этом окне идёт
+# мимо P2P целиком, поэтому меш проверяется отдельно (тем же скриптом,
+# что и очистка кэшей перед армом).
+dragonfly-ready:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(K8S)/performance/scenario/clear/wait-dragonfly-p2p-ready.sh"
 
 # Работает из любой cwd; манифесты: $(K8S)/…
 # Secret riid-config-secret из $(K8S)/config/.env — только bootstrap/registry/Makefile (secret-config-riid / registry-apply-profile).

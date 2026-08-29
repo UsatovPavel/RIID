@@ -2,12 +2,10 @@
 # Кластер: на каждом Running-поде RIID и подах Dragonfly client/seed-client:
 #
 # RIID (namespace по умолчанию riid-system):
-#   • Podman: podman system prune -af --volumes. Podman теперь демон НОДЫ
-#     (CONTAINER_HOST, см. src/engines/podman-node.yaml), поэтому prune чистит
-#     стор ноды — тот самый, куда пишут и baseline-арм, и импорт RIID.
+#   • Podman: podman system prune -af --volumes через podman-node. В RIID-образе
+#     CLI больше нет; prune по-прежнему чистит общий стор ноды.
 #   • RIID OCI-темп-кэш: каталоги riid-cache-tmp-* / riid-prefix-* и сироты
-#     layer-*.bin. Лежат в RIID_WORK_DIR (app.tempDirectory), а это hostPath на
-#     ноде — рестарт пода их больше НЕ чистит, только этот скрипт.
+#     layer-*.bin. Лежат в RIID_WORK_DIR (app.tempDirectory, emptyDir пода).
 #
 # Dragonfly (namespace по умолчанию dragonfly-system, см. DRAGONFLY_NAMESPACE):
 #   • Поды app=dragonfly, component=client | seed-client (Helm OSS): очистить содержимое
@@ -17,7 +15,9 @@
 #     при отсутствии скрипт падает.
 #
 # Ноды без соответствующих подов здесь не трогаются.
-# По умолчанию в конце выполняется reset control-plane Dragonfly (manager/scheduler + Redis FLUSHALL).
+# По умолчанию в конце выполняется reset control-plane Dragonfly (manager/scheduler + Redis FLUSHALL),
+# затем рестарт data-plane (client/seed-client) и ожидание схождения P2P-меша
+# (wait-dragonfly-p2p-ready.sh) — без этого арм стартует на мёртвом адресе scheduler.
 # Не вызывайте во время активных pull.
 #
 # Env:
@@ -25,7 +25,7 @@
 #   RIID_CONTAINER        — default: riid
 #   RIID_LABEL_SELECTOR   — default: app.kubernetes.io/name=riid
 #   RIID_WORK_DIR         — default: /var/lib/riid/work (== app.tempDirectory
-#                           в configmap.yaml и hostPath riid-work-host)
+#                           в configmap.yaml и emptyDir riid-work)
 #
 #   DRAGONFLY_NAMESPACE           — default: dragonfly-system
 #   DRAGONFLY_CACHE_DIRS           — пробел‑разделённый список каталогов (default: см. ниже)
@@ -38,6 +38,10 @@
 #   DRAGONFLY_ROLLOUT_TIMEOUT      — default: 5m
 #   DRAGONFLY_REDIS_MASTER_STS     — default: statefulset/dragonfly-redis-master
 #   DRAGONFLY_REDIS_REPLICAS_STS   — default: statefulset/dragonfly-redis-replicas
+#   DRAGONFLY_RESTART_DATA_PLANE   — 1/0, restart client/seed-client и ждать P2P (default: 1)
+#   DRAGONFLY_CLIENT_RESOURCE      — default: daemonset/dragonfly-client
+#   DRAGONFLY_SEED_RESOURCE        — default: statefulset/dragonfly-seed-client
+#   WAIT_P2P_READY_SCRIPT          — default: wait-dragonfly-p2p-ready.sh рядом с этим скриптом
 set -euo pipefail
 
 NS="${RIID_NAMESPACE:-riid-system}"
@@ -46,9 +50,12 @@ LABEL="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
 WORK_DIR="${RIID_WORK_DIR:-/var/lib/riid/work}"
 
 DFS="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
-# По умолчанию: дерево dfget/dfdaemon (часто /var/cache/dragonfly/dfdaemon под этим корнем)
-# и hostPath‑вывод RIID (/var/run/dragonfly/output в values.yaml extraVolumeMounts).
-DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/run/dragonfly/output}"
+# По умолчанию: дерево dfget/dfdaemon (часто /var/cache/dragonfly/dfdaemon под этим корнем),
+# рабочий стор dfdaemon (client.config.storage.dir в scripts/values.yaml) и
+# hostPath‑вывод RIID (/var/run/dragonfly/output там же в extraVolumeMounts).
+# Без storage.dir арм стартовал тёплым: содержимое прошлого арма оставалось на
+# ноде, а «очищались» только два каталога, которых у dfdaemon почти не бывает.
+DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/lib/dragonfly/riid/data /var/run/dragonfly/output}"
 DRAGONFLY_RESET_CONTROL_PLANE="${DRAGONFLY_RESET_CONTROL_PLANE:-1}"
 DRAGONFLY_RECREATE_REDIS_STATE="${DRAGONFLY_RECREATE_REDIS_STATE:-1}"
 DRAGONFLY_MANAGER_RESOURCE="${DRAGONFLY_MANAGER_RESOURCE:-deployment/dragonfly-manager}"
@@ -56,6 +63,10 @@ DRAGONFLY_SCHEDULER_RESOURCE="${DRAGONFLY_SCHEDULER_RESOURCE:-statefulset/dragon
 DRAGONFLY_ROLLOUT_TIMEOUT="${DRAGONFLY_ROLLOUT_TIMEOUT:-5m}"
 DRAGONFLY_REDIS_MASTER_STS="${DRAGONFLY_REDIS_MASTER_STS:-statefulset/dragonfly-redis-master}"
 DRAGONFLY_REDIS_REPLICAS_STS="${DRAGONFLY_REDIS_REPLICAS_STS:-statefulset/dragonfly-redis-replicas}"
+DRAGONFLY_RESTART_DATA_PLANE="${DRAGONFLY_RESTART_DATA_PLANE:-1}"
+DRAGONFLY_CLIENT_RESOURCE="${DRAGONFLY_CLIENT_RESOURCE:-daemonset/dragonfly-client}"
+DRAGONFLY_SEED_RESOURCE="${DRAGONFLY_SEED_RESOURCE:-statefulset/dragonfly-seed-client}"
+WAIT_P2P_READY_SCRIPT="${WAIT_P2P_READY_SCRIPT:-$(dirname "${BASH_SOURCE[0]}")/wait-dragonfly-p2p-ready.sh}"
 
 if [[ -n "${KUBECONFIG:-}" && ! -f "$KUBECONFIG" ]]; then
   echo "clear-cache-all-riid-pods: kubeconfig not found: $KUBECONFIG" >&2
@@ -79,8 +90,15 @@ for pod in "${pods[@]}"; do
     continue
   fi
   echo ">>> RIID podman prune (node store) + RIID work cache [$WORK_DIR]: $pod" >&2
+  node="$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.spec.nodeName}')"
+  podman_node_pod="$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
+    --field-selector "spec.nodeName=$node" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -z "$podman_node_pod" ]] || ! kubectl -n "$NS" exec -c installer "$podman_node_pod" -- \
+    chroot /host podman system prune -af --volumes; then
+    echo "clear-cache-all-riid-pods: FAILED Podman prune node=$node pod=$pod" >&2
+    failed=1
+  fi
   if ! kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- env RIID_WORK_DIR="$WORK_DIR" sh -ec '
-      podman system prune -af --volumes
       for d in "$RIID_WORK_DIR" /tmp; do
         [ -d "$d" ] || continue
         find "$d" -maxdepth 1 -type d -name '"'"'riid-cache-tmp-*'"'"' -exec rm -rf {} +
@@ -88,7 +106,7 @@ for pod in "${pods[@]}"; do
         find "$d" -maxdepth 1 -type f -name '"'"'layer-*.bin'"'"' -delete
       done
     '; then
-    echo "clear-cache-all-riid-pods: FAILED RIID pod=$pod" >&2
+    echo "clear-cache-all-riid-pods: FAILED RIID work cleanup pod=$pod" >&2
     failed=1
   fi
 done
@@ -229,6 +247,41 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
             failed=1
           fi
         fi
+      fi
+    fi
+  fi
+  # Обязательный шаг после reset control-plane. dfdaemon и seed-client узнают
+  # адрес планировщика по IP пода через dynconfig манагера; рестарт scheduler
+  # выше меняет этот IP, а клиенты продолжают ходить на мёртвый адрес, пока
+  # манагер не обновит запись. Арм, запущенный в этом окне, весь уходит
+  # back-to-source: P2P не работает, но pull формально не падает — и цифры
+  # бенча оказываются ложными. Поэтому data-plane перезапускается следом и
+  # прогон ждёт схождения меша.
+  if [[ "$DRAGONFLY_RESTART_DATA_PLANE" == "1" && $failed -eq 0 ]]; then
+    echo ">>> Dragonfly data-plane restart: $DRAGONFLY_CLIENT_RESOURCE, $DRAGONFLY_SEED_RESOURCE" >&2
+    for res in "$DRAGONFLY_CLIENT_RESOURCE" "$DRAGONFLY_SEED_RESOURCE"; do
+      if ! kubectl -n "$DFS" get "$res" >/dev/null 2>&1; then
+        echo "clear-cache-all-riid-pods: REQUIRED resource not found: $res" >&2
+        failed=1
+        continue
+      fi
+      if ! kubectl -n "$DFS" rollout restart "$res"; then
+        echo "clear-cache-all-riid-pods: FAILED rollout restart $res" >&2
+        failed=1
+        continue
+      fi
+      if ! kubectl -n "$DFS" rollout status "$res" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
+        echo "clear-cache-all-riid-pods: FAILED rollout status $res" >&2
+        failed=1
+      fi
+    done
+    if ((failed == 0)); then
+      if [[ ! -f "$WAIT_P2P_READY_SCRIPT" ]]; then
+        echo "clear-cache-all-riid-pods: wait script not found: $WAIT_P2P_READY_SCRIPT" >&2
+        failed=1
+      elif ! DRAGONFLY_NAMESPACE="$DFS" bash "$WAIT_P2P_READY_SCRIPT"; then
+        echo "clear-cache-all-riid-pods: FAILED Dragonfly P2P readiness" >&2
+        failed=1
       fi
     fi
   fi

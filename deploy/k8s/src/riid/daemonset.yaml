@@ -79,6 +79,13 @@ spec:
               subPath: config.yaml
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
+            # RIID derives the dfdaemon output path from the socket path
+            # (<dir>/output/p2p-*.bin) and never creates it; dfdaemon writes the
+            # finished blob there. Both sides must therefore see one host
+            # directory, and it must not be the tmpfs behind /var/run — see
+            # client.extraVolumes in scripts/values.yaml.
+            - name: dragonfly-output
+              mountPath: /var/run/dragonfly/output
             - name: podman-sock
               mountPath: /run/podman/podman.sock
             # Layouts live only for the request: Java tars and streams them over
@@ -98,6 +105,10 @@ spec:
         - name: dragonfly-sock
           hostPath:
             path: /var/run/dragonfly
+            type: DirectoryOrCreate
+        - name: dragonfly-output
+          hostPath:
+            path: /var/lib/dragonfly/riid/output
             type: DirectoryOrCreate
         - name: podman-sock
           hostPath:

@@ -35,22 +35,46 @@ client:
   dfinit:
     enable: false
   # dfdaemon hardlinks a finished task from storage.dir into the requested
-  # outputPath (RIID outputPath=/var/run/dragonfly/output/p2p-*.bin); hardlink
-  # requires both paths on the same filesystem, so storage.dir is moved onto
-  # the same hostPath (/var/run/dragonfly, already mounted for the socket)
-  # instead of the image default /var/lib/dragonfly/ (container-local overlay,
-  # a different device -> "Invalid cross-device link" os error 18).
+  # outputPath (RIID outputPath=<dfdaemon.sock dir>/output/p2p-*.bin), so the
+  # two must sit on one filesystem or the link fails with "Invalid cross-device
+  # link" (os error 18). Both therefore live under /var/lib/dragonfly/riid on
+  # the node's data disk.
+  #
+  # They are NOT under /var/run/dragonfly (the chart's socket hostPath): on the
+  # node /var/run is /run, a tmpfs sized at a tenth of RAM. dfdaemon measured
+  # 832 MB of total space there and the 12 GiB dataset died on "No space left
+  # on device" within seconds of the first arm.
+  #
+  # That also retires the dragonfly-run-tmpfs emptyDir that used to sit here.
+  # In the client image /var/run is a symlink to /run, so it and the chart's
+  # socket-dir hostPath both resolved to /run/dragonfly: two volumes on one
+  # target, which is why raising its sizeLimit never changed the space df
+  # reported inside the pod (bench/log/changelogEnv.md, left open at the time).
+  # Nothing reads /run/dragonfly except through the socket mount, so the
+  # emptyDir is simply removed rather than re-pointed.
+  #
+  # The output directory is a mount of its own, with DirectoryOrCreate: nothing
+  # else creates it. RIID derives the path from the socket path and hands it to
+  # dfdaemon without mkdir, so a missing directory turns every finished download
+  # into "copy task: No such file or directory" — the download succeeds, the
+  # handoff does not, and the pull comes back 500.
   config:
     storage:
-      dir: /var/run/dragonfly/data/
+      dir: /var/lib/dragonfly/riid/data/
   extraVolumes:
-    - name: dragonfly-run-tmpfs
-      emptyDir:
-        medium: Memory
-        sizeLimit: 2Gi
+    - name: dragonfly-data
+      hostPath:
+        path: /var/lib/dragonfly/riid/data
+        type: DirectoryOrCreate
+    - name: dragonfly-output
+      hostPath:
+        path: /var/lib/dragonfly/riid/output
+        type: DirectoryOrCreate
   extraVolumeMounts:
-    - name: dragonfly-run-tmpfs
-      mountPath: /run/dragonfly
+    - name: dragonfly-data
+      mountPath: /var/lib/dragonfly/riid/data
+    - name: dragonfly-output
+      mountPath: /var/run/dragonfly/output
 redis:
   replica:
     replicaCount: 1
