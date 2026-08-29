@@ -1,3 +1,7 @@
+# logs-bundle читает TSV из kubectl циклом с IFS=$'\t', а это bash-синтаксис:
+# под dash пустая метка component сдвинула бы поля и лог ушёл бы не в тот каталог.
+SHELL := /bin/bash
+
 # Логи по одной цепочке pull: RIID pod + dfdaemon pod на той же ноде.
 # Kubeconfig: как в performance/Makefile (Selectel). Переопределение: CONFIG_FILE=path/to/kubeconfig
 CONFIG_FILE ?= ../../providers/cluster/Selectel/serverConfig.yaml
@@ -16,7 +20,10 @@ IMAGE_FILTER ?=
 RAW_LOG ?= out.txt
 SUMMARY_LOG ?= summary.txt
 
-.PHONY: logs-riid-pull logs-dfdaemon-pull logs-dfscheduler-pull logs-pull-all logs-capture-pull logs-summarize-pull logs-capture-and-summarize
+# Куда logs-bundle складывает логи всего прогона.
+BUNDLE_DIR ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../../performance/output/logs)
+
+.PHONY: logs-riid-pull logs-dfdaemon-pull logs-dfscheduler-pull logs-pull-all logs-capture-pull logs-summarize-pull logs-capture-and-summarize logs-bundle
 
 logs-riid-pull:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -107,3 +114,40 @@ logs-summarize-pull:
 logs-capture-and-summarize:
 	@$(MAKE) logs-capture-pull SINCE="$(SINCE)" NODE="$(NODE)" RAW_LOG="$(RAW_LOG)"
 	@$(MAKE) logs-summarize-pull SINCE="$(SINCE)" RAW_LOG="$(RAW_LOG)" SUMMARY_LOG="$(SUMMARY_LOG)"
+
+# AGENT-74 requires the dfdaemon, scheduler and seed-client logs on the
+# workstation, and per-pod targets above cover one node at a time. This walks
+# every dragonfly pod by its component label instead of naming the components,
+# so a chart that renames one of them shows up as an extra directory rather than
+# as a silently missing arm. RIID pods come along: they are the other half of
+# every pull chain.
+logs-bundle:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX" >/dev/null; \
+	OUT="$(BUNDLE_DIR)"; \
+	mkdir -p "$$OUT"; \
+	: > "$$OUT/manifest.txt"; \
+	kubectl -n dragonfly-system get pods -l app=dragonfly \
+	  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.component}{"\t"}{.spec.nodeName}{"\n"}{end}' \
+	| while IFS=$$'\t' read -r pod component node; do \
+	    [ -n "$$pod" ] || continue; \
+	    comp="$${component:-unlabelled}"; \
+	    mkdir -p "$$OUT/$$comp"; \
+	    printf '%s\t%s\t%s\n' "dragonfly-system/$$pod" "component=$$comp" "node=$$node" >> "$$OUT/manifest.txt"; \
+	    kubectl -n dragonfly-system logs "$$pod" --all-containers --since=$(SINCE) --timestamps \
+	      > "$$OUT/$$comp/$$pod.log" 2>"$$OUT/$$comp/$$pod.err" || true; \
+	    [ -s "$$OUT/$$comp/$$pod.err" ] || rm -f "$$OUT/$$comp/$$pod.err"; \
+	  done; \
+	mkdir -p "$$OUT/riid"; \
+	kubectl -n riid-system get pods -l app.kubernetes.io/name=riid \
+	  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}' \
+	| while IFS=$$'\t' read -r pod node; do \
+	    [ -n "$$pod" ] || continue; \
+	    printf '%s\t%s\n' "riid-system/$$pod" "node=$$node" >> "$$OUT/manifest.txt"; \
+	    kubectl -n riid-system logs "$$pod" -c riid --since=$(SINCE) --timestamps \
+	      > "$$OUT/riid/$$pod.log" 2>/dev/null || true; \
+	  done; \
+	echo "logs-bundle: SINCE=$(SINCE) -> $$OUT"; \
+	find "$$OUT" -name '*.log' -printf '%p\t%s\n' | sort

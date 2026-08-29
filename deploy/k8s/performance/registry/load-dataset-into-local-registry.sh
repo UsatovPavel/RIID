@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Зеркалирует образы в локальный registry для perf/smoke.
 #
-# После каждого успешного mirror смотрим df "/" внутри
-# контейнера; если Used превышает порог (по умолчанию 16 GiB), вызываем
-# `podman system prune -af`, чтобы снизить риск eviction узла по ephemeral-storage.
+# Копирование делает skopeo (см. _catalog_pull_push): реестр→реестр, без graph
+# driver, поэтому образ загрузчика (REGISTRY_LOADER_IMAGE) может быть любым — от
+# него требуется только apt, чтобы доставить skopeo. podman здесь больше не
+# нужен: если он в образе всё-таки есть, после каждого успешного mirror смотрим
+# df "/" внутри контейнера и при Used выше порога (по умолчанию 16 GiB) зовём
+# `podman system prune -af` против eviction узла по ephemeral-storage; без
+# podman эта проверка просто пропускается.
 #
 # Режимы:
 #   По умолчанию — TSV DATASET_FILE + deploy/k8s/config/.env (REGISTRY_SELECTEL_NAME → префикс источника).
@@ -117,16 +121,24 @@ spec:
 EOF
 kubectl -n "$LOADER_NAMESPACE" wait --for=condition=Ready --timeout=180s "pod/${LOADER_POD_NAME}" >/dev/null
 
+# Копирование реестр→реестр делается skopeo, а не podman pull/tag/push.
+# У podman для распаковки нужен graph driver, а образ загрузчика задаётся
+# переменной REGISTRY_LOADER_IMAGE и о его сторе никто не договаривался: у
+# образа RIID podman есть, но нет ни storage.conf, ни fuse-overlayfs, ни
+# /dev/fuse в поде — и каждый pull падает с "'overlay' is not supported over
+# overlayfs". skopeo же переливает блобы потоком: ни стора, ни fuse, ни
+# привилегий, и без лишней распаковки с обратной упаковкой.
 kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- sh -lc \
-  'command -v podman >/dev/null || (export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends podman fuse-overlayfs >/dev/null)'
-kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- podman --version >/dev/null
+  'command -v skopeo >/dev/null || (export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends skopeo >/dev/null)'
+kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- skopeo --version >/dev/null
 
+# Учётка исходного реестра передаётся skopeo прямо в вызове, а не через login:
+# authfile пришлось бы класть в под и потом за ним следить.
+SRC_CREDS=""
 if [[ -n "${RIID_SELECTEL_USER:-}" ]]; then
   _cr_pass="${RIID_SELECTEL_TOKEN:-${RIID_SELECTEL_PASSWORD:-}}"
   if [[ -n "$_cr_pass" && -n "${LOGIN_HOST:-}" ]]; then
-    kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- \
-      env SRC_HOST="$LOGIN_HOST" SRC_USER="$RIID_SELECTEL_USER" SRC_PASSWORD="$_cr_pass" \
-      sh -lc 'echo "$SRC_PASSWORD" | podman login "$SRC_HOST" --username "$SRC_USER" --password-stdin >/dev/null'
+    SRC_CREDS="${RIID_SELECTEL_USER}:${_cr_pass}"
   fi
 fi
 
@@ -155,8 +167,11 @@ if [[ "$LOAD_TEST_IMAGELIST" == 1 ]]; then
   echo "load-dataset-into-local-registry: mode=catalog resolve_smoke_repository.py" >&2
 fi
 
+# Осталось от podman-режима: skopeo локального стора не держит, поэтому чистить
+# обычно нечего. Проверка остаётся на случай загрузчика, где podman всё-таки есть.
 _maybe_prune_loader_podman_if_root_usage_high() {
   local used_kib
+  kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- sh -lc 'command -v podman >/dev/null' >/dev/null 2>&1 || return 0
   used_kib="$(kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- df -Pk / 2>/dev/null | awk 'NR == 2 { print $3 }' || true)"
   if [[ -z "$used_kib" || ! "$used_kib" =~ ^[0-9]+$ ]]; then
     return 0
@@ -172,7 +187,13 @@ _catalog_pull_push() {
   total=$((total + 1))
   echo "[$total] mirror $src -> $dst" >&2
   if ! kubectl -n "$LOADER_NAMESPACE" exec "$LOADER_POD_NAME" -- \
-      env SRC="$src" DST="$dst" sh -lc 'set -e; podman pull "$SRC" >/dev/null; podman tag "$SRC" "$DST"; podman push --tls-verify=false "$DST" >/dev/null'; then
+      env SRC="$src" DST="$dst" SRC_CREDS="$SRC_CREDS" sh -lc '
+        set -e
+        if [ -n "$SRC_CREDS" ]; then
+          skopeo copy --src-creds "$SRC_CREDS" --dest-tls-verify=false "docker://$SRC" "docker://$DST" >/dev/null
+        else
+          skopeo copy --dest-tls-verify=false "docker://$SRC" "docker://$DST" >/dev/null
+        fi'; then
     failed=$((failed + 1))
     echo "[$total] FAILED: $src" >&2
     return 1

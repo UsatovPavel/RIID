@@ -15,6 +15,7 @@ usage() {
   echo "Usage: $0 [--apply] [--profile NAME]"
   echo "  NAME: dockerhub | selectel | local (file deploy/k8s/providers/registry/client/<NAME>.yaml must exist)"
   echo "Env: RIID_CONFIGMAP_YAML, ENV_FILE, RIID_REGISTRY_PROFILE, RIID_REGISTRY_PROFILE_DIR"
+  echo "     RIID_PREFIX_IMPORT=true|false — pins runtime.prefixImport (AGENT-74 arm switch)"
   echo "Credentials in .env:"
   echo "  dockerhub — RIID_DOCKERHUB_USER, RIID_DOCKERHUB_TOKEN (or RIID_DOCKERHUB_PASSWORD)"
   echo "  selectel  — RIID_SELECTEL_USER, RIID_SELECTEL_TOKEN (or RIID_SELECTEL_PASSWORD)"
@@ -89,6 +90,19 @@ yq e '.data["config.yaml"]' "$CONFIGMAP_YAML" \
   | yq e '.client.registries = load(strenv(_RIID_PROFILE_YAML)).registries' - \
   > "$TMP_INNER"
 
+# AGENT-74 benches RIID with prefix import and without, and the two arms differ
+# only by this flag. Left unset the image keeps its own default, so an ordinary
+# rollout is unchanged.
+if [[ -n "${RIID_PREFIX_IMPORT:-}" ]]; then
+  case "$RIID_PREFIX_IMPORT" in
+    true|false) ;;
+    *) echo "RIID_PREFIX_IMPORT must be true or false, got: $RIID_PREFIX_IMPORT" >&2; exit 1 ;;
+  esac
+  export _RIID_PREFIX_IMPORT="$RIID_PREFIX_IMPORT"
+  yq e -i '.runtime.prefixImport = (strenv(_RIID_PREFIX_IMPORT) == "true")' "$TMP_INNER"
+  echo "render-riid-config-secret: runtime.prefixImport=$RIID_PREFIX_IMPORT" >&2
+fi
+
 if [[ "${_RIID_SET_CREDENTIALS}" == "1" ]]; then
   yq e '(.client.registries[].credentials) = {"username": strenv(_RIID_REG_USER), "password": strenv(_RIID_REG_PASS)}' -i "$TMP_INNER"
 fi
@@ -100,7 +114,7 @@ kubectl create secret generic riid-config-secret \
 
 if [[ "$APPLY" -eq 1 ]]; then
   kubectl apply -f "$OUT"
-  echo "Applied riid-config-secret (profile=$PROFILE). Restart: kubectl -n riid-system rollout restart daemonset riid" >&2
+  echo "Applied riid-config-secret (profile=$PROFILE${RIID_PREFIX_IMPORT:+, prefixImport=$RIID_PREFIX_IMPORT}). Restart: kubectl -n riid-system rollout restart daemonset riid" >&2
 else
   cat "$OUT"
 fi

@@ -39,7 +39,11 @@ ENGINE="${ENGINE:-}"
 # Arm label in the TSV: source plus engine. Without the engine the arms of the
 # matrix are indistinguishable in the summaries — "bare" reads the same for
 # podman and for containerd.
-BACKEND_LABEL="$BACKEND${ENGINE:+-$ENGINE}"
+# ARM is the third coordinate: two runs can share source and engine and still be
+# different arms — AGENT-74 compares RIID => Podman with prefix import against
+# the same pair without it, and an unlabelled pair is indistinguishable later.
+ARM="${ARM:-}"
+BACKEND_LABEL="$BACKEND${ENGINE:+-$ENGINE}${ARM:+-$ARM}"
 OUTPUT_TSV="${OUTPUT_TSV:-${OUTPUT_CSV:-}}"
 BACKEND_CMD="$BACKEND_DIR/${BACKEND}.sh"
 DATASET_FILE="${DATASET_FILE:-}"
@@ -67,7 +71,7 @@ if [[ ! -f "$BACKEND_CMD" ]]; then
   exit 2
 fi
 
-# An engine that runs on the node (podman via CONTAINER_HOST, containerd, Porto)
+# An engine that runs on the node (podman, containerd, Porto)
 # resolves the registry in the host netns, which has no cluster resolver. The
 # ClusterIP lookup that fixes it costs a kubectl call, so it happens once here
 # rather than per image inside the timed section. RIID pulls in the pod and does

@@ -22,7 +22,9 @@
 # containerd takes --hosts-dir as an argument. Hence two separate functions
 # instead of one with a boolean flag.
 
-# kubectl exec into the bench pod. Every engine command goes through it.
+# kubectl exec into the bench pod. Socket-native engines use this directly;
+# Podman's native benchmark uses the matching podman-node host instead because
+# the RIID image deliberately has no podman CLI.
 riid_engine_exec() {
   local pod="$1"
   shift

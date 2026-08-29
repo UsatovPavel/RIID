@@ -10,6 +10,12 @@ KUBECONFIG ?= $(abspath $(SELECTEL_DIR)/$(CONFIG_FILE))
 LOCAL_REGISTRY_MANIFEST ?= $(K8S)/.resolved/performance/registry/local-registry.yaml
 PROVIDER_APPLY_SH ?= bash "$(K8S)/providers/registry/image/provider-apply.sh" --provider dockerhub --root "$(K8S)"
 PERF_REGISTRY_DATASET ?= $(K8S)/performance/input/dataset_a.tsv
+# Partial dataset (AGENT-74): a non-empty list narrows dataset_a to the images it
+# names, so the stand loads and benches 20 images instead of the whole catalog.
+# Default is the untracked per-stand file; pass the tracked 20-image list with
+# FILTER_TSV=$(K8S)/config/imagelist/dataset_partial20.tsv.
+FILTER_TSV ?= $(K8S)/performance/input/filter.tsv
+FILTER_DATASET_SCRIPT ?= $(K8S)/providers/registry/image/dataset/write_filtered_dataset_a.py
 INIT_WORKER_IMAGE_SCRIPT ?= $(REGISTRY_DIR)/init/init-worker-image.sh
 ENV_FILE ?= $(K8S)/config/.env
 REGISTRY_MIRROR_ZSTD_LEVEL ?= 3
@@ -71,6 +77,7 @@ registry-apply-profile:
 	else \
 	  $(MAKE) dragonfly-selectel-registry-pull-secret K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)" SELECTEL_DIR="$(SELECTEL_DIR)"; \
 	fi; \
+	kubectl create namespace riid-system --dry-run=client -o yaml | kubectl apply -f - >/dev/null; \
 	bash "$(K8S)/src/riid/render-riid-config-secret.sh" --apply --profile "$(PROFILE)"; \
 	if kubectl -n riid-system get daemonset riid >/dev/null 2>&1; then \
 	  kubectl -n riid-system rollout restart daemonset riid; \
@@ -85,13 +92,13 @@ registry-apply-profile:
 	DRAGONFLY_REGISTRY_PROFILE="$(PROFILE)" bash "$(K8S)/src/dragonfly/install-dragonfly.sh"; \
 	echo "registry-apply-profile: providers generation is out of bootstrap scope (no imagelist-overlays / generate-registry-image-lists)"; \
 	PERF_IN="$(K8S)/performance/input"; \
-	FILTER_TSV="$$PERF_IN/filter.tsv"; \
+	FILTER_TSV="$(FILTER_TSV)"; \
 	DSA="$(K8S)/providers/registry/image/dataset/output/dataset_$(PROFILE)_a.tsv"; \
 	DSB="$(K8S)/providers/registry/image/dataset/output/dataset_$(PROFILE)_b.tsv"; \
 	mkdir -p "$$PERF_IN"; \
 	if [ -f "$$FILTER_TSV" ] && [ -s "$$FILTER_TSV" ]; then \
 	  [ -f "$$DSA" ] || { echo "registry-apply-profile: filter.tsv needs $$DSA (run generate-registry-image-lists)" >&2; exit 1; }; \
-	  python3 "$(K8S)/performance/input/write_filtered_dataset_a.py" \
+	  python3 "$(FILTER_DATASET_SCRIPT)" \
 	    --k8s-root "$(K8S)" --provider "$(PROFILE)" --source "$$DSA" \
 	    --filter "$$FILTER_TSV" --out "$$PERF_IN/dataset_a.tsv" \
 	    || exit 1; \
@@ -124,6 +131,7 @@ registry-apply-test-profile:
 	command -v yq >/dev/null || { echo "registry-apply-test-profile: yq not found"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
+	kubectl create namespace riid-system --dry-run=client -o yaml | kubectl apply -f - >/dev/null; \
 	bash "$(K8S)/src/riid/render-riid-config-secret.sh" --apply --profile "$(TEST_PROFILE)"; \
 	if kubectl -n riid-system get daemonset riid >/dev/null 2>&1; then \
 	  kubectl -n riid-system rollout restart daemonset riid; \
@@ -136,13 +144,13 @@ registry-apply-test-profile:
 	fi; \
 	echo "registry-apply-test-profile: providers generation is out of bootstrap scope (no imagelist-overlays / generate-registry-image-lists)"; \
 	PERF_IN="$(K8S)/performance/input"; \
-	FILTER_TSV="$$PERF_IN/filter.tsv"; \
+	FILTER_TSV="$(FILTER_TSV)"; \
 	DSA="$(K8S)/providers/registry/image/dataset/output/dataset_$(TEST_PROFILE)_a.tsv"; \
 	DSB="$(K8S)/providers/registry/image/dataset/output/dataset_$(TEST_PROFILE)_b.tsv"; \
 	mkdir -p "$$PERF_IN"; \
 	if [ -f "$$FILTER_TSV" ] && [ -s "$$FILTER_TSV" ]; then \
 	  [ -f "$$DSA" ] || { echo "registry-apply-test-profile: filter.tsv needs $$DSA (run generate-registry-image-lists)" >&2; exit 1; }; \
-	  python3 "$(K8S)/performance/input/write_filtered_dataset_a.py" \
+	  python3 "$(FILTER_DATASET_SCRIPT)" \
 	    --k8s-root "$(K8S)" --provider "$(TEST_PROFILE)" --source "$$DSA" \
 	    --filter "$$FILTER_TSV" --out "$$PERF_IN/dataset_a.tsv" \
 	    || exit 1; \
@@ -203,17 +211,17 @@ calc-worker-to-worker-speed:
 	bash "$(K8S)/performance/registry/calc-worker-to-worker-traffic-speed.sh"
 
 init-performance-registry-images:
-	@"$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
+	@bash "$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
 
 # The same mirror plus a zstd variant of every image in a second registry
 # (REGISTRY_SELECTEL_ZSTD_NAME). Requires podman: docker push has no
 # --compression-format.
 init-performance-registry-images-zstd:
 	@REGISTRY_MIRROR_ZSTD=1 REGISTRY_MIRROR_ZSTD_LEVEL="$(REGISTRY_MIRROR_ZSTD_LEVEL)" \
-	"$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
+	bash "$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
 
 init-performance-registry-images-state-init:
-	@"$(REGISTRY_DIR)/init/init-performance-registry-images-incremental.sh" --init-state "$(ENV_FILE)"
+	@bash "$(REGISTRY_DIR)/init/init-performance-registry-images-incremental.sh" --init-state "$(ENV_FILE)"
 
 init-performance-registry-images-incremental:
-	@"$(REGISTRY_DIR)/init/init-performance-registry-images-incremental.sh" $(REGISTRY_INCREMENTAL_ARGS) "$(ENV_FILE)"
+	@bash "$(REGISTRY_DIR)/init/init-performance-registry-images-incremental.sh" $(REGISTRY_INCREMENTAL_ARGS) "$(ENV_FILE)"

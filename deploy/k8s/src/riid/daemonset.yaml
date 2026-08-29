@@ -65,10 +65,8 @@ spec:
           env:
             - name: RIID_CONFIG
               value: /etc/riid/config.yaml
-            # Remote podman. CONTAINER_HOST alone puts podman in client mode —
-            # no --remote flag anywhere (cmd/podman/registry/remote.go:33 in
-            # podman 6.1.0), so PodmanRuntimeAdapter and the bench drivers both
-            # reach the node daemon without any code knowing about it.
+            # PodmanRuntimeAdapter sends Libpod HTTP requests directly over this
+            # Unix socket; no podman client binary is installed in the RIID image.
             - name: CONTAINER_HOST
               value: unix:///run/podman/podman.sock
           ports:
@@ -83,11 +81,9 @@ spec:
               mountPath: /var/run/dragonfly
             - name: podman-sock
               mountPath: /run/podman/podman.sock
-            # Same path inside and outside: the prefix-import path hands podman
-            # an `oci:<dir>` reference, and a remote podman resolves that
-            # directory on the NODE. A different mountPath here would make the
-            # daemon look for a directory that only exists in the pod.
-            - name: riid-work-host
+            # Layouts live only for the request: Java tars and streams them over
+            # the socket, so the node no longer needs the same host path.
+            - name: riid-work
               mountPath: /var/lib/riid/work
       volumes:
         - name: riid-work
@@ -107,7 +103,3 @@ spec:
           hostPath:
             path: /run/podman/podman.sock
             type: Socket
-        - name: riid-work-host
-          hostPath:
-            path: /var/lib/riid/work
-            type: DirectoryOrCreate

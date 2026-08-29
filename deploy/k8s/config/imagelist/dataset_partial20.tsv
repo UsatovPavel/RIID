@@ -1,0 +1,27 @@
+# Partial dataset for AGENT-74: 20 of the 100 catalog images.
+# Rule: sort config/imagelist/presented_images_list_sizes.tsv by size_bytes
+# descending, keep every 5th row starting at index 3 (awk 'NR%5==3').
+# Deterministic, spans 3.1 GiB down to 28 MiB, 12.13 GiB in total.
+# Columns are the canonical Docker Hub repository and tag; the provider prefix
+# (riid/... for the local registry) is applied by write_filtered_dataset_a.py.
+repository	tag
+runmymind/docker-android-sdk	latest
+jetbrains/teamcity-server	latest
+onlyoffice/documentserver	latest
+sysdig/agent	latest
+library/sonarqube	latest
+library/elasticsearch	9.5.2
+apache/airflow	latest
+grafana/grafana	latest
+cimg/base	current
+pinetwork/pi-node-docker	mainnet-relay-v1.0-p27.1.0
+netdata/netdata	latest
+library/mysql	latest
+library/php	latest
+rancher/rancher-agent	head
+library/rabbitmq	latest
+fluxcd/flux	1.25.4
+amazon/aws-efs-csi-driver	master
+library/redis	latest
+openpolicyagent/gatekeeper	v3.23.1
+istio/operator	1.23.6-distroless

@@ -27,9 +27,11 @@ SELECTEL_HELM_FRAGMENT="${REPO_ROOT}/deploy/k8s/.resolved/registry/helm/dragonfl
 TMP_VALUES="$(mktemp)"
 TMP_MERGED=""
 TMP_PROVIDER_MERGED=""
+TMP_DFINIT=""
+TMP_DFINIT_MERGED=""
 
 cleanup() {
-  rm -f "${TMP_VALUES}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}"
+  rm -f "${TMP_VALUES}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}" "${TMP_DFINIT}" "${TMP_DFINIT_MERGED}"
 }
 trap cleanup EXIT
 
@@ -74,6 +76,66 @@ if [[ "${PROFILE}" == selectel ]]; then
   echo ">>> Dragonfly Helm: merged Selectel fragment from ${SELECTEL_HELM_FRAGMENT}" >&2
 fi
 
+# AGENT-74, the dfinit arm. dfinit is an initContainer of the client DaemonSet
+# that writes a registry mirror pointing at the dfdaemon proxy into the ENGINE's
+# own config on the node. It is off in scripts/values.yaml, so an ordinary
+# install is untouched; RIID_DFINIT_ENGINE turns it on for the one arm that
+# needs it, and RIID_DFINIT_ENGINE= (empty) turns it back off.
+#
+# containerd is set to null on purpose. The chart ships a default
+# containerRuntime.containerd block, and the DaemonSet template picks the first
+# runtime present in a fixed if/else-if order — containerd, crio, podman,
+# docker. Leaving the default in place means dfinit keeps rewriting
+# /etc/containerd/config.toml while the podman arm waits for a mirror in
+# /etc/containers/registries.conf that never arrives. Helm removes a key whose
+# value is null, which is the only way to drop a default from a values file.
+DFINIT_ENGINE="${RIID_DFINIT_ENGINE:-}"
+if [[ -n "${DFINIT_ENGINE}" ]]; then
+  : "${RIID_DFINIT_REGISTRY:?RIID_DFINIT_ENGINE needs RIID_DFINIT_REGISTRY=host[:port] — the address the engine pulls from}"
+  TMP_DFINIT="$(mktemp)"
+  case "${DFINIT_ENGINE}" in
+    podman)
+      cat >"${TMP_DFINIT}" <<EOF
+client:
+  dfinit:
+    enable: true
+    config:
+      containerRuntime:
+        containerd: null
+        podman:
+          configPath: /etc/containers/registries.conf
+          registries:
+            - prefix: "${RIID_DFINIT_REGISTRY}"
+              location: "${RIID_DFINIT_REGISTRY}"
+EOF
+      ;;
+    containerd)
+      cat >"${TMP_DFINIT}" <<EOF
+client:
+  dfinit:
+    enable: true
+    config:
+      containerRuntime:
+        containerd:
+          configPath: /etc/containerd/config.toml
+          registries:
+            - hostNamespace: "${RIID_DFINIT_REGISTRY}"
+              serverAddr: "http://${RIID_DFINIT_REGISTRY}"
+              capabilities: ["pull", "resolve"]
+              skipVerify: true
+EOF
+      ;;
+    *)
+      echo "install-dragonfly.sh: invalid RIID_DFINIT_ENGINE=${DFINIT_ENGINE} (use podman|containerd)" >&2
+      exit 1
+      ;;
+  esac
+  TMP_DFINIT_MERGED="$(mktemp)"
+  yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${HELM_VALUES}" "${TMP_DFINIT}" >"${TMP_DFINIT_MERGED}"
+  HELM_VALUES="${TMP_DFINIT_MERGED}"
+  echo ">>> Dragonfly Helm: dfinit enabled for ${DFINIT_ENGINE}, mirroring ${RIID_DFINIT_REGISTRY}" >&2
+fi
+
 OPTIONAL_PROVIDER_VALUES="${REPO_ROOT}/deploy/k8s/providers/registry/dragonfly/values-${PROFILE}.yaml"
 if [[ -f "${OPTIONAL_PROVIDER_VALUES}" ]]; then
   TMP_PROVIDER_MERGED="$(mktemp)"
@@ -105,12 +167,31 @@ if ! kubectl cluster-info &>/dev/null; then
   exit 1
 fi
 
+# The chart version is part of the recorded environment (AGENT-99), and it is not
+# cosmetic: without --version helm takes whatever is newest in the repo, and a
+# chart built for a newer appVersion renders a config the pinned images cannot
+# parse — chart 1.8.2 against scheduler v2.4.4-rc.1 dies with
+# "manager requires parameter addr" in CrashLoopBackOff. The pin lives with the
+# images, in config/imagelist/dockerhub.yaml (.infra.dragonfly.helm_chart).
+CHART_VERSION="${DRAGONFLY_CHART_VERSION:-}"
+if [[ -z "${CHART_VERSION}" ]]; then
+  CHART_TAG="$(yq e '.infra.dragonfly.helm_chart.github_release_tag // ""' \
+    "${REPO_ROOT}/deploy/k8s/config/imagelist/dockerhub.yaml" 2>/dev/null || true)"
+  CHART_VERSION="${CHART_TAG#dragonfly-}"
+fi
+if [[ -z "${CHART_VERSION}" ]]; then
+  echo "install-dragonfly.sh: no chart version (set DRAGONFLY_CHART_VERSION or .infra.dragonfly.helm_chart.github_release_tag)" >&2
+  exit 1
+fi
+echo ">>> Dragonfly chart version: ${CHART_VERSION}" >&2
+
 echo ">>> Helm repo dragonfly"
 helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null || true
 helm repo update
 
 echo ">>> helm upgrade --install dragonfly (namespace dragonfly-system)"
 helm upgrade --install dragonfly dragonfly/dragonfly \
+  --version "${CHART_VERSION}" \
   --namespace dragonfly-system \
   --create-namespace \
   --wait \

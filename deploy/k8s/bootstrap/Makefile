@@ -9,13 +9,19 @@ GLOBAL_CONFIG_FILE := $(K8S)/config/config.yaml
 DOCKERHUB_IMAGELIST := $(K8S)/config/imagelist/dockerhub.yaml
 DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
+# Which registry the Dragonfly images come from; same source as bootstrap/registry.
+DRAGONFLY_PROFILE ?= $(shell yq e '.cluster_provider // "dockerhub"' "$(GLOBAL_CONFIG_FILE)" 2>/dev/null | sed -e 's/#.*//' | tr '[:upper:]' '[:lower:]' | xargs)
 
 # Default class for PVCs with no storageClass (Helm Dragonfly / Bitnami
-# MySQL+Redis). fast.ru-3b is a Cinder class created by the CSI of the managed
-# MKS cluster. The self-managed stand (terraform-porto, Ubuntu 22.04) has no CSI,
-# so it uses STORAGE_CLASS=local-path and storage-default brings the provisioner
-# up itself.
-STORAGE_CLASS ?= fast.ru-3b ## Санкт-Петербург
+# MySQL+Redis). Empty means "ask the cluster": the Cinder CSI of managed MKS
+# names its class after the zone and the suffix is not stable across stands
+# (fast.ru-3b on one, fast.ru-3 on the next), so a hardcoded name fails the
+# bootstrap on a freshly created cluster. The self-managed stand
+# (terraform-porto, Ubuntu 22.04) has no CSI at all and passes
+# STORAGE_CLASS=local-path, where storage-default brings the provisioner up
+# itself. Note there is no inline `## comment` after the value on purpose —
+# make keeps the spaces before it, and "fast.ru-3b " never matches a class.
+STORAGE_CLASS ?=
 LOCAL_PATH_STORAGE_CLASS := local-path
 LOCAL_PATH_MANIFEST := $(K8S)/.resolved/src/storage/local-path-storage.yaml
 LOCAL_PATH_ROLLOUT_TIMEOUT ?= 300s
@@ -24,11 +30,15 @@ RIID_WAIT_TIMEOUT ?= 600
 OBSERVER_ROLLOUT_TIMEOUT ?= 600s
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
-# Образ DaemonSet должен уже содержать podman+curl+jq — podman в поде только
-# REMOTE-клиент, движок живёт на ноде (install-podman-node). local-registry и
-# профили registry — bootstrap/registry/Makefile.
+# Образ DaemonSet содержит curl+jq, но не podman: Java обращается к движку на
+# ноде напрямую через Unix socket (install-podman-node). local-registry и профили
+# registry — bootstrap/registry/Makefile.
 PODMAN_NODE_WAIT_TIMEOUT ?= 900
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests
+# Registry the bench pulls from; empty means the in-cluster one, whose name lives
+# in performance/backend/engine/common.inc.sh (RIID_LOCAL_REGISTRY_HOST) so that
+# dfinit mirrors exactly the address the arms use.
+REGISTRY_PULL_HOST ?=
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -118,9 +128,16 @@ storage-default:
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	if ! kubectl get storageclass "$(STORAGE_CLASS)" >/dev/null 2>&1; then \
-	  [ "$(STORAGE_CLASS)" = "$(LOCAL_PATH_STORAGE_CLASS)" ] || { \
-	    echo "storageclass $(STORAGE_CLASS) not found; on a cluster without a CSI use STORAGE_CLASS=$(LOCAL_PATH_STORAGE_CLASS)" >&2; \
+	SC="$(strip $(STORAGE_CLASS))"; \
+	if [ -z "$$SC" ]; then \
+	  SC=$$(kubectl get storageclass -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+	    | grep -v '^$(LOCAL_PATH_STORAGE_CLASS)$$' | head -n1); \
+	  [ -n "$$SC" ] || SC="$(LOCAL_PATH_STORAGE_CLASS)"; \
+	  echo "storage-default: STORAGE_CLASS not set, taking $$SC from the cluster"; \
+	fi; \
+	if ! kubectl get storageclass "$$SC" >/dev/null 2>&1; then \
+	  [ "$$SC" = "$(LOCAL_PATH_STORAGE_CLASS)" ] || { \
+	    echo "storageclass $$SC not found; on a cluster without a CSI use STORAGE_CLASS=$(LOCAL_PATH_STORAGE_CLASS)" >&2; \
 	    exit 1; \
 	  }; \
 	  $(RUN_PROVIDER_APPLY); \
@@ -128,7 +145,7 @@ storage-default:
 	  kubectl -n local-path-storage rollout status deploy/local-path-provisioner \
 	    --timeout=$(LOCAL_PATH_ROLLOUT_TIMEOUT); \
 	fi; \
-	kubectl patch storageclass $(STORAGE_CLASS) \
+	kubectl patch storageclass "$$SC" \
 		-p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
 # Новый конфиг Dragonfly: правите repo root scripts/values.yaml, затем снова эта цель (helm upgrade --install).
@@ -158,6 +175,39 @@ install-podman-node:
 	kubectl config use-context "$$CTX"; \
 	kubectl apply -f "$(K8S)/.resolved/src/namespace.yaml"; \
 	kubectl apply -f "$(K8S)/.resolved/src/engines/podman-node.yaml"
+
+# The dfinit arm of AGENT-74. dfinit rewrites the ENGINE's registry config on the
+# node, so the switch is a Helm re-install of the Dragonfly client, not a knob in
+# the bench. The mirrored address is resolved the same way the bench resolves it
+# — the Service ClusterIP, because a node-side engine has no cluster resolver —
+# and comes from the same function, so the two cannot drift apart.
+#
+# dfinit-disable is not optional bookkeeping: the baseline arm asserts that the
+# node has no mirror (engine_no_mirror_check), and a leftover dfinit turns it
+# into a second dfinit run.
+dfinit-enable:
+	@[ -n "$(strip $(ENGINE))" ] || { echo "set ENGINE=podman|containerd"; exit 1; }
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	REG=$$(RIID_K8S_ROOT="$(K8S)" REGISTRY_PULL_HOST="$(REGISTRY_PULL_HOST)" bash -c '. "$(K8S)/performance/backend/engine/common.inc.sh"; REGISTRY_PULL_HOST="$${REGISTRY_PULL_HOST:-$$RIID_LOCAL_REGISTRY_HOST}"; riid_registry_node_host') || exit 1; \
+	[ -n "$$REG" ] || { echo "dfinit-enable: empty registry address"; exit 1; }; \
+	echo "dfinit-enable: ENGINE=$(ENGINE) registry=$$REG"; \
+	RIID_DFINIT_ENGINE="$(strip $(ENGINE))" RIID_DFINIT_REGISTRY="$$REG" \
+	DRAGONFLY_REGISTRY_PROFILE="$(DRAGONFLY_PROFILE)" \
+	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
+
+dfinit-disable:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	DRAGONFLY_REGISTRY_PROFILE="$(DRAGONFLY_PROFILE)" \
+	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"; \
+	echo "dfinit-disable: dfinit is off; the node keeps whatever registries.conf dfinit last wrote"; \
+	echo "  restore the pristine copy on every worker if the baseline arm still sees a mirror:"; \
+	echo "  cp /etc/containers/registries.conf.riid-baseline /etc/containers/registries.conf"
 
 # Ждём готовности podman на всех нодах и печатаем версии — окружение AGENT-99
 # должно быть записано, а не запомнено.
@@ -223,7 +273,7 @@ wait-riid-ready:
 	  sleep $(RIID_WAIT_INTERVAL); \
 	done
 
-# Проверка, что образ контейнера riid уже содержит инструменты (без apt в кластере).
+# Проверка инструментов и прямого доступа к Podman API (без podman CLI в образе).
 verify-riid-pod-tooling:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -234,9 +284,9 @@ verify-riid-pod-tooling:
 	printf '%s\n' "$$pods" | while IFS= read -r pod; do \
 	  echo ">>> $$pod"; \
 	  kubectl -n riid-system exec -c riid "$$pod" -- sh -c \
-	    'podman --version >/dev/null \
+	    '! command -v podman >/dev/null 2>&1 \
 	      && test -S /run/podman/podman.sock \
-	      && podman info --format "{{.Host.ServiceIsRemote}}" | grep -qx true \
+	      && test "$$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)" = OK \
 	      && command -v curl >/dev/null && curl --version | head -n1 \
 	      && command -v jq >/dev/null && jq --version'; \
 	done; \
@@ -389,4 +439,3 @@ rollout-riid-image-from-manifest:
 	kubectl -n riid-system get pods -l app.kubernetes.io/name=riid \
 	  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}'; \
 	$(MAKE) -C "$(SELECTEL_DIR)" verify-riid-pod-tooling
-

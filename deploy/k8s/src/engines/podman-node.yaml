@@ -13,6 +13,7 @@
 # Installation goes through `chroot /host` rather than nsenter: busybox's nsenter
 # applet is not guaranteed to be compiled in, while chroot always is, and with
 # the host root mounted the host's own systemctl and apt are the ones that run.
+# chroot alone is not enough though — see hostNetwork below.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -45,6 +46,13 @@ spec:
                   - key: riid.registry
                     operator: DoesNotExist
       hostPID: true
+      # chroot /host swaps the filesystem but not the network namespace, and the
+      # host's /etc/resolv.conf points at systemd-resolved on 127.0.0.53 — a
+      # listener that exists only in the host netns. Without hostNetwork apt
+      # resolves nothing and `apt-get update` returns only "Ign:" lines, then the
+      # install fails. The two go together: host root, host network.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: installer
           image: riid.daemonset.init_busybox
@@ -64,7 +72,24 @@ spec:
                 if ! command -v podman >/dev/null 2>&1; then
                   export DEBIAN_FRONTEND=noninteractive
                   apt-get update
+                  # The podman package drags in containernetworking-plugins,
+                  # which owns /etc/cni/net.d/87-podman-bridge.conflist. On a
+                  # Kubernetes node that directory belongs to the cluster CNI,
+                  # and installing the package took 10-calico.conflist with it:
+                  # every worker went NotReady with "cni plugin not initialized"
+                  # and the whole bench stand died. So the directory is snapshot
+                  # first and anything the package removed is put back after.
+                  mkdir -p /var/lib/riid/cni-net.d.riid-backup
+                  cp -a /etc/cni/net.d/. /var/lib/riid/cni-net.d.riid-backup/ 2>/dev/null || true
                   apt-get install -y --no-install-recommends podman
+                  # -n: the cluster files win; nothing the package wrote is kept
+                  # if it collides with what was there before.
+                  cp -an /var/lib/riid/cni-net.d.riid-backup/. /etc/cni/net.d/ 2>/dev/null || true
+                  # podman on this node only receives image loads and pulls, it
+                  # never runs a container, so its own CNI config is pure
+                  # liability next to the cluster plugin.
+                  rm -f /etc/cni/net.d/87-podman-bridge.conflist \
+                        /etc/cni/net.d/87-podman-bridge.conflist.dpkg-new
                 fi
                 systemctl enable --now podman.socket
                 # A pristine copy, taken before dfinit ever edits this file, so

@@ -252,7 +252,7 @@ jobs:
             -t "${IMAGE}:${TAG}" \
             .
           docker run --rm --entrypoint sh "${IMAGE}:${TAG}" -lc \
-            'command -v curl >/dev/null && command -v podman >/dev/null && command -v jq >/dev/null'
+            'command -v curl >/dev/null && ! command -v podman >/dev/null 2>&1 && command -v jq >/dev/null'
           docker push "${IMAGE}:${TAG}"
           echo "Pushed ${IMAGE}:${TAG}"
           sudo chown -R runner:runner "$GITHUB_WORKSPACE"

@@ -88,6 +88,24 @@ if [[ -z "${REGISTRY_PUSH_REPO_STRIP_LIBRARY:-}" ]]; then
   fi
 fi
 
+# Чем тянуть/пушить. docker на рабочей станции обычно требует sudo (сокет
+# /var/run/docker.sock принадлежит root), и тогда все pull падают на
+# "permission denied"; podman работает rootless и понимает те же
+# pull/tag/push/rmi. Поэтому берётся docker, только если он реально отвечает.
+# Явный выбор — REGISTRY_MIRROR_BIN=docker|podman.
+MIRROR_BIN="${REGISTRY_MIRROR_BIN:-}"
+if [[ -z "$MIRROR_BIN" ]]; then
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    MIRROR_BIN=docker
+  elif command -v podman >/dev/null 2>&1; then
+    MIRROR_BIN=podman
+  else
+    echo "init-performance-registry-images: нужен рабочий docker или podman" >&2
+    exit 1
+  fi
+fi
+echo "init-performance-registry-images: MIRROR_BIN=$MIRROR_BIN" >&2
+
 MIRROR_ZSTD="${REGISTRY_MIRROR_ZSTD:-0}"
 ZSTD_LEVEL="${REGISTRY_MIRROR_ZSTD_LEVEL:-3}"
 ZSTD_AUTHFILE=""
@@ -216,8 +234,8 @@ fi
 
 declare -A _mirror_ok=()
 
-echo ">>> docker login $REG_HOST" >&2
-echo "$SELECTEL_PASS" | docker login "$REG_HOST" --username "$RIID_SELECTEL_USER" --password-stdin
+echo ">>> $MIRROR_BIN login $REG_HOST" >&2
+echo "$SELECTEL_PASS" | "$MIRROR_BIN" login "$REG_HOST" --username "$RIID_SELECTEL_USER" --password-stdin
 
 PULL_TIMEOUT="${REGISTRY_PULL_TIMEOUT:-12m}"
 
@@ -305,7 +323,7 @@ for i in "${!REPOS[@]}"; do
   echo ">>> pull  $src (timeout ${PULL_TIMEOUT})" >&2
   _step_log="$(mktemp)"
   set +e
-  timeout "$PULL_TIMEOUT" docker pull "$src" 2>&1 | tee "$_step_log"
+  timeout "$PULL_TIMEOUT" "$MIRROR_BIN" pull "$src" 2>&1 | tee "$_step_log"
   pull_ec=${PIPESTATUS[0]}
   set -e
   if [[ "$pull_ec" -ne 0 ]]; then
@@ -321,13 +339,13 @@ for i in "${!REPOS[@]}"; do
   fi
   rm -f "$_step_log"
   echo ">>> tag+push $dst" >&2
-  if ! tag_out=$(docker tag "$src" "$dst" 2>&1); then
+  if ! tag_out=$("$MIRROR_BIN" tag "$src" "$dst" 2>&1); then
     _log_fail "$repo" "$tuse" "tag" "$(echo "$tag_out" | tail -n 1)"
     n_fail=$((n_fail + 1))
     echo ">>> FAIL tag $src -> $dst" >&2
     continue
   fi
-  if ! docker push "$dst" 2>&1 | tee "$_step_log"; then
+  if ! "$MIRROR_BIN" push "$dst" 2>&1 | tee "$_step_log"; then
     _log_fail "$repo" "$tuse" "push" "$(tail -n 1 "$_step_log")"
     rm -f "$_step_log"
     n_fail=$((n_fail + 1))
