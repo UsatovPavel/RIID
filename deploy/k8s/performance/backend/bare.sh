@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Baseline-арм: движок тянет образ сам, без RIID и без зеркала dfinit.
-# Движок выбирается через ENGINE (podman|containerd|porto), см. backend/engine/.
+# Baseline arm: the engine pulls the image itself, without RIID and without the
+# dfinit mirror. The engine is chosen with ENGINE (podman|containerd|porto), see
+# backend/engine/.
 #
-# Вызывается из scenario/run-pull-scenario.sh как BACKEND=bare с ENGINE=<движок>.
+# Called from scenario/run-pull-scenario.sh as BACKEND=bare with ENGINE=<engine>.
 set -euo pipefail
 
 POD="${1:?POD is required}"
@@ -29,8 +30,8 @@ source "$DRIVER"
 
 REF="$(engine_ref "$IMAGE_REPOSITORY" "$IMAGE_REFERENCE")"
 
-# PODMAN_CLEAR_CACHE_BEFORE_PULL — legacy-имя из backend/podman.sh, оставлено
-# ради существующих вызовов performance/Makefile.
+# PODMAN_CLEAR_CACHE_BEFORE_PULL is the legacy name from backend/podman.sh, kept
+# for the existing performance/Makefile calls.
 if [[ "${CLEAR_CACHE_BEFORE_PULL:-${PODMAN_CLEAR_CACHE_BEFORE_PULL:-0}}" == "1" ]]; then
   engine_clear_cache "$POD"
 fi

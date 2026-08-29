@@ -10,10 +10,11 @@ DOCKERHUB_IMAGELIST := $(K8S)/config/imagelist/dockerhub.yaml
 DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
 
-# Класс по умолчанию для PVC без storageClass (Helm Dragonfly / Bitnami MySQL+Redis).
-# fast.ru-3b — Cinder-класс, его создаёт CSI управляемого кластера MKS. На
-# самоуправляемом стенде (terraform-porto, Ubuntu 22.04) CSI нет, поэтому там
-# STORAGE_CLASS=local-path, и storage-default сам поднимает провижнер.
+# Default class for PVCs with no storageClass (Helm Dragonfly / Bitnami
+# MySQL+Redis). fast.ru-3b is a Cinder class created by the CSI of the managed
+# MKS cluster. The self-managed stand (terraform-porto, Ubuntu 22.04) has no CSI,
+# so it uses STORAGE_CLASS=local-path and storage-default brings the provisioner
+# up itself.
 STORAGE_CLASS ?= fast.ru-3b ## Санкт-Петербург
 LOCAL_PATH_STORAGE_CLASS := local-path
 LOCAL_PATH_MANIFEST := $(K8S)/.resolved/src/storage/local-path-storage.yaml
@@ -106,9 +107,10 @@ mark-registry-node-auto:
 	echo "registry node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.registry/p'
 
-# Пометить StorageClass как default (нужно для Dragonfly Helm на этом стенде).
-# Если класса нет и это local-path, сначала ставится провижнер из src/storage:
-# на кластере без CSI иначе некому создать ни один PVC, и Dragonfly не встаёт.
+# Mark the StorageClass as default (Dragonfly's Helm chart needs it on this
+# stand). If the class is missing and it is local-path, the provisioner from
+# src/storage is installed first: on a cluster without a CSI nothing else can
+# create a single PVC, and Dragonfly never comes up.
 storage-default:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \

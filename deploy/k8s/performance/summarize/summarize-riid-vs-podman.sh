@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Агрегат runner-выгрузок (CSV: scenario,mode,image,pod,backend,...,duration_ms,exit_code).
-# Сравнивает ЛЮБУЮ пару армов матрицы: арм определяется файлом, а не литералом в
-# колонке backend — там теперь метка вида riid-podman / dfinit-containerd, и
-# захардкоженный список пар пришлось бы расширять на каждый новый движок.
-# Для каждого image: N pulls, success rate, среднее время по успешным, ratio A/B.
+# Compares ANY pair of arms of the matrix: the arm is identified by the file, not
+# by a literal in the backend column — that column now holds a label such as
+# riid-podman / dfinit-containerd, and a hardcoded list of pairs would have to
+# grow with every new engine.
+# Per image: N pulls, success rate, mean time over the successful ones, ratio A/B.
 #
 # Игнорируются строки «Running scenario=» и любые строки без 9 полей после split по запятой.
 # Нужен GNU awk (asorti).
@@ -28,7 +29,8 @@ for f in "$A_FILE" "$B_FILE"; do
   fi
 done
 
-# Метка арма читается из данных: колонка backend одинакова во всех строках файла.
+# The arm label is read from the data: the backend column is the same on every
+# row of a file.
 arm_label() {
   awk -F ',' 'NF == 9 && $5 != "backend" { print $5; exit }' "$1"
 }

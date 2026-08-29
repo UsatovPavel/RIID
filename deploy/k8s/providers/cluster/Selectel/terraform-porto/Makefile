@@ -15,8 +15,8 @@ SSH_KEY ?= $(TF_DIR)/.ssh/id_ed25519
 COMMON_DIR := $(abspath $(TF_DIR)/../stand-common)
 TF := $(COMMON_DIR)/tf.sh $(TF_DIR)
 BOOTSTRAP_DIR := $(K8S_ROOT)/bootstrap
-# bootstrap/Makefile склеивает CONFIG_FILE со своей директорией, поэтому путь
-# сюда передаётся относительным, а не абсолютным.
+# bootstrap/Makefile concatenates CONFIG_FILE with its own directory, so the path
+# is passed relative rather than absolute.
 BOOTSTRAP_CONFIG_FILE := ../providers/cluster/Selectel/$(notdir $(KUBECONFIG_OUT))
 
 # Same single source of truth as the MKS stand: cluster_topology in config.yaml.
@@ -112,9 +112,9 @@ kubeconfig: ssh-key
 nodes:
 	@KUBECONFIG="$(KUBECONFIG_OUT)" kubectl get nodes -o wide
 
-# Тот же bootstrap, что и для MKS, но со своим kubeconfig и без Cinder:
-# класс fast.ru-3b здесь создавать некому, storage-default сам поднимет
-# local-path provisioner из src/storage.
+# The same bootstrap as for MKS, but with this stand's kubeconfig and without
+# Cinder: nothing here can create the fast.ru-3b class, so storage-default brings
+# up the local-path provisioner from src/storage itself.
 bootstrap:
 	@$(MAKE) -C "$(BOOTSTRAP_DIR)" install-all \
 	  CONFIG_FILE="$(BOOTSTRAP_CONFIG_FILE)" \

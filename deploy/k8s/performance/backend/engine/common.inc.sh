@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
-# Общая часть драйверов движков. Сорсится из backend/bare.sh и backend/dfinit.sh,
-# самостоятельно не запускается.
+# Shared part of the engine drivers. Sourced from backend/bare.sh and
+# backend/dfinit.sh; not runnable on its own.
 #
-# Контракт драйвера (каждый engine/<name>.inc.sh обязан определить):
-#   engine_preflight <pod>            — движок доступен в поде (бинарь, сокет)
-#   engine_ref <repo> <tag>           — печатает полную ссылку для pull
-#   engine_pull <pod> <ref>           — baseline pull, без зеркала dfinit
-#   engine_pull_mirrored <pod> <ref>  — pull через зеркало, которое написал dfinit
-#   engine_mirror_check <pod>         — зеркало действительно применилось
-#   engine_clear_cache <pod>          — вычистить локальное хранилище образов
+# Driver contract — every engine/<name>.inc.sh must define:
+#   engine_preflight <pod>            engine reachable in the pod (binary, socket)
+#   engine_ref <repo> <tag>           prints the full reference to pull
+#   engine_pull <pod> <ref>           baseline pull, no dfinit mirror
+#   engine_pull_mirrored <pod> <ref>  pull through the mirror dfinit wrote
+#   engine_mirror_check <pod>         the mirror really did apply
+#   engine_clear_cache <pod>          wipe the local image store
 #
-# Зеркало включается у движков по-разному: podman читает файл registries.conf,
-# containerd получает --hosts-dir аргументом. Поэтому в контракте две отдельные
-# функции, а не одна с булевым флагом.
+# Engines take the mirror differently: podman reads a registries.conf file,
+# containerd takes --hosts-dir as an argument. Hence two separate functions
+# instead of one with a boolean flag.
 
-# kubectl exec в бенч-под. Все команды движка идут только через неё.
+# kubectl exec into the bench pod. Every engine command goes through it.
 riid_engine_exec() {
   local pod="$1"
   shift
   kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- "$@"
 }
 
-# Читает одно значение из config/.env буквально.
-# `set -a; source .env` здесь неприменим: bash раскрывает $, backtick и \ внутри
-# значений, а в этом же файле лежат токены реестров — подстановка в лучшем случае
-# испортит значение, в худшем выполнит команду из него.
+# Reads a single value from config/.env literally.
+# `set -a; source .env` cannot be used here: bash expands $, backticks and \
+# inside the values, and this same file holds registry tokens — substitution
+# would corrupt a value at best and run a command from it at worst.
 riid_env_value() {
   local key="$1" file="$2" line value
   [[ -f "$file" ]] || return 1
@@ -43,9 +43,9 @@ riid_env_value() {
   return 1
 }
 
-# Хост реестра, из которого тянут baseline/dfinit армы: явный REGISTRY_PULL_HOST
-# (legacy-имя PODMAN_REGISTRY_PULL_HOST), затем подсказка из
-# resolve_smoke_repository.py, затем legacy REGISTRY_LOGIN_HOST из config/.env.
+# Registry host the baseline and dfinit arms pull from: an explicit
+# REGISTRY_PULL_HOST (legacy name PODMAN_REGISTRY_PULL_HOST), then the hint from
+# resolve_smoke_repository.py, then the legacy REGISTRY_LOGIN_HOST in config/.env.
 riid_registry_pull_host() {
   local host py cfg name
   host="${REGISTRY_PULL_HOST:-${PODMAN_REGISTRY_PULL_HOST:-}}"
@@ -71,8 +71,8 @@ riid_registry_pull_host() {
   printf '%s\n' "$host"
 }
 
-# Локальный in-cluster registry ходит по plain HTTP. Проверяется именно
-# заданный хост, а не разрезолвленный — так же, как это делал backend/podman.sh.
+# The in-cluster registry speaks plain HTTP. What gets checked is the host as
+# configured, not the resolved one — the same way backend/podman.sh did it.
 RIID_LOCAL_REGISTRY_HOST="${RIID_LOCAL_REGISTRY_HOST:-local-registry.registry-system.svc.cluster.local:5000}"
 
 riid_registry_is_plain_http() {
@@ -80,6 +80,6 @@ riid_registry_is_plain_http() {
   [[ "$host" == "$RIID_LOCAL_REGISTRY_HOST" ]]
 }
 
-# Адрес прокси dfdaemon, который dfinit прописывает движку как зеркало.
-# Дефолт чарта dragonfly (client.dfinit.config.proxy.addr: http://127.0.0.1:4001).
+# Address of the dfdaemon proxy that dfinit writes into the engine as a mirror.
+# Chart default (client.dfinit.config.proxy.addr: http://127.0.0.1:4001).
 RIID_DFINIT_PROXY_LOCATION="${RIID_DFINIT_PROXY_LOCATION:-127.0.0.1:4001}"

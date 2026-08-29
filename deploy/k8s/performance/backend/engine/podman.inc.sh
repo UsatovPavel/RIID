@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Драйвер podman. Единственный движок, который живёт внутри бенч-пода: podman
-# ставится в образ RIID (src/riid/Dockerfile.k8s), сокета на ноде ему не нужно.
+# podman driver. The only engine that lives inside the bench pod: podman is
+# installed into the RIID image (src/riid/Dockerfile.k8s) and needs no host socket.
 #
 # Env:
-#   PODMAN_TLS_VERIFY               — принудительно true|false; по умолчанию
-#                                     false для локального HTTP-реестра, иначе true
-#   PODMAN_BASELINE_REGISTRIES_CONF — registries.conf без зеркала для baseline-арма;
-#                                     пусто = файл из образа (поведение до dfinit)
+#   PODMAN_TLS_VERIFY               force true|false; defaults to false for the
+#                                     local HTTP registry, true otherwise
+#   PODMAN_BASELINE_REGISTRIES_CONF registries.conf without a mirror for the
+#                                     baseline arm; empty = the file from the
+#                                     image, which is the pre-dfinit behaviour
 
 _podman_tls_verify() {
   local v="${PODMAN_TLS_VERIFY:-${REGISTRY_TLS_VERIFY:-}}"
@@ -20,8 +21,8 @@ engine_preflight() {
   riid_engine_exec "$1" sh -ec 'command -v podman >/dev/null'
 }
 
-# Без хоста ссылка остаётся короткой: podman дотягивает её через
-# unqualified-search-registries, поэтому это рабочий кейс, а не ошибка.
+# With no host the reference stays short: podman completes it through
+# unqualified-search-registries, so this is a working case, not an error.
 engine_ref() {
   local repo="$1" tag="$2" host
   host="$(riid_registry_pull_host)"
@@ -35,8 +36,8 @@ engine_ref() {
 engine_pull() {
   local pod="$1" ref="$2"
   if [[ -n "${PODMAN_BASELINE_REGISTRIES_CONF:-}" ]]; then
-    # Baseline рядом с включённым dfinit: в поде смонтирован hostPath
-    # /etc/containers с зеркалом, поэтому чистый arm читает отдельный файл.
+    # Baseline next to an enabled dfinit: the pod mounts hostPath
+    # /etc/containers carrying the mirror, so the clean arm reads its own file.
     riid_engine_exec "$pod" env "CONTAINERS_REGISTRIES_CONF=${PODMAN_BASELINE_REGISTRIES_CONF}" \
       podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
   else
@@ -44,27 +45,27 @@ engine_pull() {
   fi
 }
 
-# dfinit пишет registries.conf на хосте; под обязан монтировать его hostPath'ом,
-# иначе podman возьмёт файл из образа и зеркало не применится.
+# dfinit writes registries.conf on the host; the pod must mount it as a hostPath,
+# otherwise podman takes the file from the image and the mirror never applies.
 engine_pull_mirrored() {
   local pod="$1" ref="$2"
   riid_engine_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
 }
 
-# Без этой проверки dfinit-арм молча вырождается в обычный pull и меряет
-# накладные расходы вместо P2P — ровно так уже терялся один прогон.
+# Without this check the dfinit arm silently degrades into a plain pull and
+# measures overhead instead of P2P — exactly how one run was already lost.
 engine_mirror_check() {
   local pod="$1" conf="${PODMAN_REGISTRIES_CONF:-/etc/containers/registries.conf}"
   if ! riid_engine_exec "$pod" grep -qF "$RIID_DFINIT_PROXY_LOCATION" "$conf"; then
     echo "dfinit mirror not found: $conf in pod=$pod has no '$RIID_DFINIT_PROXY_LOCATION'" >&2
-    echo "  проверьте hostPath /etc/containers в бенч-поде и client.dfinit в values" >&2
+    echo "  check the /etc/containers hostPath on the bench pod and client.dfinit in values" >&2
     return 1
   fi
 }
 
-# --volumes добавлен относительно старого backend/podman.sh: pull анонимных
-# volume не создаёт, на замер не влияет, зато совпадает с
-# scenario/clear/clear-cache-all-riid-pods.sh — одна семантика "чисто".
+# --volumes is new compared with the old backend/podman.sh: a pull creates no
+# anonymous volumes, so it does not affect the measurement, but it matches
+# scenario/clear/clear-cache-all-riid-pods.sh — one meaning of "clean".
 engine_clear_cache() {
   riid_engine_exec "$1" podman system prune -af --volumes >/dev/null
 }

@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# Драйвер containerd. Движок живёт на ноде, а не в поде: бенч-поду нужен
-# hostPath /run/containerd/containerd.sock и бинарь ctr в образе — тот же набор,
-# что уже требуется арму RIID => Containerd (ContainerdRuntimeAdapter).
+# containerd driver. The engine lives on the node, not in the pod: the bench pod
+# needs hostPath /run/containerd/containerd.sock and the ctr binary in its image
+# — the same set the RIID => Containerd arm already requires
+# (ContainerdRuntimeAdapter).
 #
-# В дефолтном режиме `ctr images pull` идёт через transfer service, то есть
-# HTTP-запросы делает демон containerd в host netns. Оттуда же виден
-# 127.0.0.1:4001, на котором слушает прокси dfdaemon. --hosts-dir и --plain-http
-# в этом режиме поддерживаются; --skip-verify/--tlscacert требуют --local.
+# By default `ctr images pull` goes through the transfer service, so the HTTP
+# requests are made by the containerd daemon in the host netns. That is also
+# where 127.0.0.1:4001, the dfdaemon proxy, is reachable. --hosts-dir and
+# --plain-http work in that mode; --skip-verify/--tlscacert require --local.
 #
 # Env:
-#   CONTAINERD_NAMESPACE   — namespace для бенча (default riid-bench, не k8s.io)
-#   CONTAINERD_ADDRESS     — сокет, пусто = дефолт ctr
-#   CONTAINERD_SNAPSHOTTER — пусто = дефолт ctr
-#   CONTAINERD_HOSTS_DIR   — куда dfinit положил certs.d (default /etc/containerd/certs.d)
+#   CONTAINERD_NAMESPACE   namespace for the bench (default riid-bench, not k8s.io)
+#   CONTAINERD_ADDRESS     socket; empty = the ctr default
+#   CONTAINERD_SNAPSHOTTER empty = the ctr default
+#   CONTAINERD_HOSTS_DIR   where dfinit put certs.d (default /etc/containerd/certs.d)
 
 CTR_NAMESPACE="${CONTAINERD_NAMESPACE:-riid-bench}"
 CTR_ADDRESS="${CONTAINERD_ADDRESS:-}"
@@ -24,7 +25,7 @@ if ! [[ "$CTR_NAMESPACE" =~ ^[A-Za-z0-9_.-]+$ ]]; then
   exit 2
 fi
 
-# Аргументы ctr до подкоманды, по одному в строке (читается через mapfile).
+# ctr arguments that precede the subcommand, one per line (read with mapfile).
 _ctr_base() {
   printf '%s\n' ctr
   if [[ -n "$CTR_ADDRESS" ]]; then
@@ -33,7 +34,7 @@ _ctr_base() {
   printf '%s\n' -n "$CTR_NAMESPACE"
 }
 
-# Флаги самого pull, общие для baseline и зеркала.
+# Flags of the pull itself, shared by the baseline and the mirror.
 _ctr_pull_flags() {
   if riid_registry_is_plain_http; then
     printf '%s\n' --plain-http
@@ -51,8 +52,8 @@ engine_preflight() {
   '
 }
 
-# ctr требует полностью квалифицированную ссылку: unqualified-search-registries,
-# как у podman, у него нет, короткий repo:tag он не достроит.
+# ctr needs a fully qualified reference: it has no unqualified-search-registries
+# like podman, so it will not complete a short repo:tag.
 engine_ref() {
   local repo="$1" tag="$2" host
   host="$(riid_registry_pull_host)"
@@ -71,9 +72,9 @@ engine_pull() {
   riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" "$ref" >/dev/null
 }
 
-# Зеркало включается аргументом, а не файлом: без --hosts-dir клиентский ctr
-# certs.d не читает вовсе, поэтому baseline и dfinit-арм спокойно сосуществуют
-# на одной ноде и порядок прогона не важен.
+# The mirror is switched on by an argument, not a file: without --hosts-dir the
+# ctr client does not read certs.d at all, so the baseline and dfinit arms
+# coexist on one node and the run order does not matter.
 engine_pull_mirrored() {
   local pod="$1" ref="$2"
   local -a base flags
@@ -89,13 +90,14 @@ engine_mirror_check() {
         grep -rqF "$LOC" "$DIR"
       '; then
     echo "dfinit mirror not found: $CTR_HOSTS_DIR in pod=$pod has no '$RIID_DFINIT_PROXY_LOCATION'" >&2
-    echo "  проверьте hostPath /etc/containerd в бенч-поде и client.dfinit в values" >&2
+    echo "  check the /etc/containerd hostPath on the bench pod and client.dfinit in values" >&2
     return 1
   fi
 }
 
-# content store общий на все namespace'ы, поэтому мало снести образы — надо
-# отпустить и неотрефересенный контент, иначе следующий "холодный" pull тёплый.
+# The content store is shared across namespaces, so removing the images is not
+# enough — unreferenced content has to be released too, otherwise the next
+# "cold" pull is warm.
 engine_clear_cache() {
   local pod="$1"
   riid_engine_exec "$pod" env "CTR_NS=$CTR_NAMESPACE" "CTR_ADDR=$CTR_ADDRESS" sh -ec '

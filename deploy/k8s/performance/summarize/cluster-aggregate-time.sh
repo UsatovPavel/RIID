@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Сравнение времени загрузки образов в кластере (recreate — единственный сценарий).
+# Image download time across the cluster (recreate is the only scenario).
 # Использует только AGGREGATE строки - время от старта первого пода до завершения последнего.
-# Арм определяется файлом, а не литералом в колонке backend: там теперь метка
-# вида riid-podman / dfinit-containerd, общая на шесть армов матрицы.
+# The arm is identified by the file, not by a literal in the backend column: that
+# column now holds a label such as riid-podman / dfinit-containerd, shared by
+# every arm of the matrix.
 #
 # Usage:
 #   cluster-aggregate-time.sh <arm_a.tsv> <arm_b.tsv>

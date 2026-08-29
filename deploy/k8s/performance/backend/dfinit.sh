@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Арм dfinit => <движок>: образ тянет сам движок, но через зеркало, которое
-# dfinit прописал ему в конфиг, то есть трафик идёт в прокси dfdaemon и дальше
-# в P2P. RIID в этом пути не участвует вовсе.
+# The dfinit => <engine> arm: the engine pulls the image itself, but through the
+# mirror dfinit wrote into its config, so the traffic goes to the dfdaemon proxy
+# and on into P2P. RIID takes no part in this path at all.
 #
-# Перед первым pull проверяется, что зеркало реально на месте. Без этой проверки
-# арм тихо вырождается в обычный pull с лишним хопом и меряет накладные расходы
-# вместо P2P — так уже был потерян один прогон. Отключается
+# Before the first pull the mirror is verified to be in place. Without that check
+# the arm silently degrades into a plain pull with an extra hop and measures
+# overhead instead of P2P — one run was already lost that way. Turn it off with
 # DFINIT_SKIP_MIRROR_CHECK=1.
 set -euo pipefail
 
@@ -33,8 +33,9 @@ source "$DRIVER"
 
 REF="$(engine_ref "$IMAGE_REPOSITORY" "$IMAGE_REFERENCE")"
 
-# Проверка один раз на под за прогон: маркер в /tmp пода, а не переменная —
-# run-pull-scenario.sh запускает бэкенд отдельным процессом на каждый образ.
+# Checked once per pod per run: a marker in the pod's /tmp rather than a
+# variable, because run-pull-scenario.sh starts the backend as a separate
+# process for every image.
 if [[ "${DFINIT_SKIP_MIRROR_CHECK:-0}" != "1" ]]; then
   MARKER="/tmp/.riid-dfinit-mirror-ok-${ENGINE}"
   if ! kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- test -f "$MARKER" 2>/dev/null; then

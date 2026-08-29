@@ -7,12 +7,12 @@ LABEL_SELECTOR="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="${BACKEND_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)/backend}"
 
-# Сценарий один — recreate: все поды тянут образ одновременно. Rolling убран
-# целиком, вместе с CONCURRENCY: матрица AGENT-99 сравнивает армы только на
-# одновременной нагрузке. Старый MODE=rolling ловится явной ошибкой, чтобы
-# сохранённые команды не отработали молча под другой семантикой.
+# One scenario only — recreate: every pod pulls the image at the same time.
+# Rolling is gone entirely, and CONCURRENCY with it: the AGENT-99 matrix compares
+# the arms under simultaneous load only. An old MODE=rolling is caught by an
+# explicit error so that saved commands do not quietly run with other semantics.
 if [[ -n "${MODE:-}" && "${MODE}" != "recreate" ]]; then
-  echo "MODE=${MODE} не поддерживается: остался только recreate (rolling убран)." >&2
+  echo "MODE=${MODE} is not supported: only recreate is left (rolling was removed)." >&2
   exit 2
 fi
 MODE="recreate"
@@ -33,10 +33,11 @@ SCENARIO="${SCENARIO:-scenario-unnamed}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-}"
 IMAGE_REFERENCE="${IMAGE_REFERENCE:-latest}"
 RUNTIME_ID="${RUNTIME_ID:-podman}"
-# Движок для BACKEND=bare|dfinit; для BACKEND=riid движок задаёт RUNTIME_ID.
+# Engine for BACKEND=bare|dfinit; for BACKEND=riid the engine comes from RUNTIME_ID.
 ENGINE="${ENGINE:-}"
-# Метка арма в TSV: источник+движок. Без движка шесть армов матрицы неразличимы
-# в сводках — "bare" одинаково и для podman, и для containerd.
+# Arm label in the TSV: source plus engine. Without the engine the arms of the
+# matrix are indistinguishable in the summaries — "bare" reads the same for
+# podman and for containerd.
 BACKEND_LABEL="$BACKEND${ENGINE:+-$ENGINE}"
 OUTPUT_TSV="${OUTPUT_TSV:-${OUTPUT_CSV:-}}"
 BACKEND_CMD="$BACKEND_DIR/${BACKEND}.sh"
@@ -46,9 +47,9 @@ REGISTRY_TX_POD_NAME="${REGISTRY_TX_POD_NAME:-riid-registry-node-tx-bytes}"
 REGISTRY_TX_IMAGE="${REGISTRY_TX_IMAGE:-ubuntu:24.04}"
 REGISTRY_TX_HELPER="${REGISTRY_TX_HELPER:-$SCRIPT_DIR/registry-tx.sh}"
 
-# Список бэкендов не захардкожен: он равен набору backend/*.sh, а конкретное
-# отсутствие ловится проверкой BACKEND_CMD ниже. Движок для bare/dfinit
-# задаётся отдельной переменной ENGINE (podman|containerd), см. backend/engine/.
+# The backend list is not hardcoded: it is whatever backend/*.sh exists, and a
+# missing one is caught by the BACKEND_CMD check below. The engine for
+# bare/dfinit comes from its own ENGINE variable, see backend/engine/.
 
 if ! [[ "$EXPECTED_RIID_PODS" =~ ^[0-9]+$ ]]; then
   echo "EXPECTED_RIID_PODS must be a non-negative integer (or empty for config), got: $EXPECTED_RIID_PODS" >&2
@@ -78,10 +79,11 @@ fi
 # shellcheck source=/dev/null
 source "$REGISTRY_TX_HELPER"
 
-# Миллисекунды с эпохи. Не через `date +%s%3N`: ширину у %N понимает только GNU
-# coreutils, а uutils-реализация (стоит в Ubuntu 26) её молча игнорирует и отдаёт
-# наносекунды — duration_ms тогда завышен в 10^6 раз, а из-за потери ведущего нуля
-# в дробной части местами уходит в минус. Поэтому %s.%N и арифметика руками.
+# Milliseconds since the epoch. Not `date +%s%3N`: only GNU coreutils honours the
+# width on %N, while the uutils implementation (shipped in Ubuntu 26) silently
+# ignores it and returns nanoseconds — duration_ms is then inflated 10^6 times
+# and, when a leading zero of the fraction is lost, sometimes goes negative.
+# Hence %s.%N and the arithmetic by hand.
 now_ms() {
   local t s ns
   t="$(date +%s.%N)"

@@ -1,32 +1,35 @@
 #!/usr/bin/env bash
-# Драйвер Porto. Движок живёт на ноде, как containerd: бенч-поду нужен hostPath
-# /run/portod.socket и бинарь portoctl в образе — тот же набор, что уже требуется
-# арму RIID => Porto (PortoRuntimeAdapter).
+# Porto driver. The engine lives on the node, like containerd: the bench pod
+# needs hostPath /run/portod.socket and the portoctl binary in its image — the
+# same set the RIID => Porto arm already requires (PortoRuntimeAdapter).
 #
-# Тянет реестр сам portod через `portoctl docker-pull`, поэтому у стенда есть два
-# требования, которых нет у podman и containerd:
+# portod itself talks to the registry through `portoctl docker-pull`, which puts
+# two requirements on the stand that podman and containerd do not have:
 #
-#   1. В /etc/portod.conf должно стоять `container { docker_images_support: true }`
-#      — без него docker-pull/docker-images/docker-rmi выключены целиком.
-#   2. HTTP-реестр перечисляется там же в `docker_insecure_registry`: флага уровня
-#      команды, как --tls-verify=false у podman или --plain-http у ctr, у Porto нет.
+#   1. /etc/portod.conf must carry `container { docker_images_support: true }` —
+#      without it docker-pull/docker-images/docker-rmi are disabled entirely.
+#   2. An HTTP registry is listed there too, in `docker_insecure_registry`: Porto
+#      has no command-level flag like podman's --tls-verify=false or ctr's
+#      --plain-http.
 #
-# И отдельно про имя хоста: HTTP-запросы делает portod в host netns, где нет
-# резолвера кластера. Cлужебное имя вида *.svc.cluster.local оттуда не
-# резолвится, поэтому REGISTRY_PULL_HOST для этого арма должен указывать на
-# адрес, видимый с ноды (NodePort реестра или внешний реестр).
+# And separately about the host name: the HTTP requests are made by portod in the
+# host netns, where there is no cluster resolver. A service name such as
+# *.svc.cluster.local does not resolve from there, so REGISTRY_PULL_HOST for this
+# arm has to point at an address visible from the node (the registry NodePort or
+# an external registry).
 #
 # Env:
-#   PORTO_PLACE    — -P <place>, пусто = дефолтный /place
-#   PORTO_PLATFORM — -T amd64|aarch64, пусто = дефолт portod
-#   PORTO_SOCKET   — сокет portod для preflight (default /run/portod.socket)
-#   DOCKER_TOKEN   — проброс токена реестра в docker-pull, как в документации Porto
+#   PORTO_PLACE    -P <place>; empty = the default /place
+#   PORTO_PLATFORM -T amd64|aarch64; empty = the portod default
+#   PORTO_SOCKET   portod socket used by preflight (default /run/portod.socket)
+#   DOCKER_TOKEN   registry token passed to docker-pull, as Porto documents
 
 PORTO_SOCKET="${PORTO_SOCKET:-/run/portod.socket}"
 PORTO_PLACE="${PORTO_PLACE:-}"
 PORTO_PLATFORM="${PORTO_PLATFORM:-}"
 
-# Аргументы portoctl до подкоманды и общие флаги места, по одному в строке.
+# portoctl arguments preceding the subcommand and the shared place flags, one
+# per line.
 _porto_place_flags() {
   if [[ -n "$PORTO_PLACE" ]]; then
     printf '%s\n' -P "$PORTO_PLACE"
@@ -43,17 +46,17 @@ engine_preflight() {
     [ -S "$PORTO_SOCK" ] || { echo "porto socket not mounted: $PORTO_SOCK" >&2; exit 1; }
   ' || return 1
 
-  # docker_images_support выключен по умолчанию, и тогда docker-pull падает уже
-  # на первом образе, посреди замера. Дешевле узнать об этом здесь.
+  # docker_images_support is off by default, and then docker-pull fails on the
+  # very first image, in the middle of a measurement. Cheaper to learn it here.
   if ! riid_engine_exec "$pod" portoctl docker-images "${place[@]}" >/dev/null 2>&1; then
     echo "porto: docker images support is off in pod=$pod" >&2
-    echo "  добавьте в /etc/portod.conf: container { docker_images_support: true } и перезапустите porto" >&2
+    echo "  add to /etc/portod.conf: container { docker_images_support: true } and restart porto" >&2
     return 1
   fi
 }
 
-# Porto достраивать короткую ссылку не умеет: ни unqualified-search-registries,
-# как у podman, ни чего-то похожего у него нет.
+# Porto cannot complete a short reference: it has neither
+# unqualified-search-registries like podman nor anything similar.
 engine_ref() {
   local repo="$1" tag="$2" host
   host="$(riid_registry_pull_host)"
@@ -74,7 +77,8 @@ engine_pull() {
     args+=(-T "$PORTO_PLATFORM")
   fi
 
-  # docker-pull печатает id образа — на замер не влияет, но в TSV не нужен.
+  # docker-pull prints the image id — harmless for the measurement, but it has
+  # no place in the TSV.
   if [[ -n "${DOCKER_TOKEN:-}" ]]; then
     riid_engine_exec "$pod" env "DOCKER_TOKEN=$DOCKER_TOKEN" "${args[@]}" "$ref" >/dev/null
   else
@@ -82,21 +86,22 @@ engine_pull() {
   fi
 }
 
-# dfinit не умеет Porto: его ContainerRuntimeConfig покрывает containerd, docker,
-# podman и cri-o, а конфига зеркала у Porto нет в принципе — реестр берётся из
-# самой ссылки. Поэтому арм не деградирует в обычный pull, а честно падает:
-# по матрице AGENT-99 у Porto есть только RIID => Porto и голый Porto.
+# dfinit does not support Porto: its ContainerRuntimeConfig covers containerd,
+# docker, podman and cri-o, and Porto has no mirror configuration at all — the
+# registry comes from the reference itself. So the arm does not degrade into a
+# plain pull, it fails honestly: by the AGENT-99 matrix Porto has only
+# RIID => Porto and bare Porto.
 _porto_no_dfinit() {
-  echo "porto: dfinit не поддерживает этот движок (нет ни backend в dragonfly-client-init, ни конфига зеркала у Porto)" >&2
-  echo "  по AGENT-99 у Porto только два арма: BACKEND=riid и BACKEND=bare" >&2
+  echo "porto: dfinit does not support this engine (no backend in dragonfly-client-init, and Porto has no mirror config)" >&2
+  echo "  per AGENT-99 Porto has only two arms: BACKEND=riid and BACKEND=bare" >&2
   return 2
 }
 
 engine_pull_mirrored() { _porto_no_dfinit; }
 engine_mirror_check() { _porto_no_dfinit; }
 
-# docker-images печатает заголовок "ID           NAME" и по строке на тег;
-# удаляется именно тег, потому что docker-rmi принимает имя образа.
+# docker-images prints an "ID           NAME" header and one line per tag; the
+# tag is what gets removed, because docker-rmi takes an image name.
 engine_clear_cache() {
   local pod="$1"
   riid_engine_exec "$pod" env "PORTO_PLACE=$PORTO_PLACE" sh -ec '

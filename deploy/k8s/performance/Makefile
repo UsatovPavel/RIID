@@ -8,18 +8,18 @@ REGISTRY_TC_SCRIPT := $(REGISTRY_DIR)/registry-node-tc.sh
 REGISTRY_TC_CHECK_SCRIPT := $(REGISTRY_DIR)/registry-node-tc-check.sh
 INPUT_DIR := $(PERF_DIR)/input
 
-# Сценарий один — recreate, поэтому MODE/CONCURRENCY больше нет.
-# BACKEND — откуда тянется образ, ENGINE — куда он приезжает.
+# One scenario only — recreate, so MODE/CONCURRENCY are gone.
+# BACKEND is where the image is pulled from, ENGINE is where it lands.
 BACKEND ?= riid
 ENGINE ?= podman
 # EXPECTED_RIID_PODS — опционально; если пусто, run-pull-scenario.sh берёт cluster_topology.workers из deploy/k8s/config/config.yaml (0 = не проверять число подов).
 
-# export, а не строка в env-префиксе run: значение нужно только скрипту, и
-# переопределение из командной строки (make run SCENARIO=...) всё равно экспортируется.
+# export, not a line in the env prefix of run: only the script needs the value,
+# and a command-line override (make run SCENARIO=...) is exported by make anyway.
 export SCENARIO ?= pr18
 DATASET ?= A
 DATASET_FILE ?=
-# Для BACKEND=riid движок выбирается через runtimeId в запросе к демону.
+# For BACKEND=riid the engine is selected by runtimeId in the daemon request.
 RUNTIME_ID ?= $(ENGINE)
 OUTPUT_TSV ?=
 PODMAN_CLEAR_CACHE_BEFORE_PULL ?= 0
@@ -30,7 +30,7 @@ OUTPUT_DIR ?= $(PERF_DIR)/output
 SUMMARIZE_SCRIPT := $(PERF_DIR)/summarize/summarize-riid-vs-podman.sh
 AGGREGATE_SCRIPT := $(PERF_DIR)/summarize/cluster-aggregate-time.sh
 SUMMARY_OUT := $(OUTPUT_DIR)/summary.tsv
-# Какую пару армов сводить: любые два TSV из OUTPUT_DIR.
+# Which pair of arms to summarise: any two TSVs from OUTPUT_DIR.
 SUMMARY_A ?= $(OUTPUT_DIR)/riid-podman.tsv
 SUMMARY_B ?= $(OUTPUT_DIR)/bare-podman.tsv
 
@@ -75,10 +75,11 @@ run:
 	OUTPUT_TSV="$$out" \
 	bash "$(PERF_DIR)/scenario/run-pull-scenario.sh"
 
-# Матрица AGENT-99. Полный тест: три источника (riid | bare | dfinit) на podman
-# и containerd. Сценарий один, поэтому в имени цели он не участвует. Результат
-# каждого арма ложится в $(OUTPUT_DIR)/<source>-<engine>.tsv и той же меткой
-# подписывается колонка backend, иначе армы не различить в сводках.
+# The AGENT-99 matrix. Full test: three sources (riid | bare | dfinit) on podman
+# and containerd. There is only one scenario, so it does not appear in the target
+# name. Each arm lands in $(OUTPUT_DIR)/<source>-<engine>.tsv and the backend
+# column carries the same label, otherwise the arms are indistinguishable in the
+# summaries.
 riid-podman:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=podman
 
@@ -97,9 +98,10 @@ dfinit-podman:
 dfinit-containerd:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=dfinit ENGINE=containerd
 
-# Porto — частичный тест: по AGENT-99 у него только RIID => Porto и голый Porto.
-# Цели dfinit-porto нет намеренно: dfinit не умеет Porto, и engine/porto.inc.sh
-# на этих функциях падает, а не тихо вырождается в обычный pull.
+# Porto is a partial test: per AGENT-99 it has only RIID => Porto and bare Porto.
+# There is deliberately no dfinit-porto target: dfinit cannot drive Porto, and
+# engine/porto.inc.sh fails on those functions instead of silently degrading into
+# a plain pull.
 riid-porto:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=porto
 
@@ -167,8 +169,8 @@ debug-registry-node:
 	printf '%s\n' "node=$$NODE"; \
 	kubectl debug "node/$$NODE" -i --image=busybox:1.36 -- sh -c 'df -h /host 2>/dev/null || df -h; echo ""; df -hi /host 2>/dev/null || df -hi'
 
-# Сводка по паре армов: среднее на под, ratio, success rate, registry TX.
-# Пара задаётся SUMMARY_A/SUMMARY_B — любые два TSV из OUTPUT_DIR.
+# Summary over a pair of arms: mean per pod, ratio, success rate, registry TX.
+# The pair is given by SUMMARY_A/SUMMARY_B — any two TSVs from OUTPUT_DIR.
 # SUMMARY_OUT=path — записать в файл; иначе только stdout.
 summarize:
 	@if [ -n "$(SUMMARY_OUT)" ]; then \
@@ -179,6 +181,6 @@ summarize:
 	  bash "$(SUMMARIZE_SCRIPT)" "$(SUMMARY_A)" "$(SUMMARY_B)"; \
 	fi
 
-# Wall-clock кластера по AGGREGATE-строкам — основная сводка для recreate.
+# Cluster wall-clock from the AGGREGATE rows — the main summary for recreate.
 summarize-aggregate:
 	@bash "$(AGGREGATE_SCRIPT)" "$(SUMMARY_A)" "$(SUMMARY_B)"

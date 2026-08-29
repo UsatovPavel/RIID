@@ -205,8 +205,9 @@ calc-worker-to-worker-speed:
 init-performance-registry-images:
 	@"$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"
 
-# То же зеркало плюс zstd-вариант каждого образа во втором реестре (REGISTRY_SELECTEL_ZSTD_NAME).
-# Требует podman: docker push не поддерживает --compression-format.
+# The same mirror plus a zstd variant of every image in a second registry
+# (REGISTRY_SELECTEL_ZSTD_NAME). Requires podman: docker push has no
+# --compression-format.
 init-performance-registry-images-zstd:
 	@REGISTRY_MIRROR_ZSTD=1 REGISTRY_MIRROR_ZSTD_LEVEL="$(REGISTRY_MIRROR_ZSTD_LEVEL)" \
 	"$(REGISTRY_DIR)/init/init-performance-registry-images.sh" "$(ENV_FILE)"

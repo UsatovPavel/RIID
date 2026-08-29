@@ -17,9 +17,10 @@ riid_registry_prefix_from_env() {
   REG_REPO_PREFIX="${REG_PREFIX#"${host_slash}"}"
 }
 
-# То же самое для реестра zstd-вариантов: REG_ZSTD_PREFIX, REG_ZSTD_HOST, REG_ZSTD_REPO_PREFIX
-# из REGISTRY_SELECTEL_ZSTD_NAME. Это отдельный реестр Selectel со своим токеном,
-# поэтому и префикс, и креды резолвятся независимо от основного.
+# The same for the registry of zstd variants: REG_ZSTD_PREFIX, REG_ZSTD_HOST and
+# REG_ZSTD_REPO_PREFIX from REGISTRY_SELECTEL_ZSTD_NAME. It is a separate Selectel
+# registry with its own token, so both the prefix and the credentials are
+# resolved independently of the main one.
 riid_registry_zstd_prefix_from_env() {
   local sel_raw="${REGISTRY_SELECTEL_ZSTD_NAME:-}"
   : "${sel_raw:?REGISTRY_SELECTEL_ZSTD_NAME is required in environment for zstd mirror}"

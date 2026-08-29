@@ -31,13 +31,16 @@
 #
 # library/clefos: на Docker Hub нет манифеста linux/amd64 — в скрипте пропуск. Доп. пропуски: REGISTRY_MIRROR_SKIP="ns/repo ns/repo2"
 #
-# Второе плечо — zstd (REGISTRY_MIRROR_ZSTD=1): тот же образ дополнительно кладётся
-# в реестр REGISTRY_SELECTEL_ZSTD_NAME с перепаковкой слоёв в zstd. Метод — из AGENT-97
-# (bench/zstd_bench.py): podman push --format oci --compression-format zstd --force-compression.
-# docker push здесь не годится: он не умеет --compression-format, поэтому плечо требует podman.
-# Источник для перепаковки — уже залитое gzip-зеркало, а не Docker Hub: байты те же,
-# а лимиты на pull у Hub не тратятся. Уровень: REGISTRY_MIRROR_ZSTD_LEVEL (по умолчанию 3).
-# Результат — out/performance-registry-zstd-map.tsv (repo, zstd-путь, тег, manifest digest).
+# Second leg — zstd (REGISTRY_MIRROR_ZSTD=1): the same image is additionally
+# pushed to the REGISTRY_SELECTEL_ZSTD_NAME registry with its layers repacked in
+# zstd. The method comes from AGENT-97 (bench/zstd_bench.py):
+# podman push --format oci --compression-format zstd --force-compression.
+# docker push will not do here: it has no --compression-format, so this leg
+# requires podman.
+# The repack source is the gzip mirror just pushed, not Docker Hub: the bytes are
+# the same and no Hub pull limits are spent. Level: REGISTRY_MIRROR_ZSTD_LEVEL
+# (3 by default).
+# Result: out/performance-registry-zstd-map.tsv (repo, zstd path, tag, manifest digest).
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -98,10 +101,11 @@ if [[ "$MIRROR_ZSTD" == 1 ]]; then
   ZSTD_PASS="${RIID_SELECTEL_ZSTD_TOKEN:-${RIID_SELECTEL_ZSTD_PASSWORD:-}}"
   : "${ZSTD_PASS:?в $ENV_FILE нужен RIID_SELECTEL_ZSTD_TOKEN (или RIID_SELECTEL_ZSTD_PASSWORD)}"
 
-  # Оба реестра живут на одном хосте, а podman login хранит креды по хосту — токен
-  # основного реестра затёр бы токен zstd-реестра и push падал бы на blob upload.
-  # containers-auth.json допускает ключ с namespace (host/registry), он приоритетнее
-  # ключа по хосту, поэтому пишем authfile с обоими явно.
+  # Both registries live on one host, and podman login stores credentials per
+  # host — the main registry's token would overwrite the zstd one and the push
+  # would fail on blob upload. containers-auth.json allows a key with a namespace
+  # (host/registry) that takes precedence over the host key, so the authfile is
+  # written with both explicitly.
   ZSTD_AUTHFILE="$(mktemp -t riid-zstd-auth-XXXXXX.json)"
   chmod 600 "$ZSTD_AUTHFILE"
   trap 'rm -f "$ZSTD_AUTHFILE"' EXIT
@@ -232,9 +236,9 @@ declare -A _zstd_digest=()
 n_zstd=0
 n_zstd_fail=0
 
-# Перепаковывает уже зеркалированный образ в zstd и кладёт во второй реестр.
-# Источник — gzip-зеркало ($mirror_dst): оно только что залито, поэтому содержимое
-# гарантированно то же, а лимиты Docker Hub не расходуются.
+# Repacks an already mirrored image into zstd and pushes it to the second
+# registry. The source is the gzip mirror ($mirror_dst): it was just pushed, so
+# the content is guaranteed identical and no Docker Hub limits are spent.
 _mirror_zstd_variant() {
   local repo="$1" tuse="$2" mirror_dst="$3" zstd_repo="$4"
   local dst="${REG_ZSTD_PREFIX}/${zstd_repo}:${tuse}"
