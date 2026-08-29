@@ -256,6 +256,7 @@ resource "openstack_compute_instance_v2" "worker" {
     api_port       = 6443
     kubeadm_token  = local.kubeadm_token
     porto_version  = var.porto_version
+    porto_insecure = var.porto_insecure_registries
     node_labels    = local.node_labels
   })
 

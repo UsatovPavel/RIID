@@ -58,6 +58,14 @@ The control plane then runs `kubeadm init` and applies flannel, patched to the
 `pod_cidr` of the stand. Each worker installs the Porto release deb, waits for
 port 6443 on the control plane and runs `kubeadm join`.
 
+Workers also get `/etc/portod.conf.d/10-riid-bench.conf` with
+`docker_images_support: true`, without which `portoctl docker-pull` — the whole
+basis of the Porto bench arm — is unavailable. An HTTP registry has to be listed
+in `porto_insecure_registries`: Porto has no per-command equivalent of podman's
+`--tls-verify=false` or ctr's `--plain-http`. Note that portod resolves names in
+the host netns, where cluster DNS does not exist, so a `*.svc.cluster.local`
+address will not work for that arm.
+
 The join address is fixed before anything exists (`cidrhost(subnet_cidr, 10)`,
 pinned on a Neutron port), so no worker has to look up where to join.
 

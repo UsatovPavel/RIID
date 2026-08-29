@@ -164,6 +164,12 @@ variable "porto_version" {
   }
 }
 
+variable "porto_insecure_registries" {
+  description = "Registries portod is allowed to talk to over plain HTTP, host[:port]. Porto has no per-command flag like podman's --tls-verify=false or ctr's --plain-http, so an HTTP registry has to be listed here."
+  type        = list(string)
+  default     = []
+}
+
 variable "labels" {
   description = "Extra kubernetes labels put on every worker at join time."
   type        = map(string)

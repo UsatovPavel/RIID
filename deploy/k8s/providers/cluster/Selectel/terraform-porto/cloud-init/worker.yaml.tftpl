@@ -35,6 +35,22 @@ write_files:
             value: "${node_labels}"
 %{ endif ~}
 
+  # Пакет создаёт /etc/portod.conf.d и мержит оттуда *.conf по алфавиту, поэтому
+  # настройка кладётся drop-in'ом и не спорит с файлом пакета. Написан до runcmd:
+  # postinst сам стартует porto, конфиг должен быть на месте раньше.
+  - path: /etc/portod.conf.d/10-riid-bench.conf
+    permissions: "0644"
+    content: |
+      # docker_images_support выключен по умолчанию, а без него portoctl
+      # docker-pull / docker-images / docker-rmi недоступны целиком — на них
+      # держится арм Porto в performance/backend/engine/porto.inc.sh.
+      container {
+          docker_images_support: true
+%{ for registry in porto_insecure ~}
+          docker_insecure_registry: "${registry}"
+%{ endfor ~}
+      }
+
   - path: /opt/riid/bootstrap.sh
     permissions: "0755"
     content: |
