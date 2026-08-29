@@ -56,7 +56,7 @@ engine_preflight() {
 # like podman, so it will not complete a short repo:tag.
 engine_ref() {
   local repo="$1" tag="$2" host
-  host="$(riid_registry_pull_host)"
+  host="$(riid_registry_node_host)" || return 1
   if [[ -z "$host" ]]; then
     echo "containerd: registry host is empty, set REGISTRY_PULL_HOST (ctr needs a fully qualified ref)" >&2
     return 2

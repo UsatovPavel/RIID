@@ -67,6 +67,20 @@ if [[ ! -f "$BACKEND_CMD" ]]; then
   exit 2
 fi
 
+# An engine that runs on the node (podman via CONTAINER_HOST, containerd, Porto)
+# resolves the registry in the host netns, which has no cluster resolver. The
+# ClusterIP lookup that fixes it costs a kubectl call, so it happens once here
+# rather than per image inside the timed section. RIID pulls in the pod and does
+# not need it.
+if [[ "$BACKEND" != "riid" ]]; then
+  RIID_K8S_ROOT="$K8S_ROOT"
+  export RIID_K8S_ROOT
+  # shellcheck source=../backend/engine/common.inc.sh
+  source "$BACKEND_DIR/engine/common.inc.sh"
+  REGISTRY_NODE_PULL_HOST="$(riid_registry_node_host)" || exit 1
+  export REGISTRY_NODE_PULL_HOST
+fi
+
 if [[ -n "$DATASET_FILE" && ! -f "$DATASET_FILE" ]]; then
   echo "Dataset file not found: $DATASET_FILE" >&2
   exit 2

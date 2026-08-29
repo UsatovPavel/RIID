@@ -30,6 +30,20 @@ source "$DRIVER"
 
 REF="$(engine_ref "$IMAGE_REPOSITORY" "$IMAGE_REFERENCE")"
 
+# Checked once per pod per run, marker in the pod's /tmp rather than a variable:
+# run-pull-scenario.sh starts this script as a separate process for every image.
+# Same shape as the dfinit arm's mirror check, and for the same reason — an arm
+# that quietly measures something else costs a whole run.
+MARKER="/tmp/.riid-bare-preflight-ok-${ENGINE}"
+if ! kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- test -f "$MARKER" 2>/dev/null; then
+  engine_preflight "$POD"
+  # Only engines that share one config with the dfinit arm define this.
+  if declare -F engine_no_mirror_check >/dev/null; then
+    engine_no_mirror_check "$POD"
+  fi
+  kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- touch "$MARKER" >/dev/null
+fi
+
 if [[ "${CLEAR_CACHE_BEFORE_PULL:-0}" == "1" ]]; then
   engine_clear_cache "$POD"
 fi

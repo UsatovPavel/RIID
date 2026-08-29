@@ -59,7 +59,7 @@ engine_preflight() {
 # unqualified-search-registries like podman nor anything similar.
 engine_ref() {
   local repo="$1" tag="$2" host
-  host="$(riid_registry_pull_host)"
+  host="$(riid_registry_node_host)" || return 1
   if [[ -z "$host" ]]; then
     echo "porto: registry host is empty, set REGISTRY_PULL_HOST (portoctl docker-pull needs a fully qualified ref)" >&2
     return 2

@@ -15,6 +15,41 @@ make -C deploy/k8s/performance bare-podman DATASET=A SCENARIO=prep
 make -C deploy/k8s/performance metrics METRICS_TSV=deploy/k8s/performance/output/riid-podman.tsv
 
 Полный список используемых команд(созадние кластера, тестирование, дебаг) в _commands.md
+
+## Container engines live on the node
+
+Every engine in the bench matrix has one shape: **a daemon on the node, a client in the pod.**
+containerd (`/run/containerd/containerd.sock`) and Porto (`/run/portod.socket`) were already like
+that; podman is daemonless by design, so the node runs the packaged `podman.socket` and the pod
+reaches it over `CONTAINER_HOST=unix:///run/podman/podman.sock`.
+
+```
+make -C deploy/k8s/bootstrap install-podman-node   # DaemonSet: installs podman, enables the socket
+make -C deploy/k8s/bootstrap wait-podman-node      # waits, then prints podman/OS/kernel per node
+```
+
+`install-podman-node` must run **before** `install-riid` (`install-all` already orders it that way):
+the RIID DaemonSet mounts the socket with `type: Socket`, so without it the pods never start.
+
+Why it matters for the numbers: previously podman ran inside the RIID pod with
+`mount_program = fuse-overlayfs` and no hostPath under `graphroot`, so every import unpacked through
+userspace FUSE into the container's own writable layer — overlay on overlay. `engine.import` is 76%
+of a cold request (ADR-11), so that was measuring the test rig. It also applies to both arms at once:
+the RIID import and the baseline pull now hit the same node store.
+
+Two operational consequences:
+
+- **Registry address.** A node-side engine resolves names in the host netns, where there is no
+  cluster resolver. `riid_registry_node_host` (`performance/backend/engine/common.inc.sh`) turns a
+  `*.svc.cluster.local` name into the Service ClusterIP, which *is* routable there because kube-proxy
+  programs its rules in that namespace. RIID's own download is unaffected — it runs in the pod.
+- **Baseline vs dfinit.** dfinit edits the node's `/etc/containers/registries.conf`, the very file the
+  daemon reads, so the baseline can no longer be pointed at a private copy through a client-side
+  `CONTAINERS_REGISTRIES_CONF`. Instead each arm asserts what it needs: `engine_mirror_check` (mirror
+  present) for dfinit, `engine_no_mirror_check` (mirror absent) for the baseline, both read from
+  `podman info` — the daemon's own resolved view, not a file. A pristine copy is kept at
+  `/etc/containers/registries.conf.riid-baseline` when podman is first installed.
+
 ## Cluster environment
 
 - 12 nodes;
@@ -103,7 +138,7 @@ RIID_SELECTEL_TOKEN=
 
 | Path | Role | Notes |
 |------|------|------|
-| `src/` | Cluster manifests and Helm charts (Dragonfly installer, optional default storage class, RIID workload, vmagent worker, observer chart) | Logical `image:` keys; not applied directly until resolved |
+| `src/` | Cluster manifests and Helm charts (Dragonfly installer, optional default storage class, RIID workload, node engine daemons in `src/engines/`, vmagent worker, observer chart) | Logical `image:` keys; not applied directly until resolved |
 | `config/` | Environment and catalogs | `config.yaml`, `imagelist/`, `.env` (registry credentials on the workstation) |
 | `providers/` | Generation and resolution | Builds imagelist overlays, runs `provider-apply` into `.resolved/` |
 | `bootstrap/` | Deploy entrypoint | Main `Makefile` drives kubectl/helm; `bootstrap/registry/` handles registry profiles, secrets, mirrors, perf helpers (`SELECTEL_DIR` in scripts is a legacy name for this directory) |
