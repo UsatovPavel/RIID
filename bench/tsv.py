@@ -16,6 +16,7 @@ class TraceTimings:
     t_dl_end_ms: int | None = None
     t_layout_ms: int | None = None
     t_end_ms: int | None = None
+    t_import_ms: int | None = None
     payload_bytes: int | None = None
     sources: dict[str, int] = field(default_factory=dict)
     errors: int = 0
@@ -28,6 +29,12 @@ class TraceTimings:
 
     @property
     def handoff_import_ms(self) -> int | None:
+        # engine.import is the handover itself now (issue #75), so it is read
+        # rather than derived. The subtraction is kept only as a fallback for
+        # logs produced before that change, and it is wrong on the prefix path:
+        # there the import runs inside archive.build, so t_end - t_layout ~ 0.
+        if self.t_import_ms is not None:
+            return self.t_import_ms
         if self.t_end_ms is None or self.t_layout_ms is None:
             return None
         return self.t_end_ms - self.t_layout_ms
@@ -69,6 +76,11 @@ def parse_trace(log_path: Path, trace_id: str) -> TraceTimings:
             elif event == "archive.build" and isinstance(duration, int):
                 timings.t_layout_ms = duration
             elif event == "engine.import" and isinstance(duration, int):
+                timings.t_import_ms = duration
+                match = PAYLOAD_RE.search(message)
+                if match:
+                    timings.payload_bytes = int(match.group(1))
+            elif event == "load.total" and isinstance(duration, int):
                 timings.t_end_ms = duration
                 match = PAYLOAD_RE.search(message)
                 if match:

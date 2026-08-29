@@ -12,12 +12,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.slf4j.MDC;
 
 import riid.app.core.model.ImageId;
 import riid.cache.oci.ImageDigest;
@@ -25,6 +27,7 @@ import riid.client.api.ManifestResult;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
+import riid.core.logging.LogContextKeys;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.core.model.manifest.MediaType;
@@ -139,6 +142,35 @@ class OciArchiveBuilderStreamLayersTest {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Issue #75 follow-up: every line a layer's fetch produces must carry that
+     * layer, so source.select / source.fetch can be joined to layer.import.
+     */
+    @Test
+    @Timeout(60)
+    void scopesLayerDigestInMdcWhileItsLayerIsFetched() throws Exception {
+        BlobSource blobs = new BlobSource(fs);
+        Map<String, String> seenInMdc = new ConcurrentHashMap<>();
+        for (String digest : LAYER_DIGESTS) {
+            blobs.beforeFetch(digest, () -> {
+                String scoped = MDC.get(LogContextKeys.LAYER_DIGEST);
+                if (scoped != null) {
+                    seenInMdc.put(digest, scoped);
+                }
+            });
+        }
+        OciArchiveBuilder builder = new OciArchiveBuilder(blobs, fs, TestPaths.DEFAULT_BASE_DIR);
+
+        builder.streamLayers(imageId(), manifestResult(), layersOnly((layer, blobPath) -> {
+            // the sink is not what this test is about
+        }));
+
+        for (String digest : LAYER_DIGESTS) {
+            assertEquals(digest, seenInMdc.get(digest), "MDC must carry the digest of the layer being fetched");
+        }
+        assertNull(MDC.get(LogContextKeys.LAYER_DIGEST), "the pull task must not leak the digest into MDC");
     }
 
     private static ImageId imageId() {
