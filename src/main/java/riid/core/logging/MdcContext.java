@@ -37,6 +37,18 @@ public final class MdcContext {
         MDC.remove(LogContextKeys.OPERATION);
     }
 
+    /**
+     * Scopes the following lines to one layer. Pull tasks run one per virtual
+     * thread, so MDC isolates them without any extra bookkeeping.
+     */
+    public static void putLayerDigest(String layerDigest) {
+        MDC.put(LogContextKeys.LAYER_DIGEST, layerDigest);
+    }
+
+    public static void clearLayerDigest() {
+        MDC.remove(LogContextKeys.LAYER_DIGEST);
+    }
+
     public static void clearRequestContext() {
         MDC.remove(LogContextKeys.OPERATION);
         MDC.remove(LogContextKeys.COMPONENT);

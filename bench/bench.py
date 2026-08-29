@@ -3,15 +3,17 @@
 
 Что меряем — "handoff", передача уже скачанного образа в контейнерный рантайм:
 отрезок от момента, когда Dragonfly отдал последний слой, до завершения
-операции. Считается из структурных JSON-логов демона по одному trace_id
-(duration_ms в логах кумулятивные от старта запроса):
+операции. Считается из структурных JSON-логов демона по одному trace_id.
+duration_ms у каждого события — его собственный интервал, но события вложены
+(load.total ⊃ archive.build ⊃ source.fetch), поэтому выглядят кумулятивными:
 
     t_dl_end        = max(duration_ms) по event=source.fetch
     t_layout        = duration_ms у event=archive.build
-    t_end           = duration_ms у event=engine.import
+    t_import        = duration_ms у event=engine.import   # сама передача в движок
+    t_end           = duration_ms у event=load.total      # манифест → образ в движке
 
     handoff_layout  = t_layout - t_dl_end     # финализация OCI layout
-    handoff_import  = t_end    - t_layout     # импорт в движок
+    handoff_import  = t_import                # импорт в движок, берётся напрямую
     handoff         = t_end    - t_dl_end     # то, что оптимизируем
 
 Сценарий (дословно из AGENT-71): 10 образов 10..50 MB → daemon → python 11-м;

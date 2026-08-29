@@ -378,8 +378,16 @@ public final class OciArchiveBuilder {
                 return;
             }
             pullTasks.add(() -> runPullWithInheritedMdc(mdcSnapshot, () -> {
-                Path blobPath = pullLayer(repository, ImageDigest.parse(digest), size, mediaType, blobsDir);
-                onArrival.accept(ImageDigest.parse(digest).hex(), blobPath);
+                // One task per layer on its own virtual thread, so MDC scopes the
+                // digest to exactly this layer and every line the fetch produces
+                // - source.select and source.fetch included - can be joined to it.
+                MdcContext.putLayerDigest(digest);
+                try {
+                    Path blobPath = pullLayer(repository, ImageDigest.parse(digest), size, mediaType, blobsDir);
+                    onArrival.accept(ImageDigest.parse(digest).hex(), blobPath);
+                } finally {
+                    MdcContext.clearLayerDigest();
+                }
             }));
         }
 
