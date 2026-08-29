@@ -17,31 +17,31 @@ make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset \
   PERF_REGISTRY_DATASET="$(pwd)/deploy/k8s/performance/input/dataset_b.tsv"
 
 make -C deploy/k8s/performance debug-registry-node
-## Тестирование: Dataset(A, B), Backend: (Riid, Podman)
+## Тестирование: Dataset(A, B), источник (riid | bare | dfinit) x движок (podman | containerd)
 make -C deploy/k8s/bootstrap/registry registry-apply-test-profile
 make -C deploy/k8s/performance clear-cluster-cache
 #### На самом деле что в YandexCloud что в Kubernetes очистка кэша не работает для riid. Проще кластер перезапустить для запуска с чистого листа чем дебажить.
 #### (возможно из-за выполнения рекомендаций Клода)
-### Rolling mode 
-nohup make -C deploy/k8s/performance run \
-  BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid \
-  > _riid_dataset_a.log 2>&1 &
+### Recreate — единственный сценарий; шесть армов матрицы AGENT-99
+### Результат каждого арма: deploy/k8s/performance/output/<source>-<engine>.tsv
+nohup make -C deploy/k8s/performance riid-podman DATASET=A SCENARIO=cold \
+  > _riid-podman.log 2>&1 &
 echo $!
-nohup make -C deploy/k8s/performance run \
-  BACKEND=podman MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-podman \
-  > _podman_dataset_a.log 2>&1 &
+nohup make -C deploy/k8s/performance bare-podman DATASET=A SCENARIO=cold \
+  > _bare-podman.log 2>&1 &
 echo $!
-### Recreate mode 
-nohup make -C deploy/k8s/performance run \
-  BACKEND=riid MODE=recreate DATASET=A SCENARIO=cold-riid \
-  > _riid_cold_dataset_a.log 2>&1 &
+nohup make -C deploy/k8s/performance dfinit-podman DATASET=A SCENARIO=cold \
+  > _dfinit-podman.log 2>&1 &
 echo $!
-nohup make -C deploy/k8s/performance run \
-  BACKEND=podman MODE=recreate DATASET=A SCENARIO=cold-podman \
-  > _podman_cold_dataset_a.log 2>&1 &
-echo $!
+### То же для containerd: riid-containerd | bare-containerd | dfinit-containerd
 
-make -C deploy/k8s/performance summarize
+### Сводка по любой паре армов
+make -C deploy/k8s/performance summarize \
+  SUMMARY_A=deploy/k8s/performance/output/riid-podman.tsv \
+  SUMMARY_B=deploy/k8s/performance/output/bare-podman.tsv
+make -C deploy/k8s/performance summarize-aggregate \
+  SUMMARY_A=deploy/k8s/performance/output/dfinit-podman.tsv \
+  SUMMARY_B=deploy/k8s/performance/output/bare-podman.tsv
 
 ## Настроить сеть 
 make -C deploy/k8s/performance registry-node-tc-apply

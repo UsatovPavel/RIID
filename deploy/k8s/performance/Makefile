@@ -8,24 +8,31 @@ REGISTRY_TC_SCRIPT := $(REGISTRY_DIR)/registry-node-tc.sh
 REGISTRY_TC_CHECK_SCRIPT := $(REGISTRY_DIR)/registry-node-tc-check.sh
 INPUT_DIR := $(PERF_DIR)/input
 
-MODE ?= rolling
+# Сценарий один — recreate, поэтому MODE/CONCURRENCY больше нет.
+# BACKEND — откуда тянется образ, ENGINE — куда он приезжает.
 BACKEND ?= riid
-CONCURRENCY ?= 2
+ENGINE ?= podman
 # EXPECTED_RIID_PODS — опционально; если пусто, run-pull-scenario.sh берёт cluster_topology.workers из deploy/k8s/config/config.yaml (0 = не проверять число подов).
 
-SCENARIO ?= pr18
+# export, а не строка в env-префиксе run: значение нужно только скрипту, и
+# переопределение из командной строки (make run SCENARIO=...) всё равно экспортируется.
+export SCENARIO ?= pr18
 DATASET ?= A
 DATASET_FILE ?=
-RUNTIME_ID ?= podman
+# Для BACKEND=riid движок выбирается через runtimeId в запросе к демону.
+RUNTIME_ID ?= $(ENGINE)
 OUTPUT_TSV ?=
 PODMAN_CLEAR_CACHE_BEFORE_PULL ?= 0
 PODMAN_REGISTRY_PULL_HOST=local-registry.registry-system.svc.cluster.local:5000
 # for local registry. if need selectel registry set empty 
 
-RIID_RESULTS ?= $(PERF_DIR)/output/prep-riid.tsv
-PODMAN_RESULTS ?= $(PERF_DIR)/output/prep-podman.tsv
+OUTPUT_DIR ?= $(PERF_DIR)/output
 SUMMARIZE_SCRIPT := $(PERF_DIR)/summarize/summarize-riid-vs-podman.sh
-SUMMARY_OUT := $(PERF_DIR)/output/summary.tsv
+AGGREGATE_SCRIPT := $(PERF_DIR)/summarize/cluster-aggregate-time.sh
+SUMMARY_OUT := $(OUTPUT_DIR)/summary.tsv
+# Какую пару армов сводить: любые два TSV из OUTPUT_DIR.
+SUMMARY_A ?= $(OUTPUT_DIR)/riid-podman.tsv
+SUMMARY_B ?= $(OUTPUT_DIR)/bare-podman.tsv
 
 ifeq ($(DATASET_FILE),)
   ifeq ($(DATASET),A)
@@ -35,7 +42,9 @@ ifeq ($(DATASET_FILE),)
   endif
 endif
 
-.PHONY: run rolling-riid recreate-riid rolling-podman recreate-podman clear-cluster-cache delete-local-registry-dataset debug-registry-node registry-node-tc-apply registry-node-tc-clear registry-node-tc-check summarize
+.PHONY: run riid-podman riid-containerd bare-podman bare-containerd dfinit-podman dfinit-containerd \
+        clear-cluster-cache delete-local-registry-dataset debug-registry-node \
+        registry-node-tc-apply registry-node-tc-clear registry-node-tc-check summarize summarize-aggregate
 
 CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-all-riid-pods.sh
 DELETE_REGISTRY_SCRIPT := $(PERF_DIR)/registry/delete-dataset-from-local-registry.sh
@@ -53,17 +62,11 @@ run:
 	kubectl config use-context "$$CTX"; \
 	out="$(OUTPUT_TSV)"; \
 	if [ -z "$$out" ]; then \
-	  if [ "$(BACKEND)" = "riid" ]; then \
-	    out="$(RIID_RESULTS)"; \
-	  else \
-	    out="$(PODMAN_RESULTS)"; \
-	  fi; \
+	  out="$(OUTPUT_DIR)/$(BACKEND)-$(ENGINE).tsv"; \
 	fi; \
 	if [ -n "$(strip $(EXPECTED_RIID_PODS))" ]; then export EXPECTED_RIID_PODS="$(EXPECTED_RIID_PODS)"; fi; \
-	MODE="$(MODE)" \
 	BACKEND="$(BACKEND)" \
-	CONCURRENCY="$(CONCURRENCY)" \
-	SCENARIO="$(SCENARIO)" \
+	ENGINE="$(ENGINE)" \
 	DATASET_FILE="$(DATASET_FILE)" \
 	RUNTIME_ID="$(RUNTIME_ID)" \
 	PODMAN_CLEAR_CACHE_BEFORE_PULL="$(PODMAN_CLEAR_CACHE_BEFORE_PULL)" \
@@ -71,17 +74,27 @@ run:
 	OUTPUT_TSV="$$out" \
 	bash "$(PERF_DIR)/scenario/run-pull-scenario.sh"
 
-rolling-riid:
-	@$(MAKE) -C "$(PERF_DIR)" run MODE=rolling BACKEND=riid SCENARIO="$(SCENARIO)-rolling-riid"
+# Шесть армов матрицы AGENT-99: три источника (riid | bare | dfinit) на два
+# движка. Сценарий один, поэтому в имени цели он не участвует. Результат каждого
+# арма ложится в $(OUTPUT_DIR)/<source>-<engine>.tsv и той же меткой
+# подписывается колонка backend, иначе армы не различить в сводках.
+riid-podman:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=podman
 
-recreate-riid:
-	@$(MAKE) -C "$(PERF_DIR)" run MODE=recreate BACKEND=riid SCENARIO="$(SCENARIO)-recreate-riid"
+riid-containerd:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=containerd
 
-rolling-podman:
-	@$(MAKE) -C "$(PERF_DIR)" run MODE=rolling BACKEND=podman SCENARIO="$(SCENARIO)-rolling-podman"
+bare-podman:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=podman
 
-recreate-podman:
-	@$(MAKE) -C "$(PERF_DIR)" run MODE=recreate BACKEND=podman SCENARIO="$(SCENARIO)-recreate-podman"
+bare-containerd:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=containerd
+
+dfinit-podman:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=dfinit ENGINE=podman
+
+dfinit-containerd:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=dfinit ENGINE=containerd
 
 clear-cluster-cache:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -144,13 +157,18 @@ debug-registry-node:
 	printf '%s\n' "node=$$NODE"; \
 	kubectl debug "node/$$NODE" -i --image=busybox:1.36 -- sh -c 'df -h /host 2>/dev/null || df -h; echo ""; df -hi /host 2>/dev/null || df -hi'
 
-# Сводка T_riid / T_podman / ratio / success rate по двум runner-CSV (см. summarize/summarize-riid-vs-podman.sh).
+# Сводка по паре армов: среднее на под, ratio, success rate, registry TX.
+# Пара задаётся SUMMARY_A/SUMMARY_B — любые два TSV из OUTPUT_DIR.
 # SUMMARY_OUT=path — записать в файл; иначе только stdout.
 summarize:
 	@if [ -n "$(SUMMARY_OUT)" ]; then \
 	  out="$(SUMMARY_OUT)"; \
 	  mkdir -p "$$(dirname "$$out")"; \
-	  bash "$(SUMMARIZE_SCRIPT)" "$(RIID_RESULTS)" "$(PODMAN_RESULTS)" | tee "$$out"; \
+	  bash "$(SUMMARIZE_SCRIPT)" "$(SUMMARY_A)" "$(SUMMARY_B)" | tee "$$out"; \
 	else \
-	  bash "$(SUMMARIZE_SCRIPT)" "$(RIID_RESULTS)" "$(PODMAN_RESULTS)"; \
+	  bash "$(SUMMARIZE_SCRIPT)" "$(SUMMARY_A)" "$(SUMMARY_B)"; \
 	fi
+
+# Wall-clock кластера по AGGREGATE-строкам — основная сводка для recreate.
+summarize-aggregate:
+	@bash "$(AGGREGATE_SCRIPT)" "$(SUMMARY_A)" "$(SUMMARY_B)"
