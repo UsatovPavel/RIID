@@ -10,7 +10,8 @@ make -C deploy/k8s/bootstrap/registry wait-local-registry
 make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset
 ## Testing
 make -C deploy/k8s/performance clear-cluster-cache
-make -C deploy/k8s/performance run BACKEND=riid MODE=rolling CONCURRENCY=2 DATASET=A SCENARIO=perf-multi-riid
+make -C deploy/k8s/performance riid-podman DATASET=A SCENARIO=prep
+make -C deploy/k8s/performance bare-podman DATASET=A SCENARIO=prep
 make -C deploy/k8s/performance summarize
 
 Полный список используемых команд(созадние кластера, тестирование, дебаг) в _commands.md
