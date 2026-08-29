@@ -184,7 +184,7 @@ class PodmanPrefixImportTest {
         private final List<String> removed = new CopyOnWriteArrayList<>();
 
         private RecordingPodmanAdapter(boolean prefixImport) {
-            super(prefixImport);
+            super(prefixImport, "");
         }
 
         private List<String> pulledImages() {

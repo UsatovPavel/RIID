@@ -289,6 +289,7 @@ class RuntimeAdaptersTest {
         private final String stderr;
 
         private TestPodmanAdapter(int exitCode, String stdout, String stderr) {
+            super(true, "");
             this.exitCode = exitCode;
             this.stdout = stdout;
             this.stderr = stderr;

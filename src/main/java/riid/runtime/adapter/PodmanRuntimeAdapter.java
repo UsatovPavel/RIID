@@ -5,29 +5,37 @@ import riid.core.model.manifest.Manifest;
 import riid.runtime.BoundedCommandExecution;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Podman adapter (WSL2-friendly): {@code podman load -q -i path} for a file, or
- * {@code podman load -q} reading a layout from stdin. Optionally imports a
- * growing prefix while the tail downloads, see
- * {@link #supportsIncrementalImport(Manifest)}.
+ * Podman adapter. In Kubernetes it streams archives to the Libpod API over the
+ * Unix socket from {@code CONTAINER_HOST}; when that variable is empty it falls
+ * back to the local {@code podman} CLI. Optionally imports a growing prefix
+ * while the tail downloads, see {@link #supportsIncrementalImport(Manifest)}.
  */
 public class PodmanRuntimeAdapter implements RuntimeAdapter {
     private static final String PODMAN_BIN = RuntimeId.PODMAN.bin();
     private static final Logger LOGGER = LoggerFactory.getLogger(PodmanRuntimeAdapter.class);
     private static final int MAX_PROC_STDERR = 64 * 1024;
     private static final String PREFIX_REPOSITORY = "localhost/riid-prefix-";
+    private static final String CONTAINER_HOST = "CONTAINER_HOST";
+    private static final String EXIT_ERROR_SEPARATOR = "): ";
 
     private final boolean prefixImport;
+    private final Optional<PodmanUnixSocketClient> socketClient;
 
     public PodmanRuntimeAdapter() {
         this(PREFIX_IMPORT_ENABLED_BY_DEFAULT);
@@ -39,7 +47,20 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
      *            the end
      */
     public PodmanRuntimeAdapter(boolean prefixImport) {
+        this(prefixImport, System.getenv(CONTAINER_HOST));
+    }
+
+    /**
+     * @param prefixImport
+     *            enable growing-prefix imports
+     * @param containerHost
+     *            {@code unix:///path/to/podman.sock}, or blank for the CLI fallback
+     */
+    public PodmanRuntimeAdapter(boolean prefixImport, String containerHost) {
         this.prefixImport = prefixImport;
+        this.socketClient = containerHost == null || containerHost.isBlank()
+                ? Optional.empty()
+                : Optional.of(new PodmanUnixSocketClient(containerHost));
     }
 
     @Override
@@ -62,11 +83,17 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
             throw new IOException("Image file not found: " + imagePath);
         }
 
-        List<String> cmd = List.of(PODMAN_BIN, "load", "-q", "-i", imagePath.toAbsolutePath().toString());
+        Path archive = imagePath.toAbsolutePath();
+        if (socketClient.isPresent()) {
+            socketClient.get().loadArchive(archive);
+            return;
+        }
+
+        List<String> cmd = List.of(PODMAN_BIN, "load", "-q", "-i", archive.toString());
         BoundedCommandExecution.ShellResult shellResult = runCommand(cmd);
         if (shellResult.exitCode() != 0) {
-            throw new IOException("podman load failed (exit " + shellResult.exitCode() + "): " + shellResult.stdout()
-                    + shellResult.stderr());
+            throw new IOException("podman load failed (exit " + shellResult.exitCode() + EXIT_ERROR_SEPARATOR
+                    + shellResult.stdout() + shellResult.stderr());
         }
     }
 
@@ -83,10 +110,71 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         }
 
         List<String> tarCmd = List.of("tar", "-cf", "-", "-C", root.toString(), ".");
+        if (socketClient.isPresent()) {
+            streamTarToSocket(tarCmd);
+            return;
+        }
+
         List<String> loadCmd = List.of(PODMAN_BIN, "load", "-q");
         BoundedCommandExecution.PipedShellResult result = BoundedCommandExecution.runWithStdoutPipedToStdin(tarCmd,
                 loadCmd, MAX_PROC_STDERR, this::startProcess);
         result.throwIfFailed("tar", "podman load");
+    }
+
+    private void streamTarToSocket(List<String> tarCommand) throws IOException, InterruptedException {
+        Process tar = startProcess(tarCommand);
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        AtomicReference<IOException> stderrFailure = new AtomicReference<>();
+        Thread stderrReader = Thread.ofVirtual().name("podman-tar-stderr").start(() -> {
+            try (InputStream stream = tar.getErrorStream()) {
+                copyTruncated(stream, stderr);
+            } catch (IOException e) {
+                stderrFailure.set(e);
+            }
+        });
+
+        IOException loadFailure = null;
+        try (InputStream archive = tar.getInputStream()) {
+            socketClient.orElseThrow().loadArchive(archive);
+        } catch (IOException e) {
+            loadFailure = e;
+        }
+
+        int exitCode;
+        try {
+            exitCode = tar.waitFor();
+            stderrReader.join();
+        } catch (InterruptedException e) {
+            tar.destroyForcibly();
+            stderrReader.interrupt();
+            throw e;
+        }
+        if (stderrFailure.get() != null) {
+            throw new IOException("Failed to read tar stderr", stderrFailure.get());
+        }
+        if (loadFailure != null) {
+            if (exitCode != 0) {
+                loadFailure.addSuppressed(new IOException("tar failed (exit " + exitCode + EXIT_ERROR_SEPARATOR
+                        + stderr.toString(StandardCharsets.UTF_8)));
+            }
+            throw loadFailure;
+        }
+        if (exitCode != 0) {
+            throw new IOException(
+                    "tar failed (exit " + exitCode + EXIT_ERROR_SEPARATOR + stderr.toString(StandardCharsets.UTF_8));
+        }
+    }
+
+    private static void copyTruncated(InputStream input, ByteArrayOutputStream captured) throws IOException {
+        byte[] buffer = new byte[8192];
+        int read = input.read(buffer);
+        while (read != -1) {
+            int remaining = MAX_PROC_STDERR - captured.size();
+            if (remaining > 0) {
+                captured.write(buffer, 0, Math.min(read, remaining));
+            }
+            read = input.read(buffer);
+        }
     }
 
     /**
@@ -172,16 +260,30 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         }
 
         private void pull(Path layout, String image) throws IOException, InterruptedException {
+            if (socketClient.isPresent()) {
+                importOciLayoutDirectory(layout);
+                return;
+            }
             List<String> cmd = List.of(PODMAN_BIN, "pull", "-q", "oci:" + layout.toAbsolutePath() + ":" + image);
             BoundedCommandExecution.ShellResult result = runCommand(cmd);
             if (result.exitCode() != 0) {
-                throw new IOException("podman pull of " + image + " failed (exit " + result.exitCode() + "): "
-                        + result.stdout() + result.stderr());
+                throw new IOException("podman pull of " + image + " failed (exit " + result.exitCode()
+                        + EXIT_ERROR_SEPARATOR + result.stdout() + result.stderr());
             }
         }
 
         private void dropPrefixImages() throws IOException, InterruptedException {
             if (prefixImages.isEmpty()) {
+                return;
+            }
+            if (socketClient.isPresent()) {
+                for (String image : prefixImages) {
+                    try {
+                        socketClient.get().removeImage(image);
+                    } catch (IOException e) {
+                        LOGGER.warn("Could not drop intermediate prefix image {}: {}", image, e.toString());
+                    }
+                }
                 return;
             }
             List<String> cmd = new ArrayList<>(List.of(PODMAN_BIN, "rmi", "-f"));
