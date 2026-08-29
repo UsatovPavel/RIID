@@ -380,12 +380,30 @@ class ConfigBranchTest {
     @Test
     void throwsWhenDaemonMaxRequestBodyBytesNotPositive() {
         AppConfig.DaemonConfig daemon = new AppConfig.DaemonConfig("/tmp/riid.sock", "127.0.0.1", 9090, 8, 0,
-                Duration.ofSeconds(10), AppConfig.OverloadPolicy.REJECT, null);
+                Duration.ofSeconds(10), AppConfig.OverloadPolicy.REJECT, null, null, null);
         AppConfig app = new AppConfig(null, null, null, daemon);
         GlobalConfig cfg = new GlobalConfig(validClient(), new DispatcherConfig(1), null, app, null);
 
         var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
         assertEquals("app.daemon.maxRequestBodyBytes must be positive", ex.getMessage());
+    }
+
+    @Test
+    void throwsWhenDaemonCacheHighWatermarkIsOutOfRange() {
+        GlobalConfig cfg = configWithCacheWatermarks(101, 50);
+
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
+
+        assertEquals("app.daemon.cacheHighWatermarkPercent must be in range 1..100", ex.getMessage());
+    }
+
+    @Test
+    void throwsWhenDaemonCacheLowWatermarkIsNotBelowHighWatermark() {
+        GlobalConfig cfg = configWithCacheWatermarks(90, 90);
+
+        var ex = assertThrows(ConfigValidationException.class, () -> ConfigValidator.validate(cfg));
+
+        assertEquals("app.daemon cache watermarks must satisfy low < high", ex.getMessage());
     }
 
     @Tag("filesystem")
@@ -406,6 +424,13 @@ class ConfigBranchTest {
     private static ClientConfig validClient() {
         return new ClientConfig(HttpClientConfig.builder().build(), new AuthConfig(),
                 List.of(RegistryEndpoint.https("example.org")));
+    }
+
+    private static GlobalConfig configWithCacheWatermarks(int highWatermarkPercent, int lowWatermarkPercent) {
+        AppConfig.DaemonConfig daemon = new AppConfig.DaemonConfig(null, null, null, null, null, null, null, 100L,
+                highWatermarkPercent, lowWatermarkPercent);
+        AppConfig app = new AppConfig(null, null, null, daemon);
+        return new GlobalConfig(validClient(), new DispatcherConfig(1), null, app, null);
     }
 
     private static ClientConfig clientWithRegistries(RegistryEndpoint ep) {

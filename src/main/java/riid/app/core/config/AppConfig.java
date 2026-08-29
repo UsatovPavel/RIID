@@ -44,7 +44,7 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
     }
 
     public DaemonConfig daemonOrDefault() {
-        return daemon == null ? new DaemonConfig(null, null, null, null, null, null, null, null) : daemon;
+        return daemon == null ? new DaemonConfig(null, null, null, null, null, null, null, null, null, null) : daemon;
     }
 
     public enum OverloadPolicy {
@@ -57,7 +57,9 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
             @JsonProperty("maxRequestBodyBytes") Integer maxRequestBodyBytes,
             @JsonProperty("requestTimeout") Duration requestTimeout,
             @JsonProperty("overloadPolicy") OverloadPolicy overloadPolicy,
-            @JsonProperty("maxCacheBytes") Long maxCacheBytes) {
+            @JsonProperty("maxCacheBytes") Long maxCacheBytes,
+            @JsonProperty("cacheHighWatermarkPercent") Integer cacheHighWatermarkPercent,
+            @JsonProperty("cacheLowWatermarkPercent") Integer cacheLowWatermarkPercent) {
         private static final String DEFAULT_UNIX_SOCKET_PATH = "/tmp/riid.sock";
         private static final String DEFAULT_METRICS_HOST = "0.0.0.0";
         private static final int DEFAULT_METRICS_PORT = 9090;
@@ -66,6 +68,8 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
         private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(30);
         private static final OverloadPolicy DEFAULT_OVERLOAD_POLICY = OverloadPolicy.REJECT;
         private static final long DEFAULT_MAX_CACHE_BYTES = 1_073_741_824L;
+        private static final int DEFAULT_CACHE_HIGH_WATERMARK_PERCENT = 90;
+        private static final int DEFAULT_CACHE_LOW_WATERMARK_PERCENT = 50;
 
         public String unixSocketPathOrDefault() {
             if (unixSocketPath == null || unixSocketPath.isBlank()) {
@@ -118,6 +122,18 @@ public record AppConfig(@JsonProperty("tempDirectory") String tempDirectory,
                 return DEFAULT_MAX_CACHE_BYTES;
             }
             return maxCacheBytes;
+        }
+
+        public int cacheHighWatermarkPercentOrDefault() {
+            return cacheHighWatermarkPercent == null
+                    ? DEFAULT_CACHE_HIGH_WATERMARK_PERCENT
+                    : cacheHighWatermarkPercent;
+        }
+
+        public int cacheLowWatermarkPercentOrDefault() {
+            return cacheLowWatermarkPercent == null
+                    ? DEFAULT_CACHE_LOW_WATERMARK_PERCENT
+                    : cacheLowWatermarkPercent;
         }
     }
 }

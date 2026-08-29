@@ -262,7 +262,14 @@ public final class ImageLoadingFacade implements AutoCloseable {
         AppConfig appConfig = config.app();
         AppConfig.DaemonConfig daemonConfig = appConfig != null ? appConfig.daemonOrDefault() : null;
         long maxCacheBytes = daemonConfig != null ? daemonConfig.maxCacheBytesOrDefault() : -1L;
-        TempFileCacheAdapter cache = new TempFileCacheAdapter(fs, maxCacheBytes);
+        int highWatermarkPercent = daemonConfig != null
+                ? daemonConfig.cacheHighWatermarkPercentOrDefault()
+                : 0;
+        int lowWatermarkPercent = daemonConfig != null
+                ? daemonConfig.cacheLowWatermarkPercentOrDefault()
+                : 0;
+        TempFileCacheAdapter cache = new TempFileCacheAdapter(fs, maxCacheBytes, highWatermarkPercent,
+                lowWatermarkPercent);
         HttpClientConfig httpConfig = new HttpClientConfig();
         AuthConfig authConfig = config.client() != null && config.client().auth() != null
                 ? config.client().auth()

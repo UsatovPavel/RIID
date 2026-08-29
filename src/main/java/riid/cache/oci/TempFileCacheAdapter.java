@@ -20,19 +20,18 @@ import riid.core.fs.PathSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
- * Temporary filesystem cache. Bounded instances evict LRU entries from the
- * 90 percent high watermark down to the 50 percent low watermark.
+ * Temporary filesystem cache. Bounded instances evict LRU entries between
+ * configured high and low watermarks.
  */
 public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(TempFileCacheAdapter.class);
-    private static final int HIGH_WATERMARK_PERCENT = 90;
-    private static final int LOW_WATERMARK_PERCENT = 50;
-
     private final Path rootPath;
     private final FileCacheAdapter delegate;
     @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "HostFilesystem is stateless")
     private final HostFilesystem fs;
     private final long maxCacheBytes;
+    private final int highWatermarkPercent;
+    private final int lowWatermarkPercent;
     private final ConcurrentHashMap<ImageDigest, CacheRecord> records = new ConcurrentHashMap<>();
     private final AtomicLong currentCacheBytes = new AtomicLong();
     private final AtomicLong reservedEvictionBytes = new AtomicLong();
@@ -42,20 +41,24 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     private boolean cleaned;
 
     public TempFileCacheAdapter() {
-        this(new NioHostFilesystem(), -1L);
+        this(new NioHostFilesystem());
     }
 
     public TempFileCacheAdapter(HostFilesystem fs) {
-        this(fs, -1L);
+        this(fs, -1L, 0, 0);
     }
 
     /**
-     * Create a temporary cache; a non-positive limit leaves it unbounded.
+     * Create a cache; a positive limit enables the supplied eviction watermarks.
      */
-    public TempFileCacheAdapter(HostFilesystem fs, long maxCacheBytes) {
+    public TempFileCacheAdapter(HostFilesystem fs, long maxCacheBytes, int highWatermarkPercent,
+            int lowWatermarkPercent) {
         try {
+            validateEvictionPolicy(maxCacheBytes, highWatermarkPercent, lowWatermarkPercent);
             this.fs = fs;
             this.maxCacheBytes = maxCacheBytes;
+            this.highWatermarkPercent = highWatermarkPercent;
+            this.lowWatermarkPercent = lowWatermarkPercent;
             this.rootPath = PathSupport.tempDirPath("riid-cache-tmp-");
             fs.createDirectory(rootPath);
             this.delegate = new FileCacheAdapter(rootPath.toString(), fs);
@@ -118,7 +121,7 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     }
 
     /**
-     * Delete all temporary files when no operation or lease is active.
+     * Delete all temporary files, failing immediately while work is active.
      */
     public synchronized void cleanup() throws IOException {
         if (cleaned) {
@@ -309,11 +312,21 @@ public final class TempFileCacheAdapter implements CacheAdapter, AutoCloseable {
     }
 
     private long highWatermarkBytes() {
-        return percentage(maxCacheBytes, HIGH_WATERMARK_PERCENT);
+        return percentage(maxCacheBytes, highWatermarkPercent);
     }
 
     private long lowWatermarkBytes() {
-        return percentage(maxCacheBytes, LOW_WATERMARK_PERCENT);
+        return percentage(maxCacheBytes, lowWatermarkPercent);
+    }
+
+    private static void validateEvictionPolicy(long maxBytes, int highPercent, int lowPercent) {
+        if (maxBytes <= 0) {
+            return;
+        }
+        if (lowPercent < 1 || lowPercent > 100 || highPercent < 1 || highPercent > 100
+                || lowPercent >= highPercent) {
+            throw new IllegalArgumentException("cache watermarks must satisfy 1 <= low < high <= 100");
+        }
     }
 
     private static long percentage(long value, int percent) {

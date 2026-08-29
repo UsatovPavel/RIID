@@ -121,7 +121,12 @@ final class CacheRecord {
     }
 
     void cancelEviction(EvictionClaim claim) {
-        access.compareAndSet(claim.state(), new AccessState(Phase.READY, 0, null));
+        if (!access.compareAndSet(claim.state(), new AccessState(Phase.READY, 0, null))) {
+            IllegalStateException failure = new IllegalStateException(
+                    "Cache eviction state is invalid for " + digest);
+            claim.finished().completeExceptionally(failure);
+            throw failure;
+        }
         claim.finished().complete(null);
     }
 

@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import riid.core.fs.HostFilesystem;
 import riid.core.fs.HostFilesystemTestSupport;
 import riid.core.fs.TestPaths;
+import riid.core.model.manifest.TestManifests;
 
 class FileCacheAdapterTest {
 
@@ -36,7 +37,7 @@ class FileCacheAdapterTest {
     void putAndGetRoundtrip() throws Exception {
         root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString(), fs);
-        ImageDigest digest = ImageDigest.parse("sha256:" + "d".repeat(64));
+        ImageDigest digest = ImageDigest.parse(TestManifests.digest('d'));
 
         Path tmp = TestPaths.tempFile(fs, "cache-file-", ".bin");
         fs.writeString(tmp, "hello");
@@ -51,7 +52,7 @@ class FileCacheAdapterTest {
     void missingReturnsEmptyAndHasFalse() throws Exception {
         root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString(), fs);
-        ImageDigest digest = ImageDigest.parse("sha256:" + "e".repeat(64));
+        ImageDigest digest = ImageDigest.parse(TestManifests.digest('e'));
         assertTrue(cache.acquire(digest).isEmpty());
     }
 
@@ -59,7 +60,7 @@ class FileCacheAdapterTest {
     void sizeIsComputedWhenUnknown() throws Exception {
         root = TestPaths.tempDir(fs, "file-cache-");
         cache = new FileCacheAdapter(root.toString());
-        ImageDigest digest = ImageDigest.parse("sha256:" + "f".repeat(64));
+        ImageDigest digest = ImageDigest.parse(TestManifests.digest('f'));
 
         Path tmp = TestPaths.tempFile(fs, "cache-file-", ".data");
         fs.writeString(tmp, "payload");

@@ -28,10 +28,9 @@ import riid.core.fs.HostFilesystem;
 import riid.core.fs.HostFilesystemTestSupport;
 import riid.core.fs.NioHostFilesystem;
 import riid.core.fs.TestPaths;
+import riid.core.model.manifest.TestManifests;
 
 class TempFileCacheAdapterTest {
-    private static final String SHA256_PREFIX = "sha256:";
-
     private TempFileCacheAdapter cache;
     private final HostFilesystem fs = HostFilesystemTestSupport.create();
 
@@ -99,7 +98,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void putRejectsPayloadLargerThanCache() throws Exception {
-        cache = new TempFileCacheAdapter(fs, 4);
+        cache = boundedCache(4);
         ImageDigest digest = digest('d');
         Path payload = payload("12345");
 
@@ -112,7 +111,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void ninetyPercentEvictsLeastRecentlyUsedEntriesDownToFiftyPercent() throws Exception {
-        cache = new TempFileCacheAdapter(fs, 100);
+        cache = boundedCache(100);
         ImageDigest digestA = digest('a');
         ImageDigest digestB = digest('b');
         ImageDigest digestC = digest('c');
@@ -137,13 +136,11 @@ class TempFileCacheAdapterTest {
 
     @Test
     void belowNinetyPercentDoesNotEvict() throws Exception {
-        cache = new TempFileCacheAdapter(fs, 100);
-        ImageDigest[] digests = {digest('1'), digest('2'), digest('3'), digest('4'), digest('5')};
-        putAndClose(digests[0], 20);
-        putAndClose(digests[1], 20);
-        putAndClose(digests[2], 20);
-        putAndClose(digests[3], 20);
-        putAndClose(digests[4], 9);
+        cache = boundedCache(100);
+        ImageDigest[] digests = {digest('1'), digest('2'), digest('3')};
+        putAndClose(digests[0], 30);
+        putAndClose(digests[1], 30);
+        putAndClose(digests[2], 29);
 
         for (ImageDigest digest : digests) {
             assertPresent(digest);
@@ -152,7 +149,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void sharedDigestRemainsUntilLastLeaseCloses() throws Exception {
-        cache = new TempFileCacheAdapter(fs, 100);
+        cache = boundedCache(100);
         ImageDigest shared = digest('6');
         CacheLease first = put(shared, 60);
         CacheLease second = cache.acquire(shared).orElseThrow();
@@ -169,7 +166,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void cleanupFailsWithoutDeletingActiveLease() throws Exception {
-        cache = new TempFileCacheAdapter(fs, 100);
+        cache = boundedCache(100);
         CacheLease active = put(digest('9'), 10);
         Path path = active.path();
 
@@ -184,7 +181,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void concurrentPutOfSameDigestPublishesOnce() throws Exception {
-        cache = new TempFileCacheAdapter(fs, 100);
+        cache = boundedCache(100);
         ImageDigest digest = digest('f');
         AtomicInteger opens = new AtomicInteger();
         CountDownLatch writerOpened = new CountDownLatch(1);
@@ -227,7 +224,7 @@ class TempFileCacheAdapterTest {
 
     @Test
     void waitingPutRetriesAfterConcurrentWriterFails() throws Exception {
-        cache = new TempFileCacheAdapter(fs, 100);
+        cache = boundedCache(100);
         ImageDigest digest = digest('0');
         CountDownLatch writerOpened = new CountDownLatch(1);
         CountDownLatch releaseWriter = new CountDownLatch(1);
@@ -277,6 +274,10 @@ class TempFileCacheAdapterTest {
                 CacheMediaType.OCI_LAYER);
     }
 
+    private TempFileCacheAdapter boundedCache(long maxBytes) {
+        return new TempFileCacheAdapter(fs, maxBytes, 90, 50);
+    }
+
     private void putAndClose(ImageDigest digest, int size) throws Exception {
         try (CacheLease ignored = put(digest, size)) {
             // Publish and immediately make the entry evictable.
@@ -300,6 +301,6 @@ class TempFileCacheAdapterTest {
     }
 
     private static ImageDigest digest(char value) {
-        return ImageDigest.parse(SHA256_PREFIX + String.valueOf(value).repeat(64));
+        return ImageDigest.parse(TestManifests.digest(value));
     }
 }

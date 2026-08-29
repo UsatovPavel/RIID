@@ -185,6 +185,35 @@ class ConfigLoaderTest {
         assertEquals(Duration.ofMinutes(2), cfg.client().http().imageTimeoutMin());
         assertEquals(Duration.ofMinutes(30), cfg.client().http().imageTimeoutMax());
         assertEquals(Duration.ofMinutes(30), cfg.app().daemonOrDefault().requestTimeoutOrDefault());
+        assertEquals(90, cfg.app().daemonOrDefault().cacheHighWatermarkPercentOrDefault());
+        assertEquals(50, cfg.app().daemonOrDefault().cacheLowWatermarkPercentOrDefault());
+    }
+
+    @Test
+    void loadsOptionalCacheWatermarks() throws Exception {
+        String yaml = """
+                client:
+                  http:
+                    backoffExponentBase: 2
+                  auth: {}
+                  registries:
+                    - scheme: https
+                      host: example.org
+                      port: -1
+                dispatcher:
+                  maxConcurrentRegistry: 1
+                app:
+                  daemon:
+                    cacheHighWatermarkPercent: 80
+                    cacheLowWatermarkPercent: 40
+                """;
+        Path tmp = TestPaths.tempFile(fs, TestPaths.DEFAULT_BASE_DIR, TMP_PREFIX, TMP_SUFFIX);
+        fs.writeString(tmp, yaml);
+
+        GlobalConfig cfg = ConfigLoader.load(tmp);
+
+        assertEquals(80, cfg.app().daemonOrDefault().cacheHighWatermarkPercentOrDefault());
+        assertEquals(40, cfg.app().daemonOrDefault().cacheLowWatermarkPercentOrDefault());
     }
 
     @Test
