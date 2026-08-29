@@ -44,11 +44,11 @@ riid_env_value() {
 }
 
 # Registry host the baseline and dfinit arms pull from: an explicit
-# REGISTRY_PULL_HOST (legacy name PODMAN_REGISTRY_PULL_HOST), then the hint from
-# resolve_smoke_repository.py, then the legacy REGISTRY_LOGIN_HOST in config/.env.
+# REGISTRY_PULL_HOST, then the hint from resolve_smoke_repository.py, then the
+# legacy REGISTRY_LOGIN_HOST in config/.env.
 riid_registry_pull_host() {
   local host py cfg name
-  host="${REGISTRY_PULL_HOST:-${PODMAN_REGISTRY_PULL_HOST:-}}"
+  host="${REGISTRY_PULL_HOST:-}"
   if [[ -n "$host" ]]; then
     printf '%s\n' "$host"
     return 0
@@ -72,11 +72,11 @@ riid_registry_pull_host() {
 }
 
 # The in-cluster registry speaks plain HTTP. What gets checked is the host as
-# configured, not the resolved one — the same way backend/podman.sh did it.
+# configured, not the resolved one.
 RIID_LOCAL_REGISTRY_HOST="${RIID_LOCAL_REGISTRY_HOST:-local-registry.registry-system.svc.cluster.local:5000}"
 
 riid_registry_is_plain_http() {
-  local host="${REGISTRY_PULL_HOST:-${PODMAN_REGISTRY_PULL_HOST:-}}"
+  local host="${REGISTRY_PULL_HOST:-}"
   [[ "$host" == "$RIID_LOCAL_REGISTRY_HOST" ]]
 }
 

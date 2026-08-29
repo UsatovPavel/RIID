@@ -19,18 +19,18 @@ ENGINE ?= podman
 export SCENARIO ?= pr18
 DATASET ?= A
 DATASET_FILE ?=
-# For BACKEND=riid the engine is selected by runtimeId in the daemon request.
-RUNTIME_ID ?= $(ENGINE)
 OUTPUT_TSV ?=
-PODMAN_CLEAR_CACHE_BEFORE_PULL ?= 0
-PODMAN_REGISTRY_PULL_HOST=local-registry.registry-system.svc.cluster.local:5000
-# for local registry. if need selectel registry set empty 
+CLEAR_CACHE_BEFORE_PULL ?= 0
+# Local in-cluster registry; leave empty to pull from the Selectel registry.
+REGISTRY_PULL_HOST = local-registry.registry-system.svc.cluster.local:5000
 
 OUTPUT_DIR ?= $(PERF_DIR)/output
-SUMMARIZE_SCRIPT := $(PERF_DIR)/summarize/summarize-riid-vs-podman.sh
+METRICS_SCRIPT := $(PERF_DIR)/summarize/scenario-metrics.sh
 AGGREGATE_SCRIPT := $(PERF_DIR)/summarize/cluster-aggregate-time.sh
 SUMMARY_OUT := $(OUTPUT_DIR)/summary.tsv
-# Which pair of arms to summarise: any two TSVs from OUTPUT_DIR.
+# Which arm to report metrics for; defaults to the arm this Makefile would run.
+METRICS_TSV ?= $(OUTPUT_DIR)/$(BACKEND)-$(ENGINE).tsv
+# Which pair of arms to compare wall-clock for: any two TSVs from OUTPUT_DIR.
 SUMMARY_A ?= $(OUTPUT_DIR)/riid-podman.tsv
 SUMMARY_B ?= $(OUTPUT_DIR)/bare-podman.tsv
 
@@ -45,7 +45,7 @@ endif
 .PHONY: run riid-podman riid-containerd riid-porto bare-podman bare-containerd bare-porto \
         dfinit-podman dfinit-containerd \
         clear-cluster-cache delete-local-registry-dataset debug-registry-node \
-        registry-node-tc-apply registry-node-tc-clear registry-node-tc-check summarize summarize-aggregate
+        registry-node-tc-apply registry-node-tc-clear registry-node-tc-check metrics summarize-aggregate
 
 CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-all-riid-pods.sh
 DELETE_REGISTRY_SCRIPT := $(PERF_DIR)/registry/delete-dataset-from-local-registry.sh
@@ -69,9 +69,8 @@ run:
 	BACKEND="$(BACKEND)" \
 	ENGINE="$(ENGINE)" \
 	DATASET_FILE="$(DATASET_FILE)" \
-	RUNTIME_ID="$(RUNTIME_ID)" \
-	PODMAN_CLEAR_CACHE_BEFORE_PULL="$(PODMAN_CLEAR_CACHE_BEFORE_PULL)" \
-	PODMAN_REGISTRY_PULL_HOST="$(PODMAN_REGISTRY_PULL_HOST)" \
+	CLEAR_CACHE_BEFORE_PULL="$(CLEAR_CACHE_BEFORE_PULL)" \
+	REGISTRY_PULL_HOST="$(REGISTRY_PULL_HOST)" \
 	OUTPUT_TSV="$$out" \
 	bash "$(PERF_DIR)/scenario/run-pull-scenario.sh"
 
@@ -169,16 +168,17 @@ debug-registry-node:
 	printf '%s\n' "node=$$NODE"; \
 	kubectl debug "node/$$NODE" -i --image=busybox:1.36 -- sh -c 'df -h /host 2>/dev/null || df -h; echo ""; df -hi /host 2>/dev/null || df -hi'
 
-# Summary over a pair of arms: mean per pod, ratio, success rate, registry TX.
-# The pair is given by SUMMARY_A/SUMMARY_B — any two TSVs from OUTPUT_DIR.
-# SUMMARY_OUT=path — записать в файл; иначе только stdout.
-summarize:
+# Three metrics of one arm: registry traffic, sum of per-image mean pull time,
+# sum of per-image cluster wall-clock. Comparison is done by reading two runs
+# side by side, not by the script.
+# SUMMARY_OUT=path — also write to a file; otherwise stdout only.
+metrics:
 	@if [ -n "$(SUMMARY_OUT)" ]; then \
 	  out="$(SUMMARY_OUT)"; \
 	  mkdir -p "$$(dirname "$$out")"; \
-	  bash "$(SUMMARIZE_SCRIPT)" "$(SUMMARY_A)" "$(SUMMARY_B)" | tee "$$out"; \
+	  bash "$(METRICS_SCRIPT)" "$(METRICS_TSV)" | tee "$$out"; \
 	else \
-	  bash "$(SUMMARIZE_SCRIPT)" "$(SUMMARY_A)" "$(SUMMARY_B)"; \
+	  bash "$(METRICS_SCRIPT)" "$(METRICS_TSV)"; \
 	fi
 
 # Cluster wall-clock from the AGGREGATE rows — the main summary for recreate.

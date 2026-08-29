@@ -12,7 +12,7 @@ make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset
 make -C deploy/k8s/performance clear-cluster-cache
 make -C deploy/k8s/performance riid-podman DATASET=A SCENARIO=prep
 make -C deploy/k8s/performance bare-podman DATASET=A SCENARIO=prep
-make -C deploy/k8s/performance summarize
+make -C deploy/k8s/performance metrics METRICS_TSV=deploy/k8s/performance/output/riid-podman.tsv
 
 Полный список используемых команд(созадние кластера, тестирование, дебаг) в _commands.md
 ## Cluster environment

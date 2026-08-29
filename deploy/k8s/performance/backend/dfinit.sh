@@ -3,7 +3,9 @@
 # mirror dfinit wrote into its config, so the traffic goes to the dfdaemon proxy
 # and on into P2P. RIID takes no part in this path at all.
 #
-# Before the first pull the mirror is verified to be in place. Without that check
+# Before the first pull that mirror entry — the registry mirror dfinit wrote into
+# the engine's own config, pointing at the dfdaemon proxy — is verified to be in
+# place. Without that check
 # the arm silently degrades into a plain pull with an extra hop and measures
 # overhead instead of P2P — one run was already lost that way. Turn it off with
 # DFINIT_SKIP_MIRROR_CHECK=1.
@@ -44,7 +46,7 @@ if [[ "${DFINIT_SKIP_MIRROR_CHECK:-0}" != "1" ]]; then
   fi
 fi
 
-if [[ "${CLEAR_CACHE_BEFORE_PULL:-${PODMAN_CLEAR_CACHE_BEFORE_PULL:-0}}" == "1" ]]; then
+if [[ "${CLEAR_CACHE_BEFORE_PULL:-0}" == "1" ]]; then
   engine_clear_cache "$POD"
 fi
 

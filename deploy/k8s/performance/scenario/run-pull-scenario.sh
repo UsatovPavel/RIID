@@ -32,8 +32,9 @@ EXPECTED_RIID_PODS="${EXPECTED_RIID_PODS//[[:space:]]/}"
 SCENARIO="${SCENARIO:-scenario-unnamed}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-}"
 IMAGE_REFERENCE="${IMAGE_REFERENCE:-latest}"
-RUNTIME_ID="${RUNTIME_ID:-podman}"
-# Engine for BACKEND=bare|dfinit; for BACKEND=riid the engine comes from RUNTIME_ID.
+# Engine of the arm, one vocabulary for every backend: bare/dfinit pick the
+# driver in backend/engine/ by this name, riid sends it to the daemon as
+# runtimeId. Both accept podman | containerd | porto.
 ENGINE="${ENGINE:-}"
 # Arm label in the TSV: source plus engine. Without the engine the arms of the
 # matrix are indistinguishable in the summaries — "bare" reads the same for
@@ -112,7 +113,6 @@ run_one() {
     CONTAINER="$CONTAINER" \
     IMAGE_REPOSITORY="$IMAGE_REPOSITORY" \
     IMAGE_REFERENCE="$IMAGE_REFERENCE" \
-    RUNTIME_ID="$RUNTIME_ID" \
     ENGINE="$ENGINE" \
     bash "$BACKEND_CMD" "$pod"; then
     code=0

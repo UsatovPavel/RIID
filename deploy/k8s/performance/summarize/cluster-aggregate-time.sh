@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Image download time across the cluster (recreate is the only scenario).
-# Использует только AGGREGATE строки - время от старта первого пода до завершения последнего.
+# Uses the AGGREGATE rows only: first pod start to last pod finish.
 # The arm is identified by the file, not by a literal in the backend column: that
 # column now holds a label such as riid-podman / dfinit-containerd, shared by
 # every arm of the matrix.

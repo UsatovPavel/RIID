@@ -63,9 +63,9 @@ engine_mirror_check() {
   fi
 }
 
-# --volumes is new compared with the old backend/podman.sh: a pull creates no
-# anonymous volumes, so it does not affect the measurement, but it matches
-# scenario/clear/clear-cache-all-riid-pods.sh — one meaning of "clean".
+# --volumes: a pull creates no anonymous volumes, so it does not affect the
+# measurement, but it matches scenario/clear/clear-cache-all-riid-pods.sh —
+# one meaning of "clean".
 engine_clear_cache() {
   riid_engine_exec "$1" podman system prune -af --volumes >/dev/null
 }

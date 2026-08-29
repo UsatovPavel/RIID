@@ -46,10 +46,10 @@ echo $!
 ### То же для containerd: riid-containerd | bare-containerd | dfinit-containerd
 ### Porto (частичный тест, dfinit его не умеет): riid-porto | bare-porto
 
-### Сводка по любой паре армов
-make -C deploy/k8s/performance summarize \
-  SUMMARY_A=deploy/k8s/performance/output/riid-podman.tsv \
-  SUMMARY_B=deploy/k8s/performance/output/bare-podman.tsv
+### Метрики одного арма: registry traffic, сумма средних, сумма wall-clock
+make -C deploy/k8s/performance metrics \
+  METRICS_TSV=deploy/k8s/performance/output/riid-podman.tsv
+### Сравнение wall-clock по паре армов (по AGGREGATE-строкам)
 make -C deploy/k8s/performance summarize-aggregate \
   SUMMARY_A=deploy/k8s/performance/output/dfinit-podman.tsv \
   SUMMARY_B=deploy/k8s/performance/output/bare-podman.tsv

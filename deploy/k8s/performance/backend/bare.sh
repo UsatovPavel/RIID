@@ -30,9 +30,7 @@ source "$DRIVER"
 
 REF="$(engine_ref "$IMAGE_REPOSITORY" "$IMAGE_REFERENCE")"
 
-# PODMAN_CLEAR_CACHE_BEFORE_PULL is the legacy name from backend/podman.sh, kept
-# for the existing performance/Makefile calls.
-if [[ "${CLEAR_CACHE_BEFORE_PULL:-${PODMAN_CLEAR_CACHE_BEFORE_PULL:-0}}" == "1" ]]; then
+if [[ "${CLEAR_CACHE_BEFORE_PULL:-0}" == "1" ]]; then
   engine_clear_cache "$POD"
 fi
 
