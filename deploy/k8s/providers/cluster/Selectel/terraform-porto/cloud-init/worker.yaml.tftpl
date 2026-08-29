@@ -1,0 +1,85 @@
+#cloud-config
+# Воркер стенда: та же база, что у control plane, плюс Porto и вход в кластер.
+users:
+  - default
+  - name: riid
+    gecos: RIID benchmark stand
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /opt/riid/common-node.sh
+    permissions: "0755"
+    content: |
+      ${indent(6, common)}
+
+  - path: /opt/riid/kubeadm-join.yaml
+    permissions: "0600"
+    content: |
+      apiVersion: kubeadm.k8s.io/v1beta4
+      kind: JoinConfiguration
+      discovery:
+        bootstrapToken:
+          token: ${kubeadm_token}
+          apiServerEndpoint: ${api_endpoint}
+          # CA control plane появляется позже, чем рендерится этот файл, а
+          # единственный вход в 6443 закрыт security group стенда.
+          unsafeSkipCAVerification: true
+      nodeRegistration:
+        criSocket: unix:///run/containerd/containerd.sock
+%{ if node_labels != "" ~}
+        kubeletExtraArgs:
+          - name: node-labels
+            value: "${node_labels}"
+%{ endif ~}
+
+  # Пакет создаёт /etc/portod.conf.d и мержит оттуда *.conf по алфавиту, поэтому
+  # настройка кладётся drop-in'ом и не спорит с файлом пакета. Написан до runcmd:
+  # postinst сам стартует porto, конфиг должен быть на месте раньше.
+  - path: /etc/portod.conf.d/10-riid-bench.conf
+    permissions: "0644"
+    content: |
+      # docker_images_support выключен по умолчанию, а без него portoctl
+      # docker-pull / docker-images / docker-rmi недоступны целиком — на них
+      # держится арм Porto в performance/backend/engine/porto.inc.sh.
+      container {
+          docker_images_support: true
+%{ for registry in porto_insecure ~}
+          docker_insecure_registry: "${registry}"
+%{ endfor ~}
+      }
+
+  - path: /opt/riid/bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euxo pipefail
+      /opt/riid/common-node.sh
+
+      # Porto: релизный jammy-deb, а не сборка из исходников. Сборка тянет весь
+      # build-depends и минуты времени на каждой ноде, а пакет ставит бинарники
+      # в /usr/sbin и сам включает porto.service.
+      curl -fsSLo /opt/riid/porto.deb \
+        "https://github.com/ten-nancy/porto/releases/download/v${porto_version}/porto_jammy_${porto_version}_amd64.deb"
+      apt-get install -y /opt/riid/porto.deb
+      systemctl enable --now porto
+      portoctl --version
+
+      # control plane поднимается параллельно, поэтому ждём его API.
+      for attempt in $(seq 1 120); do
+        if timeout 3 bash -c "cat < /dev/null > /dev/tcp/${api_host}/${api_port}" 2>/dev/null; then
+          break
+        fi
+        sleep 10
+      done
+
+      kubeadm join --config /opt/riid/kubeadm-join.yaml
+      touch /run/riid-worker-ready
+
+runcmd:
+  - [bash, /opt/riid/bootstrap.sh]
+
+output:
+  all: "| tee -a /var/log/riid-bootstrap.log"

@@ -1,3 +1,15 @@
+## Создаём стенд
+### MKS (Ubuntu 24.04): podman / containerd / riid
+### stand = init + plan + apply + kubeconfig + wait + nodes
+make -C deploy/k8s/providers/cluster/Selectel/terraform stand-12
+### Porto (Ubuntu 22.04): MKS не даёт выбрать ОС, поэтому свой kubeadm-кластер
+### stand заканчивается smoke'ом: portoctl --version на каждом воркере
+make -C deploy/k8s/providers/cluster/Selectel/terraform-porto stand-12
+### bootstrap для Porto-стенда: свой kubeconfig и local-path вместо Cinder
+make -C deploy/k8s/bootstrap install-all \
+  CONFIG_FILE=../providers/cluster/Selectel/serverConfig-porto.yaml \
+  STORAGE_CLASS=local-path
+
 ## Устанавливаем кластер
 Вставляем конфиг в providers/cluster/Selectel и проксируем grafana в 1 терминале
 make -C deploy/k8s/bootstrap install-all
