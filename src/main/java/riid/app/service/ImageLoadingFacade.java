@@ -73,6 +73,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
     private static final long HANDOVER_NOT_STARTED = Long.MIN_VALUE;
 
     private static final String LOADED = "Loaded ";
+    private static final String PAYLOAD_SUFFIX = " B payload)";
     private static final String INTO_RUNTIME = " into runtime ";
     private final OciArchiveBuilder archiveBuilder;
     private final RuntimeRegistry runtimeRegistry;
@@ -150,32 +151,37 @@ public final class ImageLoadingFacade implements AutoCloseable {
         long loadStartedNs = System.nanoTime();
         try {
             long payloadBytes = archiveBuilder.estimatePayloadBytes(manifestResult);
+            LoadOutcome outcome;
             if (runtime.supportsIncrementalImport(manifestResult.manifest())) {
                 long handoverStartedNs = importIncrementally(manifestResult, runtime, imageId);
-                logEngineImport(handoverStartedNs, LOADED + imageId + INTO_RUNTIME + runtime.runtimeId()
-                        + " layer by layer (~" + payloadBytes + " B payload)");
-                logLoadTotal(loadStartedNs, imageId, runtime, payloadBytes);
-                return new LoadOutcome(imageId, payloadBytes);
-            }
-            if (runtime.prefersOciLayoutStreamImport()) {
-                LoadOutcome outcome = archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
+                MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
+                        .addDurationMs(durationMs(handoverStartedNs)).log(LOADED + imageId + INTO_RUNTIME
+                                + runtime.runtimeId() + " layer by layer (~" + payloadBytes + PAYLOAD_SUFFIX);
+                outcome = new LoadOutcome(imageId, payloadBytes);
+            } else if (runtime.prefersOciLayoutStreamImport()) {
+                outcome = archiveBuilder.withOciLayout(imageId, manifestResult, ociDir -> {
                     long importStartedNs = System.nanoTime();
                     runtime.importOciLayoutDirectory(ociDir);
-                    logEngineImport(importStartedNs, LOADED + imageId + INTO_RUNTIME + runtime.runtimeId()
-                            + " via OCI layout stream (~" + payloadBytes + " B payload)");
+                    MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT)
+                            .addResult(ResultType.SUCCESS).addDurationMs(durationMs(importStartedNs))
+                            .log(LOADED + imageId + INTO_RUNTIME + runtime.runtimeId()
+                                    + " via OCI layout stream (~" + payloadBytes + PAYLOAD_SUFFIX);
                     return new LoadOutcome(imageId, payloadBytes);
                 });
-                logLoadTotal(loadStartedNs, imageId, runtime, payloadBytes);
-                return outcome;
+            } else {
+                outcome = archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
+                    long importStartedNs = System.nanoTime();
+                    runtime.importImage(archivePath);
+                    MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT)
+                            .addResult(ResultType.SUCCESS).addDurationMs(durationMs(importStartedNs))
+                            .log(LOADED + imageId + INTO_RUNTIME + runtime.runtimeId() + " at " + archivePath);
+                    return new LoadOutcome(imageId, payloadBytes);
+                });
             }
-            LoadOutcome outcome = archiveBuilder.withArchive(imageId, manifestResult, archivePath -> {
-                long importStartedNs = System.nanoTime();
-                runtime.importImage(archivePath);
-                logEngineImport(importStartedNs,
-                        LOADED + imageId + INTO_RUNTIME + runtime.runtimeId() + " at " + archivePath);
-                return new LoadOutcome(imageId, payloadBytes);
-            });
-            logLoadTotal(loadStartedNs, imageId, runtime, payloadBytes);
+            MilestoneEventLogger.info(LOGGER).addEvent(EventType.LOAD_TOTAL).addResult(ResultType.SUCCESS)
+                    .addDurationMs(durationMs(loadStartedNs))
+                    .log(LOADED + imageId + INTO_RUNTIME + runtime.runtimeId() + " (~" + payloadBytes
+                            + PAYLOAD_SUFFIX);
             return outcome;
         } catch (AppException e) {
             MilestoneEventLogger.error(LOGGER).addCause(e).addEvent(EventType.LOAD_TOTAL).addResult(ResultType.ERROR)
@@ -203,28 +209,6 @@ public final class ImageLoadingFacade implements AutoCloseable {
         }
     }
 
-    /**
-     * {@code engine.import} covers the handover to the engine and nothing else:
-     * the single import call on the classic paths, and first-blob-to-finish on the
-     * prefix one. Everything before it now belongs to {@code load.total}.
-     */
-    private void logEngineImport(long startedNs, String message) {
-        String previousOperation = MdcContext.getOperation();
-        MdcContext.putOperation(EventType.ENGINE_IMPORT.value());
-        try {
-            MilestoneEventLogger.info(LOGGER).addEvent(EventType.ENGINE_IMPORT).addResult(ResultType.SUCCESS)
-                    .addDurationMs(durationMs(startedNs)).log(message);
-        } finally {
-            MdcContext.restoreOperation(previousOperation);
-        }
-    }
-
-    /** Manifest in hand to image in the engine - the envelope engine.import used to be. */
-    private void logLoadTotal(long startedNs, ImageId imageId, RuntimeAdapter runtime, long payloadBytes) {
-        MilestoneEventLogger.info(LOGGER).addEvent(EventType.LOAD_TOTAL).addResult(ResultType.SUCCESS)
-                .addDurationMs(durationMs(startedNs)).log(LOADED + imageId + INTO_RUNTIME + runtime.runtimeId()
-                        + " (~" + payloadBytes + " B payload)");
-    }
 
     /**
      * Prefix import: layers go into the runtime as they are downloaded, so the
