@@ -11,9 +11,9 @@ preparation stand is 6 nodes and the production one is 12 without editing HCL.
 
 ## Credentials
 
-`tf.sh` exports them from `deploy/k8s/config/.env`, so no secret reaches a
-tfvars file or the shell history. The file is parsed by `load-env.inc.sh` rather
-than sourced: `set -a; . .env` makes bash expand `$`, backticks and backslashes
+`../stand-common/tf.sh` exports them from `deploy/k8s/config/.env`, so no secret
+reaches a tfvars file or the shell history. The file is parsed by
+`stand-common/load-env.inc.sh` rather than sourced: `set -a; . .env` makes bash expand `$`, backticks and backslashes
 inside the values, which silently truncates any password containing them and
 turns a valid account into a confusing `Authentication failed`.
 
@@ -35,17 +35,25 @@ cluster.
 ## Usage
 
 ```bash
-make init
-make plan                 # NODES defaults to cluster_topology from config.yaml
-make plan NODES=6         # preparation stand
-make apply
-make kubeconfig           # writes ../serverConfig.yaml, what bootstrap/ reads
+make stand                # init + plan + apply + kubeconfig + wait + nodes
+make stand-6              # the same on the preparation stand
+make stand-12             # the same at the production size
 make -C ../../../../bootstrap install-all
 make destroy
 ```
 
-`tf.sh` resolves the project id on its own; `resolve-project-id.sh` can also be run
-directly if you need just the id.
+`NODES` defaults to `cluster_topology` in `config/config.yaml`, so plain
+`make stand` builds the configured size. `make kubeconfig` writes
+`../serverConfig.yaml`, which is the `CONFIG_FILE` `bootstrap/` already defaults
+to. The individual steps (`init`, `plan`, `apply`, `kubeconfig`, `wait`,
+`nodes`) still exist for when a stand needs to be picked apart.
+
+The wrapper resolves the project id on its own; `make project-id` prints it if
+that is all you need.
+
+The shell layer — `tf.sh`, `load-env.inc.sh`, `resolve-project-id.sh` — lives in
+`../stand-common/` and is shared with the Porto stand, so the module directory
+holds only Terraform and its Makefile. Always go through the Makefile.
 
 ## State
 

@@ -2,7 +2,6 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
-!*.tfvars.example
 crash.log
 tfplan*
 id_ed25519

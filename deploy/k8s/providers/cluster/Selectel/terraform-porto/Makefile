@@ -10,7 +10,10 @@ CONFIG_YAML ?= $(K8S_ROOT)/config/config.yaml
 # same time and bootstrap/ must be pointed at one of them explicitly.
 KUBECONFIG_OUT ?= $(abspath $(TF_DIR)/..)/serverConfig-porto.yaml
 SSH_KEY ?= $(TF_DIR)/.ssh/id_ed25519
-TF := $(TF_DIR)/tf.sh
+# Обёртка одна на оба стенда и живёт в stand-common; каталог модуля она
+# получает аргументом, поэтому TF раскрывается в два слова.
+COMMON_DIR := $(abspath $(TF_DIR)/../stand-common)
+TF := $(COMMON_DIR)/tf.sh $(TF_DIR)
 
 # Same single source of truth as the MKS stand: cluster_topology in config.yaml.
 NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers + .cluster_topology.registry_nodes' "$(CONFIG_YAML)" 2>/dev/null)
@@ -20,7 +23,7 @@ export NODES
 SSH_OPTS := -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
 NODE_READY_TIMEOUT ?= 1800
 
-.PHONY: help init fmt validate plan apply destroy output stand stand-6 stand-12 \
+.PHONY: help init fmt validate plan apply destroy output project-id stand stand-6 stand-12 \
         ssh-key kubeconfig wait ssh smoke nodes
 
 help:
@@ -60,6 +63,10 @@ destroy:
 
 output:
 	$(TF) output
+
+# На эту цель ссылается сообщение валидации project_id в variables.tf.
+project-id:
+	@"$(COMMON_DIR)/resolve-project-id.sh"
 
 # One button: everything from an empty project to a kubeconfig on disk.
 stand:

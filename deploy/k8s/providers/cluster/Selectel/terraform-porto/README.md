@@ -71,8 +71,11 @@ pinned on a Neutron port), so no worker has to look up where to join.
 
 ## Credentials
 
-Identical to the MKS module: `tf.sh` exports them from `deploy/k8s/config/.env`,
-and the file is parsed by `load-env.inc.sh` rather than sourced — `set -a; . .env`
+Identical to the MKS module, and literally the same code: the shell layer
+(`tf.sh`, `load-env.inc.sh`, `resolve-project-id.sh`) lives in
+`../stand-common/` and is shared by both stands. It exports the credentials from
+`deploy/k8s/config/.env`, parsing the file with `load-env.inc.sh` rather than
+sourcing it — `set -a; . .env`
 makes bash expand `$`, backticks and backslashes inside the values and silently
 truncates any password containing them.
 

@@ -1,8 +1,0 @@
-# Optional overrides. Credentials are NOT taken from here — tf.sh exports them
-# from deploy/k8s/config/.env. Size comes from config/config.yaml via the Makefile.
-
-# cluster_name      = "riid-bench"
-# nodes_count       = 6          # preparation stand; 12 for the production run
-# region            = "ru-3"
-# availability_zone = "ru-3a"
-# kube_version      = "1.31.5"   # null takes the region default

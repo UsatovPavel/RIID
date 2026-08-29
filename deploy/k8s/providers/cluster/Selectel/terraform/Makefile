@@ -5,7 +5,10 @@ TF_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 K8S_ROOT := $(abspath $(TF_DIR)/../../../..)
 CONFIG_YAML ?= $(K8S_ROOT)/config/config.yaml
 KUBECONFIG_OUT ?= $(abspath $(TF_DIR)/..)/serverConfig.yaml
-TF := $(TF_DIR)/tf.sh
+# Обёртка одна на оба стенда и живёт в stand-common; каталог модуля она
+# получает аргументом, поэтому TF раскрывается в два слова.
+COMMON_DIR := $(abspath $(TF_DIR)/../stand-common)
+TF := $(COMMON_DIR)/tf.sh $(TF_DIR)
 
 # Single source of truth for the stand size: cluster_topology in config/config.yaml.
 NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers + .cluster_topology.registry_nodes' "$(CONFIG_YAML)" 2>/dev/null)
@@ -14,7 +17,7 @@ export NODES
 
 NODE_READY_TIMEOUT ?= 1800
 
-.PHONY: help init fmt validate plan apply destroy output kubeconfig \
+.PHONY: help init fmt validate plan apply destroy output project-id kubeconfig \
         stand stand-6 stand-12 wait nodes
 
 help:
@@ -50,6 +53,10 @@ destroy:
 
 output:
 	$(TF) output
+
+# На эту цель ссылается сообщение валидации project_id в variables.tf.
+project-id:
+	@"$(COMMON_DIR)/resolve-project-id.sh"
 
 # bootstrap/Makefile reads the cluster through CONFIG_FILE, which defaults to this path.
 kubeconfig:
