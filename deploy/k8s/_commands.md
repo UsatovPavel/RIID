@@ -46,6 +46,7 @@ nohup make -C deploy/k8s/performance dfinit-podman DATASET=A SCENARIO=cold \
   > _dfinit-podman.log 2>&1 &
 echo $!
 ### То же для containerd: riid-containerd | bare-containerd | dfinit-containerd
+### Porto (частичный тест, dfinit его не умеет): riid-porto | bare-porto
 
 ### Сводка по любой паре армов
 make -C deploy/k8s/performance summarize \

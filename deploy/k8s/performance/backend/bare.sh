@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Baseline-арм: движок тянет образ сам, без RIID и без зеркала dfinit.
-# Движок выбирается через ENGINE (podman|containerd), см. backend/engine/.
+# Движок выбирается через ENGINE (podman|containerd|porto), см. backend/engine/.
 #
 # Вызывается из scenario/run-pull-scenario.sh как BACKEND=bare с ENGINE=<движок>.
 set -euo pipefail

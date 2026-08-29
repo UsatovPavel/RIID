@@ -42,7 +42,8 @@ ifeq ($(DATASET_FILE),)
   endif
 endif
 
-.PHONY: run riid-podman riid-containerd bare-podman bare-containerd dfinit-podman dfinit-containerd \
+.PHONY: run riid-podman riid-containerd riid-porto bare-podman bare-containerd bare-porto \
+        dfinit-podman dfinit-containerd \
         clear-cluster-cache delete-local-registry-dataset debug-registry-node \
         registry-node-tc-apply registry-node-tc-clear registry-node-tc-check summarize summarize-aggregate
 
@@ -74,9 +75,9 @@ run:
 	OUTPUT_TSV="$$out" \
 	bash "$(PERF_DIR)/scenario/run-pull-scenario.sh"
 
-# Шесть армов матрицы AGENT-99: три источника (riid | bare | dfinit) на два
-# движка. Сценарий один, поэтому в имени цели он не участвует. Результат каждого
-# арма ложится в $(OUTPUT_DIR)/<source>-<engine>.tsv и той же меткой
+# Матрица AGENT-99. Полный тест: три источника (riid | bare | dfinit) на podman
+# и containerd. Сценарий один, поэтому в имени цели он не участвует. Результат
+# каждого арма ложится в $(OUTPUT_DIR)/<source>-<engine>.tsv и той же меткой
 # подписывается колонка backend, иначе армы не различить в сводках.
 riid-podman:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=podman
@@ -95,6 +96,15 @@ dfinit-podman:
 
 dfinit-containerd:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=dfinit ENGINE=containerd
+
+# Porto — частичный тест: по AGENT-99 у него только RIID => Porto и голый Porto.
+# Цели dfinit-porto нет намеренно: dfinit не умеет Porto, и engine/porto.inc.sh
+# на этих функциях падает, а не тихо вырождается в обычный pull.
+riid-porto:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=porto
+
+bare-porto:
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=porto
 
 clear-cluster-cache:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
