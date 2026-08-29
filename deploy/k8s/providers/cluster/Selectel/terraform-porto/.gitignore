@@ -4,6 +4,6 @@
 *.tfvars
 !*.tfvars.example
 crash.log
-tfplan
+tfplan*
 id_ed25519
 id_ed25519.pub

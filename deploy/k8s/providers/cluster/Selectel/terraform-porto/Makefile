@@ -100,17 +100,22 @@ kubeconfig: ssh-key
 nodes:
 	@KUBECONFIG="$(KUBECONFIG_OUT)" kubectl get nodes -o wide
 
-# Blocks until control plane + every worker report Ready. cloud-init installs
-# containerd, kubeadm and Porto on each node, so the first boot is minutes long.
+# cloud-init ставит containerd, kubeadm и Porto на каждой ноде, поэтому первый
+# boot длится минуты. Control plane отбрасывается селектором по
+# наличию метки, а не по её значению: kubeadm ставит
+# node-role.kubernetes.io/control-plane с пустым значением, и сравнение значения
+# посчитало бы мастер обычным воркером.
 wait:
 	@[ -n "$(strip $(NODES))" ] || { echo "NODES is empty: install yq or pass NODES=6" >&2; exit 1; }
 	@KUBECONFIG="$(KUBECONFIG_OUT)"; export KUBECONFIG; \
-	expected=$$(( $(NODES) + 1 )); \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (run make kubeconfig)" >&2; exit 1; }; \
 	deadline=$$(( $$(date +%s) + $(NODE_READY_TIMEOUT) )); \
 	while :; do \
-	  ready=$$(kubectl get nodes --no-headers 2>/dev/null | awk '$$2 == "Ready"' | wc -l); \
-	  echo "ready $$ready/$$expected"; \
-	  [ "$$ready" -ge "$$expected" ] && break; \
+	  ready=$$(kubectl get nodes --no-headers \
+	    -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' 2>/dev/null \
+	    | awk '$$2 == "Ready"' | wc -l); \
+	  echo "ready $$ready/$(NODES)"; \
+	  [ "$$ready" -ge "$(NODES)" ] && break; \
 	  [ "$$(date +%s)" -lt "$$deadline" ] || { echo "timeout waiting for nodes" >&2; exit 1; }; \
 	  sleep 20; \
 	done

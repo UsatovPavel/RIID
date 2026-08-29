@@ -4,18 +4,12 @@ Creates the cluster the Porto benchmark runs on, and nothing that lives inside
 it. Dragonfly, RIID, the registry and the datasets stay with `bootstrap/` and
 helm, exactly as for the MKS stand next door.
 
-## Why a second module
+## How it differs from the MKS stand
 
-Porto is packaged for focal and jammy only: upstream's own build image is
-`FROM ubuntu:22.04`, `debian/control.in` build-depends on `libncurses5-dev` and
-`python-all` (neither exists in noble), and the releases of `ten-nancy/porto`
-carry `porto_focal_*.deb` and `porto_jammy_*.deb` and nothing newer.
-
-Selectel MKS gives no way to pick the node OS — neither `selectel_mks_cluster_v1`
-nor `selectel_mks_nodegroup_v1` has an image attribute — and the oldest
-Kubernetes version it offers still lands on Ubuntu 24.04.4. So the Porto stand is
-built from plain cloud servers with kubeadm instead, on the same flavor, the same
-disk tier and the same zone as the MKS stand, so the two stay comparable.
+Why this stand exists at all — Porto's packaging and what MKS can and cannot
+offer — is in `docs/design records/PR 20 Porto stand/ADR-12-porto-stand-outside-mks.md`.
+Flavor, disk tier and zone are the same as MKS so the two stay comparable; the
+rest differs as follows.
 
 | | MKS (`../terraform`) | this module |
 |---|---|---|
