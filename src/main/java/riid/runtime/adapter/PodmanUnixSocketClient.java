@@ -167,15 +167,11 @@ final class PodmanUnixSocketClient {
     }
 
     private static long parseContentLength(String value) throws IOException {
-        try {
-            long length = Long.parseLong(value);
-            if (length < 0) {
-                throw new NumberFormatException("negative length");
-            }
-            return length;
-        } catch (NumberFormatException e) {
-            throw new IOException("Invalid Podman API Content-Length: " + value, e);
+        long length = Long.parseLong(value);
+        if (length < 0) {
+            throw new IOException("Invalid Podman API Content-Length: " + value);
         }
+        return length;
     }
 
     private static byte[] readChunkedBody(InputStream input) throws IOException {
