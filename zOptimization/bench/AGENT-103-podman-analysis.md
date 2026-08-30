@@ -1,5 +1,20 @@
 # AGENT-103: podman / RIID / dfinit — timing analysis
 
+> **Dataset correction pending re-run** ([PR #78 review](https://github.com/UsatovPavel/RIID/pull/78#discussion_r3889296658)):
+> the 20-image dataset behind every table below was `filter.tsv`'s old
+> "every 5th row by size" pick, not the actual top-20 by popularity. That's
+> now fixed (`filter.tsv` rebuilt from `ChimangoScanTop150.versions.csv`
+> ranks 1-20, non-amd64 ranks backfilled from 21-23; the previously-missing
+> `write_filtered_dataset_a.py` added; `dataset_a.tsv` regenerated) — see
+> `AGENT-103-dataset-fix-runbook.md` for the fix and the remaining live steps
+> (clear+repush the Selectel registries, re-run the 4-arm matrix). Until that
+> re-run happens, every number and the log excerpts below still describe the
+> *old* dataset; the mechanism-level findings (Effect A/B split,
+> `engine.import` cost, the stale-scheduler-endpoint bug) are expected to
+> hold, but should be re-confirmed against the new run. The §3/§4 "no image
+> literally named `python`" caveat no longer applies going forward — `python`
+> (rank 2) is directly in the corrected set.
+
 Scope: the analysis requested in the [AGENT-103](https://usatovpavel.atlassian.net/browse/AGENT-103)
 comment thread — not the parent "Check logs" subtask itself (metrics dashboard, Python
 load-image reading). Source data: `zOptimization/clusterLogs-agent74-v0.4.11/dfinit-podman`
@@ -73,10 +88,39 @@ more work than `bare-podman` ever attempts, not a P2P tax.
 question, since both arms run RIID's full archive-build/engine.import pipeline: `dfinit=>podman`
 (474.1s over the same 19 images) is **38% faster than plain `riid=>podman`** (716.2s), i.e.
 Dragonfly P2P *reduces* RIID's overhead over bare podman (+72% → +14%), it does not add to it.
-So: comparing `dfinit-podman` against `bare-podman` directly (which is what made it "look
+So comparing `dfinit-podman` against `bare-podman` directly (which is what made it "look
 slower") mixes both effects and blames P2P for a cost (Effect A) that has nothing to do with
-P2P. Judged on the comparison P2P actually controls (Effect B), Dragonfly is a net win here,
-not evidence the deployment is fundamentally wrong.
+P2P.
+
+That residual **+14% is still real and still needs its own explanation**, not just "roughly a
+wash." With 4 nodes forming a Dragonfly mesh, a full peer-to-peer topology has C(4,2)=6 possible
+node-to-node paths versus `bare-podman`'s 4 independent direct-to-registry connections — on that
+reasoning alone, `dfinit-podman` should come out *ahead* of `bare-podman`, not 14% behind it.
+It doesn't, because the mesh never gets a chance to pay off here: the registry-egress counters
+recorded around each arm (`bare-podman.tsv`/`dfinit-podman.tsv` header comments) show
+**55,310,415,090 bytes** pulled from the registry for `bare-podman` and **55,313,349,169 bytes**
+for `dfinit-podman` — a 0.005% difference over the whole 20-image run. Every byte still came from
+origin in both arms; P2P moved essentially nothing peer-to-peer. That is expected given how this
+benchmark drives the cluster: `clear-cache-all-riid-pods.sh` wipes the Dragonfly cache dirs on
+*every* client/seed-client pod before each arm, then all 4 pods request the *same* image at the
+*same* instant (`mode=recreate`) — so no peer has anything to share until the fastest of the 4
+gets there first, and by then the other 3 have usually already gone back-to-source themselves
+rather than wait. The 10/6-edge mesh advantage is a warm-cache, staggered-request property; this
+benchmark's access pattern (cold, simultaneous, single image) structurally can't exercise it. What
+the +14% actually buys, with zero bytes saved, is dfdaemon/scheduler control-plane overhead only
+— per-layer negotiation, hashing, and an extra local write into Dragonfly's own cache directory
+before RIID's own cache sees it (visible as the climbing `source.select` durations in the trace
+above, present even on cache/p2p hits). `riid=>podman` has no registry-egress figure captured to
+compare against (cross-run, older export), so it can't be said with the same confidence that its
+38% deficit against `dfinit=>podman` is *not* about bytes saved — only that, against `bare-podman`
+specifically, dfinit's zero-byte-saved result rules out peer-to-peer transfer as the explanation
+for its own +14%. A candidate mechanism for the `riid=>podman` gap that doesn't require any
+peer-sharing: dfget-style clients fetch a single layer as multiple concurrent pieces even straight
+from origin, which can beat a naive single-stream HTTP GET per layer — but that's a hypothesis,
+not something confirmed in these logs; see "Still open". Either way, this benchmark's design
+(cold cache, 4 pods requesting the same image at the same instant) cannot exercise the mesh's
+actual peer-to-peer advantage — that needs a repeat-pull or staggered-request scenario this matrix
+does not currently include.
 
 **What dfinit *does* cost, on top of Effect A**: within this session's `dfinit-podman` run, two
 of twenty images (`sonarqube`, `pinetwork/pi-node-docker`) had one straggler pod each — 153.9s
@@ -134,6 +178,14 @@ cache/P2P inside 2.5s, `engine.import` then takes 6.6s — the dominant cost, un
 
 ## Still open
 
+- **Why is `dfinit=>podman` 38% faster than plain `riid=>podman` if P2P moved zero bytes
+  peer-to-peer against `bare-podman`?** The registry-egress evidence in §1 rules out
+  peer-to-peer sharing as the explanation for dfinit's own +14% over bare, but `riid=>podman`
+  has no comparable egress figure (cross-run, older export) to confirm the same for its 38%
+  deficit against `dfinit=>podman`. Piece-parallel fetching from origin (a dfget property that
+  doesn't require any peer to already have the data) is a plausible mechanism, not a confirmed
+  one. Needs `riid=>podman` re-run on this stand with egress counters captured, per the item
+  below.
 - **This session's RIID pod logs carry no per-request detail.** `zOptimization/clusterLogs-agent74-v0.4.11/dfinit-podman/riid/*.log`
   each contain exactly one event (`request.start`, the CLI bootstrap) and nothing else — none
   of the `manifest.fetch`/`source.select`/`archive.build`/`engine.import` trace that
