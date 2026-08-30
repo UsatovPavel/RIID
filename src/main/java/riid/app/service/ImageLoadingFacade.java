@@ -314,7 +314,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
         boolean prefixImport = runtimeConfig == null
                 ? RuntimeConfig.DEFAULT_PREFIX_IMPORT
                 : runtimeConfig.prefixImportOrDefault();
-        registerRuntime(runtimes, new PodmanRuntimeAdapter(prefixImport));
+        registerRuntime(runtimes, new PodmanRuntimeAdapter(fs, prefixImport));
         registerRuntime(runtimes, new PortoRuntimeAdapter());
         registerRuntime(runtimes, new ContainerdRuntimeAdapter(prefixImport));
         String dockerCmd = runtimeConfig != null
@@ -380,6 +380,7 @@ public final class ImageLoadingFacade implements AutoCloseable {
     public void close() throws IOException {
         IOException error = null;
         error = closeResource(p2pCleaner, "Failed to close p2p executor", error);
+        error = closeResource(runtimeRegistry::close, "Failed to close runtime adapters", error);
         error = closeResource(cacheCleaner, "Failed to close cache adapter", error);
         error = closeResource(client::close, "Failed to close registry client", error);
         if (error != null) {

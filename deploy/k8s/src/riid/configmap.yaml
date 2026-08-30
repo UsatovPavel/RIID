@@ -33,9 +33,7 @@ data:
     dispatcher:
       maxConcurrentRegistry: 4
     app:
-      # Must match the riid-work-host hostPath in daemonset.yaml exactly: OCI
-      # layouts built here are handed to the node's podman as `oci:<dir>`, and
-      # it opens that directory on the node, not in the pod.
+      # OCI layouts are tarred here and streamed to the node's Podman API.
       tempDirectory: "/var/lib/riid/work"
       daemon:
         unixSocketPath: "/tmp/riid.sock"

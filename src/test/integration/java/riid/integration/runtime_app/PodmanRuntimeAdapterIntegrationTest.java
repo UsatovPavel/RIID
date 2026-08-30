@@ -20,13 +20,9 @@ import riid.runtime.adapter.RuntimeId;
 @Tag("local")
 class PodmanRuntimeAdapterIntegrationTest {
 
-    /**
-     * Prefix import against real podman on a small multi-layer image (~11 MiB, 5
-     * layers): each prefix is loaded as its own image, and once the real one is in,
-     * only it is left behind.
-     */
+    /** A multi-layer image leaves no intermediate prefix image behind. */
     @Test
-    void importsJobberByPrefixIntoPodman() throws Exception {
+    void importsJobberWithoutIntermediateImages() throws Exception {
         PodmanRuntimeIntegrationSupport.rmiJobberIgnoreErrors();
         HostFilesystem fs = new NioHostFilesystem();
         Path configPath = PodmanRuntimeIntegrationSupport.writeDockerHubConfig(fs);

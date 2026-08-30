@@ -23,7 +23,7 @@ RUN apt-get update \
 
 # This image really does run podman inside the container (registry mirroring,
 # dataset loads), so it keeps a fuse-overlayfs store of its own. The RIID pod no
-# longer has one — there podman is a remote client of the node daemon — so the
+# longer has one — Java talks directly to the node daemon's Unix socket — so the
 # config lives here instead of being borrowed from src/riid/.
 RUN printf '%s\n' \
       '[storage]' \

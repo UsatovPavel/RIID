@@ -59,6 +59,25 @@ public final class BoundedCommandExecution {
                 cmd -> new ProcessBuilder(cmd).start());
     }
 
+    /**
+     * Runs a producer command while a Java consumer handles its stdout. Process
+     * lifecycle and bounded stderr collection stay in the shared command executor.
+     */
+    public static StreamedShellResult runWithStdoutConsumer(List<String> producerCommand, int maxStderrBytes,
+            ProcessStarter starter, InputStreamConsumer consumer) throws IOException, InterruptedException {
+        return PIPED_EXECUTOR.runWithStdoutConsumer(producerCommand, maxStderrBytes, starter, consumer);
+    }
+
+    /**
+     * Same as
+     * {@link #runWithStdoutConsumer(List, int, ProcessStarter, InputStreamConsumer)}
+     * with the default process starter.
+     */
+    public static StreamedShellResult runWithStdoutConsumer(List<String> producerCommand, int maxStderrBytes,
+            InputStreamConsumer consumer) throws IOException, InterruptedException {
+        return runWithStdoutConsumer(producerCommand, maxStderrBytes, cmd -> new ProcessBuilder(cmd).start(), consumer);
+    }
+
     @SuppressWarnings("PMD.CloseResource")
     public static CompletableFuture<ShellResult> run(List<String> command, int maxOutputBytes) {
         Objects.requireNonNull(command, "command");
@@ -299,9 +318,22 @@ public final class BoundedCommandExecution {
         }
     }
 
+    public record StreamedShellResult(int exitCode, String stderr) {
+        public void throwIfFailed(String producerLabel) throws IOException {
+            if (exitCode != 0) {
+                throw new IOException(producerLabel + " failed (exit " + exitCode + "): " + stderr);
+            }
+        }
+    }
+
     @FunctionalInterface
     public interface ProcessStarter {
         Process start(List<String> command) throws IOException;
+    }
+
+    @FunctionalInterface
+    public interface InputStreamConsumer {
+        void accept(InputStream input) throws IOException, InterruptedException;
     }
 
     public static final class OutputLimitExceededException extends IOException {

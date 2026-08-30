@@ -29,6 +29,7 @@ import riid.core.model.manifest.OciLayout;
 import riid.runtime.BoundedCommandExecution.ShellResult;
 import riid.runtime.adapter.ImageReference;
 import riid.runtime.adapter.IncrementalImageImport;
+import riid.runtime.adapter.CliOnlyPodmanRuntimeAdapter;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 
 /**
@@ -175,7 +176,7 @@ class PodmanPrefixImportTest {
     }
 
     /** Reads each layout while it exists instead of running {@code podman}. */
-    private static final class RecordingPodmanAdapter extends PodmanRuntimeAdapter {
+    private static final class RecordingPodmanAdapter extends CliOnlyPodmanRuntimeAdapter {
         private static final int RMI_ARGUMENTS = 3;
 
         private final List<String> pulled = new CopyOnWriteArrayList<>();

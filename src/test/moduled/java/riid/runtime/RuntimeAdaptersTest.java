@@ -11,6 +11,7 @@ import riid.core.fs.TestPaths;
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
 import riid.runtime.adapter.ContainerdRuntimeAdapter;
+import riid.runtime.adapter.CliOnlyPodmanRuntimeAdapter;
 import riid.runtime.adapter.DockerRuntimeAdapter;
 import riid.runtime.adapter.PodmanRuntimeAdapter;
 import riid.runtime.adapter.PortoRuntimeAdapter;
@@ -283,12 +284,13 @@ class RuntimeAdaptersTest {
     }
 
     @SuppressWarnings("PMD.TestClassWithoutTestCases")
-    private static final class TestPodmanAdapter extends PodmanRuntimeAdapter {
+    private static final class TestPodmanAdapter extends CliOnlyPodmanRuntimeAdapter {
         private final int exitCode;
         private final String stdout;
         private final String stderr;
 
         private TestPodmanAdapter(int exitCode, String stdout, String stderr) {
+            super(true);
             this.exitCode = exitCode;
             this.stdout = stdout;
             this.stderr = stderr;

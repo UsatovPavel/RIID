@@ -107,6 +107,48 @@ final class BoundedPipedCommandExecutor {
         }
     }
 
+    BoundedCommandExecution.StreamedShellResult runWithStdoutConsumer(List<String> producerCommand, int maxStderrBytes,
+            BoundedCommandExecution.ProcessStarter starter, BoundedCommandExecution.InputStreamConsumer consumer)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(producerCommand, "producerCommand");
+        Objects.requireNonNull(starter, "starter");
+        Objects.requireNonNull(consumer, "consumer");
+
+        concurrentPipesLimiter.acquire();
+        try {
+            int stderrLimit = maxStderrBytes > 0 ? maxStderrBytes : defaultMaxOutputBytes;
+            Process producer = starter.start(producerCommand);
+            try {
+                Future<Void> stdoutConsumer = pipeIoExecutor.submit(() -> {
+                    try (InputStream input = producer.getInputStream()) {
+                        consumer.accept(input);
+                    }
+                    return null;
+                });
+                Future<String> producerStderr = pipeIoExecutor.submit(
+                        streamReaderTruncating(producer.getErrorStream(), stderrLimit, "streamed-producer-stderr"));
+                try {
+                    getConsumerResult(stdoutConsumer);
+                    int exitCode = producer.waitFor();
+                    return new BoundedCommandExecution.StreamedShellResult(exitCode, get(producerStderr));
+                } catch (IOException | InterruptedException | RuntimeException | Error e) {
+                    if (producer.isAlive()) {
+                        producer.destroyForcibly();
+                    }
+                    stdoutConsumer.cancel(true);
+                    attachStderrDiagnostics(e, producerStderr, "producer");
+                    throw e;
+                }
+            } finally {
+                if (producer.isAlive()) {
+                    producer.destroyForcibly();
+                }
+            }
+        } finally {
+            concurrentPipesLimiter.release();
+        }
+    }
+
     void shutdown() {
         pipeIoExecutor.shutdown();
     }
@@ -157,6 +199,28 @@ final class BoundedPipedCommandExecutor {
                 throw ie;
             }
             throw new IOException("Failed to read process output", cause);
+        }
+    }
+
+    private static void getConsumerResult(Future<Void> future) throws IOException, InterruptedException {
+        try {
+            future.get();
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            if (cause instanceof InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw interrupted;
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IOException("Failed to consume process stdout", cause);
         }
     }
 
