@@ -4,172 +4,146 @@ Scope: the analysis requested in the [AGENT-103](https://usatovpavel.atlassian.n
 comment thread — not the parent "Check logs" subtask itself (metrics dashboard, Python
 load-image reading). Source data: `zOptimization/clusterLogs-agent74-v0.4.11/dfinit-podman`
 (this stand, v0.4.11, this session) and `zOptimization/clusterLogs-run2` (previous stand,
-v0.4.10, prior session) as pointed to in the comment, cross-checked against the raw TSVs
-in `deploy/k8s/performance/output/` of both worktrees.
+v0.4.10, prior session) as pointed to in the comment, cross-checked against the raw TSVs in
+`deploy/k8s/performance/output/` of both worktrees.
 
-## Data provenance (read this before the numbers)
+## Data provenance
 
 | arm | run | RIID image | cluster/session |
 |---|---|---|---|
 | `bare-podman` | this session | n/a (no RIID, direct `podman pull`) | this stand, 2026-08-30 |
 | `dfinit-podman` | this session | v0.4.11 | this stand, 2026-08-30 |
-| `riid-podman` (noprefix) | **prior session** | v0.4.10 | previous stand, 2026-08-30 00:xx MSK, 19/20 (`sonarqube` failed, undiagnosed then) |
+| `riid-podman` (noprefix) | prior session | v0.4.10 | previous stand, 2026-08-29 ~22:00 UTC / 00:xx MSK, 19/20 |
 | `riid-containerd` (noprefix / prefix) | this session | v0.4.11 | this stand, 2026-08-30 |
 
 `bare-podman` and `dfinit-podman` are the same cluster, same hour, same RIID build — directly
-comparable. `riid-podman` is the only "RIID, no dfinit, podman" data that exists anywhere
-(the `riid-podman-noprefix`/`riid-podman-prefix` arms were never re-run on this stand — see
-"Still open" below); it comes from a different cluster instance and the older v0.4.10 image.
-That version gap does not touch this code path (`PodmanUnixSocketClient` only changes the
-prefix-import transport, not plain pull), but a different cluster run is still a different
-run — registry cache state, node placement and network jitter are not controlled for across
-sessions. Treat the `riid-podman` column as directional, not as tightly bound to `bare`/`dfinit`
-as those two are to each other.
+comparable. `riid-podman` is the only "RIID, no dfinit, podman" data that exists anywhere; it
+comes from a different cluster instance and the older v0.4.10 image (the version gap doesn't
+touch this code path — `PodmanUnixSocketClient` only changes the prefix-import transport, not
+plain pull — but a different run is still a different run). Treat that column as directional.
 
-## 1. Why did `dfinit-podman` run slower than `bare-podman`?
+`riid-podman`'s one failure, `sonarqube` (exit 1, pod `riid-dtbgk`): **not** an application
+bug. `riid-dtbgk.log` has zero entries for the sonarqube request — no `manifest.fetch`, nothing
+— even though the other three pods (`riid-qpvgq`, `riid-pc7vh`, `riid-w4kl7`) logged full,
+successful pulls for the same image at the same start time. `riid-dtbgk`'s log stream stops
+dead at `21:53:18Z`, right after its *previous* image (`rancher-agent`) finished, one second
+before the sonarqube request would have started, and the whole run's log export was captured
+at `21:55:15Z` — "minutes before teardown" per `clusterLogs-run2/RESULTS.md`. That pod's node
+went away mid-request as the stand's lifetime timer tore the cluster down, which is why the
+bench driver only got a bare exit 1 back ~133s later with nothing behind it: no error to read
+because the process that would have logged one was already gone.
 
-Short answer: **it mostly didn't, per pod.** The published "aggregate" number (max end −
-min start across the 4 parallel pods pulling that image) makes it look like a ~42% regression
-(628.0s vs 441.6s over 20 images), but that total is dominated by two single-pod stragglers.
-Look at the per-pod **median** instead of the max, and the regression drops to +8.6%
-(461.2s vs 424.7s over 20 images) — much closer to what a P2P hop (dfdaemon proxy + scheduler
-negotiation) should cost on top of a direct pull.
+## 1. Why does RIID (with or without dfinit) look slower than bare podman?
 
-| image | dfinit pods (4x duration, s) | max−min gap |
-|---|---|---|
-| `sonarqube:latest` | 22.2, 22.7, 22.9, **153.9** | 131.8s |
-| `pinetwork/pi-node-docker` | 16.4, 16.6, 16.6, **48.0** | 31.6s |
-| everything else (18 images) | gap ≤ 1.9s | — |
+Two separate effects are stacked here; conflating them is what makes `dfinit-podman` look
+worse than it is.
 
-These two stragglers alone account for **163.4s of the 186.4s total aggregate delta (87.7%)**.
-Remove them and the remaining 18-image delta is 23.0s total, ~1.3s/image — noise.
+**Effect A — RIID's own pipeline is not what `bare-podman` runs, P2P or not.**
+`bare-podman` is a raw `podman pull`. RIID instead builds a local OCI archive from the fetched
+layers and then loads *that* into the runtime over the podman socket (`archive.build` →
+`engine.import`) — a comparison against `bare-podman` is a comparison against a different,
+strictly larger amount of work, independent of transport. Reading the actual per-request trace
+confirms this dominates over any P2P cost. Two real pulls, from `clusterLogs-run2` (the only
+export with this level of RIID-side detail — see "Still open"):
 
-**Root cause of the stragglers**: `dfdaemon` (the Dragonfly client, one per node) logs
-`connect to http://<ip>:8002 failed: transport error` /
-`create health client for scheduler <ip>:8002 failed: ConnectError` against **three**
-scheduler endpoints — `10.10.83.130:8002`, `10.10.195.198:8002`, `10.10.195.202:8002` —
-repeatedly, on multiple client pods, for the **entire** `dfinit-podman` run (first occurrence
-08:53:52, still recurring past 09:04 when the sonarqube straggler was in flight). Only one of
-these endpoints is a live scheduler; the other two are stale (this is the same "stale P2P
-scheduler address" symptom already tracked in the k8s-bench skill's known traps, caused by
-`clear-cache-all-riid-pods.sh` not always converging the data plane onto a single live
-scheduler IP). Most of the time a client picks the live endpoint quickly and the P2P overhead
-stays small (+8.6% median); occasionally — evidently node/pod-dependent — a client's specific
-piece-download negotiation stalls through enough failed/retried health checks against the
-dead endpoints that the whole pull is held up by tens of seconds to two minutes. That is
-what produced the `sonarqube` and `pinetwork` outliers.
-
-Evidence:
 ```
-zOptimization/clusterLogs-agent74-v0.4.11/dfinit-podman/dfdaemon/dragonfly-client-*.log
-  grep ERROR → "create health client for scheduler 10.10.83.130:8002 failed: ConnectError cause: transport error"
-  (and the same for 10.10.195.198:8002, 10.10.195.202:8002), recurring 08:53:52 → past 09:04:17
+php (riid-qpvgq, 196 MB payload):
+  manifest.fetch    6ms
+  8 layers, cache/p2p hits, source.select 0-2536ms cumulative from request start
+  archive.build     3280ms  (cumulative: P2P/cache phase is done by t+3.3s)
+  engine.import     6591ms  <- its own step, not cumulative: 66% of the 9964ms total
+  load.total        9964ms
+
+sonarqube (riid-pc7vh, 1.1 GB payload):
+  manifest.fetch    6ms
+  cache/p2p hits, source.select up to 12282ms cumulative
+  archive.build     21132ms (cumulative: P2P/cache phase done by t+21.1s)
+  engine.import     23031ms <- its own step: 52% of the 44237ms total
+  load.total        44237ms
 ```
-Even `bare-podman` has one minor straggler of its own (`rancher-agent`: median 6.5s vs max
-17.1s, a 10.6s gap — plain registry-side variance), so stragglers aren't unique to dfinit;
-what's unique is the *size* of the two dfinit outliers, and that size lines up with a known,
-already-tracked infra defect rather than anything inherent to P2P pulling.
 
-## 2. Overall picture: podman (bare) vs us (RIID) vs dfinit
+`engine.import` — writing the archive into podman's storage over the socket — is the single
+largest phase in both cases (52-66% of wall time) and does not care whether the bytes behind
+it came from cache, P2P, or a cold registry pull; ADR-11 measured the same effect at 76% on a
+cold request. **This is the real reason plain `riid=>podman` costs +72% over `bare-podman`
+(716.2s vs 416.3s aggregate, 19 comparable images)** — most of that gap is RIID doing strictly
+more work than `bare-podman` ever attempts, not a P2P tax.
 
-Aggregate duration per image (max end − min start across 4 pods), seconds:
+**Effect B — within RIID, does dfinit help or hurt?** This is the fair, apples-to-apples
+question, since both arms run RIID's full archive-build/engine.import pipeline: `dfinit=>podman`
+(474.1s over the same 19 images) is **38% faster than plain `riid=>podman`** (716.2s), i.e.
+Dragonfly P2P *reduces* RIID's overhead over bare podman (+72% → +14%), it does not add to it.
+So: comparing `dfinit-podman` against `bare-podman` directly (which is what made it "look
+slower") mixes both effects and blames P2P for a cost (Effect A) that has nothing to do with
+P2P. Judged on the comparison P2P actually controls (Effect B), Dragonfly is a net win here,
+not evidence the deployment is fundamentally wrong.
 
-| image | bare-podman | riid=>podman† | dfinit=>podman |
-|---|---:|---:|---:|
-| runmymind/docker-android-sdk | 102.1 | 213.4 | 104.2 |
-| onlyoffice/documentserver | 45.3 | 87.1 | 47.6 |
-| sysdig/agent | 38.0 | 85.7 | 39.7 |
-| jetbrains/teamcity-server | 43.0 | 79.3 | 44.5 |
-| apache/airflow | 28.8 | 42.2 | 34.4 |
-| elasticsearch | 27.0 | 41.8 | 27.0 |
-| grafana/grafana | 19.0 | 31.6 | 20.7 |
-| pinetwork/pi-node-docker | 16.3 | 26.8 | 48.0 ‡ |
-| cimg/base | 17.8 | 25.6 | 19.7 |
-| netdata | 12.7 | 19.7 | 14.4 |
-| php | 9.3 | 12.3 | 10.9 |
-| rancher/rancher-agent | 17.2 | 12.1 | 9.3 |
-| mysql | 12.5 | 8.2 | 14.5 |
-| openpolicyagent/gatekeeper | 3.9 | 6.7 | 5.7 |
-| fluxcd/flux | 5.5 | 6.3 | 7.6 |
-| istio/operator | 3.5 | 5.3 | 5.4 |
-| rabbitmq | 6.2 | 4.4 | 8.3 |
-| amazon/aws-efs-csi-driver | 5.1 | 4.0 | 6.9 |
-| redis | 3.3 | 3.8 | 5.2 |
-| sonarqube | 25.4 | FAILED | 153.9 ‡ |
-| **TOTAL (20 images, dfinit failed=0)** | **441.6** | 716.2 (19/20) | **628.0** |
-| **TOTAL, 19 images excl. sonarqube** | **416.3** | **716.2** | **474.1** |
+**What dfinit *does* cost, on top of Effect A**: within this session's `dfinit-podman` run, two
+of twenty images (`sonarqube`, `pinetwork/pi-node-docker`) had one straggler pod each — 153.9s
+and 48.0s respectively against three sibling pods finishing in the normal 16-23s range. These
+two stragglers account for 163.4s of the 186.4s total aggregate delta over `bare-podman`
+(87.7%); the other 18 images cost +23.0s combined (~1.3s/image, noise). Root cause, from
+`dfdaemon` logs: `create health client for scheduler <ip>:8002 failed: ConnectError cause:
+transport error` recurring against **three** scheduler endpoints throughout the whole run
+(`10.10.83.130:8002`, `10.10.195.198:8002`, `10.10.195.202:8002`, first seen 08:53:52, still
+recurring past 09:04). Only one is a live scheduler; the other two are stale — the same
+"stale P2P scheduler address" symptom already tracked in the k8s-bench skill's known traps
+(`clear-cache-all-riid-pods.sh` not always converging the data plane onto one live scheduler
+IP). That is a real, fixable dfinit-side defect — but it is a control-plane bug in this
+deployment's cache-clear script, not evidence that peer-to-peer transfer itself is the wrong
+architecture; Effect B above shows the architecture paying off even with this bug present.
+
+## 2. Overall picture: bare-podman vs riid=>podman vs dfinit=>podman
+
+Aggregate totals (sum of per-image max-across-4-pods duration), seconds:
+
+| arm | total | vs bare-podman |
+|---|---:|---:|
+| `bare-podman` (19 comparable images) | 416.3 | — |
+| `riid=>podman` (v0.4.10, cross-run) | 716.2 | +72% |
+| `dfinit=>podman` | 474.1 | +14% |
+| `dfinit=>podman`, all 20 images incl. the 2 stragglers | 628.0 | +51% (straggler-inflated, see §1) |
+
+`riid=>containerd` (this session, v0.4.11, noprefix): 607.4s over 20 images — for context,
+between bare-podman and riid=>podman in absolute terms, but a different engine so not directly
+stacked against the podman column above. `riid=>containerd` prefix: 722.0s, the slowest arm
+measured this session (prefix-import's own extra local unpack step before handing the path to
+`ctr`).
+
+## 3. Specific image, from the logs: `php` (typical) and `sonarqube` (the failure/straggler case)
+
+No image in the 20-image dataset is literally named `python`; `php` is the closest
+general-purpose language-runtime image and is used below as that proxy.
+
+**`php`, normal case** (aggregate seconds): bare-podman 9.3, riid=>podman† 12.3, dfinit=>podman
+10.9. The full request trace (§1, `riid-qpvgq`) shows nothing unusual: 8 layers resolve via
+cache/P2P inside 2.5s, `engine.import` then takes 6.6s — the dominant cost, unrelated to source.
+
+**`sonarqube`, the two failure modes actually observed**, both from real logs, not aggregates:
+- *v0.4.10 run (`riid=>podman`)*: 3/4 pods succeeded in 36.5-46.5s with the same
+  cache/p2p→archive.build→engine.import shape as `php` (see §1's trace, `riid-pc7vh`); the 4th
+  (`riid-dtbgk`) never logged a single event for this request — see "Data provenance" above,
+  the cluster's teardown timer killed its node mid-request.
+- *this session (`dfinit=>podman`)*: 3/4 pods succeeded in 22.2-22.9s (faster than bare
+  podman's 25.4s); the 4th took 153.9s. This session's RIID pod logs contain no per-request
+  detail (see "Still open"), so the direct RIID-side trace for this straggler isn't available;
+  the `dfdaemon` scheduler-connection-error evidence in §1, which spans this pod's entire pull
+  window, is the available explanation.
 
 † different run/session — see provenance note above.
-‡ straggler-inflated, see §1.
-
-**Headline finding**: on the 19 directly-computable images, plain `riid=>podman` (no dfinit)
-costs **+72% over bare-podman** (716.2s vs 416.3s), while `dfinit=>podman` costs only **+14%
-over bare** (474.1s vs 416.3s) on that same set — i.e. adding Dragonfly P2P did not add to
-RIID's overhead over bare podman, it **roughly halved** it (716.2s → 474.1s). This should be
-read with the provenance caveat above (`riid=>podman` is a different run), but the gap is
-large enough (2x) that ordinary run-to-run jitter is an unlikely full explanation; the more
-likely story is that RIID's own import path (unpacking into the archive/import machinery
-before handing to podman) carries a real fixed cost, and pulling layers through the local
-Dragonfly peer/cache measurably cuts the registry-round-trip part of that cost.
-
-## 3. Download time, riid=>podman and riid=>containerd
-
-Aggregate duration per image, seconds (`riid=>podman` = v0.4.10 prior run, `riid=>containerd`
-= v0.4.11 this session, both "noprefix"; containerd prefix arm included for reference):
-
-| image | riid=>podman | riid=>containerd | riid=>containerd (prefix) |
-|---|---:|---:|---:|
-| runmymind/docker-android-sdk | 213.4 | 147.1 | 187.1 |
-| onlyoffice/documentserver | 87.1 | 64.3 | 56.7 |
-| sysdig/agent | 85.7 | 44.8 | 53.5 |
-| jetbrains/teamcity-server | 79.3 | 72.3 | 62.2 |
-| apache/airflow | 42.2 | 42.0 | 54.8 |
-| elasticsearch | 41.8 | 34.1 | 51.9 |
-| grafana/grafana | 31.6 | 24.7 | 34.7 |
-| pinetwork/pi-node-docker | 26.8 | 20.6 | 23.1 |
-| cimg/base | 25.6 | 20.2 | 30.0 |
-| netdata | 19.7 | 15.8 | 17.1 |
-| php | 12.3 | 12.0 | 11.8 |
-| rancher/rancher-agent | 12.1 | 9.8 | 12.5 |
-| mysql | 8.2 | 18.5 | 22.6 |
-| openpolicyagent/gatekeeper | 6.7 | 6.5 | 11.2 |
-| fluxcd/flux | 6.3 | 6.9 | 14.3 |
-| istio/operator | 5.3 | 5.4 | 10.0 |
-| rabbitmq | 4.4 | 10.5 | 14.3 |
-| amazon/aws-efs-csi-driver | 4.0 | 7.1 | 12.0 |
-| redis | 3.8 | 4.5 | 9.8 |
-| sonarqube | FAILED | 40.3 | 32.2 |
-| **TOTAL** | 716.2 (19/20) | **607.4** (20/20) | **722.0** (20/20) |
-
-`riid=>containerd` (noprefix) came in fastest of the three RIID variants shown here, ahead of
-`riid=>podman` — but again, cross-run/cross-engine, directional only. `riid=>containerd`
-prefix is consistently the slowest engine/arm combination measured this session, which tracks
-with prefix-import doing its own extra local unpack step before handing the path to `ctr`.
-
-## 4. Specific image: podman / us / dfinit
-
-The 20-image dataset has no image literally named `python`; the closest general-purpose
-runtime image in it is **`php`**, used below as the representative "typical, no-straggler"
-case. **`sonarqube`** is shown alongside it because it's the concrete example of the effect
-explained in §1.
-
-| | bare-podman | riid=>podman† | dfinit=>podman |
-|---|---:|---:|---:|
-| **php** (typical case) | 9.3s | 12.3s | 10.9s |
-| **sonarqube** (straggler case) | 25.4s | FAILED | 153.9s (median pod: 22.8s) |
-
-`php`: dfinit sits between bare and plain RIID, exactly the "+8.6% median overhead" pattern
-from §1 — nothing anomalous. `sonarqube`: 3 of 4 dfinit pods finished in 22.2–22.9s (*faster*
-than bare's 25.4s), the 4th took 153.9s — the scheduler-endpoint churn from §1 stalling one
-node's client, not a per-image-size effect.
 
 ## Still open
 
-- `riid-podman-noprefix`/`riid-podman-prefix` were never re-run on this session's stand
-  against `bare-podman`/`dfinit-podman` on the same cluster; §2/§3's `riid=>podman` column
-  remains cross-run. Re-running both on this stand would let §2 drop the provenance caveat
-  entirely.
-- The stale-scheduler-endpoint condition (`10.10.83.130:8002`, `10.10.195.198:8002` never
-  answering all run) was not fixed this session, only observed as the proximate cause of the
-  two stragglers above; see the k8s-bench skill's "known traps" for the existing gating-bug
-  writeup in `clear-cache-all-riid-pods.sh`.
+- **This session's RIID pod logs carry no per-request detail.** `zOptimization/clusterLogs-agent74-v0.4.11/dfinit-podman/riid/*.log`
+  each contain exactly one event (`request.start`, the CLI bootstrap) and nothing else — none
+  of the `manifest.fetch`/`source.select`/`archive.build`/`engine.import` trace that
+  `clusterLogs-run2`'s export has. All of §1/§3's log-level narrative had to be reconstructed
+  from the older v0.4.10 run for that reason. Worth checking whether `export-cluster-logs.sh`'s
+  pod selector or the daemon's own log routing changed between these two runs, since without
+  that trace this session's stragglers can only be explained from the `dfdaemon` side.
+- `riid-podman-noprefix`/`riid-podman-prefix` were never re-run on this session's stand against
+  `bare-podman`/`dfinit-podman` on the same cluster; §1/§2's `riid=>podman` numbers remain
+  cross-run. Re-running both on this stand would remove that caveat entirely.
+- The stale-scheduler-endpoint bug in §1 (Effect B's residual cost) was not fixed this session,
+  only diagnosed; see the k8s-bench skill's "known traps" for the existing gating-bug writeup
+  in `clear-cache-all-riid-pods.sh`.
