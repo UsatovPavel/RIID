@@ -18,10 +18,11 @@ make -C deploy/k8s/performance metrics
 
 ## Container engines live on the node
 
-Every engine in the bench matrix has one shape: **a daemon on the node, a client in the pod.**
+Every engine in the bench matrix has one shape: **a daemon on the node, reached over a socket.**
 containerd (`/run/containerd/containerd.sock`) and Porto (`/run/portod.socket`) were already like
-that; podman is daemonless by design, so the node runs the packaged `podman.socket` and the pod
-reaches it over `CONTAINER_HOST=unix:///run/podman/podman.sock`.
+that; podman is daemonless by design, so the node runs the packaged `podman.socket`. RIID's Java
+adapter sends Libpod HTTP directly to `CONTAINER_HOST=unix:///run/podman/podman.sock`; the RIID
+image deliberately contains no Podman CLI or containers stack.
 
 ```
 make -C deploy/k8s/bootstrap install-podman-node   # DaemonSet: installs podman, enables the socket

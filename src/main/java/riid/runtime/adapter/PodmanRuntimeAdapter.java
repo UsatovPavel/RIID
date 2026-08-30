@@ -2,20 +2,17 @@ package riid.runtime.adapter;
 
 import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.fs.HostFilesystem;
+import riid.core.fs.NioHostFilesystem;
 import riid.runtime.BoundedCommandExecution;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,14 +28,14 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     private static final Logger LOGGER = LoggerFactory.getLogger(PodmanRuntimeAdapter.class);
     private static final int MAX_PROC_STDERR = 64 * 1024;
     private static final String PREFIX_REPOSITORY = "localhost/riid-prefix-";
-    private static final String CONTAINER_HOST = "CONTAINER_HOST";
     private static final String EXIT_ERROR_SEPARATOR = "): ";
 
+    private final HostFilesystem fs;
     private final boolean prefixImport;
     private final Optional<PodmanUnixSocketClient> socketClient;
 
     public PodmanRuntimeAdapter() {
-        this(PREFIX_IMPORT_ENABLED_BY_DEFAULT);
+        this(new NioHostFilesystem(), PREFIX_IMPORT_ENABLED_BY_DEFAULT);
     }
 
     /**
@@ -47,20 +44,21 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
      *            the end
      */
     public PodmanRuntimeAdapter(boolean prefixImport) {
-        this(prefixImport, System.getenv(CONTAINER_HOST));
+        this(new NioHostFilesystem(), prefixImport);
+    }
+
+    public PodmanRuntimeAdapter(HostFilesystem fs, boolean prefixImport) {
+        this(fs, prefixImport, PodmanUnixSocketClient.fromEnvironment(fs));
     }
 
     /**
-     * @param prefixImport
-     *            enable growing-prefix imports
-     * @param containerHost
-     *            {@code unix:///path/to/podman.sock}, or blank for the CLI fallback
+     * Package-private seam for socket contract tests. Production resolves the
+     * endpoint in {@link PodmanUnixSocketClient#fromEnvironment(HostFilesystem)}.
      */
-    public PodmanRuntimeAdapter(boolean prefixImport, String containerHost) {
+    PodmanRuntimeAdapter(HostFilesystem fs, boolean prefixImport, Optional<PodmanUnixSocketClient> socketClient) {
+        this.fs = Objects.requireNonNull(fs, "fs");
         this.prefixImport = prefixImport;
-        this.socketClient = containerHost == null || containerHost.isBlank()
-                ? Optional.empty()
-                : Optional.of(new PodmanUnixSocketClient(containerHost));
+        this.socketClient = Objects.requireNonNull(socketClient, "socketClient");
     }
 
     @Override
@@ -79,7 +77,7 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     @Override
     public void importImage(Path imagePath) throws IOException, InterruptedException {
         Objects.requireNonNull(imagePath, "imagePath");
-        if (!imagePath.toFile().exists()) {
+        if (!fs.exists(imagePath) || !fs.isRegularFile(imagePath)) {
             throw new IOException("Image file not found: " + imagePath);
         }
 
@@ -105,13 +103,15 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     public void importOciLayoutDirectory(Path ociLayoutRoot) throws IOException, InterruptedException {
         Objects.requireNonNull(ociLayoutRoot, "ociLayoutRoot");
         Path root = ociLayoutRoot.toAbsolutePath().normalize();
-        if (!Files.isDirectory(root)) {
+        if (!fs.isDirectory(root)) {
             throw new IOException("OCI layout root is not a directory: " + root);
         }
 
         List<String> tarCmd = List.of("tar", "-cf", "-", "-C", root.toString(), ".");
         if (socketClient.isPresent()) {
-            streamTarToSocket(tarCmd);
+            BoundedCommandExecution.StreamedShellResult result = BoundedCommandExecution.runWithStdoutConsumer(tarCmd,
+                    MAX_PROC_STDERR, this::startProcess, socketClient.orElseThrow()::loadArchive);
+            result.throwIfFailed("tar");
             return;
         }
 
@@ -119,62 +119,6 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         BoundedCommandExecution.PipedShellResult result = BoundedCommandExecution.runWithStdoutPipedToStdin(tarCmd,
                 loadCmd, MAX_PROC_STDERR, this::startProcess);
         result.throwIfFailed("tar", "podman load");
-    }
-
-    private void streamTarToSocket(List<String> tarCommand) throws IOException, InterruptedException {
-        Process tar = startProcess(tarCommand);
-        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
-        AtomicReference<IOException> stderrFailure = new AtomicReference<>();
-        Thread stderrReader = Thread.ofVirtual().name("podman-tar-stderr").start(() -> {
-            try (InputStream stream = tar.getErrorStream()) {
-                copyTruncated(stream, stderr);
-            } catch (IOException e) {
-                stderrFailure.set(e);
-            }
-        });
-
-        IOException loadFailure = null;
-        try (InputStream archive = tar.getInputStream()) {
-            socketClient.orElseThrow().loadArchive(archive);
-        } catch (IOException e) {
-            loadFailure = e;
-        }
-
-        int exitCode;
-        try {
-            exitCode = tar.waitFor();
-            stderrReader.join();
-        } catch (InterruptedException e) {
-            tar.destroyForcibly();
-            stderrReader.interrupt();
-            throw e;
-        }
-        if (stderrFailure.get() != null) {
-            throw new IOException("Failed to read tar stderr", stderrFailure.get());
-        }
-        if (loadFailure != null) {
-            if (exitCode != 0) {
-                loadFailure.addSuppressed(new IOException("tar failed (exit " + exitCode + EXIT_ERROR_SEPARATOR
-                        + stderr.toString(StandardCharsets.UTF_8)));
-            }
-            throw loadFailure;
-        }
-        if (exitCode != 0) {
-            throw new IOException(
-                    "tar failed (exit " + exitCode + EXIT_ERROR_SEPARATOR + stderr.toString(StandardCharsets.UTF_8));
-        }
-    }
-
-    private static void copyTruncated(InputStream input, ByteArrayOutputStream captured) throws IOException {
-        byte[] buffer = new byte[8192];
-        int read = input.read(buffer);
-        while (read != -1) {
-            int remaining = MAX_PROC_STDERR - captured.size();
-            if (remaining > 0) {
-                captured.write(buffer, 0, Math.min(read, remaining));
-            }
-            read = input.read(buffer);
-        }
     }
 
     /**

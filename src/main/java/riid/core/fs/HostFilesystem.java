@@ -37,6 +37,10 @@ public interface HostFilesystem {
 
     boolean isRegularFile(Path path);
 
+    default boolean isDirectory(Path path) {
+        return exists(path) && !isRegularFile(path);
+    }
+
     long size(Path path) throws IOException;
 
     String probeContentType(Path path) throws IOException;

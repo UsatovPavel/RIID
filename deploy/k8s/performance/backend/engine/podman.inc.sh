@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # podman driver. The engine is a daemon on the node (podman.socket, installed by
-# src/engines/podman-node.yaml) and everything here is a remote client, the same
-# shape as containerd's containerd.sock and Porto's portod.socket.
+# src/engines/podman-node.yaml). The RIID image has no podman binary, so native
+# benchmark commands execute the host client through the podman-node installer.
 #
-# There is no --remote flag anywhere on purpose: CONTAINER_HOST alone switches
-# podman into client mode (cmd/podman/registry/remote.go:33 in podman 6.1.0), and
-# that variable is set on the RIID container in daemonset.yaml. So the bench and
-# PodmanRuntimeAdapter reach the same daemon without either of them knowing.
+# PodmanRuntimeAdapter itself speaks Libpod HTTP directly over CONTAINER_HOST.
+# Both paths operate on the same node image store.
 #
 # Two consequences of the engine living on the node, both of which used to be
 # handled in the pod and are now checked instead:
@@ -32,23 +30,33 @@ _podman_tls_verify() {
   printf '%s\n' "$v"
 }
 
+_podman_node_exec() {
+  local riid_pod="$1" node node_pod
+  shift
+  node="$(kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')"
+  node_pod="$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
+    --field-selector "spec.nodeName=$node" -o jsonpath='{.items[0].metadata.name}')"
+  if [[ -z "$node_pod" ]]; then
+    echo "no podman-node pod on node=$node for RIID pod=$riid_pod" >&2
+    return 1
+  fi
+  kubectl -n "$NS" exec -c installer "$node_pod" -- chroot /host "$@"
+}
+
 # What the daemon resolved, not what some file says: this is the engine's own
 # view of its registries, mirrors included (libpod/info.go:53 fills it from
 # sysregistriesv2.GetRegistries).
 _podman_registries() {
-  riid_engine_exec "$1" podman info --format '{{json .Registries}}'
+  _podman_node_exec "$1" podman info --format '{{json .Registries}}'
 }
 
 engine_preflight() {
-  local pod="$1" remote
-  riid_engine_exec "$pod" sh -ec 'command -v podman >/dev/null'
-  remote="$(riid_engine_exec "$pod" podman info --format '{{.Host.ServiceIsRemote}}' 2>/dev/null || true)"
-  if [[ "$remote" != "true" ]]; then
-    echo "podman in pod=$pod is not talking to the node daemon (ServiceIsRemote=$remote)" >&2
-    echo "  expected CONTAINER_HOST=unix:///run/podman/podman.sock and a live podman.socket" >&2
-    echo "  check: make -C deploy/k8s/bootstrap wait-podman-node" >&2
-    return 1
-  fi
+  local pod="$1"
+  riid_engine_exec "$pod" sh -ec '
+    ! command -v podman >/dev/null 2>&1
+    test "$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)" = OK
+  '
+  _podman_node_exec "$pod" podman info >/dev/null
 }
 
 # With no host the reference stays short: podman completes it through
@@ -65,12 +73,12 @@ engine_ref() {
 
 engine_pull() {
   local pod="$1" ref="$2"
-  riid_engine_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
+  _podman_node_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
 }
 
 engine_pull_mirrored() {
   local pod="$1" ref="$2"
-  riid_engine_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
+  _podman_node_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
 }
 
 # Without this check the dfinit arm silently degrades into a plain pull and
@@ -103,5 +111,5 @@ engine_no_mirror_check() {
 # one meaning of "clean". Now wipes the node's store, which is the store both
 # the baseline and the RIID import write into.
 engine_clear_cache() {
-  riid_engine_exec "$1" podman system prune -af --volumes >/dev/null
+  _podman_node_exec "$1" podman system prune -af --volumes >/dev/null
 }

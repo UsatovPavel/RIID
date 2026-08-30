@@ -18,23 +18,19 @@ daemon socket.
 
 Run podman on the node through its packaged `podman.socket` (DaemonSet
 `src/engines/podman-node.yaml`) and let the pod reach it over `CONTAINER_HOST`.
-No Java changes: `CONTAINER_HOST` on its own switches podman into client mode
-(`cmd/podman/registry/remote.go:33`, podman 6.1.0), so `PodmanRuntimeAdapter`
-still issues plain `podman load` / `podman pull`.
+`PodmanRuntimeAdapter` sends archives directly to
+`POST /v4.0.0/libpod/images/load`. A blank `CONTAINER_HOST` keeps the CLI path
+for local development, but the Kubernetes image contains no Podman binary.
 
 Everything that served the in-pod store is gone: `storage.conf`,
 `fuse-overlayfs`, `/dev/fuse`, `SYS_ADMIN`/`MKNOD`.
 
 ## Consequences
 
-- The import pays one extra copy of the image through the socket: with machine
-  mode off, `podman load -i` sends the archive as the request body
-  (`tunnel/images.go:222` plus `internal/localapi/utils.go:141`). `ctr images
-  import` and `portoctl layer -I` already pay exactly that, which is what makes
-  the arms comparable across engines.
-- `podman pull oci:<dir>` is resolved by the service, so `app.tempDirectory` is
-  pinned to `/var/lib/riid/work` and that path is mounted as a hostPath **under
-  the same name** inside the pod.
+- The import still pays one copy through the socket, as do `ctr images import`
+  and `portoctl layer -I`.
+- Prefix layouts are tarred and streamed through the load endpoint, so
+  `app.tempDirectory` is an `emptyDir`; no matching node hostPath is needed.
 - A node-side engine resolves names in the host netns, where there is no cluster
   resolver, so the registry address is turned into a ClusterIP
   (`riid_registry_node_host`), once per run rather than per image.

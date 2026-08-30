@@ -24,9 +24,9 @@ RIID_WAIT_TIMEOUT ?= 600
 OBSERVER_ROLLOUT_TIMEOUT ?= 600s
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
-# Образ DaemonSet должен уже содержать podman+curl+jq — podman в поде только
-# REMOTE-клиент, движок живёт на ноде (install-podman-node). local-registry и
-# профили registry — bootstrap/registry/Makefile.
+# Образ DaemonSet содержит только curl+tar: Java обращается к Podman на ноде
+# напрямую через Unix socket (install-podman-node). local-registry и профили
+# registry — bootstrap/registry/Makefile.
 PODMAN_NODE_WAIT_TIMEOUT ?= 900
 .PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests
 
@@ -223,7 +223,7 @@ wait-riid-ready:
 	  sleep $(RIID_WAIT_INTERVAL); \
 	done
 
-# Проверка, что образ контейнера riid уже содержит инструменты (без apt в кластере).
+# Проверка минимального tooling и прямого доступа к Podman API.
 verify-riid-pod-tooling:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -234,11 +234,10 @@ verify-riid-pod-tooling:
 	printf '%s\n' "$$pods" | while IFS= read -r pod; do \
 	  echo ">>> $$pod"; \
 	  kubectl -n riid-system exec -c riid "$$pod" -- sh -c \
-	    'podman --version >/dev/null \
+	    '! command -v podman >/dev/null 2>&1 \
 	      && test -S /run/podman/podman.sock \
-	      && podman info --format "{{.Host.ServiceIsRemote}}" | grep -qx true \
-	      && command -v curl >/dev/null && curl --version | head -n1 \
-	      && command -v jq >/dev/null && jq --version'; \
+	      && test "$$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)" = OK \
+	      && command -v tar >/dev/null'; \
 	done; \
 	echo "verify-riid-pod-tooling: ok"
 
@@ -389,4 +388,3 @@ rollout-riid-image-from-manifest:
 	kubectl -n riid-system get pods -l app.kubernetes.io/name=riid \
 	  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}'; \
 	$(MAKE) -C "$(SELECTEL_DIR)" verify-riid-pod-tooling
-

@@ -12,15 +12,19 @@ import java.net.UnixDomainSocketAddress;
 import java.nio.channels.Channels;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.TreeMap;
+
+import riid.core.fs.HostFilesystem;
 
 /** Minimal HTTP/1.1 client for the Podman service exposed on a Unix socket. */
 final class PodmanUnixSocketClient {
+    private static final String PODMAN_HOST_ENV = "CONTAINER_HOST";
     static final String LOAD_PATH = "/v4.0.0/libpod/images/load";
     private static final int BUFFER_SIZE = 16 * 1024;
     private static final int MAX_LINE_BYTES = 16 * 1024;
@@ -29,8 +33,17 @@ final class PodmanUnixSocketClient {
     private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
 
     private final Path socketPath;
+    private final HostFilesystem fs;
 
-    PodmanUnixSocketClient(String containerHost) {
+    static Optional<PodmanUnixSocketClient> fromEnvironment(HostFilesystem fs) {
+        String containerHost = System.getenv(PODMAN_HOST_ENV);
+        return containerHost == null || containerHost.isBlank()
+                ? Optional.empty()
+                : Optional.of(new PodmanUnixSocketClient(containerHost, fs));
+    }
+
+    PodmanUnixSocketClient(String containerHost, HostFilesystem fs) {
+        this.fs = Objects.requireNonNull(fs, "fs");
         URI uri;
         try {
             uri = URI.create(containerHost);
@@ -48,8 +61,8 @@ final class PodmanUnixSocketClient {
     }
 
     void loadArchive(Path archive) throws IOException {
-        long length = Files.size(archive);
-        try (InputStream body = Files.newInputStream(archive)) {
+        long length = fs.size(archive);
+        try (InputStream body = fs.newInputStream(archive)) {
             request("POST", LOAD_PATH, body, length);
         }
     }

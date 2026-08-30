@@ -65,6 +65,11 @@ public final class NioHostFilesystem implements HostFilesystem {
     }
 
     @Override
+    public boolean isDirectory(Path path) {
+        return Files.isDirectory(path);
+    }
+
+    @Override
     public long size(Path path) throws IOException {
         return Files.size(path);
     }

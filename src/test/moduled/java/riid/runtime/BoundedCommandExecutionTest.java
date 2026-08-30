@@ -1,7 +1,9 @@
 package riid.runtime;
 
 import java.io.File;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -92,6 +94,28 @@ class BoundedCommandExecutionTest {
         var future = BoundedCommandExecution.run(floodCommand(32, 0), 8);
         ExecutionException ex = assertThrows(ExecutionException.class, future::get);
         assertLimitExceeded(ex);
+    }
+
+    @Test
+    void stdoutConsumerReceivesProcessOutputAndStderrRemainsBounded() throws Exception {
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+
+        BoundedCommandExecution.StreamedShellResult result = BoundedCommandExecution.runWithStdoutConsumer(command(),
+                1024, input -> input.transferTo(stdout));
+
+        Assertions.assertEquals(0, result.exitCode());
+        Assertions.assertTrue(stdout.toString(StandardCharsets.UTF_8).contains("stdout-ok"));
+        Assertions.assertTrue(result.stderr().contains("stderr-ok"));
+    }
+
+    @Test
+    void stdoutConsumerFailureIsPropagated() {
+        IOException error = assertThrows(IOException.class,
+                () -> BoundedCommandExecution.runWithStdoutConsumer(command(), 1024, input -> {
+                    throw new IOException("consumer failed");
+                }));
+
+        Assertions.assertEquals("consumer failed", error.getMessage());
     }
 
     @Test
