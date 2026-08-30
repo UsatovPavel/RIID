@@ -20,6 +20,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.input.BoundedInputStream;
+
 import riid.core.fs.HostFilesystem;
 
 /** Minimal HTTP/1.1 client for the Podman service exposed on a Unix socket. */
@@ -187,13 +190,17 @@ final class PodmanUnixSocketClient {
             } catch (NumberFormatException e) {
                 throw new IOException("Invalid Podman API chunk size: " + sizeLine, e);
             }
+            if (size < 0) {
+                throw new IOException("Invalid Podman API chunk size: " + sizeLine);
+            }
             if (size == 0) {
                 while (!readLine(input).isEmpty()) {
                     // Ignore trailers.
                 }
                 return captured.toByteArray();
             }
-            copyLimited(input, captured, size);
+            int remainingCapacity = MAX_RESPONSE_BYTES - captured.size();
+            captured.writeBytes(readLimited(input, size, remainingCapacity));
             if (!readLine(input).isEmpty()) {
                 throw new IOException("Invalid Podman API chunk terminator");
             }
@@ -201,45 +208,21 @@ final class PodmanUnixSocketClient {
     }
 
     private static byte[] readFixedBody(InputStream input, long length) throws IOException {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        copyLimited(input, captured, length);
-        return captured.toByteArray();
+        return readLimited(input, length, MAX_RESPONSE_BYTES);
     }
 
     private static byte[] readUntilEof(InputStream input) throws IOException {
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        byte[] buffer = new byte[BUFFER_SIZE];
-        int read = input.read(buffer);
-        long total = 0;
-        while (read != -1) {
-            appendLimited(captured, buffer, read, total);
-            total += read;
-            read = input.read(buffer);
-        }
-        return captured.toByteArray();
-    }
-
-    private static void copyLimited(InputStream input, ByteArrayOutputStream captured, long length) throws IOException {
-        byte[] buffer = new byte[BUFFER_SIZE];
-        long remaining = length;
-        long total = 0;
-        while (remaining > 0) {
-            int read = input.read(buffer, 0, (int) Math.min(buffer.length, remaining));
-            if (read == -1) {
-                throw new EOFException("Podman API response ended before its declared body length");
-            }
-            appendLimited(captured, buffer, read, total);
-            total += read;
-            remaining -= read;
+        try (InputStream limited = BoundedInputStream.builder().setInputStream(input)
+                .setMaxCount(MAX_RESPONSE_BYTES).setPropagateClose(false).get()) {
+            return IOUtils.toByteArray(limited);
         }
     }
 
-    private static void appendLimited(ByteArrayOutputStream captured, byte[] buffer, int read, long total) {
-        if (total >= MAX_RESPONSE_BYTES) {
-            return;
-        }
-        int capturedBytes = (int) Math.min(read, MAX_RESPONSE_BYTES - total);
-        captured.write(buffer, 0, capturedBytes);
+    private static byte[] readLimited(InputStream input, long length, int maxCapturedBytes) throws IOException {
+        long capturedLength = Math.min(length, maxCapturedBytes);
+        byte[] captured = IOUtils.toByteArray(input, capturedLength);
+        IOUtils.skipFully(input, length - capturedLength);
+        return captured;
     }
 
     private static String readLine(InputStream input) throws IOException {
