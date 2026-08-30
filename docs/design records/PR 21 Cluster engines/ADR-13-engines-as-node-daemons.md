@@ -18,19 +18,27 @@ daemon socket.
 
 Run podman on the node through its packaged `podman.socket` (DaemonSet
 `src/engines/podman-node.yaml`) and let the pod reach it over `CONTAINER_HOST`.
-`PodmanRuntimeAdapter` sends archives directly to
-`POST /v4.0.0/libpod/images/load`. A blank `CONTAINER_HOST` keeps the CLI path
-for local development, but the Kubernetes image contains no Podman binary.
+For a Unix endpoint `PodmanRuntimeAdapter` uses Jetty HTTP/1.1 over
+`Transport.TCPUnix` and sends one final OCI-layout tar stream directly to
+`POST /v4.0.0/libpod/images/load`. A blank or valid non-Unix `CONTAINER_HOST`
+keeps the CLI path for local development, but the Kubernetes image contains no
+Podman binary.
 
 Everything that served the in-pod store is gone: `storage.conf`,
 `fuse-overlayfs`, `/dev/fuse`, `SYS_ADMIN`/`MKNOD`.
 
 ## Consequences
 
-- The import still pays one copy through the socket, as do `ctr images import`
+- The final import pays one copy through the socket, as do `ctr images import`
   and `portoctl layer -I`.
-- Prefix layouts are tarred and streamed through the load endpoint, so
+- Socket mode disables growing-prefix imports. Libpod first copies every load
+  request into a server-side temporary archive, so sending all accumulated
+  prefixes would turn traffic and temporary writes into O(N²). CLI fallback
+  retains its local `podman pull oci:` prefix path.
+- The final OCI layout is tarred and streamed through the load endpoint, so
   `app.tempDirectory` is an `emptyDir`; no matching node hostPath is needed.
+- Jetty owns HTTP framing, concurrent upload/response handling and the explicit
+  connection/request/response limits; RIID does not maintain an HTTP parser.
 - A node-side engine resolves names in the host netns, where there is no cluster
   resolver, so the registry address is turned into a ClusterIP
   (`riid_registry_node_host`), once per run rather than per image.

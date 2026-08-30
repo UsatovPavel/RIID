@@ -210,6 +210,10 @@ final class BoundedPipedCommandExecutor {
             if (cause instanceof IOException io) {
                 throw io;
             }
+            if (cause instanceof InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw interrupted;
+            }
             if (cause instanceof RuntimeException runtimeException) {
                 throw runtimeException;
             }

@@ -94,7 +94,17 @@ jobs:
           sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
       - name: Podman and Docker runtime integration tests (Hub pull + load)
         run: |
-          ./gradlew --no-daemon integrationTest \
+          PODMAN_SOCKET="$RUNNER_TEMP/riid-podman.sock"
+          podman system service --time=0 "unix://$PODMAN_SOCKET" >"$RUNNER_TEMP/podman-service.log" 2>&1 &
+          PODMAN_SERVICE_PID=$!
+          trap 'kill "$PODMAN_SERVICE_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            [ -S "$PODMAN_SOCKET" ] && break
+            sleep 1
+          done
+          test -S "$PODMAN_SOCKET" || (cat "$RUNNER_TEMP/podman-service.log"; exit 1)
+          test "$(curl --fail --silent --show-error --unix-socket "$PODMAN_SOCKET" http://d/_ping)" = OK
+          CONTAINER_HOST="unix://$PODMAN_SOCKET" ./gradlew --no-daemon integrationTest \
             --tests 'riid.integration.runtime_app.PodmanRuntimeAdapterIntegrationTest' \
             --tests 'riid.integration.runtime_app.DockerRuntimeAdapterIntegrationTest'
       - name: Setup minikube (driver=none)

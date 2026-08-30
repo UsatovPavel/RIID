@@ -24,7 +24,8 @@ RIID_WAIT_TIMEOUT ?= 600
 OBSERVER_ROLLOUT_TIMEOUT ?= 600s
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
-# Образ DaemonSet содержит только curl+tar: Java обращается к Podman на ноде
+# Образ DaemonSet добавляет только curl; tar приходит из Debian base image.
+# Java обращается к Podman на ноде
 # напрямую через Unix socket (install-podman-node). local-registry и профили
 # registry — bootstrap/registry/Makefile.
 PODMAN_NODE_WAIT_TIMEOUT ?= 900

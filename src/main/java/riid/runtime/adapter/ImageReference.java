@@ -1,5 +1,7 @@
 package riid.runtime.adapter;
 
+import org.jspecify.annotations.NonNull;
+
 import java.util.Objects;
 
 /**
@@ -34,7 +36,7 @@ public record ImageReference(String repository, String tag) {
     }
 
     @Override
-    public String toString() {
+    public @NonNull String toString() {
         return name();
     }
 }

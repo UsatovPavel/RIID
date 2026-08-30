@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -31,6 +32,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import riid.core.fs.HostFilesystemTestSupport;
 import riid.core.fs.NioHostFilesystem;
+import riid.core.model.manifest.Descriptor;
+import riid.core.model.manifest.Manifest;
 
 class PodmanUnixSocketClientTest {
     private static final byte[] ARCHIVE = "oci archive".getBytes(StandardCharsets.UTF_8);
@@ -48,8 +51,9 @@ class PodmanUnixSocketClientTest {
             Path archive = Path.of("/virtual/image.tar");
             fs.write(archive, ARCHIVE);
 
-            PodmanUnixSocketClient client = new PodmanUnixSocketClient(server.containerHost(), fs);
-            new PodmanRuntimeAdapter(fs, true, Optional.of(client)).importImage(archive);
+            try (PodmanUnixSocketClient client = new PodmanUnixSocketClient(server.containerHost(), fs)) {
+                new PodmanRuntimeAdapter(fs, true, Optional.of(client)).importImage(archive);
+            }
 
             Request request = server.request();
             assertEquals("POST " + PodmanUnixSocketClient.LOAD_PATH + " HTTP/1.1", request.requestLine());
@@ -64,8 +68,9 @@ class PodmanUnixSocketClientTest {
         Files.writeString(tempDir.resolve("oci-layout"), "layout");
         try (FakePodmanServer server = new FakePodmanServer(tempDir, 200, "{}")) {
             NioHostFilesystem fs = new NioHostFilesystem();
-            PodmanUnixSocketClient client = new PodmanUnixSocketClient(server.containerHost(), fs);
-            new PodmanRuntimeAdapter(fs, true, Optional.of(client)).importOciLayoutDirectory(tempDir);
+            try (PodmanUnixSocketClient client = new PodmanUnixSocketClient(server.containerHost(), fs)) {
+                new PodmanRuntimeAdapter(fs, true, Optional.of(client)).importOciLayoutDirectory(tempDir);
+            }
 
             Request request = server.request();
             assertEquals("POST " + PodmanUnixSocketClient.LOAD_PATH + " HTTP/1.1", request.requestLine());
@@ -81,9 +86,11 @@ class PodmanUnixSocketClientTest {
             Files.write(archive, ARCHIVE);
 
             NioHostFilesystem fs = new NioHostFilesystem();
-            PodmanUnixSocketClient client = new PodmanUnixSocketClient(server.containerHost(), fs);
-            IOException error = assertThrows(IOException.class,
-                    () -> new PodmanRuntimeAdapter(fs, true, Optional.of(client)).importImage(archive));
+            IOException error;
+            try (PodmanUnixSocketClient client = new PodmanUnixSocketClient(server.containerHost(), fs)) {
+                PodmanRuntimeAdapter adapter = new PodmanRuntimeAdapter(fs, true, Optional.of(client));
+                error = assertThrows(IOException.class, () -> adapter.importImage(archive));
+            }
 
             assertTrue(error.getMessage().contains("HTTP 500"), error.getMessage());
             assertTrue(error.getMessage().contains("load exploded"), error.getMessage());
@@ -91,24 +98,37 @@ class PodmanUnixSocketClientTest {
     }
 
     @Test
-    void removesImageThroughLibpodApiWithEscapedName() throws Exception {
-        try (FakePodmanServer server = new FakePodmanServer(tempDir, 200, "{}")) {
-            new PodmanUnixSocketClient(server.containerHost(), new NioHostFilesystem())
-                    .removeImage("localhost/riid-prefix:1");
-
-            Request request = server.request();
-            assertEquals("DELETE /v4.0.0/libpod/images/localhost%2Friid-prefix%3A1?force=true&ignore=true HTTP/1.1",
-                    request.requestLine());
-            assertEquals("0", request.headers().get("content-length"));
-            assertFalse(request.headers().containsKey("content-type"));
-        }
-    }
-
-    @Test
     void rejectsNonUnixContainerHost() {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> new PodmanUnixSocketClient("tcp://127.0.0.1:8080", new NioHostFilesystem()));
-        assertTrue(error.getMessage().contains("unix:///"), error.getMessage());
+        assertTrue(error.getMessage().contains("unix://"), error.getMessage());
+    }
+
+    @Test
+    void nonUnixContainerHostUsesCliFallback() {
+        assertTrue(PodmanUnixSocketClient.fromContainerHost("tcp://127.0.0.1:8080", new NioHostFilesystem()).isEmpty());
+        assertTrue(PodmanUnixSocketClient.fromContainerHost("ssh://worker/run/podman.sock", new NioHostFilesystem())
+                .isEmpty());
+    }
+
+    @Test
+    void malformedUnixContainerHostStillFailsFast() {
+        assertThrows(IllegalArgumentException.class, () -> PodmanUnixSocketClient
+                .fromContainerHost("unix://worker/run/podman.sock", new NioHostFilesystem()));
+    }
+
+    @Test
+    void socketModeStreamsOneFinalLayoutAndDisablesPrefixImport() throws Exception {
+        Manifest manifest = new Manifest(2, "application/vnd.oci.image.manifest.v1+json",
+                new Descriptor("application/vnd.oci.image.config.v1+json", "sha256:config", 1),
+                List.of(new Descriptor("application/vnd.oci.image.layer.v1.tar", "sha256:one", 1),
+                        new Descriptor("application/vnd.oci.image.layer.v1.tar", "sha256:two", 1)));
+        NioHostFilesystem fs = new NioHostFilesystem();
+        try (PodmanUnixSocketClient client = new PodmanUnixSocketClient("unix:///tmp/not-opened.sock", fs)) {
+            PodmanRuntimeAdapter adapter = new PodmanRuntimeAdapter(fs, true, Optional.of(client));
+            assertTrue(adapter.prefersOciLayoutStreamImport());
+            assertFalse(adapter.supportsIncrementalImport(manifest));
+        }
     }
 
     private record Request(String requestLine, Map<String, String> headers, byte[] body) {

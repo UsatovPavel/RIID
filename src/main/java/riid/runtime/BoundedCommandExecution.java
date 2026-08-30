@@ -333,7 +333,7 @@ public final class BoundedCommandExecution {
 
     @FunctionalInterface
     public interface InputStreamConsumer {
-        void accept(InputStream input) throws IOException;
+        void accept(InputStream input) throws IOException, InterruptedException;
     }
 
     public static final class OutputLimitExceededException extends IOException {

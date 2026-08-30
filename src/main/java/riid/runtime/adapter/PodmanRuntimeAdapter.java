@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Podman adapter. In Kubernetes it streams archives to the Libpod API over the
  * Unix socket from {@code CONTAINER_HOST}; when that variable is empty it falls
- * back to the local {@code podman} CLI. Optionally imports a growing prefix
+ * back to the local {@code podman} CLI. CLI mode can import a growing prefix
  * while the tail downloads, see {@link #supportsIncrementalImport(Manifest)}.
  */
 public class PodmanRuntimeAdapter implements RuntimeAdapter {
@@ -68,10 +68,9 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
 
     @Override
     public boolean prefersOciLayoutStreamImport() {
-        // false: `-i <path>` skips podman load's stdin-only io.Copy(tempfile, stdin)
-        // step (cmd/podman/images/load.go) entirely. ~6% faster handoff, confirmed
-        // over 4 independent fresh-Dragonfly-install A/B rounds, see bench_log.md.
-        return false;
+        // The socket endpoint only accepts a tar stream. Avoid first materializing
+        // the same OCI layout as a second archive on the client filesystem.
+        return socketClient.isPresent();
     }
 
     @Override
@@ -131,7 +130,9 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         // Nothing is re-extracted: containers/storage keys a layer by chain-id
         // (storage_dest.go:1043) and reuses one it already holds, so a prefix costs
         // only its new top layers and the final import costs almost nothing.
-        return prefixImport && manifest.layers().size() > 1;
+        // Sending every accumulated prefix through images/load would retransmit
+        // all earlier layers and make socket traffic and server temp writes O(N²).
+        return socketClient.isEmpty() && prefixImport && manifest.layers().size() > 1;
     }
 
     @Override
@@ -139,8 +140,9 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         Objects.requireNonNull(image, "image");
         Objects.requireNonNull(manifest, "manifest");
         if (!supportsIncrementalImport(manifest)) {
-            throw new IOException("Image " + image + " is not imported by prefix: prefixImport=" + prefixImport + ", "
-                    + manifest.layers().size() + " layers");
+            throw new IOException(
+                    "Image " + image + " is not imported by prefix: socketClient=" + socketClient.isPresent()
+                            + ", prefixImport=" + prefixImport + ", " + manifest.layers().size() + " layers");
         }
         return new PodmanIncrementalImport(image, manifest);
     }
@@ -204,10 +206,6 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
         }
 
         private void pull(Path layout, String image) throws IOException, InterruptedException {
-            if (socketClient.isPresent()) {
-                importOciLayoutDirectory(layout);
-                return;
-            }
             List<String> cmd = List.of(PODMAN_BIN, "pull", "-q", "oci:" + layout.toAbsolutePath() + ":" + image);
             BoundedCommandExecution.ShellResult result = runCommand(cmd);
             if (result.exitCode() != 0) {
@@ -218,16 +216,6 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
 
         private void dropPrefixImages() throws IOException, InterruptedException {
             if (prefixImages.isEmpty()) {
-                return;
-            }
-            if (socketClient.isPresent()) {
-                for (String image : prefixImages) {
-                    try {
-                        socketClient.get().removeImage(image);
-                    } catch (IOException e) {
-                        LOGGER.warn("Could not drop intermediate prefix image {}: {}", image, e.toString());
-                    }
-                }
                 return;
             }
             List<String> cmd = new ArrayList<>(List.of(PODMAN_BIN, "rmi", "-f"));
@@ -261,5 +249,12 @@ public class PodmanRuntimeAdapter implements RuntimeAdapter {
     protected BoundedCommandExecution.ShellResult runCommand(List<String> command)
             throws IOException, InterruptedException {
         return BoundedCommandExecution.run(command);
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (socketClient.isPresent()) {
+            socketClient.get().close();
+        }
     }
 }

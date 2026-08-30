@@ -35,7 +35,8 @@ _podman_node_exec() {
   shift
   node="$(kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')"
   node_pod="$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
-    --field-selector "spec.nodeName=$node" -o jsonpath='{.items[0].metadata.name}')"
+    --field-selector "spec.nodeName=$node,status.phase=Running" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   if [[ -z "$node_pod" ]]; then
     echo "no podman-node pod on node=$node for RIID pod=$riid_pod" >&2
     return 1
@@ -53,10 +54,25 @@ _podman_registries() {
 engine_preflight() {
   local pod="$1"
   riid_engine_exec "$pod" sh -ec '
-    ! command -v podman >/dev/null 2>&1
-    test "$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)" = OK
+    if command -v podman >/dev/null 2>&1; then
+      echo "podman must not be installed in the RIID container" >&2
+      exit 1
+    fi
+    if ! response="$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)"; then
+      echo "Podman API is not reachable through /run/podman/podman.sock" >&2
+      exit 1
+    fi
+    if [ "$response" != OK ]; then
+      echo "unexpected Podman _ping response: $response" >&2
+      exit 1
+    fi
   '
-  _podman_node_exec "$pod" podman info >/dev/null
+  if ! _podman_node_exec "$pod" podman info >/dev/null; then
+    echo "podman info failed on the node behind RIID pod=$pod" >&2
+    _podman_node_exec "$pod" sh -c \
+      'systemctl --no-pager --full status podman.socket podman.service; ss -lx | grep podman || true' >&2 || true
+    return 1
+  fi
 }
 
 # With no host the reference stays short: podman completes it through

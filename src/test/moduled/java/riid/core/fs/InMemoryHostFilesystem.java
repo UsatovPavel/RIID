@@ -96,6 +96,11 @@ public class InMemoryHostFilesystem implements HostFilesystem {
     }
 
     @Override
+    public boolean isDirectory(Path path) {
+        return directories.contains(normalize(path));
+    }
+
+    @Override
     public long size(Path path) throws IOException {
         return readBytes(path).length;
     }

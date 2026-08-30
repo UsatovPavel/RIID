@@ -72,4 +72,8 @@ public interface RuntimeAdapter {
         throw new UnsupportedOperationException(
                 "Runtime " + runtimeId() + " does not support incremental image import");
     }
+
+    default void close() throws IOException {
+        // Most adapters do not own resources.
+    }
 }
