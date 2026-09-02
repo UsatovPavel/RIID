@@ -2,12 +2,13 @@
 SHELL := /bin/bash
 HERE  := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: help up host identity prep cluster fixes verify recover down status
+.PHONY: help up host identity prep cluster fixes verify recover down status cold-cache
 
 help:
 	@echo "make up       - build the whole stand from powered-off VMs"
 	@echo "make recover  - VMs are off after a host reboot: bring them back"
 	@echo "make verify   - assert the stand is actually usable"
+	@echo "make cold-cache - valid cold state before an arm, ends in verify"
 	@echo "make status   - short health summary"
 	@echo "make down     - power the VMs off"
 	@echo ""
@@ -22,6 +23,7 @@ cluster:  ; @bash "$(HERE)04-cluster-init.sh"
 fixes:    ; @bash "$(HERE)05-stand-fixes.sh"
 verify:   ; @bash "$(HERE)06-verify.sh"
 recover:  ; @bash "$(HERE)recover.sh"
+cold-cache: ; @bash "$(HERE)cold-cache.sh"
 
 status:
 	@source "$(HERE)stand.env"; \
