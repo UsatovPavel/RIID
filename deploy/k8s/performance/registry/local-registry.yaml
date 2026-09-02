@@ -3,6 +3,20 @@ kind: Namespace
 metadata:
   name: registry-system
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: local-registry-data
+  namespace: registry-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # The 20-image partial dataset is ~11.5 GiB of blobs plus registry
+      # metadata; leave room for the zstd mirror of the same set.
+      storage: 30Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -30,6 +44,16 @@ spec:
             - name: http
               containerPort: 5000
               protocol: TCP
+          volumeMounts:
+            # Without this the dataset lives in the container's writable layer
+            # and every pod restart silently empties the registry, costing a
+            # ~90 minute re-mirror over the WAN before the next arm can run.
+            - name: data
+              mountPath: /var/lib/registry
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: local-registry-data
 ---
 apiVersion: v1
 kind: Service
