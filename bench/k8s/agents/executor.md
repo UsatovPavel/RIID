@@ -17,7 +17,20 @@ FOR EACH ARM, in this order: riid-podman, dfinit-podman, bare-containerd, riid-c
 4. Treat the arm as producing a result ONLY if `make` exited 0 AND the TSV's mtime changed. A failed arm leaves the previous TSV in place and it reads as a perfectly plausible new measurement. If either check fails, say so and move on — never report the file.
 5. Export logs immediately after the arm and BEFORE the next cache clear: dfdaemon, scheduler, seed-client from dragonfly-system and the RIID pods from riid-system, one directory per arm under `zOptimization/`, with a README and SHA256SUMS. The next clear destroys Dragonfly's log history. This is an acceptance criterion, not debugging output.
 
-DO NOT end your turn to wait for a long-running command. Block on it and carry on. Work the whole matrix in one go.
+DO NOT end your turn to wait for a long-running command — this has now failed three times and is the single biggest waste of budget on this task. Saying "I'll resume when the monitor notifies me" ends your turn and the work stops.
+
+The technique: keep the wait INSIDE one Bash call, so the call does not return until the thing you are waiting for is finished.
+
+```bash
+# right: one call that blocks, then reports
+./prepare-arm.sh && make -C deploy/k8s/performance riid-podman \
+  CONFIG_FILE=... EXPECTED_RIID_PODS=2 REGISTRY_TX_IFACE=enp0s8; echo "rc=$?"
+
+# right: block until a condition holds, with a bound so it cannot hang forever
+for i in $(seq 1 60); do <condition> && break; sleep 15; done
+```
+
+Do not arm a Monitor and end your turn; do not launch something with `&` and stop. If a step genuinely exceeds one Bash call's limit, run it with `nohup ... &` and then immediately, in the NEXT call, block on its completion with a bounded `until` loop. Work the whole matrix in one go.
 
 DO NOT create or destroy Selectel cloud compute. Pulling images from cr.selcloud.ru is fine. Do not power on any Porto VM.
 
