@@ -53,6 +53,47 @@ done
 # workers to NotReady with "cni plugin not initialized" a minute or two later.
 # Restarting calico-node restores the conflist; doing it unconditionally is far
 # cheaper than discovering it halfway through the next arm.
+# Dragonfly's own caches are part of the chain: /var/lib/dragonfly-run on each
+# worker plus the seed-client PVCs under /opt/local-path-provisioner. Leaving
+# them warm means a "cold" P2P arm measures a populated mesh - and they grow to
+# ~12 GB per node, which is most of what fills the disk. Deleting files under a
+# LIVE dfdaemon breaks it permanently ("No such file or directory (os error 2)"
+# on every later fetch), so the data plane is drained first and only then wiped.
+say "draining the Dragonfly data plane before clearing its caches"
+kube -n dragonfly-system scale statefulset dragonfly-seed-client --replicas=0 >/dev/null 2>&1
+kube -n dragonfly-system patch daemonset dragonfly-client --type strategic \
+  -p '{"spec":{"template":{"spec":{"nodeSelector":{"riid.drain":"true"}}}}}' >/dev/null 2>&1
+for _ in $(seq 1 30); do
+  left=$(kube -n dragonfly-system get pods -l app=dragonfly -o name 2>/dev/null \
+    | grep -cE 'seed-client|client-' || true)
+  [ "${left:-0}" -eq 0 ] && break
+  sleep 10
+done
+say "  data plane drained (${left:-?} pods left)"
+
+# Deleting these files under a live dfdaemon corrupts it permanently, and a
+# corrupted mesh silently falls back to the registry - which looks like a valid
+# arm. A warm cache only costs accuracy on this run; a corrupted one costs the
+# whole stand, so an incomplete drain means skip, never "clear anyway".
+if [ "${left:-1}" -ne 0 ]; then
+  say "  WARNING: data plane did not fully drain - skipping the Dragonfly cache"
+  say "  wipe. This arm will run against a WARM Dragonfly cache; treat its P2P"
+  say "  numbers as unproven and re-run once the drain succeeds."
+else
+  i=0
+  for alias in $STAND_SSH; do
+    i=$((i+1)); [ "$i" = 1 ] && continue
+    node_sudo "$alias" "rm -rf /var/lib/dragonfly-run/*"
+    node_sudo "$alias" "sh -c 'rm -rf /opt/local-path-provisioner/*dragonfly-seed-client*/* 2>/dev/null'"
+    say "  $alias dragonfly caches cleared"
+  done
+fi
+
+say "bringing the Dragonfly data plane back"
+kube -n dragonfly-system patch daemonset dragonfly-client --type json \
+  -p '[{"op":"remove","path":"/spec/template/spec/nodeSelector/riid.drain"}]' >/dev/null 2>&1
+kube -n dragonfly-system scale statefulset dragonfly-seed-client --replicas=3 >/dev/null 2>&1
+
 say "restoring CNI (calico-node rollout)"
 kube -n kube-system rollout restart daemonset/calico-node >/dev/null 2>&1
 kube -n kube-system rollout status daemonset/calico-node --timeout=10m 2>&1 | tail -1
