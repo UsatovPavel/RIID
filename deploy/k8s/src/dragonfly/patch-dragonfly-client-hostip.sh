@@ -48,9 +48,21 @@ fi
 
 # Reuse whatever args Helm rendered (log-level / --console) instead of
 # hardcoding them, so a scripts/values.yaml change doesn't need a matching
-# edit here.
-mapfile -t ORIG_ARGS < <(kubectl -n "$NS" get daemonset "$DS" \
-  -o jsonpath='{.spec.template.spec.containers[0].args[*]}' | tr ' ' '\n')
+# edit here. On a re-run the live args are OUR OWN wrapper, not Helm's, so
+# reading them again would nest the wrapper inside itself once per apply and
+# eventually hand dfdaemon the wrapper's shell words as flags ("unexpected
+# argument 'set'"). Remember the real ones in an annotation the first time.
+ARGS_ANNOTATION="riid-hostip-original-args"
+SAVED_ARGS="$(kubectl -n "$NS" get daemonset "$DS" \
+  -o jsonpath="{.metadata.annotations['${ARGS_ANNOTATION}']}" 2>/dev/null || true)"
+if [ -n "$SAVED_ARGS" ]; then
+  mapfile -t ORIG_ARGS < <(printf '%s' "$SAVED_ARGS" | tr ' ' '\n')
+else
+  mapfile -t ORIG_ARGS < <(kubectl -n "$NS" get daemonset "$DS" \
+    -o jsonpath='{.spec.template.spec.containers[0].args[*]}' | tr ' ' '\n')
+  kubectl -n "$NS" annotate daemonset "$DS" \
+    "${ARGS_ANNOTATION}=${ORIG_ARGS[*]}" --overwrite >/dev/null
+fi
 EXEC_ARGS=""
 for a in "${ORIG_ARGS[@]}"; do
   [ -n "$a" ] || continue
