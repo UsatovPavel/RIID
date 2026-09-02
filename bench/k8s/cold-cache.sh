@@ -15,6 +15,29 @@ for alias in $STAND_SSH; do
   say "  $(node_run "$alias" 'df -h / | tail -1')"
 done
 
+# kubelet's DiskPressure condition has been observed stuck True while df shows
+# tens of GB free. It keeps evicting RIID pods mid-arm, which shows up as a
+# whole arm of fast non-zero exits rather than as an obvious infrastructure
+# fault. Restarting kubelet forces it to re-evaluate; only do it when the disk
+# really is fine, so a genuine full disk is still reported rather than masked.
+say "checking for a stuck DiskPressure condition"
+i=0
+for alias in $STAND_SSH; do
+  i=$((i+1))
+  node="$(stand_field "$STAND_NODES" "$i")"
+  cond="$(kube get node "$node" -o jsonpath='{.status.conditions[?(@.type=="DiskPressure")].status}' 2>/dev/null)"
+  [ "$cond" = "True" ] || continue
+  avail_gb="$(node_run "$alias" "df --output=avail -BG / | tail -1 | tr -dc '0-9'")"
+  if [ "${avail_gb:-0}" -ge 20 ]; then
+    say "  $node: DiskPressure=True with ${avail_gb}GB free - stuck, restarting kubelet"
+    node_sudo "$alias" "systemctl restart kubelet"
+    sleep 30
+    say "  $node: now DiskPressure=$(kube get node "$node" -o jsonpath='{.status.conditions[?(@.type=="DiskPressure")].status}' 2>/dev/null)"
+  else
+    say "  $node: DiskPressure=True with only ${avail_gb}GB free - genuinely low, not masking it"
+  fi
+done
+
 # podman's prune has repeatedly taken /etc/cni/net.d with it, which drops the
 # workers to NotReady with "cni plugin not initialized" a minute or two later.
 # Restarting calico-node restores the conflist; doing it unconditionally is far
