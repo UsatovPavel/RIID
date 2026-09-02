@@ -24,6 +24,13 @@ VALUES="${REPO_ROOT}/scripts/values.yaml"
 RENDER_VALUES="${REPO_ROOT}/scripts/render-values-from-infra.sh"
 SELECTEL_HELM_FRAGMENT="${REPO_ROOT}/deploy/k8s/.resolved/registry/helm/dragonfly-values-selectel.yaml"
 
+# Pin the chart to the same version CI uses. Single source of truth is
+# scripts/Makefile; the literal below is only a fallback if that parse fails.
+# An unpinned install resolves to the newest upstream chart, which defaults
+# manager.enable to false and raises resource requests past a small stand.
+DRAGONFLY_CHART_VERSION="${DRAGONFLY_CHART_VERSION:-$(sed -n 's/^DRAGONFLY_CHART_VERSION[[:space:]]*:=[[:space:]]*//p' "${REPO_ROOT}/scripts/Makefile" 2>/dev/null | head -1)}"
+DRAGONFLY_CHART_VERSION="${DRAGONFLY_CHART_VERSION:-1.6.26}"
+
 TMP_VALUES="$(mktemp)"
 TMP_MERGED=""
 TMP_PROVIDER_MERGED=""
@@ -109,13 +116,23 @@ echo ">>> Helm repo dragonfly"
 helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null || true
 helm repo update
 
-echo ">>> helm upgrade --install dragonfly (namespace dragonfly-system)"
+echo ">>> helm upgrade --install dragonfly (namespace dragonfly-system), chart ${DRAGONFLY_CHART_VERSION}"
 helm upgrade --install dragonfly dragonfly/dragonfly \
+  --version "${DRAGONFLY_CHART_VERSION}" \
   --namespace dragonfly-system \
   --create-namespace \
   --wait \
   --timeout 15m \
   -f "${HELM_VALUES}"
+
+# AGENT-99: dragonfly-client (hostNetwork DaemonSet) advertises whatever IP
+# its own default-route autodetection picks; on stands where every node
+# clones the same NAT adapter (VirtualBox), that is the same unreachable
+# address on every node and P2P silently degrades to 100% registry fallback.
+# See patch-dragonfly-client-hostip.sh for the full diagnosis. Re-applied on
+# every install/upgrade, including the dfinit-enable/disable path, because
+# each helm upgrade re-renders the DaemonSet from the chart and undoes it.
+bash "${SCRIPT_DIR}/patch-dragonfly-client-hostip.sh"
 
 echo ">>> Pods:"
 kubectl get pods -n dragonfly-system -o wide
