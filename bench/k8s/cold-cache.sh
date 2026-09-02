@@ -12,6 +12,17 @@ for alias in $STAND_SSH; do
   node_sudo "$alias" "podman system prune -af --volumes >/dev/null 2>&1"
   node_sudo "$alias" "podman rmi -af >/dev/null 2>&1"
   node_sudo "$alias" "rm -rf /var/lib/riid/work/*"
+
+  # containerd's store is NOT covered by podman's prune, and a containerd arm
+  # leaves ~20 GB behind. Two arms filled a 79 GB disk to 86% and kubelet then
+  # evicted RIID mid-run, which surfaces as "pods not found" rather than as a
+  # disk problem. Only the bench namespace is touched: k8s.io holds the
+  # cluster's own images and removing those would break the node. The content
+  # store is shared, so unreferenced content must be released too or the next
+  # "cold" pull is warm.
+  node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images ls -q 2>/dev/null | while read -r img; do [ -n \"\$img\" ] && printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images rm --sync \"\$img\" >/dev/null 2>&1; done" >/dev/null 2>&1
+  node_sudo "$alias" "ctr -n riid-bench content prune references >/dev/null 2>&1"
+  say "  containerd bench images left: $(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images ls -q 2>/dev/null | wc -l")"
   say "  $(node_run "$alias" 'df -h / | tail -1')"
 done
 
