@@ -68,8 +68,19 @@ done
 # on every later fetch), so the data plane is drained first and only then wiped.
 say "draining the Dragonfly data plane before clearing its caches"
 kube -n dragonfly-system scale statefulset dragonfly-seed-client --replicas=0 >/dev/null 2>&1
-kube -n dragonfly-system patch daemonset dragonfly-client --type strategic \
-  -p '{"spec":{"template":{"spec":{"nodeSelector":{"riid.drain":"true"}}}}}' >/dev/null 2>&1
+# Verify the DaemonSet actually went to zero rather than assuming the patch
+# landed: hiding its output once cost several runs, each silently skipping the
+# cache wipe and quietly measuring a warm mesh.
+for attempt in $(seq 1 12); do
+  want=$(kube -n dragonfly-system get ds dragonfly-client \
+    -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
+  [ "${want:-1}" = "0" ] && { say "  client DaemonSet drained to 0"; break; }
+  kube -n dragonfly-system patch daemonset dragonfly-client --type strategic \
+    -p '{"spec":{"template":{"spec":{"nodeSelector":{"riid.drain":"true"}}}}}' >/dev/null 2>&1
+  sleep 10
+done
+[ "${want:-1}" = "0" ] || say "  WARNING: client DaemonSet still wants ${want:-?} pods"
+
 for attempt in $(seq 1 60); do
   left=$(kube -n dragonfly-system get pods -l app=dragonfly -o name 2>/dev/null \
     | grep -cE 'seed-client|client-' || true)
