@@ -1,0 +1,18 @@
+[Unit]
+# Runs the AGENT-99 arm queue independently of any Claude session or terminal.
+# Install:  make -C bench/k8s queue-install
+Description=RIID AGENT-99 benchmark arm queue
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/edu/RIID
+ExecStart=%h/edu/RIID/bench/k8s/arm-queue.sh
+# One arm failing must not stop the queue; the script decides what to retry.
+Restart=on-failure
+RestartSec=120
+StandardOutput=append:%h/edu/RIID/bench/k8s/queue-state/queue.log
+StandardError=append:%h/edu/RIID/bench/k8s/queue-state/queue.log
+
+[Install]
+WantedBy=default.target

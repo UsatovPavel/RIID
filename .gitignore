@@ -60,7 +60,9 @@ deploy/k8s/.resolved/
 deploy/k8s/bootstrap/**.tsv
 deploy/k8s/providers/cluster/**/serverConfig.yaml
 deploy/k8s/**/output/
-deploy/k8s/performance/input/
+deploy/k8s/performance/input/*
+!deploy/k8s/performance/input/filter.tsv
+!deploy/k8s/performance/input/write_filtered_dataset_a.py
 
 ## Selectel artifacts###
 deploy/k8s/Selectel/*
@@ -78,3 +80,4 @@ bench/_error.txt
 internalDocs/
 zOptimization/
 bench/log/changelogEnvVPN.md
+bench/k8s/queue-state/
