@@ -117,6 +117,22 @@ run_one() {
   n="$(registry_count)"; say "  registry holds ${n:-0}/20 repositories"
   [ "${n:-0}" = "20" ] || { say "$arm: registry incomplete - skipping"; return 1; }
 
+  # A baseline arm must see no mirror, and dfinit re-writes the node's
+  # registries.conf from its init container every time a dragonfly-client pod
+  # starts - which cold-cache does before every arm. So the pristine copy has to
+  # go back HERE, after cold-cache and immediately before the pull loop, not
+  # after whichever arm happened to be dfinit. Otherwise engine_no_mirror_check
+  # correctly aborts all 20 images in ~3s and the arm burns every retry.
+  case "$arm" in bare-*)
+    i=0
+    for alias in $STAND_SSH; do
+      i=$((i+1)); [ "$i" = 1 ] && continue
+      node_sudo "$alias" "sh -c 'test -f /etc/containers/registries.conf.riid-baseline && cp /etc/containers/registries.conf.riid-baseline /etc/containers/registries.conf'"
+    done
+    say "  restored the pristine registries.conf for a baseline arm"
+    ;;
+  esac
+
   case "$arm" in dfinit-*) make -C deploy/k8s/bootstrap dfinit-enable \
       ENGINE="${arm#dfinit-}" $CF > "$STATE/$arm.dfinit.log" 2>&1;; esac
 
