@@ -20,9 +20,16 @@ for alias in $STAND_SSH; do
   # cluster's own images and removing those would break the node. The content
   # store is shared, so unreferenced content must be released too or the next
   # "cold" pull is warm.
-  node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images ls -q 2>/dev/null | while read -r img; do [ -n \"\$img\" ] && printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images rm --sync \"\$img\" >/dev/null 2>&1; done" >/dev/null 2>&1
-  node_sudo "$alias" "ctr -n riid-bench content prune references >/dev/null 2>&1"
-  say "  containerd bench images left: $(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images ls -q 2>/dev/null | wc -l")"
+  # Two namespaces, not one: the bench's own containerd backend pulls into
+  # riid-bench, but RIID's ContainerdRuntimeAdapter uses containerd's default
+  # namespace ("default"). Clearing only riid-bench left 18-19 images and ~40 GB
+  # behind after every riid-containerd arm. k8s.io is the cluster's own images
+  # and must never be touched.
+  for ns in riid-bench default; do
+    node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n $ns images ls -q 2>/dev/null | while read -r img; do [ -n \"\$img\" ] && printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n $ns images rm --sync \"\$img\" >/dev/null 2>&1; done" >/dev/null 2>&1
+    node_sudo "$alias" "ctr -n $ns content prune references >/dev/null 2>&1"
+  done
+  say "  containerd images left: riid-bench=$(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images ls -q 2>/dev/null | wc -l") default=$(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n default images ls -q 2>/dev/null | wc -l")"
   say "  $(node_run "$alias" 'df -h / | tail -1')"
 done
 
@@ -63,10 +70,18 @@ say "draining the Dragonfly data plane before clearing its caches"
 kube -n dragonfly-system scale statefulset dragonfly-seed-client --replicas=0 >/dev/null 2>&1
 kube -n dragonfly-system patch daemonset dragonfly-client --type strategic \
   -p '{"spec":{"template":{"spec":{"nodeSelector":{"riid.drain":"true"}}}}}' >/dev/null 2>&1
-for _ in $(seq 1 30); do
+for attempt in $(seq 1 60); do
   left=$(kube -n dragonfly-system get pods -l app=dragonfly -o name 2>/dev/null \
     | grep -cE 'seed-client|client-' || true)
   [ "${left:-0}" -eq 0 ] && break
+  # Seed-client pods own PVCs and can sit in Terminating for a long time; past
+  # the halfway mark, stop waiting politely and delete them outright, otherwise
+  # the drain never finishes and the cache wipe is skipped every run.
+  if [ "$attempt" -eq 30 ]; then
+    say "  drain still has ${left} pod(s) after 5m - forcing deletion"
+    kube -n dragonfly-system delete pods -l app=dragonfly --field-selector=status.phase!=Succeeded \
+      --grace-period=30 --wait=false >/dev/null 2>&1
+  fi
   sleep 10
 done
 say "  data plane drained (${left:-?} pods left)"
