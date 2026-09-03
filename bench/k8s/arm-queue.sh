@@ -74,7 +74,21 @@ run_one() {
     > "$STATE/$arm.run.log" 2>&1
   rc=$?
   export_logs "$arm" "$log"
-  case "$arm" in dfinit-*) make -C deploy/k8s/bootstrap dfinit-disable $CF >/dev/null 2>&1;; esac
+  case "$arm" in dfinit-*)
+    make -C deploy/k8s/bootstrap dfinit-disable $CF >/dev/null 2>&1
+    # dfinit-disable stops the mirror going forward but leaves the node's
+    # registries.conf rewritten. A later bare-* arm then refuses to run at all
+    # ("baseline arm is contaminated"), which is correct - it would otherwise
+    # measure a baseline that quietly pulls through the mirror. Put the
+    # pristine copy back so the next baseline is honest.
+    i=0
+    for alias in $STAND_SSH; do
+      i=$((i+1)); [ "$i" = 1 ] && continue
+      node_sudo "$alias" "sh -c 'test -f /etc/containers/registries.conf.riid-baseline && cp /etc/containers/registries.conf.riid-baseline /etc/containers/registries.conf'"
+    done
+    say "  restored the pristine registries.conf on the workers"
+    ;;
+  esac
 
   after=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
   if [ "$rc" -ne 0 ] || [ "$after" = "$before" ]; then
