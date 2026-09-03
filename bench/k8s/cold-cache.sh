@@ -109,7 +109,13 @@ else
   i=0
   for alias in $STAND_SSH; do
     i=$((i+1)); [ "$i" = 1 ] && continue
-    node_sudo "$alias" "rm -rf /var/lib/dragonfly-run/*"
+    # dfdaemon keeps its content under /var/run/dragonfly/data and its socket
+    # at /var/run/dragonfly/dfdaemon.sock. Wipe ONLY the data: deleting the
+    # socket leaves RIID unable to reach dfdaemon at all, and RIID's fallback to
+    # the registry is silent - the arm still completes, having measured nothing
+    # to do with P2P. (/var/lib/dragonfly-run is not dfdaemon's directory; a
+    # live DaemonSet had drifted to it, which is why p2p=0 on every earlier arm.)
+    node_sudo "$alias" "sh -c 'rm -rf /var/run/dragonfly/data/* 2>/dev/null'"
     node_sudo "$alias" "sh -c 'rm -rf /opt/local-path-provisioner/*dragonfly-seed-client*/* 2>/dev/null'"
     say "  $alias dragonfly caches cleared"
   done

@@ -32,6 +32,14 @@ for alias in $STAND_SSH; do
   chk $r "$alias /run/portod.socket is a socket (RIID DaemonSet asserts it)"
 done
 
+say "P2P socket reachable from RIID"
+i=0
+for alias in $STAND_SSH; do
+  i=$((i+1)); [ "$i" = 1 ] && continue
+  node_run "$alias" "test -S /var/run/dragonfly/dfdaemon.sock" && r=0 || r=1
+  chk $r "$alias has dfdaemon.sock (RIID falls back to the registry without it, silently)"
+done
+
 say "disk headroom (dataset needs ~20 GB unpacked, kubelet reserves ~6.3 GB)"
 i=0
 for alias in $STAND_SSH; do
