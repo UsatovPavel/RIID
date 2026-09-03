@@ -18,7 +18,12 @@ STATE="${STAND_DIR}/queue-state"
 mkdir -p "$STATE"
 cd "$REPO" || die "repo not found"
 
-ARMS="${ARMS:-riid-podman dfinit-podman bare-podman riid-containerd dfinit-containerd bare-containerd}"
+# gzip phase. riid-podman/dfinit-podman/bare-containerd are already measured.
+# NOTE: a podman prefix arm is impossible here - PodmanRuntimeAdapter returns
+# socketClient.isEmpty() && prefixImport, and the stand runs podman over its
+# socket, so prefix is declined whatever the config says. containerd has no
+# such restriction, so the prefix arm is measured there.
+ARMS="${ARMS:-bare-podman riid-containerd dfinit-containerd riid-podman-prefix riid-containerd-prefix}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
 
 attempts_of() { cat "$STATE/$1.attempts" 2>/dev/null || echo 0; }
@@ -30,6 +35,41 @@ registry_count() {
   pod=$(kube -n registry-system get pod -l app.kubernetes.io/name=local-registry -o name 2>/dev/null | head -1)
   kube -n registry-system exec "${pod#pod/}" -- sh -c \
     'find /var/lib/registry/docker/registry/v2/repositories -type d -name _manifests 2>/dev/null | wc -l' 2>/dev/null | tr -dc '0-9'
+}
+
+# prefixImport lives in RIID's own config; flipping it needs a DaemonSet restart.
+set_prefix_import() {
+  local want="$1" cfg
+  cfg=$(kube -n riid-system get cm riid-config -o jsonpath='{.data.config\.yaml}' 2>/dev/null) || return 1
+  printf '%s\n' "$cfg" | grep -q '^runtime:' \
+    && cfg=$(printf '%s\n' "$cfg" | sed -E "s/^  prefixImport:.*/  prefixImport: ${want}/") \
+    || cfg=$(printf '%s\nruntime:\n  prefixImport: %s\n' "$cfg" "$want")
+  printf '%s\n' "$cfg" | grep -q "prefixImport: ${want}" || return 1
+  kube -n riid-system create cm riid-config --from-literal=config.yaml="$cfg" \
+    --dry-run=client -o yaml | kube apply -f - >/dev/null 2>&1 || return 1
+  kube -n riid-system rollout restart daemonset/riid >/dev/null 2>&1
+  kube -n riid-system rollout status daemonset/riid --timeout=8m >/dev/null 2>&1
+  say "  prefixImport=${want}"
+}
+
+# A podman prefix arm needs the CLI path: PodmanRuntimeAdapter declines
+# incremental import whenever it talks to the socket (images/load takes a whole
+# archive, so growing prefixes would be O(N^2) on the wire). A blank
+# CONTAINER_HOST selects the CLI fallback - and the RIID image ships no podman,
+# so the node's own binary is mounted in, exactly as ctr is.
+set_podman_cli_mode() {
+  local want="$1"
+  if [ "$want" = yes ]; then
+    kube -n riid-system patch daemonset riid --type strategic -p '{"spec":{"template":{"spec":{
+      "containers":[{"name":"riid","env":[{"name":"CONTAINER_HOST","value":""}],
+        "volumeMounts":[{"name":"podman-bin","mountPath":"/usr/local/bin/podman","readOnly":true}]}],
+      "volumes":[{"name":"podman-bin","hostPath":{"path":"/usr/bin/podman","type":"File"}}]}}}}' >/dev/null 2>&1
+  else
+    kube -n riid-system patch daemonset riid --type strategic -p '{"spec":{"template":{"spec":{
+      "containers":[{"name":"riid","env":[{"name":"CONTAINER_HOST","value":"unix:///run/podman/podman.sock"}]}]}}}}' >/dev/null 2>&1
+  fi
+  kube -n riid-system rollout status daemonset/riid --timeout=8m >/dev/null 2>&1
+  say "  podman CLI mode=${want}"
 }
 
 export_logs() {
@@ -80,10 +120,24 @@ run_one() {
   case "$arm" in dfinit-*) make -C deploy/k8s/bootstrap dfinit-enable \
       ENGINE="${arm#dfinit-}" $CF > "$STATE/$arm.dfinit.log" 2>&1;; esac
 
+  # The prefix arm is the same engine arm with runtime.prefixImport flipped on;
+  # the flag lives in RIID's config, not in a make target.
+  local base="$arm" prefix=no
+  case "$arm" in *-prefix) base="${arm%-prefix}"; prefix=yes;; esac
+  if [ "$prefix" = yes ]; then
+    set_prefix_import true || { say "$arm: could not enable prefixImport"; return 1; }
+    case "$base" in riid-podman) set_podman_cli_mode yes;; esac
+  fi
+
+  tsv="$PERF/output/${base}.tsv"
   before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
-  make -C "$PERF" "$arm" $CF EXPECTED_RIID_PODS=2 REGISTRY_TX_IFACE="$STAND_CLUSTER_NIC" \
+  make -C "$PERF" "$base" $CF EXPECTED_RIID_PODS=2 REGISTRY_TX_IFACE="$STAND_CLUSTER_NIC" \
     > "$STATE/$arm.run.log" 2>&1
   rc=$?
+  if [ "$prefix" = yes ]; then
+    set_prefix_import false
+    case "$base" in riid-podman) set_podman_cli_mode no;; esac
+  fi
   export_logs "$arm" "$log"
   case "$arm" in dfinit-*)
     make -C deploy/k8s/bootstrap dfinit-disable $CF >/dev/null 2>&1
