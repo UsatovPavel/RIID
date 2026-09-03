@@ -42,7 +42,18 @@ export_logs() {
   for p in $(kube -n dragonfly-system get pods -l app=dragonfly,component=seed-client -o name 2>/dev/null); do
     kube -n dragonfly-system logs "${p#pod/}" -c seed-client --tail=1000000 --timestamps > "$out/seed/${p#pod/}.log" 2>/dev/null; done
   for p in $(kube -n riid-system get pods -l app.kubernetes.io/name=riid -o name 2>/dev/null); do
-    kube -n riid-system logs "${p#pod/}" -c riid --tail=1000000 --timestamps > "$out/riid/${p#pod/}.log" 2>/dev/null; done
+    kube -n riid-system logs "${p#pod/}" -c riid --tail=1000000 --timestamps > "$out/riid/${p#pod/}.log" 2>/dev/null
+    # A pod that died mid-arm is replaced, and the export then captures the
+    # fresh pod's empty log while the evidence of why it died is gone. Keep the
+    # previous container's output and the termination reason as well.
+    kube -n riid-system logs "${p#pod/}" -c riid --previous --tail=1000000 --timestamps \
+      > "$out/riid/${p#pod/}.previous.log" 2>/dev/null
+    [ -s "$out/riid/${p#pod/}.previous.log" ] || rm -f "$out/riid/${p#pod/}.previous.log"
+    kube -n riid-system describe pod "${p#pod/}" > "$out/riid/${p#pod/}.describe.txt" 2>/dev/null
+  done
+  # Events explain an eviction or OOM kill that no container log will show.
+  kube -n riid-system get events --sort-by=.lastTimestamp > "$out/riid/events.txt" 2>/dev/null
+  kube get nodes -o wide > "$out/riid/nodes.txt" 2>/dev/null
   { echo "# $arm"; echo "captured: $(date -Is)"; echo;
     find "$out" -type f -name '*.log' -printf '%p %s bytes\n' | sort; } > "$out/README.md"
   ( cd "$out" && find . -type f -name '*.log' -exec sha256sum {} + > SHA256SUMS 2>/dev/null )
