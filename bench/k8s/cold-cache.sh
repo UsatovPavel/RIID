@@ -5,26 +5,6 @@
 set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-# CNI comes first. Everything below manipulates workloads, and on a NotReady
-# node a drain cannot finish: pods sit Terminating for the whole timeout, the
-# cache wipe is skipped, and the arm dies on a missing socket - with the CNI
-# repair still queued behind the drain that its absence had just broken.
-# podman's prune keeps deleting /etc/cni/net.d/10-calico.conflist, and the
-# workers drop to NotReady a minute or two later. A finished rollout is NOT
-# proof the file came back - it has come back missing often enough to cost
-# several arms - so verify the file itself and retry.
-say "restoring CNI (calico-node rollout)"
-for attempt in 1 2 3; do
-  kube -n kube-system rollout restart daemonset/calico-node >/dev/null 2>&1
-  kube -n kube-system rollout status daemonset/calico-node --timeout=10m >/dev/null 2>&1
-  missing=0
-  for alias in $STAND_SSH; do
-    node_run "$alias" "test -f /etc/cni/net.d/10-calico.conflist" || missing=$((missing+1))
-  done
-  [ "$missing" -eq 0 ] && { say "  calico conflist present on every node"; break; }
-  say "  conflist still missing on ${missing} node(s) after rollout ${attempt}/3"
-  sleep 30
-done
 
 i=0
 for alias in $STAND_SSH; do
@@ -59,6 +39,29 @@ done
 # whole arm of fast non-zero exits rather than as an obvious infrastructure
 # fault. Restarting kubelet forces it to re-evaluate; only do it when the disk
 # really is fine, so a genuine full disk is still reported rather than masked.
+# CNI repair goes AFTER the purge and BEFORE anything touches workloads.
+# `podman system prune` deletes /etc/cni/net.d/10-calico.conflist about two
+# minutes after it runs, so a check placed before it passes and the nodes go
+# NotReady anyway; and on a NotReady node the Dragonfly drain cannot finish,
+# so the cache wipe is skipped and the arm measures a warm mesh.
+sleep 120   # let the prune's delayed damage surface before repairing it
+# podman's prune keeps deleting /etc/cni/net.d/10-calico.conflist, and the
+# workers drop to NotReady a minute or two later. A finished rollout is NOT
+# proof the file came back - it has come back missing often enough to cost
+# several arms - so verify the file itself and retry.
+say "restoring CNI (calico-node rollout)"
+for attempt in 1 2 3; do
+  kube -n kube-system rollout restart daemonset/calico-node >/dev/null 2>&1
+  kube -n kube-system rollout status daemonset/calico-node --timeout=10m >/dev/null 2>&1
+  missing=0
+  for alias in $STAND_SSH; do
+    node_run "$alias" "test -f /etc/cni/net.d/10-calico.conflist" || missing=$((missing+1))
+  done
+  [ "$missing" -eq 0 ] && { say "  calico conflist present on every node"; break; }
+  say "  conflist still missing on ${missing} node(s) after rollout ${attempt}/3"
+  sleep 30
+done
+
 say "checking for a stuck DiskPressure condition"
 i=0
 for alias in $STAND_SSH; do
@@ -112,7 +115,7 @@ for attempt in $(seq 1 60); do
   if [ "$attempt" -eq 30 ]; then
     say "  drain still has ${left} pod(s) after 5m - forcing deletion"
     kube -n dragonfly-system delete pods -l app=dragonfly --field-selector=status.phase!=Succeeded \
-      --grace-period=30 --wait=false >/dev/null 2>&1
+      --grace-period=0 --force --wait=false >/dev/null 2>&1
   fi
   sleep 10
 done
