@@ -36,8 +36,14 @@ say "P2P socket reachable from RIID"
 i=0
 for alias in $STAND_SSH; do
   i=$((i+1)); [ "$i" = 1 ] && continue
-  node_run "$alias" "test -S /var/run/dragonfly/dfdaemon.sock" && r=0 || r=1
-  chk $r "$alias has dfdaemon.sock (RIID falls back to the registry without it, silently)"
+  # Read the path from the live DaemonSet rather than hardcoding it: the socket
+  # dir was moved off tmpfs (/run is 873 MB of RAM, far too small for an 11 GiB
+  # dataset) and a hardcoded check would then pass or fail for the wrong reason.
+  SOCK_DIR="$(kube -n dragonfly-system get ds dragonfly-client \
+    -o jsonpath='{.spec.template.spec.volumes[?(@.name=="socket-dir")].hostPath.path}' 2>/dev/null)"
+  SOCK_DIR="${SOCK_DIR:-/var/run/dragonfly}"
+  node_run "$alias" "test -S ${SOCK_DIR}/dfdaemon.sock" && r=0 || r=1
+  chk $r "$alias has ${SOCK_DIR}/dfdaemon.sock (RIID falls back to the registry without it, silently)"
 done
 
 say "disk headroom (dataset needs ~20 GB unpacked, kubelet reserves ~6.3 GB)"

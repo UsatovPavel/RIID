@@ -88,6 +88,22 @@ PATCH=$(cat <<JSON
 JSON
 )
 
+# The chart mounts the socket dir from the node's /var/run/dragonfly, and in the
+# container /var/run is a symlink to /run - a tmpfs sized ~873 MB on these nodes.
+# dfdaemon's storage.dir lives under it, so the P2P cache is capped by RAM: it
+# fills, evicts, and peers have nothing to serve (and once /run is full, no
+# container on the node can start at all - "no space left on device" while
+# creating a cgroup). Move it onto real disk. RIID must mount the same host path
+# or it will not find the socket.
+SOCK_HOSTPATH="${SOCK_HOSTPATH:-/var/lib/dragonfly-run}"
+SOCK_IDX="$(kubectl -n "$NS" get ds "$DS" -o json \
+  | python3 -c 'import json,sys; v=json.load(sys.stdin)["spec"]["template"]["spec"]["volumes"]; print(next((i for i,x in enumerate(v) if x["name"]=="socket-dir"), -1))')"
+if [ "${SOCK_IDX}" != "-1" ]; then
+  echo ">>> patch-dragonfly-client-hostip: socket dir -> ${SOCK_HOSTPATH} (off tmpfs)"
+  kubectl -n "$NS" patch daemonset "$DS" --type json \
+    -p "[{\"op\":\"replace\",\"path\":\"/spec/template/spec/volumes/${SOCK_IDX}/hostPath/path\",\"value\":\"${SOCK_HOSTPATH}\"}]" >/dev/null
+fi
+
 echo ">>> patch-dragonfly-client-hostip: pinning host.ip to status.hostIP on $DS/$CONTAINER"
 kubectl -n "$NS" patch daemonset "$DS" --type strategic -p "$PATCH"
 kubectl -n "$NS" rollout status daemonset "$DS" --timeout=5m

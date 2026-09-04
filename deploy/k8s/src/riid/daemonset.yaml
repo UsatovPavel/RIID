@@ -133,7 +133,11 @@ spec:
             optional: true
         - name: dragonfly-sock
           hostPath:
-            path: /var/run/dragonfly
+            # Must match the socket dir the dragonfly-client DaemonSet mounts
+            # (see patch-dragonfly-client-hostip.sh). The chart default puts it
+            # under /run, which is tmpfs - the P2P cache is then capped by RAM
+            # and a full /run stops every container on the node from starting.
+            path: /var/lib/dragonfly-run
             type: DirectoryOrCreate
         # Must be the SAME host directory dfdaemon actually writes finished
         # blobs to. dragonfly-client's only volume for this tree is hostPath
@@ -148,7 +152,7 @@ spec:
         # RIID and dfdaemon were reading two different directories.
         - name: dragonfly-output
           hostPath:
-            path: /var/run/dragonfly/output
+            path: /var/lib/dragonfly-run/output
             type: DirectoryOrCreate
         - name: podman-sock
           hostPath:
