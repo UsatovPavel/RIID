@@ -112,6 +112,38 @@ if ! kubectl cluster-info &>/dev/null; then
   exit 1
 fi
 
+# dfinit rewrites one engine's registry config. Which engine is a per-arm
+# choice (make dfinit-enable ENGINE=...), but the chart values can only hold one
+# answer, and dfinit.enable is unconditional - so a containerd block left in
+# values.yaml is live for EVERY arm, including podman ones. That is not
+# hypothetical: it crashlooped the whole dragonfly-client DaemonSet with
+# "failed to run container runtime: Is a directory (os error 21)" and took P2P
+# down for a plain riid-containerd arm. Render the handler from the requested
+# engine instead, and null the other one.
+DFINIT_ENGINE="${RIID_DFINIT_ENGINE:-}"
+if [ "$DFINIT_ENGINE" = "containerd" ]; then
+  DFINIT_OVERRIDE="$(mktemp)"
+  cleanup_dfinit_override() { rm -f "$DFINIT_OVERRIDE"; }
+  trap cleanup_dfinit_override EXIT
+  cat > "$DFINIT_OVERRIDE" <<DFEOF
+client:
+  dfinit:
+    config:
+      containerRuntime:
+        crio: null
+        containerd:
+          configPath: /etc/containerd/config.toml
+          registries:
+            - hostNamespace: ${RIID_DFINIT_REGISTRY:-}
+              serverAddr: http://${RIID_DFINIT_REGISTRY:-}
+              capabilities: ["pull", "resolve"]
+DFEOF
+  echo ">>> dfinit engine: containerd (crio handler disabled for this install)"
+  DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
+else
+  DFINIT_HELM_ARGS=""
+fi
+
 echo ">>> Helm repo dragonfly"
 helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null || true
 helm repo update
@@ -119,6 +151,7 @@ helm repo update
 echo ">>> helm upgrade --install dragonfly (namespace dragonfly-system), chart ${DRAGONFLY_CHART_VERSION}"
 helm upgrade --install dragonfly dragonfly/dragonfly \
   --version "${DRAGONFLY_CHART_VERSION}" \
+  ${DFINIT_HELM_ARGS} \
   --namespace dragonfly-system \
   --create-namespace \
   --wait \
