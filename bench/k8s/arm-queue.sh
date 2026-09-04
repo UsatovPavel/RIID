@@ -40,17 +40,34 @@ registry_count() {
 
 # prefixImport lives in RIID's own config; flipping it needs a DaemonSet restart.
 set_prefix_import() {
-  local want="$1" cfg
-  cfg=$(kube -n riid-system get cm riid-config -o jsonpath='{.data.config\.yaml}' 2>/dev/null) || return 1
+  local want="$1" cfg src
+  # The init container prefers the Secret over the ConfigMap (daemonset.yaml:
+  # "if [ -f /sec/config.yaml ]"), so writing the ConfigMap changes nothing when
+  # the Secret exists - the flag never reaches the pod. With no runtime section
+  # at all, prefixImport falls back to its built-in default, which is ON: plain
+  # riid-* arms then silently take the prefix path and die on "OCI layout
+  # streaming failed" / "Blob IO error". Write whichever source actually wins.
+  if kube -n riid-system get secret riid-config-secret >/dev/null 2>&1; then
+    src=secret
+    cfg=$(kube -n riid-system get secret riid-config-secret -o jsonpath='{.data.config\.yaml}' 2>/dev/null | base64 -d) || return 1
+  else
+    src=configmap
+    cfg=$(kube -n riid-system get cm riid-config -o jsonpath='{.data.config\.yaml}' 2>/dev/null) || return 1
+  fi
   printf '%s\n' "$cfg" | grep -q '^runtime:' \
     && cfg=$(printf '%s\n' "$cfg" | sed -E "s/^  prefixImport:.*/  prefixImport: ${want}/") \
     || cfg=$(printf '%s\nruntime:\n  prefixImport: %s\n' "$cfg" "$want")
   printf '%s\n' "$cfg" | grep -q "prefixImport: ${want}" || return 1
-  kube -n riid-system create cm riid-config --from-literal=config.yaml="$cfg" \
-    --dry-run=client -o yaml | kube apply -f - >/dev/null 2>&1 || return 1
+  if [ "$src" = secret ]; then
+    printf '%s' "$cfg" | kube -n riid-system create secret generic riid-config-secret \
+      --from-file=config.yaml=/dev/stdin --dry-run=client -o yaml | kube apply -f - >/dev/null 2>&1 || return 1
+  else
+    kube -n riid-system create cm riid-config --from-literal=config.yaml="$cfg" \
+      --dry-run=client -o yaml | kube apply -f - >/dev/null 2>&1 || return 1
+  fi
   kube -n riid-system rollout restart daemonset/riid >/dev/null 2>&1
   kube -n riid-system rollout status daemonset/riid --timeout=8m >/dev/null 2>&1
-  say "  prefixImport=${want}"
+  say "  prefixImport=${want} (via ${src})"
 }
 
 # A podman prefix arm needs the CLI path: PodmanRuntimeAdapter declines
