@@ -119,6 +119,15 @@ spec:
             # arm broke. Same path on both sides is therefore required.
             - name: riid-work
               mountPath: /var/lib/riid/work
+            # Anything RIID writes outside a mounted path lands in the
+            # container's writable layer, which kubelet counts as the pod's
+            # ephemeral storage. A containerd arm evicted the RIID pod with
+            # "Container riid was using 9695188Ki" - 9.7 GB - and the arm then
+            # failed with "pods not found" partway through, looking like an
+            # application fault. /tmp is the one such path (Java's default temp
+            # dir, and the daemon socket), so it goes on the node's disk too.
+            - name: riid-tmp
+              mountPath: /tmp
       volumes:
         - name: riid-work
           hostPath:
@@ -166,6 +175,10 @@ spec:
           hostPath:
             path: /usr/bin/ctr
             type: File
+        - name: riid-tmp
+          hostPath:
+            path: /var/lib/riid/tmp
+            type: DirectoryOrCreate
         - name: portod-sock
           hostPath:
             path: /run/portod.socket
