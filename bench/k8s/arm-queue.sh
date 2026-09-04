@@ -25,6 +25,7 @@ cd "$REPO" || die "repo not found"
 # such restriction, so the prefix arm is measured there.
 ARMS="${ARMS:-bare-podman riid-containerd dfinit-containerd riid-podman-prefix riid-containerd-prefix}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
+STAND_FAILS=0
 
 attempts_of() { cat "$STATE/$1.attempts" 2>/dev/null || echo 0; }
 mark_attempt() { echo $(( $(attempts_of "$1") + 1 )) > "$STATE/$1.attempts"; }
@@ -123,8 +124,21 @@ run_one() {
   if ! bash "${STAND_DIR}/cold-cache.sh" > "$STATE/$arm.coldcache.log" 2>&1 \
      || ! tail -3 "$STATE/$arm.coldcache.log" | grep -q 'stand verified'; then
     say "$arm: cold-cache did not reach 'stand verified' - not starting the arm"
+    grep -E '  FAIL' "$STATE/$arm.coldcache.log" 2>/dev/null | tail -3
+    # A failed cold-cache means the STAND is unusable, not that this arm is bad.
+    # Cycling to the next arm just burns another 20 minutes on the same fault -
+    # nine such cycles once cost three hours, and a powered-off laptop cost
+    # three and a half more. Count them and stop rather than churn.
+    STAND_FAILS=$((STAND_FAILS + 1))
+    if [ "$STAND_FAILS" -ge 2 ]; then
+      say "STAND UNUSABLE: cold-cache failed ${STAND_FAILS} times in a row - stopping."
+      say "  fix the stand (make -C bench/k8s recover; make -C bench/k8s verify), then"
+      say "  restart the queue. Nothing is measured while it is in this state."
+      exit 3
+    fi
     return 1
   fi
+  STAND_FAILS=0
   n="$(registry_count)"; say "  registry holds ${n:-0}/20 repositories"
   [ "${n:-0}" = "20" ] || { say "$arm: registry incomplete - skipping"; return 1; }
 

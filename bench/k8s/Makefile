@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 HERE  := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: help up host identity prep cluster fixes verify recover down status cold-cache queue-install queue-start queue-status queue-stop
+.PHONY: help up host identity prep cluster fixes verify recover down status cold-cache queue-install queue-start queue-status queue-stop queue-disable
 
 help:
 	@echo "make up       - build the whole stand from powered-off VMs"
@@ -38,7 +38,13 @@ queue-start: queue-install
 	@systemctl --user enable --now riid-arm-queue.service
 	@systemctl --user status riid-arm-queue.service --no-pager | head -5
 
+# stop != disable. Stopping to read a log used to leave the service disabled,
+# and the queue simply never came back - an hour of stand time lost that way.
 queue-stop:
+	@systemctl --user stop riid-arm-queue.service 2>/dev/null || true
+	@echo "stopped (still enabled); resume with: make -C bench/k8s queue-start"
+
+queue-disable:
 	@systemctl --user disable --now riid-arm-queue.service 2>/dev/null || true
 
 queue-status:
