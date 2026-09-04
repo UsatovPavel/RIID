@@ -146,6 +146,31 @@ wait_nodes_ready "$(stand_count)" 40 || say "nodes still not all Ready"
 
 # A RIID pod that survived the previous arm serves layers from its in-pod cache:
 # one such pod turned a cold image from 557 s into 686 ms.
+# The manager keys a scheduler record by (host, ip), so every control-plane
+# restart - and cold-cache does one before every arm - inserts a NEW row instead
+# of updating the old one. Several then sit there marked "active" with IPs of
+# long-dead pods; dfdaemon asks the manager for schedulers, health-checks the
+# corpses and crashloops, or at best floods "transport error" and wastes the
+# arm's time. Keep only the live scheduler's row.
+purge_stale_schedulers() {
+  local pw live db
+  pw="$(kube -n dragonfly-system get secret dragonfly-mysql \
+        -o jsonpath='{.data.mysql-root-password}' 2>/dev/null | base64 -d)" || return 0
+  live="$(kube -n dragonfly-system get pod dragonfly-scheduler-0 \
+        -o jsonpath='{.status.podIP}' 2>/dev/null)"
+  [ -n "$pw" ] && [ -n "$live" ] || { say "  skipping scheduler-table purge (no password or no live scheduler)"; return 0; }
+  db=manager
+  local before after
+  before="$(kube -n dragonfly-system exec dragonfly-mysql-0 -c mysql -- sh -c \
+    "mysql -uroot -p'$pw' -D $db -N -e 'select count(*) from scheduler;'" 2>/dev/null | tr -dc '0-9')"
+  kube -n dragonfly-system exec dragonfly-mysql-0 -c mysql -- sh -c \
+    "mysql -uroot -p'$pw' -D $db -e \"delete from scheduler where ip <> '$live';\"" >/dev/null 2>&1
+  after="$(kube -n dragonfly-system exec dragonfly-mysql-0 -c mysql -- sh -c \
+    "mysql -uroot -p'$pw' -D $db -N -e 'select count(*) from scheduler;'" 2>/dev/null | tr -dc '0-9')"
+  say "  scheduler rows ${before:-?} -> ${after:-?} (live ${live})"
+}
+purge_stale_schedulers
+
 say "restarting RIID so no pod carries the previous arm's cache"
 kube -n riid-system rollout restart daemonset/riid >/dev/null 2>&1
 kube -n riid-system rollout status daemonset/riid --timeout=10m 2>&1 | tail -1
