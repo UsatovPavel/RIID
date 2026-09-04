@@ -5,6 +5,27 @@
 set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
+# CNI comes first. Everything below manipulates workloads, and on a NotReady
+# node a drain cannot finish: pods sit Terminating for the whole timeout, the
+# cache wipe is skipped, and the arm dies on a missing socket - with the CNI
+# repair still queued behind the drain that its absence had just broken.
+# podman's prune keeps deleting /etc/cni/net.d/10-calico.conflist, and the
+# workers drop to NotReady a minute or two later. A finished rollout is NOT
+# proof the file came back - it has come back missing often enough to cost
+# several arms - so verify the file itself and retry.
+say "restoring CNI (calico-node rollout)"
+for attempt in 1 2 3; do
+  kube -n kube-system rollout restart daemonset/calico-node >/dev/null 2>&1
+  kube -n kube-system rollout status daemonset/calico-node --timeout=10m >/dev/null 2>&1
+  missing=0
+  for alias in $STAND_SSH; do
+    node_run "$alias" "test -f /etc/cni/net.d/10-calico.conflist" || missing=$((missing+1))
+  done
+  [ "$missing" -eq 0 ] && { say "  calico conflist present on every node"; break; }
+  say "  conflist still missing on ${missing} node(s) after rollout ${attempt}/3"
+  sleep 30
+done
+
 i=0
 for alias in $STAND_SSH; do
   i=$((i+1)); [ "$i" = 1 ] && continue   # control plane runs no bench engine
@@ -126,22 +147,6 @@ kube -n dragonfly-system patch daemonset dragonfly-client --type json \
   -p '[{"op":"remove","path":"/spec/template/spec/nodeSelector/riid.drain"}]' >/dev/null 2>&1
 kube -n dragonfly-system scale statefulset dragonfly-seed-client --replicas=3 >/dev/null 2>&1
 
-# podman's prune keeps deleting /etc/cni/net.d/10-calico.conflist, and the
-# workers drop to NotReady a minute or two later. A finished rollout is NOT
-# proof the file came back - it has come back missing often enough to cost
-# several arms - so verify the file itself and retry.
-say "restoring CNI (calico-node rollout)"
-for attempt in 1 2 3; do
-  kube -n kube-system rollout restart daemonset/calico-node >/dev/null 2>&1
-  kube -n kube-system rollout status daemonset/calico-node --timeout=10m >/dev/null 2>&1
-  missing=0
-  for alias in $STAND_SSH; do
-    node_run "$alias" "test -f /etc/cni/net.d/10-calico.conflist" || missing=$((missing+1))
-  done
-  [ "$missing" -eq 0 ] && { say "  calico conflist present on every node"; break; }
-  say "  conflist still missing on ${missing} node(s) after rollout ${attempt}/3"
-  sleep 30
-done
 wait_nodes_ready "$(stand_count)" 40 || say "nodes still not all Ready"
 
 # A RIID pod that survived the previous arm serves layers from its in-pod cache:
