@@ -60,10 +60,21 @@ set_prefix_import() {
 set_podman_cli_mode() {
   local want="$1"
   if [ "$want" = yes ]; then
+    # The binary alone is not enough: the RIID image ships no containers stack,
+    # so podman CLI finds no /etc/containers (policy.json, storage.conf) and
+    # every import returns HTTP 500. Hand it the node's config and the node's
+    # storage - the engine under test is the node's podman either way, the CLI
+    # is only a different transport to the same graphroot.
     kube -n riid-system patch daemonset riid --type strategic -p '{"spec":{"template":{"spec":{
       "containers":[{"name":"riid","env":[{"name":"CONTAINER_HOST","value":""}],
-        "volumeMounts":[{"name":"podman-bin","mountPath":"/usr/local/bin/podman","readOnly":true}]}],
-      "volumes":[{"name":"podman-bin","hostPath":{"path":"/usr/bin/podman","type":"File"}}]}}}}' >/dev/null 2>&1
+        "volumeMounts":[
+          {"name":"podman-bin","mountPath":"/usr/local/bin/podman","readOnly":true},
+          {"name":"containers-etc","mountPath":"/etc/containers","readOnly":true},
+          {"name":"containers-storage","mountPath":"/var/lib/containers"}]}],
+      "volumes":[
+        {"name":"podman-bin","hostPath":{"path":"/usr/bin/podman","type":"File"}},
+        {"name":"containers-etc","hostPath":{"path":"/etc/containers","type":"Directory"}},
+        {"name":"containers-storage","hostPath":{"path":"/var/lib/containers","type":"DirectoryOrCreate"}}]}}}}' >/dev/null 2>&1
   else
     kube -n riid-system patch daemonset riid --type strategic -p '{"spec":{"template":{"spec":{
       "containers":[{"name":"riid","env":[{"name":"CONTAINER_HOST","value":"unix:///run/podman/podman.sock"}]}]}}}}' >/dev/null 2>&1
