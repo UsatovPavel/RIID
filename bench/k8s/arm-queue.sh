@@ -128,6 +128,20 @@ export_logs() {
   ( cd "$out" && find . -type f -name '*.log' -exec sha256sum {} + > SHA256SUMS 2>/dev/null )
 }
 
+# A failed stand is not a failed arm. Cycling to the next arm just burns another
+# 20 minutes on the same fault - nine such cycles once cost three hours, and a
+# powered-off laptop cost three and a half more. Count them and stop.
+stand_failed() {
+  STAND_FAILS=$((STAND_FAILS + 1))
+  if [ "$STAND_FAILS" -ge 2 ]; then
+    say "STAND UNUSABLE: the stand failed ${STAND_FAILS} times in a row - stopping."
+    say "  fix the stand (make -C bench/k8s recover; make -C bench/k8s verify), then"
+    say "  restart the queue. Nothing is measured while it is in this state."
+    exit 3
+  fi
+  return 1
+}
+
 run_one() {
   local arm="$1" stamp tsv before after rc n log
   stamp="$(date +%Y%m%d-%H%M)"
@@ -137,23 +151,22 @@ run_one() {
   mark_attempt "$arm"
 
   # The stand is usually "broken" only because the laptop rebooted.
-  bash "${STAND_DIR}/recover.sh" > "$STATE/$arm.recover.log" 2>&1
-  if ! bash "${STAND_DIR}/cold-cache.sh" > "$STATE/$arm.coldcache.log" 2>&1 \
+  # recover's exit status used to be discarded: it reported "aibox not reachable"
+  # and cold-cache then ground away against a dead API server for two hours
+  # before anyone noticed. A stand that did not come back is a stand failure, so
+  # fail here instead of paying for that discovery downstream. The timeout is the
+  # backstop for the same lesson - cold-cache is a ~20 min job and must never be
+  # able to consume a whole window on its own.
+  if ! bash "${STAND_DIR}/recover.sh" > "$STATE/$arm.recover.log" 2>&1; then
+    say "$arm: recover failed - the stand did not come back"
+    tail -2 "$STATE/$arm.recover.log"
+    stand_failed; return $?
+  fi
+  if ! timeout 45m bash "${STAND_DIR}/cold-cache.sh" > "$STATE/$arm.coldcache.log" 2>&1 \
      || ! tail -3 "$STATE/$arm.coldcache.log" | grep -q 'stand verified'; then
     say "$arm: cold-cache did not reach 'stand verified' - not starting the arm"
     grep -E '  FAIL' "$STATE/$arm.coldcache.log" 2>/dev/null | tail -3
-    # A failed cold-cache means the STAND is unusable, not that this arm is bad.
-    # Cycling to the next arm just burns another 20 minutes on the same fault -
-    # nine such cycles once cost three hours, and a powered-off laptop cost
-    # three and a half more. Count them and stop rather than churn.
-    STAND_FAILS=$((STAND_FAILS + 1))
-    if [ "$STAND_FAILS" -ge 2 ]; then
-      say "STAND UNUSABLE: cold-cache failed ${STAND_FAILS} times in a row - stopping."
-      say "  fix the stand (make -C bench/k8s recover; make -C bench/k8s verify), then"
-      say "  restart the queue. Nothing is measured while it is in this state."
-      exit 3
-    fi
-    return 1
+    stand_failed; return $?
   fi
   STAND_FAILS=0
   n="$(registry_count)"; say "  registry holds ${n:-0}/20 repositories"
