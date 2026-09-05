@@ -31,11 +31,15 @@ attempts_of() { cat "$STATE/$1.attempts" 2>/dev/null || echo 0; }
 mark_attempt() { echo $(( $(attempts_of "$1") + 1 )) > "$STATE/$1.attempts"; }
 is_done()      { [ -f "$STATE/$1.done" ]; }
 
+# Count only the repositories this arm will actually pull. The registry holds
+# the gzip dataset under riid/ and the zstd one under riid-zstd/, so counting
+# every repository returns 40 and the gate rejects a perfectly good stand with
+# "registry incomplete".
 registry_count() {
-  local pod
+  local pod prefix="${1:-riid}"
   pod=$(kube -n registry-system get pod -l app.kubernetes.io/name=local-registry -o name 2>/dev/null | head -1)
   kube -n registry-system exec "${pod#pod/}" -- sh -c \
-    'find /var/lib/registry/docker/registry/v2/repositories -type d -name _manifests 2>/dev/null | wc -l' 2>/dev/null | tr -dc '0-9'
+    "find /var/lib/registry/docker/registry/v2/repositories/${prefix} -type d -name _manifests 2>/dev/null | wc -l" 2>/dev/null | tr -dc '0-9'
 }
 
 # prefixImport lives in RIID's own config; flipping it needs a DaemonSet restart.
@@ -273,7 +277,9 @@ run_one() {
     stand_failed; return $?
   fi
   STAND_FAILS=0
-  n="$(registry_count)"; say "  registry holds ${n:-0}/20 repositories"
+  local dsprefix=riid
+  case "$arm" in *-zstd) dsprefix=riid-zstd;; esac
+  n="$(registry_count "$dsprefix")"; say "  registry holds ${n:-0}/20 ${dsprefix}/ repositories"
   [ "${n:-0}" = "20" ] || { say "$arm: registry incomplete - skipping"; return 1; }
 
   # A baseline arm must see no mirror, and dfinit re-writes the node's
