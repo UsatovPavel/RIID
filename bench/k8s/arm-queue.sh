@@ -365,7 +365,9 @@ run_one() {
   # this run; also keep an arm-named copy so the generic file is never the only
   # place an arm's result lives.
   cp "$tsv" "$PERF/output/${arm}.agent99-${stamp}.tsv"
-  cp "$tsv" "$PERF/output/${arm}.tsv"
+  # A zstd arm already writes to its own arm-named file via OUTPUT_TSV, so the
+  # arm-named copy would be the file onto itself.
+  [ "$tsv" = "$PERF/output/${arm}.tsv" ] || cp "$tsv" "$PERF/output/${arm}.tsv"
   say "  images=$(awk -F, 'NR>1 && $4=="AGGREGATE"' "$tsv" | wc -l)/20 failures=$(awk -F, 'NR>1 && $9!=0 && $9!=""' "$tsv" | wc -l)"
   awk -F, 'NR>1 && $4=="AGGREGATE"{s+=$8} END{if(s>0) printf "  sum AGGREGATE: %.1f s\n", s/1000}' "$tsv"
   grep registry_tx_bytes_delta "$tsv" | awk -F'\t' '{printf "  egress: %.2f GiB\n", $2/1073741824}'
