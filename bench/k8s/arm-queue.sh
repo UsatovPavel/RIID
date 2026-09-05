@@ -340,6 +340,14 @@ run_one() {
     set_prefix_import true || { say "$arm: could not enable prefixImport"; return 1; }
     case "$base" in riid-podman) set_podman_cli_mode yes;; esac
   fi
+  # RIID gained the podman socket in 0.4.11 ("Engine: podman socket switch").
+  # Older builds have no socketClient and no CONTAINER_HOST at all - they always
+  # shell out to the podman binary - so benching one on podman needs CLI mode
+  # even without prefix import. AGENT-112 compares 0.4.5 against 0.4.11, and this
+  # transport difference IS the change between them, not a stand detail.
+  if [ "${RIID_PODMAN_CLI:-0}" = "1" ] && [ "$prefix" = no ]; then
+    case "$base" in riid-podman) set_podman_cli_mode yes;; esac
+  fi
 
   tsv="$PERF/output/${base}.tsv"
   case "$arm" in *-zstd) tsv="$PERF/output/${arm}.tsv";; esac
@@ -363,6 +371,8 @@ run_one() {
   export_logs "$arm" "$log"
   if [ "$prefix" = yes ]; then
     set_prefix_import false
+    case "$base" in riid-podman) set_podman_cli_mode no;; esac
+  elif [ "${RIID_PODMAN_CLI:-0}" = "1" ]; then
     case "$base" in riid-podman) set_podman_cli_mode no;; esac
   fi
   case "$arm" in dfinit-*)
