@@ -35,9 +35,19 @@ for alias in $STAND_SSH; do
   # and must never be touched.
   for ns in riid-bench default; do
     node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n $ns images ls -q 2>/dev/null | while read -r img; do [ -n \"\$img\" ] && printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n $ns images rm --sync \"\$img\" >/dev/null 2>&1; done" >/dev/null 2>&1
+    # Leases pin content alive, and `content prune references` will not touch
+    # leased blobs. An interrupted pull leaves one behind with a 24h GC expiry,
+    # so the images list reads 0 while every blob is still on disk and the next
+    # "cold" pull comes back "already exists" in about a second. Drop the
+    # namespace's leases first, then prune - otherwise the purge only looks
+    # like it worked.
+    node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n $ns leases ls -q 2>/dev/null | while read -r l; do [ -n \"\$l\" ] && printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n $ns leases rm \"\$l\" >/dev/null 2>&1; done" >/dev/null 2>&1
     node_sudo "$alias" "ctr -n $ns content prune references >/dev/null 2>&1"
   done
   say "  containerd images left: riid-bench=$(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench images ls -q 2>/dev/null | wc -l") default=$(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n default images ls -q 2>/dev/null | wc -l")"
+  # Images can read 0 while the content store is untouched, which is exactly how
+  # a warm arm passes for cold. Report the blobs, not just the references.
+  say "  containerd blobs left: riid-bench=$(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n riid-bench content ls -q 2>/dev/null | wc -l") default=$(node_run "$alias" "printf '%s\n' '${STAND_PASSWORD}' | sudo -S ctr -n default content ls -q 2>/dev/null | wc -l")"
   say "  $(node_run "$alias" 'df -h / | tail -1')"
 done
 
