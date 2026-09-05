@@ -106,22 +106,26 @@ final class PrefixImportLayouts implements AutoCloseable {
         linkLayers(layout, scope, alreadySent, count);
         byte[] prefixConfig = configCutTo(count);
         String configDigest = writeBlob(layout, prefixConfig);
-        Manifest prefixManifest = new Manifest(manifest.schemaVersion(), manifest.mediaType(),
-                new Descriptor(manifest.config().mediaType(), SHA256 + configDigest, prefixConfig.length),
+        Manifest prefixManifest = new Manifest(manifest.schemaVersion(), MediaTypes.OCI_IMAGE_MANIFEST,
+                new Descriptor(MediaTypes.OCI_IMAGE_CONFIG, SHA256 + configDigest, prefixConfig.length),
                 manifest.layers().subList(0, count));
         writeLayout(layout, OBJECT_MAPPER.writeValueAsBytes(prefixManifest), imageName);
         return layout;
     }
 
     /**
-     * The image the caller asked for, built from the untouched manifest and config,
-     * so it is byte for byte the one an ordinary import would have produced.
+     * The image the caller asked for, built from the untouched config and layers,
+     * with the manifest's own media type normalised to OCI (see
+     * {@link #writeLayout}).
      */
     Path fullLayout(String imageName, LayerScope scope, int alreadySent) throws IOException {
         Path layout = layoutDir("full");
         linkLayers(layout, scope, alreadySent, manifest.layers().size());
         writeBlob(layout, configBytes);
-        writeLayout(layout, OBJECT_MAPPER.writeValueAsBytes(manifest), imageName);
+        Manifest ociManifest = new Manifest(manifest.schemaVersion(), MediaTypes.OCI_IMAGE_MANIFEST,
+                new Descriptor(MediaTypes.OCI_IMAGE_CONFIG, manifest.config().digest(), manifest.config().size()),
+                manifest.layers());
+        writeLayout(layout, OBJECT_MAPPER.writeValueAsBytes(ociManifest), imageName);
         return layout;
     }
 
@@ -223,18 +227,22 @@ final class PrefixImportLayouts implements AutoCloseable {
         return hex;
     }
 
+    /**
+     * podman's {@code oci:} transport rejects a Docker-typed manifest or config
+     * descriptor here, unlike {@code ctr images import}; the caller already
+     * normalises both to OCI media types (like skopeo does), so this index
+     * descriptor is always the OCI one. Layer media types are left untouched.
+     */
     private void writeLayout(Path layout, byte[] manifestBytes, String imageName) throws IOException {
         String manifestDigest = writeBlob(layout, manifestBytes);
         Files.writeString(layout.resolve(OciLayout.MARKER_FILE), OciLayout.MARKER_CONTENT);
-        String declared = manifest.mediaType();
-        String mediaType = declared == null || declared.isBlank() ? MediaTypes.OCI_IMAGE_MANIFEST : declared;
         Files.writeString(layout.resolve(OciLayout.INDEX_JSON),
                 String.format(Locale.ROOT,
                         "{\"schemaVersion\":2,\"%s\":[{\"%s\":\"%s\",\"%s\":%d,\"%s\":\"%s%s\","
                                 + "\"%s\":{\"%s\":\"%s\"}}]}",
-                        OciLayout.MANIFESTS, OciLayout.MEDIA_TYPE, mediaType, OciLayout.SIZE, manifestBytes.length,
-                        OciLayout.DIGEST, SHA256, manifestDigest, OciLayout.ANNOTATIONS, OciLayout.REF_NAME_ANNOTATION,
-                        imageName));
+                        OciLayout.MANIFESTS, OciLayout.MEDIA_TYPE, MediaTypes.OCI_IMAGE_MANIFEST, OciLayout.SIZE,
+                        manifestBytes.length, OciLayout.DIGEST, SHA256, manifestDigest, OciLayout.ANNOTATIONS,
+                        OciLayout.REF_NAME_ANNOTATION, imageName));
     }
 
     private static Path blobsOf(Path layout) {

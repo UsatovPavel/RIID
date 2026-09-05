@@ -24,7 +24,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import riid.core.model.manifest.Descriptor;
 import riid.core.model.manifest.Manifest;
+import riid.core.model.manifest.MediaTypes;
 import riid.core.model.manifest.OciLayout;
 import riid.runtime.BoundedCommandExecution.ShellResult;
 import riid.runtime.adapter.ImageReference;
@@ -76,6 +78,33 @@ class PodmanPrefixImportTest {
 
         assertEquals(List.of(1, 2, LAYERS_COUNT), adapter.manifestLayerCounts(), "1, then 2, then the whole image");
         assertEquals(List.of(1, 2, LAYERS_COUNT), adapter.diffIdCounts(), "configs must match layer for layer");
+    }
+
+    /**
+     * DEFECT 2 (AGENT-113): podman's {@code oci:} transport refuses a Docker v2
+     * manifest or config media type ("unsupported manifest MIME types" / "invalid
+     * mixed OCI image"), even though {@code ctr images import} does not care.
+     * Verified against a real podman binary that layer media types do not need the
+     * same treatment - only the manifest and config descriptors are normalised.
+     */
+    @Test
+    void normalizesDockerManifestAndConfigMediaTypesToOci() throws Exception {
+        RecordingPodmanAdapter adapter = new RecordingPodmanAdapter(true);
+        Manifest source = manifest(LAYERS_COUNT);
+        Manifest dockerSourced = new Manifest(source.schemaVersion(), MediaTypes.DOCKER_MANIFEST_V2,
+                new Descriptor(MediaTypes.DOCKER_IMAGE_CONFIG, source.config().digest(), source.config().size()),
+                source.layers());
+
+        runSession(adapter, dockerSourced, LAYERS_COUNT);
+
+        assertEquals(LAYERS_COUNT, adapter.indexDescriptorMediaTypes().size());
+        assertTrue(adapter.indexDescriptorMediaTypes().stream().allMatch(MediaTypes.OCI_IMAGE_MANIFEST::equals),
+                "index.json must declare the OCI manifest media type: " + adapter.indexDescriptorMediaTypes());
+        assertTrue(adapter.manifestMediaTypes().stream().allMatch(MediaTypes.OCI_IMAGE_MANIFEST::equals),
+                "the manifest blob's own mediaType must be normalised to OCI: " + adapter.manifestMediaTypes());
+        assertTrue(adapter.configMediaTypes().stream().allMatch(MediaTypes.OCI_IMAGE_CONFIG::equals),
+                "the config descriptor must be normalised to OCI, or podman reports \"invalid mixed OCI image\": "
+                        + adapter.configMediaTypes());
     }
 
     @Test
@@ -183,6 +212,9 @@ class PodmanPrefixImportTest {
         private final List<Integer> layerCounts = new CopyOnWriteArrayList<>();
         private final List<Integer> diffIds = new CopyOnWriteArrayList<>();
         private final List<String> removed = new CopyOnWriteArrayList<>();
+        private final List<String> indexMediaTypes = new CopyOnWriteArrayList<>();
+        private final List<String> manifestBodyMediaTypes = new CopyOnWriteArrayList<>();
+        private final List<String> configDescriptorMediaTypes = new CopyOnWriteArrayList<>();
 
         private RecordingPodmanAdapter(boolean prefixImport) {
             super(prefixImport);
@@ -204,12 +236,28 @@ class PodmanPrefixImportTest {
             return removed;
         }
 
+        private List<String> indexDescriptorMediaTypes() {
+            return indexMediaTypes;
+        }
+
+        private List<String> manifestMediaTypes() {
+            return manifestBodyMediaTypes;
+        }
+
+        private List<String> configMediaTypes() {
+            return configDescriptorMediaTypes;
+        }
+
         private void recordLayout(Path layout) throws IOException {
             JsonNode index = OBJECT_MAPPER.readTree(layout.resolve(OciLayout.INDEX_JSON).toFile());
             JsonNode descriptor = index.get(OciLayout.MANIFESTS).get(0);
+            indexMediaTypes.add(descriptor.get(OciLayout.MEDIA_TYPE).asText());
             JsonNode manifest = OBJECT_MAPPER.readTree(blobOf(layout, descriptor.get(OciLayout.DIGEST).asText()));
+            manifestBodyMediaTypes.add(manifest.get(OciLayout.MEDIA_TYPE).asText());
             layerCounts.add(manifest.get(OciLayout.LAYERS).size());
-            String configDigest = manifest.get(OciLayout.CONFIG).get(OciLayout.DIGEST).asText();
+            JsonNode configDescriptor = manifest.get(OciLayout.CONFIG);
+            configDescriptorMediaTypes.add(configDescriptor.get(OciLayout.MEDIA_TYPE).asText());
+            String configDigest = configDescriptor.get(OciLayout.DIGEST).asText();
             diffIds.add(OBJECT_MAPPER.readTree(blobOf(layout, configDigest)).get(OciLayout.ROOTFS)
                     .get(OciLayout.DIFF_IDS).size());
         }
