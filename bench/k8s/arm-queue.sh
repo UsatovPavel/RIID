@@ -268,16 +268,26 @@ run_one() {
 
   # The prefix arm is the same engine arm with runtime.prefixImport flipped on;
   # the flag lives in RIID's config, not in a make target.
-  local base="$arm" prefix=no
+  local base="$arm" prefix=no dsargs=""
   case "$arm" in *-prefix) base="${arm%-prefix}"; prefix=yes;; esac
+  # A zstd arm is the same arm against the zstd copy of the same 20 images, so
+  # it needs no new make target - just the other dataset file and its own output
+  # file, since the runner names output by backend label and would otherwise
+  # overwrite the gzip result. The zstd dataset is 220 distinct blobs at
+  # 10.17 GiB against gzip's 11.07 GiB, so its ratios divide by 10.17.
+  case "$arm" in
+    *-zstd) base="${base%-zstd}"
+            dsargs="DATASET_FILE=$PERF/input/dataset_a_zstd.tsv OUTPUT_TSV=$PERF/output/${arm}.tsv";;
+  esac
   if [ "$prefix" = yes ]; then
     set_prefix_import true || { say "$arm: could not enable prefixImport"; return 1; }
     case "$base" in riid-podman) set_podman_cli_mode yes;; esac
   fi
 
   tsv="$PERF/output/${base}.tsv"
+  case "$arm" in *-zstd) tsv="$PERF/output/${arm}.tsv";; esac
   before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
-  make -C "$PERF" "$base" $CF EXPECTED_RIID_PODS=2 REGISTRY_TX_IFACE="$STAND_CLUSTER_NIC" \
+  make -C "$PERF" "$base" $CF EXPECTED_RIID_PODS=2 REGISTRY_TX_IFACE="$STAND_CLUSTER_NIC" $dsargs \
     > "$STATE/$arm.run.log" 2>&1
   rc=$?
   # Export before restoring anything: both restore steps roll the RIID
