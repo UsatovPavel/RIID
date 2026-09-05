@@ -312,14 +312,26 @@ run_one() {
     return 1
   fi
 
+  # The runner names its output by the BACKEND label, so a prefix arm and its
+  # plain counterpart both write output/riid-containerd.tsv and the second one
+  # silently clobbers the first. The timestamped copy below is the record of
+  # this run; also keep an arm-named copy so the generic file is never the only
+  # place an arm's result lives.
   cp "$tsv" "$PERF/output/${arm}.agent99-${stamp}.tsv"
+  cp "$tsv" "$PERF/output/${arm}.tsv"
   say "  images=$(awk -F, 'NR>1 && $4=="AGGREGATE"' "$tsv" | wc -l)/20 failures=$(awk -F, 'NR>1 && $9!=0 && $9!=""' "$tsv" | wc -l)"
   awk -F, 'NR>1 && $4=="AGGREGATE"{s+=$8} END{if(s>0) printf "  sum AGGREGATE: %.1f s\n", s/1000}' "$tsv"
   grep registry_tx_bytes_delta "$tsv" | awk -F'\t' '{printf "  egress: %.2f GiB\n", $2/1073741824}'
   case "$arm" in riid-*|dfinit-*)
     say "  p2p=$(grep -ho 'Source fetched: p2p' "$log/$arm"/riid/*.log 2>/dev/null | wc -l) registry=$(grep -ho 'Source fetched: registry' "$log/$arm"/riid/*.log 2>/dev/null | wc -l)"
-    # Two log lines per transaction, so halve it - counting raw lines doubled it once.
-    say "  NeedBackToSource(tx)=$(( $(grep -ho 'NeedBackToSource' "$log/$arm"/seed/*.log "$log/$arm"/dfdaemon/*.log 2>/dev/null | wc -l) / 2 ))"
+    # One line per event, but the substring occurs twice inside it (once as the
+    # prefix of NeedBackToSourceResponse, once in its description), so grep -o
+    # doubles the count. Match the line instead of the substring and the /2 that
+    # used to compensate is no longer needed. These events land in the SEED logs:
+    # a zero here means the seed tier never fetched anything, which is what
+    # separated dfinit-containerd (0, egress x1.83) from riid-containerd (222,
+    # egress x1.25) - the counter is a seed-participation signal, not noise.
+    say "  NeedBackToSource(tx)=$(grep -hc 'need back to source response' "$log/$arm"/seed/*.log "$log/$arm"/dfdaemon/*.log 2>/dev/null | paste -sd+ | bc)"
     # A throw from the puller's close() discards an already-finished P2P
     # download, and the layer is then paid for a second time from the registry.
     # The rate is a race, not a property of the arm, so it has to be reported
