@@ -242,6 +242,20 @@ stand_failed() {
   return 1
 }
 
+# AGENT-112: the stand benches whatever image the DaemonSet runs, not the
+# checkout, so comparing RIID versions means swapping the image and nothing
+# else. Set the image with `kubectl set image` rather than re-applying the
+# manifest: install-riid would strip the queue's own per-arm patches.
+set_riid_image() {
+  local want="$1" have
+  have=$(kube -n riid-system get ds riid \
+         -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
+  [ "$have" = "$want" ] && { say "  riid image already ${want##*/}"; return 0; }
+  kube -n riid-system set image daemonset/riid riid="$want" >/dev/null 2>&1 || return 1
+  kube -n riid-system rollout status daemonset/riid --timeout=10m >/dev/null 2>&1 || return 1
+  say "  riid image ${have##*/} -> ${want##*/}"
+}
+
 run_one() {
   local arm="$1" stamp tsv before after rc n log
   stamp="$(date +%Y%m%d-%H%M)"
@@ -249,6 +263,12 @@ run_one() {
   tsv="$PERF/output/${arm}.tsv"
   say "===== $arm (attempt $(( $(attempts_of "$arm") + 1 ))/$MAX_ATTEMPTS) ====="
   mark_attempt "$arm"
+
+  # An arm may pin the RIID version under test; without it, whatever is
+  # deployed stays. The image is recorded in the arm's own log either way.
+  if [ -n "${RIID_IMAGE:-}" ]; then
+    set_riid_image "$RIID_IMAGE" || { say "$arm: could not set image $RIID_IMAGE"; return 1; }
+  fi
 
   # The stand is usually "broken" only because the laptop rebooted.
   # recover's exit status used to be discarded: it reported "aibox not reachable"
@@ -389,6 +409,7 @@ run_one() {
     ;;
   esac
   touch "$STATE/$arm.done"
+  say "  riid image: $(kube -n riid-system get ds riid -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
   say "$arm: DONE -> ${arm}.agent99-${stamp}.tsv"
 }
 
