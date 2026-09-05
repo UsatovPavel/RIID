@@ -224,8 +224,16 @@ run_one() {
   # fail here instead of paying for that discovery downstream. The timeout is the
   # backstop for the same lesson - cold-cache is a ~20 min job and must never be
   # able to consume a whole window on its own.
-  if ! bash "${STAND_DIR}/recover.sh" > "$STATE/$arm.recover.log" 2>&1; then
-    say "$arm: recover failed - the stand did not come back"
+  bash "${STAND_DIR}/recover.sh" > "$STATE/$arm.recover.log" 2>&1
+  # recover ends by exec'ing 06-verify.sh, so its exit status is that verify's
+  # fail count - and most of those failures are exactly what cold-cache exists
+  # to repair (a disk filled by the previous arm, stale caches). Aborting on any
+  # of them stops the queue for a condition the next step would have fixed.
+  # What must abort is the stand not being THERE: that is the case that cost two
+  # hours grinding cold-cache against a dead API server.
+  ready=$(kube get nodes --no-headers 2>/dev/null | grep -cw Ready)
+  if [ "${ready:-0}" -lt "$(stand_count)" ]; then
+    say "$arm: only ${ready:-0}/$(stand_count) nodes Ready after recover - the stand did not come back"
     tail -2 "$STATE/$arm.recover.log"
     stand_failed; return $?
   fi
