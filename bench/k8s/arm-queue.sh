@@ -311,8 +311,10 @@ run_one() {
   # overwrite the gzip result. The zstd dataset is 220 distinct blobs at
   # 10.17 GiB against gzip's 11.07 GiB, so its ratios divide by 10.17.
   case "$arm" in
+    # Absolute paths: make -C runs the scenario from another directory, and a
+    # relative DATASET_FILE resolves against that one ("Dataset file not found").
     *-zstd) base="${base%-zstd}"
-            dsargs="DATASET_FILE=$PERF/input/dataset_a_zstd.tsv OUTPUT_TSV=$PERF/output/${arm}.tsv";;
+            dsargs="DATASET_FILE=$(pwd)/$PERF/input/dataset_a_zstd.tsv OUTPUT_TSV=$(pwd)/$PERF/output/${arm}.tsv";;
   esac
   if [ "$prefix" = yes ]; then
     set_prefix_import true || { say "$arm: could not enable prefixImport"; return 1; }
