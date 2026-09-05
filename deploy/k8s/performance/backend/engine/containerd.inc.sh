@@ -51,9 +51,11 @@ _ctr_base() {
 # it. stderr is left alone so a real error still surfaces in the arm's run.log.
 _ctr_run() {
   if [[ "$CTR_DEBUG" == "1" && -n "$CTR_DEBUG_LOG" ]]; then
-    printf '\n===== %s =====\n' "${IMAGE_REPOSITORY:-?}:${IMAGE_REFERENCE:-?} $(date -u +%H:%M:%S)" \
-      >> "$CTR_DEBUG_LOG"
-    "$@" >> "$CTR_DEBUG_LOG"
+    # Both pods pull the same image at once; sharing one file interleaves their
+    # progress tables into nonsense, so give each pod its own.
+    local out="${CTR_DEBUG_LOG%.log}-${pod}.log"
+    printf '\n===== %s =====\n' "${IMAGE_REPOSITORY:-?}:${IMAGE_REFERENCE:-?} $(date -u +%H:%M:%S)" >> "$out"
+    "$@" >> "$out"
   else
     "$@" > /dev/null
   fi
