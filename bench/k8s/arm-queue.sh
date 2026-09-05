@@ -192,11 +192,15 @@ run_one() {
   make -C "$PERF" "$base" $CF EXPECTED_RIID_PODS=2 REGISTRY_TX_IFACE="$STAND_CLUSTER_NIC" \
     > "$STATE/$arm.run.log" 2>&1
   rc=$?
+  # Export before restoring anything: both restore steps roll the RIID
+  # DaemonSet, and a rolled pod takes its log with it. Every prefix arm so far
+  # exported exactly 2134 bytes of fresh-pod startup chatter, which also made
+  # the p2p/registry counters below read 0/0 - unprovable, not just untidy.
+  export_logs "$arm" "$log"
   if [ "$prefix" = yes ]; then
     set_prefix_import false
     case "$base" in riid-podman) set_podman_cli_mode no;; esac
   fi
-  export_logs "$arm" "$log"
   case "$arm" in dfinit-*)
     make -C deploy/k8s/bootstrap dfinit-disable $CF >/dev/null 2>&1
     # dfinit-disable stops the mirror going forward but leaves the node's
