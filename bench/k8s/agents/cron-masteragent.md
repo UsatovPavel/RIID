@@ -14,8 +14,14 @@ GOAL: finish the AGENT-99 arm matrix on the local stand, producing measured TSVs
 
 STAND: see the riid-local-stand skill and bench/k8s/README.md. Run `make -C bench/k8s recover` first — the usual reason the stand looks broken is that the laptop rebooted and the VMs are simply off — then `make -C bench/k8s verify` before trusting it.
 
-ARMS STILL OWED (partial 20-image dataset): riid-podman, dfinit-podman, bare-containerd, riid-containerd, dfinit-containerd. Porto arms are not for this stand and the Porto VMs stay powered off; the laptop cannot host both stands.
+ARMS STILL OWED (partial 20-image dataset): dfinit-containerd, riid-podman-prefix, riid-containerd-prefix. Already measured and VALID, do not re-run: dfinit-podman, bare-containerd, riid-podman, bare-podman, riid-containerd — see bench/k8s/Summary_bench.md, which is the source of truth for what is owed. After the gzip arms: drop the gzip dataset, load zstd, run the three zstd arms; Porto last. Porto arms are not for this stand and the Porto VMs stay powered off; the laptop cannot host both stands.
 
 DELEGATION — this is the architecture the user asked for: spawn an EXECUTOR subagent from bench/k8s/agents/executor.md and a separate VALIDATOR subagent, with fresh context, from bench/k8s/agents/validator.md. Both on Sonnet, never Opus. Give the validator the executor's agentId so they can talk directly. Talk ONLY to the validator yourself — an agent that ran an arm is the worst judge of whether that arm is valid.
 
 Never create or destroy Selectel cloud compute without asking the user first; pulling images from cr.selcloud.ru is fine. Other sessions may be working on the same stand, so check file mtimes before attributing a result to your own run.
+
+STAND FAILURES THAT HAVE ACTUALLY COST WHOLE WINDOWS — check these before believing a diagnosis:
+- The laptop sleeping powers off all three VMs. `VBoxManage list runningvms` first; if empty, `VBoxManage startvm <vm> --type headless` for each. Hold a sleep inhibitor while arms run (`systemd-inhibit --what=sleep:idle --mode=block ... &`), or this repeats.
+- After any VM power cycle the scheduler gets a new pod IP and the Dragonfly clients crashloop on the old one (`available schedulers not found`). Purge the dead rows from the manager's MySQL `scheduler` table, keeping only `dragonfly-scheduler-0`'s live podIP, then roll `daemonset/dragonfly-client` and `statefulset/dragonfly-seed-client`. cold-cache skips this purge when no scheduler is live yet, which is exactly the case right after a reboot.
+- Do not repair the stand while cold-cache's verify step is running: a concurrent data-plane restart removes the dfdaemon socket and frees cache, so verify reports a missing socket and a disk figure 30 GB out of date, and the arm is refused for reasons that are already gone.
+
