@@ -106,6 +106,35 @@ set_prefix_import() {
 #     confinement blocks the mount(2) syscall even with SYS_ADMIN alone
 #     ("kernel does not support overlay fs ... over extfs" - misleading, the
 #     real cause is confinement, not the kernel or filesystem).
+#  6. The (5) fields never actually reached the pod: wrapping them as
+#     "securityContext":{"$patch":"replace", <real fields>} makes `kubectl
+#     patch --type strategic` report "patched (no change)" and leaves
+#     securityContext null - every ControllerRevision produced by this
+#     function since (5) landed still shows securityContext: null. $patch:
+#     replace is only meaningful as the sole key of an object (that is how
+#     the "no" branch below legitimately empties securityContext); paired
+#     with sibling fields in the same object it silently no-ops the whole
+#     field instead of merging them in. So the pod ran fully confined the
+#     entire time, hit the exact same seccomp-blocks-mount(2) failure as (5)
+#     ("... is not a shared mount" / "overlay ... not supported over extfs" -
+#     the same misleading text, now with a different missing ingredient), and
+#     no mount-propagation change is needed at all. Verified: the same fields
+#     without the $patch wrapper apply cleanly (kubectl reports "patched", the
+#     object is non-null), and with them genuinely live, an isolated pod
+#     mounting the real, already-initialized /var/lib/containers with default
+#     (private) mount propagation - no Bidirectional, no privileged - runs
+#     `podman info` and `podman import` clean.
+#  7. A second, independent bug the (6) fix exposed: the "no" branch's
+#     volumeMounts $patch:delete entries matched by "name", but corev1's
+#     patchMergeKey for Container.VolumeMounts is "mountPath", not "name" -
+#     the API rejected the whole patch outright ("map: map[$patch:delete
+#     name:lib-subid] does not contain declared merge key: mountPath"),
+#     silenced by the same >/dev/null 2>&1 as everything else here. Because
+#     (6) meant "yes" never did anything either, this had never mattered
+#     before: reverting a no-op left nothing to revert. Once (6) is fixed,
+#     "yes" actually changes the pod, so "no" must actually undo it - fixed
+#     by keying volumeMounts deletion on mountPath (Volumes' own merge key,
+#     "name", was already correct and untouched).
 #
 # None of this touches deploy/k8s/src/riid/Dockerfile.k8s: rebasing the image
 # would apply to every arm's measurement, not just this one, and arms already
@@ -118,7 +147,7 @@ set_podman_cli_mode() {
     kube -n riid-system patch daemonset riid --type strategic -p '{"spec":{"template":{"spec":{
       "containers":[{"name":"riid",
         "env":[{"name":"CONTAINER_HOST","$patch":"delete"}],
-        "securityContext":{"$patch":"replace",
+        "securityContext":{
           "capabilities":{"add":["SYS_ADMIN"]},
           "seccompProfile":{"type":"Unconfined"},
           "appArmorProfile":{"type":"Unconfined"}},
@@ -150,12 +179,12 @@ set_podman_cli_mode() {
         "env":[{"name":"CONTAINER_HOST","value":"unix:///run/podman/podman.sock"}],
         "securityContext":{"$patch":"replace"},
         "volumeMounts":[
-          {"name":"lib-subid","$patch":"delete"},
-          {"name":"lib-gpgme","$patch":"delete"},
-          {"name":"lib-devmapper","$patch":"delete"},
-          {"name":"lib-glib","$patch":"delete"},
-          {"name":"conmon-bin","$patch":"delete"},
-          {"name":"runc-bin","$patch":"delete"}]}],
+          {"mountPath":"/usr/lib/x86_64-linux-gnu/libsubid.so.4","$patch":"delete"},
+          {"mountPath":"/usr/lib/x86_64-linux-gnu/libgpgme.so.11","$patch":"delete"},
+          {"mountPath":"/usr/lib/x86_64-linux-gnu/libdevmapper.so.1.02.1","$patch":"delete"},
+          {"mountPath":"/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0","$patch":"delete"},
+          {"mountPath":"/usr/bin/conmon","$patch":"delete"},
+          {"mountPath":"/usr/sbin/runc","$patch":"delete"}]}],
       "volumes":[
         {"name":"lib-subid","$patch":"delete"},
         {"name":"lib-gpgme","$patch":"delete"},
