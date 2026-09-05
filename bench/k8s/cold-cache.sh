@@ -13,6 +13,13 @@ for alias in $STAND_SSH; do
   node_sudo "$alias" "podman system prune -af --volumes >/dev/null 2>&1"
   node_sudo "$alias" "podman rmi -af >/dev/null 2>&1"
   node_sudo "$alias" "rm -rf /var/lib/riid/work/*"
+  # RIID's TempFileCacheAdapter creates /tmp/riid-cache-tmp-<uuid> and cleans it
+  # on an orderly close - but not when the pod is killed. /tmp is a hostPath on
+  # the node (it has to be, or the pod is evicted for ephemeral storage), so
+  # those leaked directories now survive restarts and pile up: 21 GB after one
+  # arm, which filled the disk, triggered DiskPressure and evicted the pod
+  # mid-run. Clearing them is part of a cold cache, not an optimisation.
+  node_sudo "$alias" "sh -c 'rm -rf /var/lib/riid/tmp/riid-cache-tmp-* 2>/dev/null'"
 
   # containerd's store is NOT covered by podman's prune, and a containerd arm
   # leaves ~20 GB behind. Two arms filled a 79 GB disk to 86% and kubelet then
@@ -133,13 +140,20 @@ else
   i=0
   for alias in $STAND_SSH; do
     i=$((i+1)); [ "$i" = 1 ] && continue
-    # dfdaemon keeps its content under /var/run/dragonfly/data and its socket
-    # at /var/run/dragonfly/dfdaemon.sock. Wipe ONLY the data: deleting the
-    # socket leaves RIID unable to reach dfdaemon at all, and RIID's fallback to
-    # the registry is silent - the arm still completes, having measured nothing
-    # to do with P2P. (/var/lib/dragonfly-run is not dfdaemon's directory; a
-    # live DaemonSet had drifted to it, which is why p2p=0 on every earlier arm.)
-    node_sudo "$alias" "sh -c 'rm -rf /var/run/dragonfly/data/* 2>/dev/null'"
+    # dfdaemon's container mounts hostPath /var/lib/dragonfly-run at its own
+    # /var/run/dragonfly, so on the HOST - where this script runs via ssh -
+    # the real path is /var/lib/dragonfly-run, not /var/run/dragonfly (which
+    # does not exist here at all). The previous command targeted the
+    # container-internal path and silently no-op'd every run: data/ (RocksDB
+    # metadata) and output/ (the actual piece cache, named p2p-<uuid>.bin)
+    # grew unbounded - 23-28 GB per worker - and caused the "cold-cache did
+    # not reach 'stand verified'" disk-headroom failures that blocked
+    # riid-containerd/dfinit-containerd/*-prefix for over a day. Wipe both
+    # subdirectories but leave dfdaemon.sock itself alone: deleting the
+    # socket leaves RIID unable to reach dfdaemon at all, and RIID's fallback
+    # to the registry is silent - the arm still completes, having measured
+    # nothing to do with P2P.
+    node_sudo "$alias" "sh -c 'rm -rf /var/lib/dragonfly-run/data/* /var/lib/dragonfly-run/output/* 2>/dev/null'"
     node_sudo "$alias" "sh -c 'rm -rf /opt/local-path-provisioner/*dragonfly-seed-client*/* 2>/dev/null'"
     say "  $alias dragonfly caches cleared"
   done
