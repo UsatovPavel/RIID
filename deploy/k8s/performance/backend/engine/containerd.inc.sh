@@ -19,6 +19,13 @@ CTR_NAMESPACE="${CONTAINERD_NAMESPACE:-riid-bench}"
 CTR_ADDRESS="${CONTAINERD_ADDRESS:-}"
 CTR_SNAPSHOTTER="${CONTAINERD_SNAPSHOTTER:-}"
 CTR_HOSTS_DIR="${CONTAINERD_HOSTS_DIR:-/etc/containerd/certs.d}"
+# ctr's --debug is a GLOBAL flag, so it has to precede the subcommand. It makes
+# the client log every blob it fetches - which layer, from where, how big - so a
+# bench arm can be read per blob instead of per image. The output goes to
+# stderr; CTR_DEBUG_LOG collects it per arm, and without that variable it simply
+# joins the arm's run.log.
+CTR_DEBUG="${CONTAINERD_DEBUG:-0}"
+CTR_DEBUG_LOG="${CONTAINERD_DEBUG_LOG:-}"
 
 if ! [[ "$CTR_NAMESPACE" =~ ^[A-Za-z0-9_.-]+$ ]]; then
   echo "CONTAINERD_NAMESPACE has unexpected characters: $CTR_NAMESPACE" >&2
@@ -28,10 +35,28 @@ fi
 # ctr arguments that precede the subcommand, one per line (read with mapfile).
 _ctr_base() {
   printf '%s\n' ctr
+  if [[ "$CTR_DEBUG" == "1" ]]; then
+    printf '%s\n' --debug
+  fi
   if [[ -n "$CTR_ADDRESS" ]]; then
     printf '%s\n' -a "$CTR_ADDRESS"
   fi
   printf '%s\n' -n "$CTR_NAMESPACE"
+}
+
+# ctr writes its per-blob progress to STDOUT - one line per manifest, config and
+# layer, carrying the digest and the state (waiting / already exists /
+# downloading / done / extracted). The bench normally discards stdout, which is
+# exactly where that detail lives, so debug mode keeps it instead of dropping
+# it. stderr is left alone so a real error still surfaces in the arm's run.log.
+_ctr_run() {
+  if [[ "$CTR_DEBUG" == "1" && -n "$CTR_DEBUG_LOG" ]]; then
+    printf '\n===== %s =====\n' "${IMAGE_REPOSITORY:-?}:${IMAGE_REFERENCE:-?} $(date -u +%H:%M:%S)" \
+      >> "$CTR_DEBUG_LOG"
+    "$@" >> "$CTR_DEBUG_LOG"
+  else
+    "$@" > /dev/null
+  fi
 }
 
 # Flags of the pull itself, shared by the baseline and the mirror.
@@ -69,7 +94,7 @@ engine_pull() {
   local -a base flags
   mapfile -t base < <(_ctr_base)
   mapfile -t flags < <(_ctr_pull_flags)
-  riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" "$ref" >/dev/null
+  _ctr_run riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" "$ref"
 }
 
 # The mirror is switched on by an argument, not a file: without --hosts-dir the
@@ -80,7 +105,7 @@ engine_pull_mirrored() {
   local -a base flags
   mapfile -t base < <(_ctr_base)
   mapfile -t flags < <(_ctr_pull_flags)
-  riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" --hosts-dir "$CTR_HOSTS_DIR" "$ref" >/dev/null
+  _ctr_run riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" --hosts-dir "$CTR_HOSTS_DIR" "$ref"
 }
 
 engine_mirror_check() {

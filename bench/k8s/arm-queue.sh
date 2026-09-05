@@ -344,6 +344,15 @@ run_one() {
   tsv="$PERF/output/${base}.tsv"
   case "$arm" in *-zstd) tsv="$PERF/output/${arm}.tsv";; esac
   before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
+  # Per-blob capture: ctr prints one progress line per manifest, config and layer
+  # on stdout, which the scenario normally discards. Point the engine at a file
+  # beside the arm's own logs so the detail survives with the run.
+  if [ "${CONTAINERD_DEBUG:-0}" = "1" ]; then
+    mkdir -p "$log/$arm"
+    export CONTAINERD_DEBUG_LOG="$(pwd)/$log/$arm/ctr-blobs.log"
+    : > "$CONTAINERD_DEBUG_LOG"
+    say "  per-blob ctr log: $log/$arm/ctr-blobs.log"
+  fi
   make -C "$PERF" "$base" $CF EXPECTED_RIID_PODS=2 REGISTRY_TX_IFACE="$STAND_CLUSTER_NIC" $dsargs \
     > "$STATE/$arm.run.log" 2>&1
   rc=$?
