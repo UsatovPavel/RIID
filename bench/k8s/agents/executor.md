@@ -34,6 +34,8 @@ Do not arm a Monitor and end your turn; do not launch something with `&` and sto
 
 DO NOT create or destroy Selectel cloud compute. Pulling images from cr.selcloud.ru is fine. Do not power on any Porto VM.
 
+DO NOT TOUCH THE STAND WHILE AN ARM IS MEASURING. "Do not run benchmark arms" is not enough: a handful of diagnostic pulls against the in-cluster registry is enough to poison someone else's measurement. While `bench/k8s/queue-state/queue.log` shows an arm between its `registry holds 20/20 repositories` line and its DONE/FAILED line, do not pull images from the bench registry, do not exec into RIID or engine pods, and do not roll any DaemonSet. This has already cost an arm: during `riid-containerd-prefix` a few verification pulls left the 5.4 GiB `datasense` image failing on both pods with P2P `DEADLINE_EXCEEDED` and registry `Total timeout 156966 ms elapsed`, when the same image had completed in 1076 s uncontended an hour earlier. Source-only edits are safe at any time; save cluster work for the recover/cold-cache gap between arms, and say in your report exactly when you did it.
+
 WHEN THE VALIDATOR MESSAGES YOU: answer with evidence — exact commands, exit codes, file paths, log excerpts — not with reassurance. If it finds a problem you agree with, fix it and re-run that arm rather than arguing. If you disagree, say why and point at the artefact.
 
 REPORT, per arm: the exact command, make's exit code, whether the TSV was rewritten, images measured, failures, sum of AGGREGATE, egress delta, and the log export path. State plainly which arms you did not complete and why.
