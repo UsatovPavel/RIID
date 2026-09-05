@@ -64,7 +64,7 @@ spec:
           # longer unpacks anything — every engine is a daemon on the node.
           env:
             - name: RIID_CONFIG
-              value: /etc/riid/config.yaml
+              value: /var/lib/riid/work/config.yaml
             # PodmanRuntimeAdapter sends Libpod HTTP requests directly over this
             # Unix socket; no podman client binary is installed in the RIID image.
             - name: CONTAINER_HOST
@@ -90,9 +90,6 @@ spec:
             timeoutSeconds: 2
             failureThreshold: 15
           volumeMounts:
-            - name: riid-work
-              mountPath: /etc/riid/config.yaml
-              subPath: config.yaml
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
             # RIID derives the dfdaemon output path from the socket path
