@@ -23,7 +23,19 @@ set -a; . "${STAND_DIR}/stand.env"; set +a
 # shellcheck source=lib.sh
 . "${STAND_DIR}/lib.sh"
 
+# The workers keep dfinit's mirror in registries.conf (prefix 10.96.5.146:5000
+# -> 127.0.0.1:4001), so a pull addressed to the service IP silently travels
+# through Dragonfly's HTTP proxy. That proxy dies on the 5.4 GB datasense blob:
+#   Error: writing blob: ... unexpected EOF (after reconnecting, server did not
+#   process a Range: header, status 200)
+# 19 of 20 images repacked through it and only the largest failed; the same pull
+# addressed to the registry POD ip - which matches no mirror rule - succeeded
+# first try. Repacking must not go through P2P anyway: it is dataset
+# preparation, not a measurement. So resolve the pod ip and pull from that.
 REGISTRY="${REGISTRY:-10.96.5.146:5000}"
+PULL_FROM="${PULL_FROM:-$(kube -n registry-system get pods \
+  -o jsonpath='{.items[0].status.podIP}' 2>/dev/null):5000}"
+[ "$PULL_FROM" = ":5000" ] && PULL_FROM="$REGISTRY"
 DEST_PREFIX="${DEST_PREFIX:-riid-zstd}"
 SRC_PREFIX="${SRC_PREFIX:-riid}"
 ZSTD_LEVEL="${ZSTD_LEVEL:-3}"
@@ -49,7 +61,7 @@ ok=0; fail=0
 for repo in $REPOS; do
   tag="$(tags_of "$repo")"
   [ -n "$tag" ] || { say "  SKIP $repo (no tags)"; fail=$((fail+1)); continue; }
-  src="${REGISTRY}/${repo}:${tag}"
+  src="${PULL_FROM}/${repo}:${tag}"
   dst="${REGISTRY}/${DEST_PREFIX}/${repo#${SRC_PREFIX}/}:${tag}"
   # --force-compression is what actually rewrites the blobs; without it podman
   # reuses the source's gzip layers and the "zstd" copy is gzip with a new name.
