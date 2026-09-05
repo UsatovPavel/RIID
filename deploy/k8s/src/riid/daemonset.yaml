@@ -73,6 +73,22 @@ spec:
             - name: metrics
               containerPort: 9090
               protocol: TCP
+          # Readiness previously tracked nothing but the container process
+          # existing, so kubelet marked the pod Ready before Jetty had bound
+          # /tmp/riid.sock - the bench's first pull then raced the daemon's own
+          # startup ("Failed to connect to localhost port 80 ... Couldn't
+          # connect to server", a plain connection refused). HealthHttpHandler
+          # answers GET /healthz with a bare 200 on every connector, including
+          # this TCP one, with no dispatcher/registry work - the cheapest true
+          # signal that the daemon is actually serving, not just running.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 1
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 15
           volumeMounts:
             - name: riid-work
               mountPath: /etc/riid/config.yaml
