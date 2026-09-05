@@ -232,6 +232,11 @@ run_one() {
     say "  p2p=$(grep -ho 'Source fetched: p2p' "$log/$arm"/riid/*.log 2>/dev/null | wc -l) registry=$(grep -ho 'Source fetched: registry' "$log/$arm"/riid/*.log 2>/dev/null | wc -l)"
     # Two log lines per transaction, so halve it - counting raw lines doubled it once.
     say "  NeedBackToSource(tx)=$(( $(grep -ho 'NeedBackToSource' "$log/$arm"/seed/*.log "$log/$arm"/dfdaemon/*.log 2>/dev/null | wc -l) / 2 ))"
+    # A throw from the puller's close() discards an already-finished P2P
+    # download, and the layer is then paid for a second time from the registry.
+    # The rate is a race, not a property of the arm, so it has to be reported
+    # next to the timing or two riid arms are comparing noise.
+    say "  p2p-discarded-after-download=$(grep -ho 'failed to close dragonfly puller' "$log/$arm"/riid/*.log 2>/dev/null | wc -l)"
     ;;
   esac
   touch "$STATE/$arm.done"
