@@ -72,30 +72,97 @@ set_prefix_import() {
 
 # A podman prefix arm needs the CLI path: PodmanRuntimeAdapter declines
 # incremental import whenever it talks to the socket (images/load takes a whole
-# archive, so growing prefixes would be O(N^2) on the wire). A blank
-# CONTAINER_HOST selects the CLI fallback - and the RIID image ships no podman,
-# so the node's own binary is mounted in, exactly as ctr is.
+# archive, so growing prefixes would be O(N^2) on the wire). The node's own
+# podman binary is mounted in, exactly as ctr is.
+#
+# Verified (AGENT-99, standalone diagnostic pod, not through this daemonset)
+# what CLI mode actually needs beyond the binary+config+storage mounts already
+# below - each finding is the exact error hit without it:
+#
+#  1. CONTAINER_HOST must be UNSET, not set to "". PodmanUnixSocketClient.
+#     fromEnvironment (PodmanUnixSocketClient.java:145) treats null and ""
+#     the same, but the native podman CLI child process reads its own
+#     CONTAINER_HOST via Go's os.LookupEnv, which only checks presence, not
+#     value - a set-but-empty var still makes it probe
+#     unix:///run/podman/podman.sock ("Cannot connect to Podman ... dial unix
+#     /run/podman/podman.sock: connect: no such file or directory"). Deleting
+#     the env entry (not blanking it) satisfies both the Java gate and the CLI.
+#  2. Three shared libraries the RIID image (Ubuntu 24.04/noble) lacks that
+#     the node's podman binary is linked against (`ldd /usr/bin/podman`):
+#     libsubid.so.4, libgpgme.so.11, libdevmapper.so.1.02.1. This was the
+#     originally diagnosed gap ("cannot open shared object file").
+#  3. conmon + libglib-2.0.so.0 (conmon's own dependency). RIID never runs a
+#     container - only `podman load`/`pull`/`rmi` - but libpod's Runtime
+#     bring-up resolves the OCI runtime and conmon eagerly for ANY local
+#     command, container or not ("could not find a working conmon binary").
+#  4. An OCI runtime binary, even though it is never invoked: same eager
+#     resolution as (3). crun (podman's compiled-in first choice) is not
+#     installed anywhere on this stand, node included - runc is, and the node
+#     itself resolves to runc for the same reason, so mount runc.
+#  5. capabilities.add SYS_ADMIN + seccompProfile/appArmorProfile Unconfined.
+#     containers/storage's overlay graphdriver performs a real test mount
+#     (metacopy/native-diff/userxattr probing) on every process attach, not
+#     just first-time setup, on an ALREADY-initialized store. Default pod
+#     confinement blocks the mount(2) syscall even with SYS_ADMIN alone
+#     ("kernel does not support overlay fs ... over extfs" - misleading, the
+#     real cause is confinement, not the kernel or filesystem).
+#
+# None of this touches deploy/k8s/src/riid/Dockerfile.k8s: rebasing the image
+# would apply to every arm's measurement, not just this one, and arms already
+# measured (riid-containerd, bare-podman, ...) must stay comparable against
+# the image they actually ran on. This keeps the change local to the one arm
+# that needs it and reverts cleanly in the "no" branch below.
 set_podman_cli_mode() {
   local want="$1"
   if [ "$want" = yes ]; then
-    # The binary alone is not enough: the RIID image ships no containers stack,
-    # so podman CLI finds no /etc/containers (policy.json, storage.conf) and
-    # every import returns HTTP 500. Hand it the node's config and the node's
-    # storage - the engine under test is the node's podman either way, the CLI
-    # is only a different transport to the same graphroot.
     kube -n riid-system patch daemonset riid --type strategic -p '{"spec":{"template":{"spec":{
-      "containers":[{"name":"riid","env":[{"name":"CONTAINER_HOST","value":""}],
+      "containers":[{"name":"riid",
+        "env":[{"name":"CONTAINER_HOST","$patch":"delete"}],
+        "securityContext":{"$patch":"replace",
+          "capabilities":{"add":["SYS_ADMIN"]},
+          "seccompProfile":{"type":"Unconfined"},
+          "appArmorProfile":{"type":"Unconfined"}},
         "volumeMounts":[
           {"name":"podman-bin","mountPath":"/usr/local/bin/podman","readOnly":true},
           {"name":"containers-etc","mountPath":"/etc/containers","readOnly":true},
-          {"name":"containers-storage","mountPath":"/var/lib/containers"}]}],
+          {"name":"containers-storage","mountPath":"/var/lib/containers"},
+          {"name":"lib-subid","mountPath":"/usr/lib/x86_64-linux-gnu/libsubid.so.4","readOnly":true},
+          {"name":"lib-gpgme","mountPath":"/usr/lib/x86_64-linux-gnu/libgpgme.so.11","readOnly":true},
+          {"name":"lib-devmapper","mountPath":"/usr/lib/x86_64-linux-gnu/libdevmapper.so.1.02.1","readOnly":true},
+          {"name":"lib-glib","mountPath":"/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0","readOnly":true},
+          {"name":"conmon-bin","mountPath":"/usr/bin/conmon","readOnly":true},
+          {"name":"runc-bin","mountPath":"/usr/sbin/runc","readOnly":true}]}],
       "volumes":[
         {"name":"podman-bin","hostPath":{"path":"/usr/bin/podman","type":"File"}},
         {"name":"containers-etc","hostPath":{"path":"/etc/containers","type":"Directory"}},
-        {"name":"containers-storage","hostPath":{"path":"/var/lib/containers","type":"DirectoryOrCreate"}}]}}}}' >/dev/null 2>&1
+        {"name":"containers-storage","hostPath":{"path":"/var/lib/containers","type":"DirectoryOrCreate"}},
+        {"name":"lib-subid","hostPath":{"path":"/usr/lib/x86_64-linux-gnu/libsubid.so.4.0.0","type":"File"}},
+        {"name":"lib-gpgme","hostPath":{"path":"/usr/lib/x86_64-linux-gnu/libgpgme.so.11.27.0","type":"File"}},
+        {"name":"lib-devmapper","hostPath":{"path":"/usr/lib/x86_64-linux-gnu/libdevmapper.so.1.02.1","type":"File"}},
+        {"name":"lib-glib","hostPath":{"path":"/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0.8000.0","type":"File"}},
+        {"name":"conmon-bin","hostPath":{"path":"/usr/bin/conmon","type":"File"}},
+        {"name":"runc-bin","hostPath":{"path":"/usr/sbin/runc","type":"File"}}]}}}}' >/dev/null 2>&1
   else
+    # Full revert: restore the socket env var and drop every mount/capability
+    # added above, so socket-mode and containerd arms never inherit them.
     kube -n riid-system patch daemonset riid --type strategic -p '{"spec":{"template":{"spec":{
-      "containers":[{"name":"riid","env":[{"name":"CONTAINER_HOST","value":"unix:///run/podman/podman.sock"}]}]}}}}' >/dev/null 2>&1
+      "containers":[{"name":"riid",
+        "env":[{"name":"CONTAINER_HOST","value":"unix:///run/podman/podman.sock"}],
+        "securityContext":{"$patch":"replace"},
+        "volumeMounts":[
+          {"name":"lib-subid","$patch":"delete"},
+          {"name":"lib-gpgme","$patch":"delete"},
+          {"name":"lib-devmapper","$patch":"delete"},
+          {"name":"lib-glib","$patch":"delete"},
+          {"name":"conmon-bin","$patch":"delete"},
+          {"name":"runc-bin","$patch":"delete"}]}],
+      "volumes":[
+        {"name":"lib-subid","$patch":"delete"},
+        {"name":"lib-gpgme","$patch":"delete"},
+        {"name":"lib-devmapper","$patch":"delete"},
+        {"name":"lib-glib","$patch":"delete"},
+        {"name":"conmon-bin","$patch":"delete"},
+        {"name":"runc-bin","$patch":"delete"}]}}}}' >/dev/null 2>&1
   fi
   kube -n riid-system rollout status daemonset/riid --timeout=8m >/dev/null 2>&1
   say "  podman CLI mode=${want}"
