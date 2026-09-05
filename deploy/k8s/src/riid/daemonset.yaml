@@ -94,6 +94,14 @@ spec:
             # the RIID image; only the socket has to be handed in.
             - name: containerd-sock
               mountPath: /run/containerd/containerd.sock
+            # dfinit-containerd arm: `ctr images pull --hosts-dir` and the
+            # bench's own mirror check (containerd.inc.sh engine_mirror_check)
+            # both read certs.d from THIS pod's filesystem, not the node's —
+            # without this mount both see an empty/missing directory even
+            # after dfinit correctly rewrites certs.d on the node.
+            - name: containerd-certs-d
+              mountPath: /etc/containerd/certs.d
+              readOnly: true
             # ContainerdRuntimeAdapter shells out to `ctr`, which the RIID image
             # does not ship. Mount the node's own binary rather than baking one
             # in: that way it always matches the containerd the node runs, and a
@@ -171,6 +179,13 @@ spec:
           hostPath:
             path: /run/containerd/containerd.sock
             type: Socket
+        # DirectoryOrCreate: dfinit only populates this after dfinit-enable
+        # runs, so it must not block pod scheduling before that (bare/riid
+        # containerd arms never touch it).
+        - name: containerd-certs-d
+          hostPath:
+            path: /etc/containerd/certs.d
+            type: DirectoryOrCreate
         - name: ctr-bin
           hostPath:
             path: /usr/bin/ctr

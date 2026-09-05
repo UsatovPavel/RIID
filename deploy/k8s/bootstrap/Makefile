@@ -4,7 +4,9 @@ SELECTEL_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 K8S := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 OBSERVER_CHART := $(K8S)/src/monitoring/helm/riid-observer
 RUN_PROVIDER_APPLY := bash "$(K8S)/providers/registry/image/provider-apply.sh" --provider dockerhub --root "$(K8S)"
-KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
+# CONFIG_FILE may be absolute (use as-is) or relative (resolve against this
+# Makefile's own directory, so it works regardless of the caller's cwd).
+KUBECONFIG := $(if $(filter /%,$(CONFIG_FILE)),$(CONFIG_FILE),$(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE)))
 GLOBAL_CONFIG_FILE := $(K8S)/config/config.yaml
 DOCKERHUB_IMAGELIST := $(K8S)/config/imagelist/dockerhub.yaml
 DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
