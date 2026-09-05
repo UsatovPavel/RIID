@@ -21,7 +21,7 @@ seedClient:
     enable: true
   config:
     # AGENT-99: 60/45 was still far too high. On a 79 GB worker that lets the
-    # cache reach ~47 GB before GC runs - four times the 11.46 GiB dataset - and
+    # cache reach ~47 GB before GC runs - four times the 11.07 GiB dataset - and
     # it shares the disk with containerd's store and RIID's work dir. aibox2
     # then sits below the 27 GB the preflight needs and every arm is blocked or
     # evicted mid-run. 25/15 caps it near the dataset's own size.
