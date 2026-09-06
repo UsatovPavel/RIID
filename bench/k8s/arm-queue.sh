@@ -318,8 +318,16 @@ run_one() {
     ;;
   esac
 
-  case "$arm" in dfinit-*) make -C deploy/k8s/bootstrap dfinit-enable \
-      ENGINE="${arm#dfinit-}" $CF > "$STATE/$arm.dfinit.log" 2>&1;; esac
+  # ENGINE must be the bare engine name. install-dragonfly.sh branches on an
+  # exact string match ("containerd"), so a suffixed arm like
+  # dfinit-containerd-zstd used to pass ENGINE=containerd-zstd, miss the branch,
+  # and install the client with NO containerd dfinit override at all - the exact
+  # condition the script warns crashlooped the whole client DaemonSet. Strip the
+  # dataset and flag suffixes before handing the name over.
+  case "$arm" in dfinit-*)
+    eng="${arm#dfinit-}"; eng="${eng%-zstd}"; eng="${eng%-prefix}"
+    make -C deploy/k8s/bootstrap dfinit-enable \
+      ENGINE="$eng" $CF > "$STATE/$arm.dfinit.log" 2>&1;; esac
 
   # The prefix arm is the same engine arm with runtime.prefixImport flipped on;
   # the flag lives in RIID's config, not in a make target.
