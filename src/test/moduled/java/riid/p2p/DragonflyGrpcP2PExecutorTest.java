@@ -195,7 +195,11 @@ class DragonflyGrpcP2PExecutorTest {
             result = executor.fetch(REPO, ImageDigest.parse(DIGEST), SIZE, CacheMediaType.OCI_LAYER);
         } finally {
             boolean interrupted = Thread.interrupted();
-            assertTrue(interrupted, "an InterruptedException from close() must set the interrupt flag back");
+            // The interruption belongs to the puller's own channel shutdown, not to
+            // this task. Re-asserting it would make the caller's next blocking file
+            // copy fail with ClosedByInterruptException and lose the very layer this
+            // method just rescued, so the flag must stay clear.
+            assertFalse(interrupted, "a close() failure must not leave the thread interrupted");
             if (interruptedBefore) {
                 Thread.currentThread().interrupt();
             }

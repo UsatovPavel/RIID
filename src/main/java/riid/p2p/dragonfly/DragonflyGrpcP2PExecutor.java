@@ -109,9 +109,13 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
             try {
                 puller.close();
             } catch (Exception closeException) {
-                if (isInterruption(closeException)) {
-                    Thread.currentThread().interrupt();
-                }
+                // Deliberately NOT re-asserting the interrupt flag. The interruption
+                // seen here comes from the puller shutting down its own dfdaemon
+                // channel, not from anyone cancelling this task, and the caller's
+                // next step after a successful fetch is a blocking file copy
+                // (SimpleRequestDispatcher: cache.put). Setting the flag would make
+                // that copy fail with ClosedByInterruptException and destroy the
+                // very download this method exists to preserve.
                 if (pullFailure != null) {
                     pullFailure.addSuppressed(closeException);
                 } else {
@@ -124,19 +128,6 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
             throw pullFailure;
         }
         return Optional.of(pulledPath);
-    }
-
-    /**
-     * True if the exception, or one of its causes, is an
-     * {@link InterruptedException}.
-     */
-    private static boolean isInterruption(Throwable exception) {
-        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (cause instanceof InterruptedException) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
