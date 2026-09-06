@@ -368,6 +368,14 @@ run_one() {
   # DaemonSet, and a rolled pod takes its log with it. Every prefix arm so far
   # exported exactly 2134 bytes of fresh-pod startup chatter, which also made
   # the p2p/registry counters below read 0/0 - unprovable, not just untidy.
+  # The precondition record must travel with the run it belongs to. These logs
+  # are written per ARM NAME, so a second run of the same arm overwrites the
+  # first one's evidence - and a question about that run's cold-cache then has
+  # no answer at all, which is exactly what happened comparing 0.4.12 to 0.4.13.
+  mkdir -p "$log/$arm"
+  for f in recover coldcache; do
+    [ -f "$STATE/$arm.$f.log" ] && cp "$STATE/$arm.$f.log" "$log/$arm/$f.log"
+  done
   export_logs "$arm" "$log"
   if [ "$prefix" = yes ]; then
     set_prefix_import false
