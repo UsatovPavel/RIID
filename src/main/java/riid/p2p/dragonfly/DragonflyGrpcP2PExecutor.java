@@ -15,6 +15,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import riid.cache.oci.CacheMediaType;
 import riid.cache.oci.ImageDigest;
 import riid.client.core.config.RegistryEndpoint;
@@ -29,6 +32,8 @@ import riid.core.fs.PathSupport;
  * (hostPath mount) so dfdaemon can write and RIID can read on host.
  */
 public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DragonflyGrpcP2PExecutor.class);
+
     private final RegistryEndpoint endpoint;
     private final DragonflyConfig config;
     private final RegistryAuthProvider authProvider;
@@ -81,25 +86,48 @@ public final class DragonflyGrpcP2PExecutor implements P2PExecutor {
                 authProvider.resolve(endpoint, repository));
         Duration pullTimeout = config.requestTimeoutForSizeBytes(size);
         Puller puller = pullerFactory.create(config, pullTimeout);
+        Path pulledPath = null;
+        IOException pullFailure = null;
         try {
             PullResult result = puller.pull(request).join();
-            return Optional.of(result.path());
+            pulledPath = result.path();
         } catch (CompletionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof DragonflyPullException dragonflyPullException) {
-                throw new IOException("dragonfly pull failed: " + dragonflyPullException.getMessage(),
+                pullFailure = new IOException("dragonfly pull failed: " + dragonflyPullException.getMessage(),
                         dragonflyPullException);
+            } else {
+                pullFailure = new IOException("dragonfly pull failed: " + cause.getMessage(), cause);
             }
-            throw new IOException("dragonfly pull failed: " + cause.getMessage(), cause);
         } catch (DragonflyPullException e) {
-            throw new IOException("dragonfly pull failed: " + e.getMessage(), e);
+            pullFailure = new IOException("dragonfly pull failed: " + e.getMessage(), e);
         } finally {
+            // A close() failure must never mask a pull that already succeeded - the
+            // dispatcher would otherwise re-fetch from the registry a layer that is
+            // already on disk. If the pull already failed, attach the close failure
+            // instead of losing it.
             try {
                 puller.close();
-            } catch (Exception e) {
-                throw new IOException("failed to close dragonfly puller", e);
+            } catch (Exception closeException) {
+                // Deliberately NOT re-asserting the interrupt flag. The interruption
+                // seen here comes from the puller shutting down its own dfdaemon
+                // channel, not from anyone cancelling this task, and the caller's
+                // next step after a successful fetch is a blocking file copy
+                // (SimpleRequestDispatcher: cache.put). Setting the flag would make
+                // that copy fail with ClosedByInterruptException and destroy the
+                // very download this method exists to preserve.
+                if (pullFailure != null) {
+                    pullFailure.addSuppressed(closeException);
+                } else {
+                    LOGGER.warn("Failed to close dragonfly puller after a successful pull of {}", digest,
+                            closeException);
+                }
             }
         }
+        if (pullFailure != null) {
+            throw pullFailure;
+        }
+        return Optional.of(pulledPath);
     }
 
     /**
