@@ -355,6 +355,19 @@ run_one() {
   # transport difference IS the change between them, not a stand detail.
   if [ "${RIID_PODMAN_CLI:-0}" = "1" ] && [ "$prefix" = no ]; then
     case "$base" in riid-podman) set_podman_cli_mode yes;; esac
+  elif [ "$prefix" = no ]; then
+    # CLI mode is only ever undone by the arm that turned it on, so an arm that
+    # died before its cleanup leaves the podman shim mounted in the RIID
+    # container - and engine_preflight then refuses EVERY podman arm with
+    # "podman must not be installed in the RIID container". Three bare-podman
+    # attempts and a bare-podman-zstd attempt were burned that way. Assert the
+    # clean state on entry instead of trusting the previous arm's exit path.
+    if kube -n riid-system exec "$(kube -n riid-system get pods \
+         -l app.kubernetes.io/name=riid -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)" \
+         -c riid -- sh -c 'command -v podman' >/dev/null 2>&1; then
+      say "  podman shim left over from an earlier arm - reverting CLI mode"
+      set_podman_cli_mode no
+    fi
   fi
 
   tsv="$PERF/output/${base}.tsv"
