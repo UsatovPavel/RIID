@@ -9,8 +9,12 @@
 #
 # Dragonfly (namespace по умолчанию dragonfly-system, см. DRAGONFLY_NAMESPACE):
 #   • Поды app=dragonfly, component=client | seed-client (Helm OSS): очистить содержимое
-#     каталогов из DRAGONFLY_CACHE_DIRS (по умолчанию логический кэш dfdaemon и P2P output,
-#     см. scripts/values.yaml extraVolumeMounts /var/run/dragonfly/output).
+#     каталогов из DRAGONFLY_CACHE_DIRS (по умолчанию логический кэш dfdaemon, P2P output
+#     и storage.dir — см. scripts/values.yaml client.config.storage.dir и
+#     extraVolumeMounts /var/run/dragonfly/output). storage.dir is dfdaemon's own
+#     content-addressable task store, the hardlink source for P2P output; it survives pod
+#     restarts on its hostPath, so omitting it here let a previous arm's already-fetched
+#     images serve a later arm as free instant local-cache hits instead of a genuine cold pull.
 #   • Namespace и обязательные control-plane ресурсы считаются обязательными:
 #     при отсутствии скрипт падает.
 #
@@ -44,9 +48,11 @@ LABEL="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
 WORK_DIR="${RIID_WORK_DIR:-/var/lib/riid/work}"
 
 DFS="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
-# По умолчанию: дерево dfget/dfdaemon (часто /var/cache/dragonfly/dfdaemon под этим корнем)
-# и hostPath‑вывод RIID (/var/run/dragonfly/output в values.yaml extraVolumeMounts).
-DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/run/dragonfly/output}"
+# By default: the dfget/dfdaemon tree, RIID's hostPath output
+# (/var/run/dragonfly/output) and dfdaemon's own storage.dir (/var/run/dragonfly/data).
+# Without the last one a node's dfdaemon store still hardlink-serves content across
+# arms, so a "cold" pull resolves every layer as a leftover local P2P hit.
+DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/run/dragonfly/output /var/run/dragonfly/data}"
 DRAGONFLY_RESET_CONTROL_PLANE="${DRAGONFLY_RESET_CONTROL_PLANE:-1}"
 DRAGONFLY_RECREATE_REDIS_STATE="${DRAGONFLY_RECREATE_REDIS_STATE:-1}"
 DRAGONFLY_MANAGER_RESOURCE="${DRAGONFLY_MANAGER_RESOURCE:-deployment/dragonfly-manager}"

@@ -96,7 +96,7 @@ variable "image_name" {
 variable "volume_gb" {
   description = "Boot disk per node, GiB. The SL flavors carry no disk, so every server boots from a volume."
   type        = number
-  default     = 140
+  default     = 100
 }
 
 variable "control_plane_volume_gb" {

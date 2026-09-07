@@ -64,30 +64,81 @@ spec:
           # longer unpacks anything — every engine is a daemon on the node.
           env:
             - name: RIID_CONFIG
-              value: /etc/riid/config.yaml
-            # PodmanRuntimeAdapter sends Libpod HTTP directly over this socket;
-            # the RIID image contains no podman client binary.
+              value: /var/lib/riid/work/config.yaml
+            # PodmanRuntimeAdapter sends Libpod HTTP requests directly over this
+            # Unix socket; no podman client binary is installed in the RIID image.
             - name: CONTAINER_HOST
               value: unix:///run/podman/podman.sock
           ports:
             - name: metrics
               containerPort: 9090
               protocol: TCP
+          # Readiness previously tracked only the process existing, so kubelet marked
+          # the pod Ready before Jetty had bound /tmp/riid.sock and the bench's first
+          # pull raced startup with a plain connection refused. GET /healthz answers a
+          # bare 200 on every connector - the cheapest true "actually serving" signal.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 1
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 15
           volumeMounts:
-            - name: riid-work
-              mountPath: /etc/riid/config.yaml
-              subPath: config.yaml
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
+            # RIID derives the dfdaemon output path from the socket path
+            # (<dir>/output/p2p-*.bin) and never creates it; dfdaemon writes the blob
+            # there. Both sides must see one host directory, and it must not be the
+            # tmpfs behind /var/run - see client.extraVolumes in scripts/values.yaml.
+            - name: dragonfly-output
+              mountPath: /var/run/dragonfly/output
             - name: podman-sock
               mountPath: /run/podman/podman.sock
-            # Prefix layouts are tarred and streamed through the socket, so the
-            # node no longer needs access to the work directory.
+            # RIID => Containerd arm: ContainerdRuntimeAdapter runs `ctr`, which
+            # talks gRPC to the node's containerd — the very daemon kubelet uses,
+            # so nothing extra is installed on the node. The binary itself is in
+            # the RIID image; only the socket has to be handed in.
+            - name: containerd-sock
+              mountPath: /run/containerd/containerd.sock
+            # dfinit-containerd arm: `ctr images pull --hosts-dir` and the bench's
+            # mirror check both read certs.d from THIS pod's filesystem, not the
+            # node's - without this mount both see an empty directory even after
+            # dfinit correctly rewrites certs.d on the node.
+            - name: containerd-certs-d
+              mountPath: /etc/containerd/certs.d
+              readOnly: true
+            # ContainerdRuntimeAdapter shells out to `ctr`, which the RIID image
+            # does not ship. Mount the node's own binary rather than baking one
+            # in: that way it always matches the containerd the node runs, and a
+            # version skew cannot silently break the containerd arms.
+            - name: ctr-bin
+              mountPath: /usr/local/bin/ctr
+              readOnly: true
+            # RIID => Porto arm: PortoRuntimeAdapter runs `portoctl`, which talks to
+            # the node's portod over this socket (porto.inc.sh documents the same for
+            # the bare-porto arm). portoctl ships in the RIID image; only the socket
+            # has to be handed in, same shape as podman/containerd above.
+            - name: portod-sock
+              mountPath: /run/portod.socket
+            # Prefix import hands the node's podman a PATH, not a stream, and podman
+            # resolves it in the NODE's filesystem. An emptyDir is visible only inside
+            # this pod, so every incremental import dies with "lstat /var/lib/riid/work:
+            # no such file". The streaming path does not care - only prefix broke.
             - name: riid-work
               mountPath: /var/lib/riid/work
+            # Anything RIID writes outside a mounted path lands in the container's
+            # writable layer, which kubelet counts as ephemeral storage. A containerd
+            # arm evicted the pod at 9.7 GB and the arm then failed with "pods not
+            # found", looking like an application fault. /tmp goes on the node's disk.
+            - name: riid-tmp
+              mountPath: /tmp
       volumes:
         - name: riid-work
-          emptyDir: {}
+          hostPath:
+            path: /var/lib/riid/work
+            type: DirectoryOrCreate
         - name: riid-config-cm
           configMap:
             name: riid-config
@@ -97,9 +148,44 @@ spec:
             optional: true
         - name: dragonfly-sock
           hostPath:
-            path: /var/run/dragonfly
+            # Must match the socket dir the dragonfly-client DaemonSet mounts
+            # (see patch-dragonfly-client-hostip.sh). The chart default puts it
+            # under /run, which is tmpfs - the P2P cache is then capped by RAM
+            # and a full /run stops every container on the node from starting.
+            path: /var/lib/dragonfly-run
+            type: DirectoryOrCreate
+        # Must be the SAME host directory dfdaemon writes finished blobs to:
+        # dragonfly-client mounts hostPath /var/run/dragonfly, so its
+        # /var/run/dragonfly/output is that host path, not one under /var/lib. Pointing
+        # elsewhere made every P2P download report "output file missing" on RIID's side.
+        - name: dragonfly-output
+          hostPath:
+            path: /var/lib/dragonfly-run/output
             type: DirectoryOrCreate
         - name: podman-sock
           hostPath:
             path: /run/podman/podman.sock
+            type: Socket
+        - name: containerd-sock
+          hostPath:
+            path: /run/containerd/containerd.sock
+            type: Socket
+        # DirectoryOrCreate: dfinit only populates this after dfinit-enable
+        # runs, so it must not block pod scheduling before that (bare/riid
+        # containerd arms never touch it).
+        - name: containerd-certs-d
+          hostPath:
+            path: /etc/containerd/certs.d
+            type: DirectoryOrCreate
+        - name: ctr-bin
+          hostPath:
+            path: /usr/bin/ctr
+            type: File
+        - name: riid-tmp
+          hostPath:
+            path: /var/lib/riid/tmp
+            type: DirectoryOrCreate
+        - name: portod-sock
+          hostPath:
+            path: /run/portod.socket
             type: Socket

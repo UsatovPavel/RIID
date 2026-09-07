@@ -1,5 +1,13 @@
 #cloud-config
 # Воркер стенда: та же база, что у control plane, плюс Porto и вход в кластер.
+
+# This image boots cgroup2 as the sole unified hierarchy, but Porto 5.3.41 mounts
+# its own cgroup v1 tree per controller and crash-loops there ("Cannot mount
+# cgroup: Device or resource busy"). The layout is fixed at kernel init, so it needs
+# systemd.unified_cgroup_hierarchy=0 and a reboot; the /proc/cmdline check is idempotent.
+bootcmd:
+  - [sh, -c, 'grep -q systemd.unified_cgroup_hierarchy=0 /proc/cmdline || { echo "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT systemd.unified_cgroup_hierarchy=0\"" >> /etc/default/grub; update-grub; reboot; }']
+
 users:
   - default
   - name: riid

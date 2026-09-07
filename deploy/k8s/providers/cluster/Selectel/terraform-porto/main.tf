@@ -127,6 +127,13 @@ resource "openstack_networking_secgroup_rule_v2" "intra_tcp" {
   port_range_max    = 65535
   remote_ip_prefix  = var.subnet_cidr
   security_group_id = openstack_networking_secgroup_v2.stand.id
+
+  # Selectel's Neutron normalizes a full 1-65535 range back to 0/0 on read
+  # (its shorthand for "all ports"), so every plan sees drift and replaces
+  # a rule that's already correct. Ignore it rather than replace forever.
+  lifecycle {
+    ignore_changes = [port_range_min, port_range_max]
+  }
 }
 
 resource "openstack_networking_secgroup_rule_v2" "intra_udp" {
@@ -137,6 +144,10 @@ resource "openstack_networking_secgroup_rule_v2" "intra_udp" {
   port_range_max    = 65535
   remote_ip_prefix  = var.subnet_cidr
   security_group_id = openstack_networking_secgroup_v2.stand.id
+
+  lifecycle {
+    ignore_changes = [port_range_min, port_range_max]
+  }
 }
 
 resource "openstack_networking_secgroup_rule_v2" "intra_icmp" {
@@ -157,6 +168,10 @@ resource "openstack_networking_secgroup_rule_v2" "pods" {
   port_range_max    = 65535
   remote_ip_prefix  = var.pod_cidr
   security_group_id = openstack_networking_secgroup_v2.stand.id
+
+  lifecycle {
+    ignore_changes = [port_range_min, port_range_max]
+  }
 }
 
 # --- Control plane ---
@@ -260,8 +275,12 @@ resource "openstack_compute_instance_v2" "worker" {
     node_labels    = local.node_labels
   })
 
+  # security_groups is attached at boot by Neutron, but the provider cannot read it
+  # back for a Neutron-networked instance, so every plan sees empty state and calls
+  # addSecurityGroup again - 400 "Duplicate items in the list". Ignore it rather than
+  # fight a provider round-trip gap that has no effect on real state.
   lifecycle {
-    ignore_changes = [user_data]
+    ignore_changes = [user_data, security_groups]
   }
 
   depends_on = [

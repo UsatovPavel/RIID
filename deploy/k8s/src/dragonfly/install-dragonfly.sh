@@ -24,6 +24,13 @@ VALUES="${REPO_ROOT}/scripts/values.yaml"
 RENDER_VALUES="${REPO_ROOT}/scripts/render-values-from-infra.sh"
 SELECTEL_HELM_FRAGMENT="${REPO_ROOT}/deploy/k8s/.resolved/registry/helm/dragonfly-values-selectel.yaml"
 
+# Pin the chart to the same version CI uses. Single source of truth is
+# scripts/Makefile; the literal below is only a fallback if that parse fails.
+# An unpinned install resolves to the newest upstream chart, which defaults
+# manager.enable to false and raises resource requests past a small stand.
+DRAGONFLY_CHART_VERSION="${DRAGONFLY_CHART_VERSION:-$(sed -n 's/^DRAGONFLY_CHART_VERSION[[:space:]]*:=[[:space:]]*//p' "${REPO_ROOT}/scripts/Makefile" 2>/dev/null | head -1)}"
+DRAGONFLY_CHART_VERSION="${DRAGONFLY_CHART_VERSION:-1.6.26}"
+
 TMP_VALUES="$(mktemp)"
 TMP_MERGED=""
 TMP_PROVIDER_MERGED=""
@@ -105,17 +112,58 @@ if ! kubectl cluster-info &>/dev/null; then
   exit 1
 fi
 
+# dfinit rewrites one engine's registry config, but the chart values hold only one
+# answer and dfinit.enable is unconditional - a containerd block left in values.yaml
+# is live for EVERY arm. It once crashlooped the whole client DaemonSet ("failed to
+# run container runtime: Is a directory"). Render the requested engine, null the other.
+DFINIT_ENGINE="${RIID_DFINIT_ENGINE:-}"
+if [ "$DFINIT_ENGINE" = "containerd" ]; then
+  DFINIT_OVERRIDE="$(mktemp)"
+  cleanup_dfinit_override() { rm -f "$DFINIT_OVERRIDE"; }
+  trap cleanup_dfinit_override EXIT
+  cat > "$DFINIT_OVERRIDE" <<DFEOF
+client:
+  dfinit:
+    config:
+      containerRuntime:
+        crio: null
+        containerd:
+          configPath: /etc/containerd/config.toml
+          proxyAllRegistries: false
+          registries:
+            - hostNamespace: ${RIID_DFINIT_REGISTRY:-}
+              serverAddr: http://${RIID_DFINIT_REGISTRY:-}
+              capabilities: ["pull", "resolve"]
+DFEOF
+  echo ">>> dfinit engine: containerd (crio handler disabled for this install)"
+  DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
+else
+  DFINIT_HELM_ARGS=""
+fi
+
 echo ">>> Helm repo dragonfly"
 helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null || true
 helm repo update
 
-echo ">>> helm upgrade --install dragonfly (namespace dragonfly-system)"
+echo ">>> helm upgrade --install dragonfly (namespace dragonfly-system), chart ${DRAGONFLY_CHART_VERSION}"
+# The dfinit override MUST come after the base values: helm merges -f files in
+# order and the last one wins. Passed before ${HELM_VALUES}, this override was
+# erased by that file's `containerd: null`, so `dfinit-enable ENGINE=containerd`
+# silently configured CRI-O instead and never wrote containerd's certs.d.
 helm upgrade --install dragonfly dragonfly/dragonfly \
+  --version "${DRAGONFLY_CHART_VERSION}" \
   --namespace dragonfly-system \
   --create-namespace \
   --wait \
   --timeout 15m \
-  -f "${HELM_VALUES}"
+  -f "${HELM_VALUES}" \
+  ${DFINIT_HELM_ARGS}
+
+# AGENT-99: dragonfly-client (hostNetwork) advertises whatever IP its default-route
+# autodetection picks; where nodes clone one NAT adapter that is the same unreachable
+# address everywhere and P2P degrades to 100% registry fallback. Re-applied on every
+# install/upgrade - each helm upgrade re-renders the DaemonSet and undoes it.
+bash "${SCRIPT_DIR}/patch-dragonfly-client-hostip.sh"
 
 echo ">>> Pods:"
 kubectl get pods -n dragonfly-system -o wide

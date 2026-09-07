@@ -32,7 +32,7 @@ variable "auth_url" {
   default     = "https://cloud.api.selcloud.ru/identity/v3"
 }
 
-# --- Stand shape (AGENT-98 comment: ru-3, BASIC, 4 vCPU / 8 GB, 140 GB fast, 6 or 12 nodes) ---
+# --- Stand shape (AGENT-98 comment: ru-3, BASIC, 4 vCPU / 8 GB, 100 GB fast, 6 or 12 nodes) ---
 
 variable "cluster_name" {
   description = "MKS cluster name."
@@ -103,7 +103,7 @@ variable "ram_mb" {
 variable "volume_gb" {
   description = "Boot disk per node, GiB."
   type        = number
-  default     = 140
+  default     = 100
 }
 
 variable "volume_type_family" {

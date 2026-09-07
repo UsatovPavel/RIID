@@ -5,6 +5,10 @@
 #   REGISTRY_TX_NAMESPACE
 #   REGISTRY_TX_POD_NAME
 #   REGISTRY_TX_IMAGE
+#   REGISTRY_TX_IFACE  (optional) NIC to read tx_bytes from. Set it when the
+#     cluster's traffic does not ride the node's default route - e.g. a stand
+#     with a separate host-only NIC, where autodetect would measure the idle
+#     default-route interface instead and report a near-zero delta.
 
 registry_tx_is_uint() {
   [[ "${1:-}" =~ ^[0-9]+$ ]]
@@ -35,9 +39,9 @@ registry_node_probe_tx() {
 
   cat >"$probe_body" <<'REGISTRY_TX_PROBE_SCRIPT'
 set -eu
-iface=""
+iface="__RIID_TX_IFACE__"
 # 1) IPv4 default route (works without iproute2 `ip`; aligns with registry-node-tc.sh intent).
-if [ -r /proc/net/route ]; then
+if [ -z "$iface" ] && [ -r /proc/net/route ]; then
   iface="$(awk '$2 == "00000000" { print $1; exit }' /proc/net/route 2>/dev/null || true)"
 fi
 # 2) default route line may be "default dev eth0 ..." -> pick iface after "dev", not fixed $5.
@@ -66,6 +70,9 @@ fi
 tx="$(cat "/sys/class/net/${iface}/statistics/tx_bytes")"
 echo iface=$iface tx_bytes=$tx
 REGISTRY_TX_PROBE_SCRIPT
+
+  # Empty unless REGISTRY_TX_IFACE is set, which keeps autodetect as the default.
+  sed -i "s/__RIID_TX_IFACE__/${REGISTRY_TX_IFACE:-}/" "$probe_body"
 
   {
     cat <<EOF

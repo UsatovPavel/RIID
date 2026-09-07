@@ -4,18 +4,26 @@ SELECTEL_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 K8S := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 OBSERVER_CHART := $(K8S)/src/monitoring/helm/riid-observer
 RUN_PROVIDER_APPLY := bash "$(K8S)/providers/registry/image/provider-apply.sh" --provider dockerhub --root "$(K8S)"
-KUBECONFIG := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE))
+# CONFIG_FILE may be absolute (use as-is) or relative (resolve against this
+# Makefile's own directory, so it works regardless of the caller's cwd).
+KUBECONFIG := $(if $(filter /%,$(CONFIG_FILE)),$(CONFIG_FILE),$(abspath $(dir $(lastword $(MAKEFILE_LIST)))$(CONFIG_FILE)))
 GLOBAL_CONFIG_FILE := $(K8S)/config/config.yaml
 DOCKERHUB_IMAGELIST := $(K8S)/config/imagelist/dockerhub.yaml
 DRAGONFLY_REGISTRY_DIR := $(K8S)/src/dragonfly/registry
 DRAGONFLY_PULL_SECRET_SCRIPT := $(DRAGONFLY_REGISTRY_DIR)/setup-dockerhub-pull-secret.sh
+# Which registry the Dragonfly images come from; same source as bootstrap/registry.
+DRAGONFLY_PROFILE ?= $(shell yq e '.cluster_provider // "dockerhub"' "$(GLOBAL_CONFIG_FILE)" 2>/dev/null | sed -e 's/#.*//' | tr '[:upper:]' '[:lower:]' | xargs)
 
 # Default class for PVCs with no storageClass (Helm Dragonfly / Bitnami
-# MySQL+Redis). fast.ru-3b is a Cinder class created by the CSI of the managed
-# MKS cluster. The self-managed stand (terraform-porto, Ubuntu 22.04) has no CSI,
-# so it uses STORAGE_CLASS=local-path and storage-default brings the provisioner
-# up itself.
-STORAGE_CLASS ?= fast.ru-3b ## Санкт-Петербург
+# MySQL+Redis). Empty means "ask the cluster": the Cinder CSI of managed MKS
+# names its class after the zone and the suffix is not stable across stands
+# (fast.ru-3b on one, fast.ru-3 on the next), so a hardcoded name fails the
+# bootstrap on a freshly created cluster. The self-managed stand
+# (terraform-porto, Ubuntu 22.04) has no CSI at all and passes
+# STORAGE_CLASS=local-path, where storage-default brings the provisioner up
+# itself. Note there is no inline `## comment` after the value on purpose —
+# make keeps the spaces before it, and "fast.ru-3b " never matches a class.
+STORAGE_CLASS ?=
 LOCAL_PATH_STORAGE_CLASS := local-path
 LOCAL_PATH_MANIFEST := $(K8S)/.resolved/src/storage/local-path-storage.yaml
 LOCAL_PATH_ROLLOUT_TIMEOUT ?= 300s
@@ -24,12 +32,15 @@ RIID_WAIT_TIMEOUT ?= 600
 OBSERVER_ROLLOUT_TIMEOUT ?= 600s
 MONITORING_NODE ?=
 REGISTRY_NODE ?=
-# Образ DaemonSet добавляет только curl; tar приходит из Debian base image.
-# Java обращается к Podman на ноде
-# напрямую через Unix socket (install-podman-node). local-registry и профили
+# Образ DaemonSet содержит curl+jq, но не podman: Java обращается к движку на
+# ноде напрямую через Unix socket (install-podman-node). local-registry и профили
 # registry — bootstrap/registry/Makefile.
 PODMAN_NODE_WAIT_TIMEOUT ?= 900
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all rollout-riid-image-from-manifest provider-apply-k8s-manifests
+# Registry the bench pulls from; empty means the in-cluster one, whose name lives
+# in performance/backend/engine/common.inc.sh (RIID_LOCAL_REGISTRY_HOST) so that
+# dfinit mirrors exactly the address the arms use.
+REGISTRY_PULL_HOST ?=
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -53,6 +64,17 @@ nodes:
 
 # Проверяет, что число нод без control-plane/master совпадает с суммой
 # cluster_topology.(workers + observers + registry_nodes) в config.yaml.
+#
+# This target and the two node-auto-pick targets below used to read
+# node-role.kubernetes.io/control-plane's jsonpath *value* to detect the
+# control-plane node — but kubeadm sets that label with an empty value, so
+# the extracted value is empty both when the label is absent (a worker) and
+# when it's present-but-empty (the control plane): the control-plane node
+# was silently miscounted as a worker (AGENT-108, self-managed Porto stand;
+# the same trap terraform-porto/Makefile's own `wait` target already avoids
+# by using a label selector). MKS never surfaced this because its managed
+# control plane has no Node object at all. Fixed by testing label
+# *presence* via `-l '!node-role.kubernetes.io/control-plane,...'` instead.
 validate-cluster-state:
 	@command -v yq >/dev/null || { echo "yq not found"; exit 1; }
 	@[ -f "$(GLOBAL_CONFIG_FILE)" ] || { echo "global config not found: $(GLOBAL_CONFIG_FILE)"; exit 1; }
@@ -68,7 +90,7 @@ validate-cluster-state:
 	[ "$$R" != "null" ] && [ -n "$$R" ] || R=0; \
 	EXPECTED_TOTAL=$$((W + O + R)); \
 	[ "$$EXPECTED_TOTAL" -gt 0 ] || { echo "cluster_topology sum (workers+observers+registry_nodes) is 0 in $(GLOBAL_CONFIG_FILE)"; exit 1; }; \
-	ACTUAL_WORKERS=$$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.labels.node-role\.kubernetes\.io/control-plane}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/master}{"\n"}{end}' | awk '$$1=="" && $$2=="" {c++} END {print c+0}'); \
+	ACTUAL_WORKERS=$$(kubectl get nodes --no-headers -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' | wc -l); \
 	echo "validate-cluster-state: non-control-plane nodes actual=$$ACTUAL_WORKERS expected=$$EXPECTED_TOTAL (config workers=$$W observers=$$O registry_nodes=$$R)"; \
 	[ "$$ACTUAL_WORKERS" -eq "$$EXPECTED_TOTAL" ] || { echo "node count mismatch: expected=$$EXPECTED_TOTAL (W+O+R) actual=$$ACTUAL_WORKERS"; exit 1; }
 
@@ -82,8 +104,8 @@ mark-monitoring-node-auto:
 	if [ -n "$(MONITORING_NODE)" ]; then \
 	  NODE="$(MONITORING_NODE)"; \
 	else \
-	  NODE=$$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/control-plane}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/master}{"\n"}{end}' \
-	    | awk '$$2=="" && $$3=="" {print $$1}' | tail -n1); \
+	  NODE=$$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' \
+	    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | tail -n1); \
 	fi; \
 	[ -n "$$NODE" ] || { echo "mark-monitoring-node-auto: no worker node found"; exit 1; }; \
 	kubectl label node --all riid.monitoring- >/dev/null 2>&1 || true; \
@@ -101,8 +123,9 @@ mark-registry-node-auto:
 	if [ -n "$(REGISTRY_NODE)" ]; then \
 	  NODE="$(REGISTRY_NODE)"; \
 	else \
-	  NODE=$$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/control-plane}{"\t"}{.metadata.labels.node-role\.kubernetes\.io/master}{"\t"}{.metadata.labels.riid\.monitoring}{"\n"}{end}' \
-	    | awk '$$2=="" && $$3=="" && $$4!="true" {print $$1}' | head -n1); \
+	  NODE=$$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' \
+	    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.riid\.monitoring}{"\n"}{end}' \
+	    | awk '$$2!="true" {print $$1}' | head -n1); \
 	fi; \
 	[ -n "$$NODE" ] || { echo "mark-registry-node-auto: no worker node (excluding monitoring) found"; exit 1; }; \
 	kubectl label node --all riid.registry- >/dev/null 2>&1 || true; \
@@ -119,9 +142,16 @@ storage-default:
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	if ! kubectl get storageclass "$(STORAGE_CLASS)" >/dev/null 2>&1; then \
-	  [ "$(STORAGE_CLASS)" = "$(LOCAL_PATH_STORAGE_CLASS)" ] || { \
-	    echo "storageclass $(STORAGE_CLASS) not found; on a cluster without a CSI use STORAGE_CLASS=$(LOCAL_PATH_STORAGE_CLASS)" >&2; \
+	SC="$(strip $(STORAGE_CLASS))"; \
+	if [ -z "$$SC" ]; then \
+	  SC=$$(kubectl get storageclass -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+	    | grep -v '^$(LOCAL_PATH_STORAGE_CLASS)$$' | head -n1); \
+	  [ -n "$$SC" ] || SC="$(LOCAL_PATH_STORAGE_CLASS)"; \
+	  echo "storage-default: STORAGE_CLASS not set, taking $$SC from the cluster"; \
+	fi; \
+	if ! kubectl get storageclass "$$SC" >/dev/null 2>&1; then \
+	  [ "$$SC" = "$(LOCAL_PATH_STORAGE_CLASS)" ] || { \
+	    echo "storageclass $$SC not found; on a cluster without a CSI use STORAGE_CLASS=$(LOCAL_PATH_STORAGE_CLASS)" >&2; \
 	    exit 1; \
 	  }; \
 	  $(RUN_PROVIDER_APPLY); \
@@ -129,7 +159,7 @@ storage-default:
 	  kubectl -n local-path-storage rollout status deploy/local-path-provisioner \
 	    --timeout=$(LOCAL_PATH_ROLLOUT_TIMEOUT); \
 	fi; \
-	kubectl patch storageclass $(STORAGE_CLASS) \
+	kubectl patch storageclass "$$SC" \
 		-p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
 # Новый конфиг Dragonfly: правите repo root scripts/values.yaml, затем снова эта цель (helm upgrade --install).
@@ -145,6 +175,18 @@ install-dragonfly:
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
+	@$(MAKE) -C "$(SELECTEL_DIR)" dragonfly-ready
+
+# helm --wait говорит только «поды Ready»: dfdaemon может ещё держать адрес
+# scheduler от прошлого пода — он приходит из dynconfig манагера по IP пода и
+# обновляется с задержкой. Прогон в этом окне идёт мимо P2P, поэтому меш
+# проверяется отдельно, тем же скриптом, что чистит кэши перед армом.
+dragonfly-ready:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(K8S)/performance/scenario/clear/wait-dragonfly-p2p-ready.sh"
 
 # Работает из любой cwd; манифесты: $(K8S)/…
 # Secret riid-config-secret из $(K8S)/config/.env — только bootstrap/registry/Makefile (secret-config-riid / registry-apply-profile).
@@ -159,6 +201,34 @@ install-podman-node:
 	kubectl config use-context "$$CTX"; \
 	kubectl apply -f "$(K8S)/.resolved/src/namespace.yaml"; \
 	kubectl apply -f "$(K8S)/.resolved/src/engines/podman-node.yaml"
+
+# The dfinit arm of AGENT-74: dfinit rewrites the ENGINE's registry config on the
+# node, so the switch is a Helm re-install, not a bench knob. The mirrored address
+# comes from the same function the bench uses, so the two cannot drift apart.
+# dfinit-disable is required: a leftover mirror makes the baseline a 2nd dfinit run.
+dfinit-enable:
+	@[ -n "$(strip $(ENGINE))" ] || { echo "set ENGINE=podman|containerd"; exit 1; }
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	REG=$$(RIID_K8S_ROOT="$(K8S)" REGISTRY_PULL_HOST="$(REGISTRY_PULL_HOST)" bash -c '. "$(K8S)/performance/backend/engine/common.inc.sh"; REGISTRY_PULL_HOST="$${REGISTRY_PULL_HOST:-$$RIID_LOCAL_REGISTRY_HOST}"; riid_registry_node_host') || exit 1; \
+	[ -n "$$REG" ] || { echo "dfinit-enable: empty registry address"; exit 1; }; \
+	echo "dfinit-enable: ENGINE=$(ENGINE) registry=$$REG"; \
+	RIID_DFINIT_ENGINE="$(strip $(ENGINE))" RIID_DFINIT_REGISTRY="$$REG" \
+	DRAGONFLY_REGISTRY_PROFILE="$(DRAGONFLY_PROFILE)" \
+	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
+
+dfinit-disable:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	DRAGONFLY_REGISTRY_PROFILE="$(DRAGONFLY_PROFILE)" \
+	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"; \
+	echo "dfinit-disable: dfinit is off; the node keeps whatever registries.conf dfinit last wrote"; \
+	echo "  restore the pristine copy on every worker if the baseline arm still sees a mirror:"; \
+	echo "  cp /etc/containers/registries.conf.riid-baseline /etc/containers/registries.conf"
 
 # Ждём готовности podman на всех нодах и печатаем версии — окружение AGENT-99
 # должно быть записано, а не запомнено.
@@ -224,7 +294,7 @@ wait-riid-ready:
 	  sleep $(RIID_WAIT_INTERVAL); \
 	done
 
-# Проверка минимального tooling и прямого доступа к Podman API.
+# Проверка инструментов и прямого доступа к Podman API (без podman CLI в образе).
 verify-riid-pod-tooling:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -238,7 +308,8 @@ verify-riid-pod-tooling:
 	    '! command -v podman >/dev/null 2>&1 \
 	      && test -S /run/podman/podman.sock \
 	      && test "$$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)" = OK \
-	      && command -v tar >/dev/null'; \
+	      && command -v curl >/dev/null && curl --version | head -n1 \
+	      && command -v jq >/dev/null && jq --version'; \
 	done; \
 	echo "verify-riid-pod-tooling: ok"
 

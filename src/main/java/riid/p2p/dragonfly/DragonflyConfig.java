@@ -13,7 +13,9 @@ public record DragonflyConfig(@JsonProperty("enabled") Boolean enabled,
         @JsonProperty("dfdaemonAddr") String dfdaemonAddr, @JsonProperty("schedulerAddr") String schedulerAddr,
         @JsonProperty("maxRetries") Integer maxRetries, @JsonProperty("imageTimeoutMin") Duration imageTimeoutMin,
         @JsonProperty("imageTimeoutMax") Duration imageTimeoutMax) {
-    private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofMinutes(1);
+    // A P2P pull pays for peer lookup and scheduling before the first byte,
+    // so its floor is above the registry path's, not below it.
+    private static final Duration DEFAULT_IMAGE_TIMEOUT_MIN = Duration.ofSeconds(90);
     private static final Duration DEFAULT_IMAGE_TIMEOUT_MAX = Duration.ofMinutes(30);
 
     public boolean enabledOrDefault() {

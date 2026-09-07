@@ -1,0 +1,25 @@
+# AGENT-103 fix: true top-20 by popularity, not "every 5th row by size".
+# ChimangoScanTop150.versions.csv sorted by loaded_rank, ranks 1-20; a rank with no
+# amd64 linux manifest is dropped and backfilled from the next one (15, 16, 20 out;
+# 21-23 in). The provider prefix is applied by write_filtered_dataset_a.py.
+repository	tag
+datasense/datasense	0c579488240e543a8670057d01985195
+library/python	latest
+datadog/agent	latest
+library/node	latest
+grafana/grafana	latest
+library/postgres	latest
+library/mongo	latest
+seabreeze/sbz-helloworld	1.1-alpine
+library/mysql	latest
+library/sonarqube	latest
+jenkins/jenkins	latest
+istio/proxyv2	1.31.0-rc.4-debug
+envoyproxy/envoy	tools-dev-0260c653ae6084a2118c8e4fb9eba84529df22f0
+apache/airflow	latest
+library/elasticsearch	9.5.2
+library/nginx	latest
+library/golang	latest
+fluent/fluent-bit	latest
+newrelic/infrastructure-bundle	latest
+library/ruby	latest

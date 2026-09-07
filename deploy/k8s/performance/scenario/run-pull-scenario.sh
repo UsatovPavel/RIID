@@ -189,6 +189,34 @@ if [[ "$EXPECTED_RIID_PODS" =~ ^[0-9]+$ ]] && ((EXPECTED_RIID_PODS > 0)) && ((${
   exit 1
 fi
 
+# BACKEND=riid calls RIID over the pod's Unix socket, and phase=="Running" says
+# nothing about that: cold-cache restarts the DaemonSet before every arm and Jetty
+# binds the socket seconds later, so the first pull races startup and yields a false
+# FAILED row. /healthz is on the same connector as /pull and answers 200 with no work.
+wait_for_riid_socket() {
+  local timeout="${RIID_READY_TIMEOUT_S:-60}"
+  local pod deadline code
+  for pod in "${pods[@]}"; do
+    deadline=$(($(date +%s) + timeout))
+    code=""
+    while (($(date +%s) < deadline)); do
+      code="$(kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- \
+        curl --unix-socket /tmp/riid.sock -sS -o /dev/null -w '%{http_code}' \
+        http://localhost/healthz 2>/dev/null || true)"
+      [[ "$code" == "200" ]] && break
+      sleep 1
+    done
+    if [[ "$code" != "200" ]]; then
+      echo "RIID pod $pod did not answer GET /healthz over /tmp/riid.sock within ${timeout}s (last status: ${code:-none})" >&2
+      return 1
+    fi
+  done
+}
+
+if [[ "$BACKEND" == "riid" ]]; then
+  wait_for_riid_socket || exit 1
+fi
+
 run_for_current_image() {
   local run_failed=0
   echo "Running scenario=$SCENARIO mode=$MODE backend=$BACKEND_LABEL pods=${#pods[@]} image=${IMAGE_REPOSITORY}:${IMAGE_REFERENCE}" >&2
