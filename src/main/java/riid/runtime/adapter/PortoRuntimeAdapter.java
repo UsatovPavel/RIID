@@ -123,7 +123,7 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
             importOneLayer(portoLayerName, blobPath(ociDir, stripSha256(layer.digest())));
         }
 
-        writeMarkerLayer(layerName, manifestOrderNames, false);
+        writeMarkerLayer(layerName, manifestOrderNames, false, null);
     }
 
     /**
@@ -152,15 +152,23 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
      * (top-first) chain of layer names as its private value. {@code
      * replaceExisting} drops a marker of that name first.
      */
-    private void writeMarkerLayer(String layerName, List<String> manifestOrderNames, boolean replaceExisting)
-            throws IOException, InterruptedException {
+    /**
+     * {@code hostVisibleDir}, when known, is where the marker's empty tar gets
+     * created instead of this pod's own {@code java.io.tmpdir}: portod reads
+     * every path it is handed from the node's filesystem, and a pod-local temp
+     * dir resolves to nothing there ("archive not found"), exactly the failure
+     * {@link PrefixImportLayouts} avoids the same way for podman/containerd.
+     */
+    private void writeMarkerLayer(String layerName, List<String> manifestOrderNames, boolean replaceExisting,
+            Path hostVisibleDir) throws IOException, InterruptedException {
         // The marker name comes from the image reference, not from its content: a
         // re-pushed tag would otherwise keep resolving to the chain imported first.
         List<String> topFirstChain = new ArrayList<>(manifestOrderNames);
         Collections.reverse(topFirstChain);
         String chainJson = new ObjectMapper().writeValueAsString(topFirstChain);
 
-        Path workDir = Files.createTempDirectory("porto-import-marker");
+        Path workDir = hostVisibleDir != null ? Files.createTempDirectory(hostVisibleDir, "porto-import-marker-")
+                : Files.createTempDirectory("porto-import-marker");
         try {
             Path emptyDir = Files.createTempDirectory(workDir, "empty-");
             Path emptyTar = workDir.resolve("marker.tar");
@@ -224,11 +232,27 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
      * resolves as a finished one.
      */
     private final class PortoIncrementalImport implements IncrementalImageImport {
+        /** Same reasoning as {@link PrefixImportLayouts}: {@code <dir>/blobs/sha256} -> its grandparent. */
+        private static final int BLOBS_DIR_DEPTH = 3;
+
         private final String imageName;
         private final List<Descriptor> expected;
         private final List<String> imported = new ArrayList<>();
         private final Set<String> alreadyInPorto;
         private boolean finished;
+        /**
+         * Host-visible directory for the marker's empty tar, created next to (not
+         * inside) the first layer blob's own directory the moment it is seen -
+         * while that directory is guaranteed to still exist. Waiting until
+         * {@link #finish()} to look at a layer blob's parent is too late: RIID
+         * deletes the per-request download directory as soon as the last layer is
+         * taken (the transient layout {@link PrefixImportLayouts} documents the
+         * same lifetime for), which is exactly when this class would otherwise
+         * have gone looking for it, and portod resolves the marker path in the
+         * node's filesystem, not this pod's, so a pod-local fallback isn't an
+         * option either. {@code null} only if every layer was already in Porto.
+         */
+        private Path markerWorkDir;
 
         private PortoIncrementalImport(ImageReference image, Manifest manifest)
                 throws IOException, InterruptedException {
@@ -250,6 +274,13 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 throw new IOException("Layer " + position + " of " + imageName + " arrived out of manifest order:"
                         + " expected " + declaredDigest + ", got " + layer.digest());
             }
+            if (markerWorkDir == null) {
+                Path outsideDownloadDir = blobPath.toAbsolutePath().getParent();
+                for (int up = 0; up < BLOBS_DIR_DEPTH && outsideDownloadDir.getParent() != null; up++) {
+                    outsideDownloadDir = outsideDownloadDir.getParent();
+                }
+                markerWorkDir = Files.createTempDirectory(outsideDownloadDir, "riid-porto-marker-");
+            }
             String portoLayerName = portoLayerName(layer);
             imported.add(portoLayerName);
             if (alreadyInPorto.contains(portoLayerName)) {
@@ -265,7 +296,13 @@ public class PortoRuntimeAdapter implements RuntimeAdapter {
                 throw new IOException("Incremental import of " + imageName + " finished with " + imported.size()
                         + " of " + expected.size() + " layers");
             }
-            writeMarkerLayer(imageName, imported, true);
+            try {
+                writeMarkerLayer(imageName, imported, true, markerWorkDir);
+            } finally {
+                if (markerWorkDir != null) {
+                    deleteRecursively(markerWorkDir);
+                }
+            }
             finished = true;
         }
 

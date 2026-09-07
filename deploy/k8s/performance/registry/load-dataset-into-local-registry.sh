@@ -114,6 +114,15 @@ spec:
       image: ${LOADER_IMAGE}
       imagePullPolicy: IfNotPresent
       command: ["sh", "-lc", "sleep infinity"]
+      # Nested podman (image mirroring) needs to mount its own overlay
+      # graphroot; even with mount_program=fuse-overlayfs in storage.conf,
+      # podman only honors that fallback when it detects it is running
+      # rootless. This pod's process is uid 0, so podman attempts a native
+      # kernel overlay mount instead, which needs CAP_SYS_ADMIN an
+      # unprivileged pod does not have (same reason podman-node.yaml's
+      # installer container runs privileged).
+      securityContext:
+        privileged: true
 EOF
 kubectl -n "$LOADER_NAMESPACE" wait --for=condition=Ready --timeout=180s "pod/${LOADER_POD_NAME}" >/dev/null
 

@@ -1,4 +1,4 @@
-FROM gradle:jdk23 AS builder
+FROM docker.io/library/gradle:jdk23 AS builder
 
 WORKDIR /workspace
 
@@ -26,7 +26,7 @@ RUN if [ -n "$GITHUB_ACTOR" ] && [ -n "$GITHUB_PACKAGES_TOKEN" ]; then \
       ./gradlew --no-daemon clean shadowJar ; \
     fi
 
-FROM eclipse-temurin:23-jre
+FROM docker.io/library/eclipse-temurin:23-jre
 
 WORKDIR /opt/riid
 
@@ -37,13 +37,33 @@ ENV JAVA_OPTS=""
 COPY --from=builder /workspace/build/libs/riid.jar /opt/riid/riid.jar
 COPY config/config.yaml /etc/riid/config.yaml
 
-# Java talks directly to the node's Podman Unix socket. Add only curl for
-# smoke/benchmark calls; tar is already part of the Debian base system and is
-# still asserted by the deployment preflight. The container stack is node-side.
+# The Java adapter talks HTTP directly to the node's Podman Unix socket. Keep
+# only operational tooling here; the Podman/container stack belongs on the node.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     curl \
+    jq \
+    iproute2 \
+    netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*
+
+# portoctl (client binary, talks to the host's portod over the mounted
+# /run/portod.socket — PortoRuntimeAdapter, performance/backend/engine/porto.inc.sh).
+# Installed via apt so its runtime deps (libprotobuf etc.) resolve too; the
+# package's postinst enables/starts porto.service, which has no meaning in
+# this image (no systemd, no portod belongs here — only the client) and
+# would fail outright without a policy-rc.d shim, so one is installed first
+# to make invoke-rc.d a no-op for the duration. Same release+distro as the
+# Porto stand's cloud-init (terraform-porto/cloud-init/worker.yaml.tftpl):
+# jammy, version pinned to match.
+ARG PORTO_VERSION=5.3.41
+RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
+ && chmod +x /usr/sbin/policy-rc.d \
+ && curl -fsSLo /tmp/porto.deb \
+      "https://github.com/ten-nancy/porto/releases/download/v${PORTO_VERSION}/porto_jammy_${PORTO_VERSION}_amd64.deb" \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends /tmp/porto.deb \
+ && rm -rf /tmp/porto.deb /var/lib/apt/lists/* /usr/sbin/policy-rc.d
 
 EXPOSE 9090
 
