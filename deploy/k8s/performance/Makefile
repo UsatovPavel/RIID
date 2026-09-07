@@ -27,6 +27,7 @@ REGISTRY_PULL_HOST = local-registry.registry-system.svc.cluster.local:5000
 OUTPUT_DIR ?= $(PERF_DIR)/output
 METRICS_SCRIPT := $(PERF_DIR)/summarize/scenario-metrics.sh
 AGGREGATE_SCRIPT := $(PERF_DIR)/summarize/cluster-aggregate-time.sh
+VALIDATE_SCRIPT := $(PERF_DIR)/summarize/validate-arm.sh
 SUMMARY_OUT := $(OUTPUT_DIR)/summary.tsv
 # Which arm to report metrics for; defaults to the arm this Makefile would run.
 METRICS_TSV ?= $(OUTPUT_DIR)/$(BACKEND)-$(ENGINE).tsv
@@ -44,7 +45,7 @@ endif
 
 .PHONY: run riid-podman riid-containerd riid-porto bare-podman bare-containerd bare-porto \
         dfinit-podman dfinit-containerd \
-        clear-cluster-cache delete-local-registry-dataset debug-registry-node \
+        clear-cluster-cache delete-local-registry-dataset debug-registry-node validate-arm \
         registry-node-tc-apply registry-node-tc-clear registry-node-tc-check metrics summarize-aggregate
 
 CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-all-riid-pods.sh
@@ -180,6 +181,14 @@ metrics:
 	else \
 	  bash "$(METRICS_SCRIPT)" "$(METRICS_TSV)"; \
 	fi
+
+# Does an arm measure what its name claims? Checks images, exit codes and — for
+# riid-*/dfinit-* — that dfdaemon actually finished tasks and the seed tier took
+# part. Needed on Selectel, where bench/k8s's queue does not run.
+# ARM=<name> [ARM_TSV=path] [ARM_LOGDIR=dir]
+validate-arm:
+	@bash "$(VALIDATE_SCRIPT)" "$(ARM)" \
+	  "$${ARM_TSV:-$(OUTPUT_DIR)/$(ARM).tsv}" "$(ARM_LOGDIR)"
 
 # Cluster wall-clock from the AGGREGATE rows — the main summary for recreate.
 summarize-aggregate:

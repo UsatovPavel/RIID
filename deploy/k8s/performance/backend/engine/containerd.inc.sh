@@ -108,14 +108,22 @@ engine_pull_mirrored() {
   _ctr_run riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" --hosts-dir "$CTR_HOSTS_DIR" "$ref"
 }
 
+# containerd falls back to _default/hosts.toml when a registry has no entry of its
+# own, and that catch-all carries no X-Dragonfly-Registry header: dfdaemon then
+# takes the upstream from ?ns= and prefixes https:// against a plain-HTTP registry,
+# so every task fails. A grep over the whole dir passes on exactly that state.
 engine_mirror_check() {
-  local pod="$1"
-  if ! riid_engine_exec "$pod" env "DIR=$CTR_HOSTS_DIR" "LOC=$RIID_DFINIT_PROXY_LOCATION" sh -ec '
-        [ -d "$DIR" ] || { echo "hosts dir missing: $DIR" >&2; exit 1; }
-        grep -rqF "$LOC" "$DIR"
+  local pod="$1" host
+  host="$(riid_registry_node_host)" || return 1
+  if ! riid_engine_exec "$pod" env "DIR=$CTR_HOSTS_DIR" "HOST=$host" "LOC=$RIID_DFINIT_PROXY_LOCATION" sh -ec '
+        d="$DIR/$HOST"
+        [ -f "$d/hosts.toml" ] || d="$DIR/$(printf %s "$HOST" | sed "s/:\([0-9]*\)$/_\1_/")"
+        [ -f "$d/hosts.toml" ] || { echo "no hosts.toml for $HOST under $DIR" >&2; exit 1; }
+        grep -qF "$LOC" "$d/hosts.toml" || { echo "proxy $LOC missing in $d/hosts.toml" >&2; exit 1; }
+        grep -qi "X-Dragonfly-Registry" "$d/hosts.toml" || { echo "no X-Dragonfly-Registry in $d/hosts.toml" >&2; exit 1; }
       '; then
-    echo "dfinit mirror not found: $CTR_HOSTS_DIR in pod=$pod has no '$RIID_DFINIT_PROXY_LOCATION'" >&2
-    echo "  check the /etc/containerd hostPath on the bench pod and client.dfinit in values" >&2
+    echo "dfinit mirror check failed for $host in pod=$pod" >&2
+    echo "  only _default would be used, which has no header - re-run dfinit-enable ENGINE=containerd" >&2
     return 1
   fi
 }

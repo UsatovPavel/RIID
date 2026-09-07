@@ -436,26 +436,15 @@ run_one() {
   # A zstd arm already writes to its own arm-named file via OUTPUT_TSV, so the
   # arm-named copy would be the file onto itself.
   [ "$tsv" = "$PERF/output/${arm}.tsv" ] || cp "$tsv" "$PERF/output/${arm}.tsv"
-  say "  images=$(awk -F, 'NR>1 && $4=="AGGREGATE"' "$tsv" | wc -l)/20 failures=$(awk -F, 'NR>1 && $9!=0 && $9!=""' "$tsv" | wc -l)"
-  awk -F, 'NR>1 && $4=="AGGREGATE"{s+=$8} END{if(s>0) printf "  sum AGGREGATE: %.1f s\n", s/1000}' "$tsv"
-  grep registry_tx_bytes_delta "$tsv" | awk -F'\t' '{printf "  egress: %.2f GiB\n", $2/1073741824}'
-  case "$arm" in riid-*|dfinit-*)
-    say "  p2p=$(grep -ho 'Source fetched: p2p' "$log/$arm"/riid/*.log 2>/dev/null | wc -l) registry=$(grep -ho 'Source fetched: registry' "$log/$arm"/riid/*.log 2>/dev/null | wc -l)"
-    # One line per event, but the substring occurs twice inside it (once as the
-    # prefix of NeedBackToSourceResponse, once in its description), so grep -o
-    # doubles the count. Match the line instead of the substring and the /2 that
-    # used to compensate is no longer needed. These events land in the SEED logs:
-    # a zero here means the seed tier never fetched anything, which is what
-    # separated dfinit-containerd (0, egress x1.83) from riid-containerd (222,
-    # egress x1.25) - the counter is a seed-participation signal, not noise.
-    say "  NeedBackToSource(tx)=$(grep -hc 'need back to source response' "$log/$arm"/seed/*.log "$log/$arm"/dfdaemon/*.log 2>/dev/null | paste -sd+ | bc)"
-    # A throw from the puller's close() discards an already-finished P2P
-    # download, and the layer is then paid for a second time from the registry.
-    # The rate is a race, not a property of the arm, so it has to be reported
-    # next to the timing or two riid arms are comparing noise.
-    say "  p2p-discarded-after-download=$(grep -ho 'failed to close dragonfly puller' "$log/$arm"/riid/*.log 2>/dev/null | wc -l)"
-    ;;
-  esac
+  # One gate, shared with a Selectel run that has no queue around it:
+  # deploy/k8s/performance/summarize/validate-arm.sh. An arm that fails it is not
+  # marked done, so the queue retries it instead of recording a plain pull as P2P.
+  vout=$(bash "$PERF/summarize/validate-arm.sh" "$arm" "$tsv" "$log/$arm" 2>&1); vrc=$?
+  printf '%s\n' "$vout" | while IFS= read -r vline; do say "$vline"; done
+  if [ "$vrc" -ne 0 ]; then
+    say "$arm: not marked done - see the failed checks above"
+    return 1
+  fi
   touch "$STATE/$arm.done"
   say "  riid image: $(kube -n riid-system get ds riid -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
   say "$arm: DONE -> ${arm}.agent99-${stamp}.tsv"

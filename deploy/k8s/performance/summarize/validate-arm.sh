@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Does an arm measure what its name claims? Kept here rather than in bench/k8s,
+# which is the laptop stand's VirtualBox wrapper, so a Selectel run has a gate too.
+# Usage: validate-arm.sh <arm> <tsv> [logdir]  - logdir is the arm's exported logs,
+# required for riid-*/dfinit-*, ignored for bare-*. Env: EXPECTED_IMAGES (default 20)
+
+set -uo pipefail
+
+ARM="${1:?arm name required}"
+TSV="${2:?tsv path required}"
+LOGDIR="${3:-}"
+EXPECTED_IMAGES="${EXPECTED_IMAGES:-20}"
+
+fail=0
+ok()   { printf '  OK   %s\n' "$*"; }
+bad()  { printf '  FAIL %s\n' "$*"; fail=$((fail+1)); }
+note() { printf '  --   %s\n' "$*"; }
+
+printf 'validate %s\n' "$ARM"
+
+if [ ! -s "$TSV" ]; then
+  bad "no TSV at $TSV"
+  printf '%s: INVALID (%d failed)\n' "$ARM" "$fail"
+  exit 1
+fi
+
+# A failed pull finishes in ~0.3 s and looks like a cache hit under any MB/s
+# heuristic, so exit codes are checked before anything about throughput.
+images=$(awk -F, 'NR>1 && $4=="AGGREGATE"' "$TSV" | wc -l)
+failures=$(awk -F, 'NR>1 && $9!=0 && $9!=""' "$TSV" | wc -l)
+[ "$images" -eq "$EXPECTED_IMAGES" ] && ok "images $images/$EXPECTED_IMAGES" \
+  || bad "images $images/$EXPECTED_IMAGES"
+[ "$failures" -eq 0 ] && ok "no non-zero exit_code" || bad "$failures rows with non-zero exit_code"
+
+case "$ARM" in
+  riid-*|dfinit-*)
+    if [ -z "$LOGDIR" ] || [ ! -d "$LOGDIR" ]; then
+      bad "logdir required for $ARM (dfdaemon/ and seed/ logs) - got '${LOGDIR:-<none>}'"
+    else
+      # dfdaemon logs "download task started" even when every task then fails: four
+      # dfinit-containerd runs were recorded valid that way, 220 started and 0 done.
+      # "succeeded" is the only outcome word in this log - "finished" never appears.
+      started=$(grep -rh 'download task started' "$LOGDIR/dfdaemon" 2>/dev/null | wc -l)
+      done_ok=$(grep -rh 'download task succeeded' "$LOGDIR/dfdaemon" 2>/dev/null | wc -l)
+      [ "$done_ok" -gt 0 ] && ok "dfdaemon tasks succeeded=$done_ok (started=$started)" \
+        || bad "dfdaemon tasks succeeded=0 of $started started - the arm measured a plain pull"
+      # kubelet rotation truncates these logs, so both counts are a floor and
+      # succeeded can exceed started. Only "> 0" is load-bearing here.
+      [ "$done_ok" -gt "$started" ] && note "dfdaemon log truncated by rotation - counts are a floor"
+
+      # Savings track seed participation: zero back-to-source means the seed tier
+      # fetched nothing and served nothing, whatever the RIID-side counters say.
+      btos=$(grep -rh 'need back to source response' "$LOGDIR/seed" "$LOGDIR/dfdaemon" 2>/dev/null | wc -l)
+      [ "$btos" -gt 0 ] && ok "NeedBackToSource(tx)=$btos" \
+        || bad "NeedBackToSource(tx)=0 - the seed tier did not participate"
+
+      p2p=$(grep -rho 'Source fetched: p2p' "$LOGDIR/riid" 2>/dev/null | wc -l)
+      reg=$(grep -rho 'Source fetched: registry' "$LOGDIR/riid" 2>/dev/null | wc -l)
+      note "RIID source: p2p=$p2p registry=$reg"
+      disc=$(grep -rho 'failed to close dragonfly puller' "$LOGDIR/riid" 2>/dev/null | wc -l)
+      [ "$disc" -gt 0 ] && note "p2p-discarded-after-download=$disc (re-fetched from the registry)"
+    fi
+    ;;
+esac
+
+egress=$(grep registry_tx_bytes_delta "$TSV" 2>/dev/null | awk -F'\t' '{printf "%.2f", $2/1073741824}')
+[ -n "$egress" ] && note "egress: $egress GiB"
+awk -F, 'NR>1 && $4=="AGGREGATE"{s+=$8} END{if(s>0) printf "  --   sum AGGREGATE: %.1f s\n", s/1000}' "$TSV"
+
+if [ "$fail" -eq 0 ]; then
+  printf '%s: VALID\n' "$ARM"
+  exit 0
+fi
+printf '%s: INVALID (%d check(s) failed)\n' "$ARM" "$fail"
+exit 1
