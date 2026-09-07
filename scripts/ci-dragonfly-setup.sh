@@ -44,7 +44,13 @@ sudo systemctl start cri-docker.socket
 sleep 2
 
 echo ">>> Starting minikube (driver=none)..."
-sudo env HOME="$HOME" CHANGE_MINIKUBE_NONE_USER=true minikube start --driver=none
+# --container-runtime=docker is not optional: without it minikube auto-detects a
+# runtime and picks the containerd socket that ships with Docker, whose CRI plugin
+# is disabled on the runner. crictl then fails with "unknown service
+# runtime.v1.RuntimeService" and minikube exits RUNTIME_ENABLE. The docker runtime
+# is what cri-dockerd above is installed and started for.
+sudo env HOME="$HOME" CHANGE_MINIKUBE_NONE_USER=true \
+  minikube start --driver=none --container-runtime=docker
 
 echo ">>> Minikube status:"
 minikube status
