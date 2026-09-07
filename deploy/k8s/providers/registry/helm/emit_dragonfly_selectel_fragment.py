@@ -121,6 +121,7 @@ def main() -> int:
         "dragonfly.scheduler",
         "dragonfly.client",
         "dragonfly.seed_client",
+        "dragonfly.dfinit",
         "storage.busybox",
     )
     missing = [k for k in required if k not in images]
@@ -135,11 +136,13 @@ def main() -> int:
     _, mgr_repo, mgr_sfx = parse_image_ref(images["dragonfly.manager"])
     _, _, sch_sfx = parse_image_ref(images["dragonfly.scheduler"])
     _, _, cli_sfx = parse_image_ref(images["dragonfly.client"])
+    _, _, dfi_sfx = parse_image_ref(images["dragonfly.dfinit"])
     _, _, bb_sfx = parse_image_ref(images["storage.busybox"])
 
     tag_mgr = tag_from_suffix(mgr_sfx)
     tag_sch = tag_from_suffix(sch_sfx)
     tag_cli = tag_from_suffix(cli_sfx)
+    tag_dfi = tag_from_suffix(dfi_sfx)
     tag_bb = tag_from_suffix(bb_sfx)
 
     oss = os.environ.get("DRAGONFLY_OSS_IMAGE_TAG", "").strip()
@@ -209,6 +212,13 @@ client:
     tag: {tag_cli}
     pullSecrets:
       - name: {pull_secret}
+  dfinit:
+    image:
+      registry: {img_registry}
+      repository: {reg_prefix}/dragonflyoss/dfinit
+      tag: {tag_dfi}
+      pullSecrets:
+        - name: {pull_secret}
   initContainer:
     image:
       registry: {img_registry}

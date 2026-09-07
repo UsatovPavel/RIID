@@ -8,6 +8,7 @@ infra:
       github_release_tag: dragonfly-1.6.26
   images:
     dragonfly.client: "riid/dragonflyoss/client:v1.3.8"
+    dragonfly.dfinit: "riid/dragonflyoss/dfinit:v1.3.8"
     dragonfly.manager: "riid/dragonflyoss/manager:v2.4.4-rc.1"
     dragonfly.scheduler: "riid/dragonflyoss/scheduler:v2.4.4-rc.1"
     dragonfly.seed_client: "riid/dragonflyoss/client:v1.3.8"

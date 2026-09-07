@@ -51,7 +51,7 @@ parse_ref() {
   printf '%s\t%s\t%s\n' "${registry}" "${repo}" "${tag_part}"
 }
 
-for key in dragonfly.manager dragonfly.scheduler dragonfly.client dragonfly.seed_client; do
+for key in dragonfly.manager dragonfly.scheduler dragonfly.client dragonfly.seed_client dragonfly.dfinit; do
   infra_image "${key}" >/dev/null || {
     echo "render-values-from-infra: missing infra.images[\"${key}\"] in ${IMAGE_LIST}" >&2
     exit 1
@@ -62,6 +62,9 @@ read -r mgr_reg mgr_repo mgr_tag < <(parse_ref "$(infra_image dragonfly.manager)
 read -r sch_reg sch_repo sch_tag < <(parse_ref "$(infra_image dragonfly.scheduler)")
 read -r cli_reg cli_repo cli_tag < <(parse_ref "$(infra_image dragonfly.client)")
 read -r seed_reg seed_repo seed_tag < <(parse_ref "$(infra_image dragonfly.seed_client)")
+# dfinit runs as an init container of dragonfly-client. Without this it kept the
+# chart default and was pulled unqualified from Docker Hub, bypassing the imagelist.
+read -r dfi_reg dfi_repo dfi_tag < <(parse_ref "$(infra_image dragonfly.dfinit)")
 
 SEED_CLIENTS=2
 if [[ -f "${CLUSTER_CONFIG}" ]]; then
@@ -87,6 +90,11 @@ client:
     registry: ${cli_reg}
     repository: ${cli_repo}
     tag: ${cli_tag}
+  dfinit:
+    image:
+      registry: ${dfi_reg}
+      repository: ${dfi_repo}
+      tag: ${dfi_tag}
 seedClient:
   replicas: ${SEED_CLIENTS}
   image:

@@ -133,6 +133,7 @@ client:
         crio: null
         containerd:
           configPath: /etc/containerd/config.toml
+          proxyAllRegistries: false
           registries:
             - hostNamespace: ${RIID_DFINIT_REGISTRY:-}
               serverAddr: http://${RIID_DFINIT_REGISTRY:-}
@@ -149,14 +150,18 @@ helm repo add dragonfly https://dragonflyoss.github.io/helm-charts/ 2>/dev/null 
 helm repo update
 
 echo ">>> helm upgrade --install dragonfly (namespace dragonfly-system), chart ${DRAGONFLY_CHART_VERSION}"
+# The dfinit override MUST come after the base values: helm merges -f files in
+# order and the last one wins. Passed before ${HELM_VALUES}, this override was
+# erased by that file's `containerd: null`, so `dfinit-enable ENGINE=containerd`
+# silently configured CRI-O instead and never wrote containerd's certs.d.
 helm upgrade --install dragonfly dragonfly/dragonfly \
   --version "${DRAGONFLY_CHART_VERSION}" \
-  ${DFINIT_HELM_ARGS} \
   --namespace dragonfly-system \
   --create-namespace \
   --wait \
   --timeout 15m \
-  -f "${HELM_VALUES}"
+  -f "${HELM_VALUES}" \
+  ${DFINIT_HELM_ARGS}
 
 # AGENT-99: dragonfly-client (hostNetwork DaemonSet) advertises whatever IP
 # its own default-route autodetection picks; on stands where every node
