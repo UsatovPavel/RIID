@@ -19,26 +19,6 @@ seedClient:
     tag: v1.3.8
   metrics:
     enable: true
-  config:
-    # AGENT-99: 60/45 was still far too high. On a 79 GB worker that lets the
-    # cache reach ~47 GB before GC runs - four times the 11.07 GiB dataset - and
-    # it shares the disk with containerd's store and RIID's work dir. aibox2
-    # then sits below the 27 GB the preflight needs and every arm is blocked or
-    # evicted mid-run. 25/15 caps it near the dataset's own size.
-    # Original note: the chart default (distHighThresholdPercent 90,
-    # taskTTL 720h) only starts reclaiming disk once the node is already at 90%
-    # full - well past kubelet's own DiskPressure eviction, which fired at
-    # ~85% (11.77 GiB free out of 79 GiB) and evicted the riid pod mid-arm
-    # ("pods not found"). On this node the seed-client's own PVC content
-    # (/opt/local-path-provisioner/...) competes for the same disk as
-    # containerd's content+snapshot store and dfdaemon's client cache, so GC
-    # has to trigger well before kubelet's threshold, not after it.
-    gc:
-      interval: 60s
-      policy:
-        distHighThresholdPercent: 25
-        distLowThresholdPercent: 15
-        taskTTL: 1h
 client:
   image:
     repository: dragonflyoss/client
@@ -104,15 +84,6 @@ client:
   config:
     storage:
       dir: /var/run/dragonfly/data/
-    # AGENT-99 riid-containerd: same reasoning as seedClient.config.gc above -
-    # the chart default (90% threshold, 720h TTL) never reclaims dfdaemon's own
-    # cache before kubelet's node-level DiskPressure eviction fires first.
-    gc:
-      interval: 60s
-      policy:
-        distHighThresholdPercent: 25
-        distLowThresholdPercent: 15
-        taskTTL: 1h
     # AGENT-99: dfinit points podman's mirror at this proxy, but the proxy's own
     # upstream defaulted to https://index.docker.io - so a pull of
     # 10.96.5.146:5000/riid/... was forwarded to Docker Hub, missed, and podman

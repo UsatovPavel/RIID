@@ -1,0 +1,20 @@
+# Laptop-stand-only Dragonfly tuning. Deliberately NOT in scripts/values.yaml:
+# these numbers are sized for a 79 GB VM disk and are wrong on a real cluster.
+# Apply on top: helm upgrade ... -f scripts/values.yaml -f bench/k8s/dragonfly-values-stand.yaml
+# Chart defaults are 90% / 720h, which here let the cache grow past kubelet's eviction.
+seedClient:
+  config:
+    gc:
+      interval: 60s
+      policy:
+        distHighThresholdPercent: 25
+        distLowThresholdPercent: 15
+        taskTTL: 1h
+client:
+  config:
+    gc:
+      interval: 60s
+      policy:
+        distHighThresholdPercent: 25
+        distLowThresholdPercent: 15
+        taskTTL: 1h
