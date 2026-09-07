@@ -189,16 +189,10 @@ if [[ "$EXPECTED_RIID_PODS" =~ ^[0-9]+$ ]] && ((EXPECTED_RIID_PODS > 0)) && ((${
   exit 1
 fi
 
-# BACKEND=riid calls RIID's own API over the pod's Unix socket
-# (backend/riid.sh, POST /pull on /tmp/riid.sock). Pod phase=="Running" says
-# nothing about that: cold-cache restarts the RIID DaemonSet right before every
-# arm, and Jetty takes a few seconds to bind the socket after the container
-# starts. The first pull then races the daemon's own startup and gets a plain
-# connection refused ("curl: (7) Failed to connect ... Couldn't connect to
-# server") - a false FAILED row, not a real one. GET /healthz
-# (HealthHttpHandler) is registered on the same "control" connector as /pull
-# and answers a bare 200 with no dispatcher/registry work, so polling it
-# proves the exact thing about to be called without perturbing the measurement.
+# BACKEND=riid calls RIID over the pod's Unix socket, and phase=="Running" says
+# nothing about that: cold-cache restarts the DaemonSet before every arm and Jetty
+# binds the socket seconds later, so the first pull races startup and yields a false
+# FAILED row. /healthz is on the same connector as /pull and answers 200 with no work.
 wait_for_riid_socket() {
   local timeout="${RIID_READY_TIMEOUT_S:-60}"
   local pod deadline code

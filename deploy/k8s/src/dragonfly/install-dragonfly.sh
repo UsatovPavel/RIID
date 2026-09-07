@@ -112,14 +112,10 @@ if ! kubectl cluster-info &>/dev/null; then
   exit 1
 fi
 
-# dfinit rewrites one engine's registry config. Which engine is a per-arm
-# choice (make dfinit-enable ENGINE=...), but the chart values can only hold one
-# answer, and dfinit.enable is unconditional - so a containerd block left in
-# values.yaml is live for EVERY arm, including podman ones. That is not
-# hypothetical: it crashlooped the whole dragonfly-client DaemonSet with
-# "failed to run container runtime: Is a directory (os error 21)" and took P2P
-# down for a plain riid-containerd arm. Render the handler from the requested
-# engine instead, and null the other one.
+# dfinit rewrites one engine's registry config, but the chart values hold only one
+# answer and dfinit.enable is unconditional - a containerd block left in values.yaml
+# is live for EVERY arm. It once crashlooped the whole client DaemonSet ("failed to
+# run container runtime: Is a directory"). Render the requested engine, null the other.
 DFINIT_ENGINE="${RIID_DFINIT_ENGINE:-}"
 if [ "$DFINIT_ENGINE" = "containerd" ]; then
   DFINIT_OVERRIDE="$(mktemp)"
@@ -163,13 +159,10 @@ helm upgrade --install dragonfly dragonfly/dragonfly \
   -f "${HELM_VALUES}" \
   ${DFINIT_HELM_ARGS}
 
-# AGENT-99: dragonfly-client (hostNetwork DaemonSet) advertises whatever IP
-# its own default-route autodetection picks; on stands where every node
-# clones the same NAT adapter (VirtualBox), that is the same unreachable
-# address on every node and P2P silently degrades to 100% registry fallback.
-# See patch-dragonfly-client-hostip.sh for the full diagnosis. Re-applied on
-# every install/upgrade, including the dfinit-enable/disable path, because
-# each helm upgrade re-renders the DaemonSet from the chart and undoes it.
+# AGENT-99: dragonfly-client (hostNetwork) advertises whatever IP its default-route
+# autodetection picks; where nodes clone one NAT adapter that is the same unreachable
+# address everywhere and P2P degrades to 100% registry fallback. Re-applied on every
+# install/upgrade - each helm upgrade re-renders the DaemonSet and undoes it.
 bash "${SCRIPT_DIR}/patch-dragonfly-client-hostip.sh"
 
 echo ">>> Pods:"

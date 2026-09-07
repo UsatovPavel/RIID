@@ -73,14 +73,10 @@ spec:
             - name: metrics
               containerPort: 9090
               protocol: TCP
-          # Readiness previously tracked nothing but the container process
-          # existing, so kubelet marked the pod Ready before Jetty had bound
-          # /tmp/riid.sock - the bench's first pull then raced the daemon's own
-          # startup ("Failed to connect to localhost port 80 ... Couldn't
-          # connect to server", a plain connection refused). HealthHttpHandler
-          # answers GET /healthz with a bare 200 on every connector, including
-          # this TCP one, with no dispatcher/registry work - the cheapest true
-          # signal that the daemon is actually serving, not just running.
+          # Readiness previously tracked only the process existing, so kubelet marked
+          # the pod Ready before Jetty had bound /tmp/riid.sock and the bench's first
+          # pull raced startup with a plain connection refused. GET /healthz answers a
+          # bare 200 on every connector - the cheapest true "actually serving" signal.
           readinessProbe:
             httpGet:
               path: /healthz
@@ -93,10 +89,9 @@ spec:
             - name: dragonfly-sock
               mountPath: /var/run/dragonfly
             # RIID derives the dfdaemon output path from the socket path
-            # (<dir>/output/p2p-*.bin) and never creates it; dfdaemon writes the
-            # finished blob there. Both sides must therefore see one host
-            # directory, and it must not be the tmpfs behind /var/run — see
-            # client.extraVolumes in scripts/values.yaml.
+            # (<dir>/output/p2p-*.bin) and never creates it; dfdaemon writes the blob
+            # there. Both sides must see one host directory, and it must not be the
+            # tmpfs behind /var/run - see client.extraVolumes in scripts/values.yaml.
             - name: dragonfly-output
               mountPath: /var/run/dragonfly/output
             - name: podman-sock
@@ -107,11 +102,10 @@ spec:
             # the RIID image; only the socket has to be handed in.
             - name: containerd-sock
               mountPath: /run/containerd/containerd.sock
-            # dfinit-containerd arm: `ctr images pull --hosts-dir` and the
-            # bench's own mirror check (containerd.inc.sh engine_mirror_check)
-            # both read certs.d from THIS pod's filesystem, not the node's —
-            # without this mount both see an empty/missing directory even
-            # after dfinit correctly rewrites certs.d on the node.
+            # dfinit-containerd arm: `ctr images pull --hosts-dir` and the bench's
+            # mirror check both read certs.d from THIS pod's filesystem, not the
+            # node's - without this mount both see an empty directory even after
+            # dfinit correctly rewrites certs.d on the node.
             - name: containerd-certs-d
               mountPath: /etc/containerd/certs.d
               readOnly: true
@@ -122,31 +116,22 @@ spec:
             - name: ctr-bin
               mountPath: /usr/local/bin/ctr
               readOnly: true
-            # RIID => Porto arm: PortoRuntimeAdapter runs `portoctl`, which
-            # talks to the node's portod over this socket (performance/backend
-            # /engine/porto.inc.sh documents the same requirement for the bare
-            # -porto bench arm). portoctl itself ships in the RIID image
-            # (Dockerfile.k8s); only the socket has to be handed in, same
-            # shape as podman/containerd above.
+            # RIID => Porto arm: PortoRuntimeAdapter runs `portoctl`, which talks to
+            # the node's portod over this socket (porto.inc.sh documents the same for
+            # the bare-porto arm). portoctl ships in the RIID image; only the socket
+            # has to be handed in, same shape as podman/containerd above.
             - name: portod-sock
               mountPath: /run/portod.socket
-            # Prefix import hands the node's podman a PATH, not a stream:
-            # PodmanIncrementalImport runs `podman pull` against the OCI layout
-            # under this directory, and podman resolves that path in the NODE's
-            # filesystem. An emptyDir is visible only inside this pod, so every
-            # incremental import dies with "lstat /var/lib/riid/work: no such
-            # file or directory". The plain (non-prefix) path tars and streams
-            # over the socket and does not care, which is why only the prefix
-            # arm broke. Same path on both sides is therefore required.
+            # Prefix import hands the node's podman a PATH, not a stream, and podman
+            # resolves it in the NODE's filesystem. An emptyDir is visible only inside
+            # this pod, so every incremental import dies with "lstat /var/lib/riid/work:
+            # no such file". The streaming path does not care - only prefix broke.
             - name: riid-work
               mountPath: /var/lib/riid/work
-            # Anything RIID writes outside a mounted path lands in the
-            # container's writable layer, which kubelet counts as the pod's
-            # ephemeral storage. A containerd arm evicted the RIID pod with
-            # "Container riid was using 9695188Ki" - 9.7 GB - and the arm then
-            # failed with "pods not found" partway through, looking like an
-            # application fault. /tmp is the one such path (Java's default temp
-            # dir, and the daemon socket), so it goes on the node's disk too.
+            # Anything RIID writes outside a mounted path lands in the container's
+            # writable layer, which kubelet counts as ephemeral storage. A containerd
+            # arm evicted the pod at 9.7 GB and the arm then failed with "pods not
+            # found", looking like an application fault. /tmp goes on the node's disk.
             - name: riid-tmp
               mountPath: /tmp
       volumes:
@@ -169,17 +154,10 @@ spec:
             # and a full /run stops every container on the node from starting.
             path: /var/lib/dragonfly-run
             type: DirectoryOrCreate
-        # Must be the SAME host directory dfdaemon actually writes finished
-        # blobs to. dragonfly-client's only volume for this tree is hostPath
-        # /var/run/dragonfly -> container /var/run/dragonfly (see
-        # client-daemonset.yaml's "config"/"socket-dir" mounts), so its
-        # container path /var/run/dragonfly/output is host
-        # /var/run/dragonfly/output, not a path under /var/lib. Pointing this
-        # volume at a different host path (previously
-        # /var/lib/dragonfly/riid/output) made every P2P download report
-        # "download task finished but output file missing" on the RIID side
-        # even though dfdaemon's own logs showed the hard link succeeding:
-        # RIID and dfdaemon were reading two different directories.
+        # Must be the SAME host directory dfdaemon writes finished blobs to:
+        # dragonfly-client mounts hostPath /var/run/dragonfly, so its
+        # /var/run/dragonfly/output is that host path, not one under /var/lib. Pointing
+        # elsewhere made every P2P download report "output file missing" on RIID's side.
         - name: dragonfly-output
           hostPath:
             path: /var/lib/dragonfly-run/output

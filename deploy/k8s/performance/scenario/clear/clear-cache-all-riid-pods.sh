@@ -48,13 +48,10 @@ LABEL="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
 WORK_DIR="${RIID_WORK_DIR:-/var/lib/riid/work}"
 
 DFS="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
-# By default: the dfget/dfdaemon tree (often /var/cache/dragonfly/dfdaemon under this
-# root), RIID's hostPath output (/var/run/dragonfly/output in values.yaml
-# extraVolumeMounts), and dfdaemon's own storage.dir (/var/run/dragonfly/data —
-# client.config.storage.dir in scripts/values.yaml). Without the last one, fetched
-# content remains hardlink-servable from a node's own dfdaemon store across arms — a
-# "cold" podman store on that node can still resolve every layer as an instant local P2P
-# hit left over from a previous arm's run, instead of a genuine cold pull.
+# By default: the dfget/dfdaemon tree, RIID's hostPath output
+# (/var/run/dragonfly/output) and dfdaemon's own storage.dir (/var/run/dragonfly/data).
+# Without the last one a node's dfdaemon store still hardlink-serves content across
+# arms, so a "cold" pull resolves every layer as a leftover local P2P hit.
 DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/run/dragonfly/output /var/run/dragonfly/data}"
 DRAGONFLY_RESET_CONTROL_PLANE="${DRAGONFLY_RESET_CONTROL_PLANE:-1}"
 DRAGONFLY_RECREATE_REDIS_STATE="${DRAGONFLY_RECREATE_REDIS_STATE:-1}"

@@ -48,14 +48,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # portoctl (client binary, talks to the host's portod over the mounted
-# /run/portod.socket — PortoRuntimeAdapter, performance/backend/engine/porto.inc.sh).
-# Installed via apt so its runtime deps (libprotobuf etc.) resolve too; the
-# package's postinst enables/starts porto.service, which has no meaning in
-# this image (no systemd, no portod belongs here — only the client) and
-# would fail outright without a policy-rc.d shim, so one is installed first
-# to make invoke-rc.d a no-op for the duration. Same release+distro as the
-# Porto stand's cloud-init (terraform-porto/cloud-init/worker.yaml.tftpl):
-# jammy, version pinned to match.
+# /run/portod.socket). Installed via apt so its runtime deps resolve; the package's
+# postinst starts porto.service, meaningless here and fatal without a policy-rc.d
+# shim, so one is installed first. Same jammy release as terraform-porto cloud-init.
 ARG PORTO_VERSION=5.3.41
 RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
  && chmod +x /usr/sbin/policy-rc.d \

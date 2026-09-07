@@ -177,11 +177,10 @@ install-dragonfly:
 	bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
 	@$(MAKE) -C "$(SELECTEL_DIR)" dragonfly-ready
 
-# helm --wait говорит только «поды Ready». dfdaemon при этом ещё может
-# держать адрес scheduler от прошлого пода: адрес приходит из dynconfig
-# манагера по IP пода и обновляется с задержкой. Прогон в этом окне идёт
-# мимо P2P целиком, поэтому меш проверяется отдельно (тем же скриптом,
-# что и очистка кэшей перед армом).
+# helm --wait говорит только «поды Ready»: dfdaemon может ещё держать адрес
+# scheduler от прошлого пода — он приходит из dynconfig манагера по IP пода и
+# обновляется с задержкой. Прогон в этом окне идёт мимо P2P, поэтому меш
+# проверяется отдельно, тем же скриптом, что чистит кэши перед армом.
 dragonfly-ready:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -203,15 +202,10 @@ install-podman-node:
 	kubectl apply -f "$(K8S)/.resolved/src/namespace.yaml"; \
 	kubectl apply -f "$(K8S)/.resolved/src/engines/podman-node.yaml"
 
-# The dfinit arm of AGENT-74. dfinit rewrites the ENGINE's registry config on the
-# node, so the switch is a Helm re-install of the Dragonfly client, not a knob in
-# the bench. The mirrored address is resolved the same way the bench resolves it
-# — the Service ClusterIP, because a node-side engine has no cluster resolver —
-# and comes from the same function, so the two cannot drift apart.
-#
-# dfinit-disable is not optional bookkeeping: the baseline arm asserts that the
-# node has no mirror (engine_no_mirror_check), and a leftover dfinit turns it
-# into a second dfinit run.
+# The dfinit arm of AGENT-74: dfinit rewrites the ENGINE's registry config on the
+# node, so the switch is a Helm re-install, not a bench knob. The mirrored address
+# comes from the same function the bench uses, so the two cannot drift apart.
+# dfinit-disable is required: a leftover mirror makes the baseline a 2nd dfinit run.
 dfinit-enable:
 	@[ -n "$(strip $(ENGINE))" ] || { echo "set ENGINE=podman|containerd"; exit 1; }
 	@export KUBECONFIG="$(KUBECONFIG)"; \

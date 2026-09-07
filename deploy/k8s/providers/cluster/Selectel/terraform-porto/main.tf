@@ -275,12 +275,10 @@ resource "openstack_compute_instance_v2" "worker" {
     node_labels    = local.node_labels
   })
 
-  # security_groups is already attached at boot (Neutron sets it on the port
-  # from this same field); the provider can't read it back into state for a
-  # Neutron-networked instance, so every subsequent plan sees state as empty
-  # and calls the Nova addSecurityGroup action again, which 400s with
-  # "Duplicate items in the list" since it's already there. Ignore it rather
-  # than fight a provider round-trip gap that has no effect on real state.
+  # security_groups is attached at boot by Neutron, but the provider cannot read it
+  # back for a Neutron-networked instance, so every plan sees empty state and calls
+  # addSecurityGroup again - 400 "Duplicate items in the list". Ignore it rather than
+  # fight a provider round-trip gap that has no effect on real state.
   lifecycle {
     ignore_changes = [user_data, security_groups]
   }

@@ -1,14 +1,7 @@
 # AGENT-103 fix: true top-20 by popularity, not "every 5th row by size".
-# Rule: internalDocs/programsDocumentation/external environment/registry/
-# ChimangoScanTop150.versions.csv, sorted by loaded_rank ascending, take
-# ranks 1-20; any rank with no amd64 linux manifest (amd64_digest null) is
-# dropped and backfilled from the next rank in order instead, so the set
-# stays 20 real, pullable images. Dropped this way: rank 15 library/openjdk
-# (Windows-only nanoserver tag), rank 16 sguha/scripthost (unresolvable
-# digest), rank 20 nvidia/cuda (linux_platforms=arm64 only, no amd64).
-# Backfilled from ranks 21-23.
-# Columns are the canonical Docker Hub repository and tag; the provider prefix
-# (riid/... for the local registry) is applied by write_filtered_dataset_a.py.
+# ChimangoScanTop150.versions.csv sorted by loaded_rank, ranks 1-20; a rank with no
+# amd64 linux manifest is dropped and backfilled from the next one (15, 16, 20 out;
+# 21-23 in). The provider prefix is applied by write_filtered_dataset_a.py.
 repository	tag
 datasense/datasense	0c579488240e543a8670057d01985195
 library/python	latest

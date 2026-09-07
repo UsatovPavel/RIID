@@ -19,11 +19,10 @@ CTR_NAMESPACE="${CONTAINERD_NAMESPACE:-riid-bench}"
 CTR_ADDRESS="${CONTAINERD_ADDRESS:-}"
 CTR_SNAPSHOTTER="${CONTAINERD_SNAPSHOTTER:-}"
 CTR_HOSTS_DIR="${CONTAINERD_HOSTS_DIR:-/etc/containerd/certs.d}"
-# ctr's --debug is a GLOBAL flag, so it has to precede the subcommand. It makes
-# the client log every blob it fetches - which layer, from where, how big - so a
-# bench arm can be read per blob instead of per image. The output goes to
-# stderr; CTR_DEBUG_LOG collects it per arm, and without that variable it simply
-# joins the arm's run.log.
+# ctr's --debug is a GLOBAL flag, so it must precede the subcommand. It logs every
+# blob fetched - which layer, from where, how big - so an arm can be read per blob
+# instead of per image. Output goes to stderr; CTR_DEBUG_LOG collects it per arm,
+# and without that variable it just joins the arm's run.log.
 CTR_DEBUG="${CONTAINERD_DEBUG:-0}"
 CTR_DEBUG_LOG="${CONTAINERD_DEBUG_LOG:-}"
 
@@ -44,11 +43,10 @@ _ctr_base() {
   printf '%s\n' -n "$CTR_NAMESPACE"
 }
 
-# ctr writes its per-blob progress to STDOUT - one line per manifest, config and
-# layer, carrying the digest and the state (waiting / already exists /
-# downloading / done / extracted). The bench normally discards stdout, which is
-# exactly where that detail lives, so debug mode keeps it instead of dropping
-# it. stderr is left alone so a real error still surfaces in the arm's run.log.
+# ctr writes per-blob progress to STDOUT - one line per manifest, config and layer,
+# with the digest and state (waiting / already exists / downloading / done /
+# extracted). The bench normally discards stdout, so debug mode keeps it; stderr is
+# left alone so a real error still surfaces in the arm's run.log.
 _ctr_run() {
   if [[ "$CTR_DEBUG" == "1" && -n "$CTR_DEBUG_LOG" ]]; then
     # Both pods pull the same image at once; sharing one file interleaves their
