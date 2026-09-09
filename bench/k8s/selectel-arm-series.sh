@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# AGENT-117 driver for the Selectel MKS stand (arm-queue.sh is VirtualBox-only).
+# Logs go to zOptimization/, same as every AGENT-99 arm since 2026-09-01 - a
+# prior version wrote to a /tmp job scratchpad and lost a night's dfdaemon/seed
+# logs on session rotation. Usage: selectel-arm-series.sh <arm> [<arm> ...]
+set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$REPO"
+PERF=deploy/k8s/performance
+BOOT=deploy/k8s/bootstrap
+KC="$REPO/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml"
+export KUBECONFIG="$KC"
+ARMS="$*"
+STAMP_ROOT="$(date +%Y%m%d-%H%M)"
+LOGROOT="zOptimization/clusterLogs-agent117-${STAMP_ROOT}"
+RUNLOG_DIR="$LOGROOT/run-logs"
+mkdir -p "$RUNLOG_DIR"
+
+say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+
+# cache-clear/dfinit-enable restart dragonfly-client, which bounces
+# containerd; riid pods' hostPath containerd.sock mount then goes stale
+# forever (confirmed: node ctr works, pod ctr refuses, recreating the pod
+# fixes it - waiting never does).
+wait_for_containerd() {
+  say "  rolling riid DaemonSet (its containerd.sock mount goes stale on every restart)"
+  kubectl -n riid-system rollout restart daemonset/riid >/dev/null 2>&1
+  if kubectl -n riid-system rollout status daemonset/riid --timeout=180s >/dev/null 2>&1; then
+    say "  containerd ready"
+  else
+    say "  WARNING: riid rollout did not complete in 180s, continuing anyway"
+  fi
+}
+
+# Every scheduler restart inserts a new manager.scheduler row and never
+# cleans up the old one (11 accumulated once, crashlooping every client
+# before it reached the live entry). The manager caches this list at its own
+# startup, so purging the DB alone does nothing until it restarts again.
+purge_stale_scheduler_rows() {
+  local live_ip
+  live_ip=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 -o jsonpath='{.status.podIP}' 2>/dev/null)
+  [ -n "$live_ip" ] || { say "  purge_stale_scheduler_rows: no live scheduler IP, skipping"; return; }
+  kubectl -n dragonfly-system exec dragonfly-mysql-0 -- \
+    mysql -uroot -pdragonfly-root -e "DELETE FROM manager.scheduler WHERE ip != '$live_ip';" >/dev/null 2>&1
+  say "  scheduler table pruned to live IP $live_ip - restarting manager to pick it up"
+  kubectl -n dragonfly-system rollout restart deployment/dragonfly-manager >/dev/null 2>&1
+  kubectl -n dragonfly-system rollout status deployment/dragonfly-manager --timeout=120s >/dev/null 2>&1
+  local ok=0
+  for _ in $(seq 1 20); do
+    local total ready
+    total=$(kubectl -n dragonfly-system get pods -l app=dragonfly,component=client --no-headers 2>/dev/null | wc -l)
+    ready=$(kubectl -n dragonfly-system get pods -l app=dragonfly,component=client --no-headers 2>/dev/null | awk '$2=="1/1"' | wc -l)
+    [ "$total" -gt 0 ] && [ "$total" = "$ready" ] && { ok=1; break; }
+    sleep 5
+  done
+  [ "$ok" = 1 ] && say "  dragonfly-client stable" || say "  WARNING: dragonfly-client not all Ready after 100s, continuing anyway"
+}
+
+# clear-cluster-cache only prunes podman, never containerd's content store -
+# all 20 dataset images were already cached before a "fresh" arm even started.
+# Wipe the riid-bench namespace specifically (not k8s.io, which holds the
+# live pod images).
+clear_containerd_cache() {
+  say "  wiping containerd riid-bench namespace on every node (real cold start)"
+  for p in $(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do
+    kubectl -n riid-system exec -c installer "$p" -- chroot /host sh -c '
+      ctr -n riid-bench images ls -q 2>/dev/null | while read -r img; do
+        [ -n "$img" ] && ctr -n riid-bench images rm --sync "$img" >/dev/null 2>&1
+      done
+      ctr -n riid-bench content prune references >/dev/null 2>&1
+    ' >/dev/null 2>&1
+  done
+  local first left
+  first=$(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  left=$(kubectl -n riid-system exec -c installer "$first" -- chroot /host ctr -n riid-bench images ls -q 2>/dev/null | wc -l)
+  say "  riid-bench images remaining on node 0: $left"
+}
+
+# Same shape as bench/k8s/arm-queue.sh's export_logs, repo-relative output
+# instead of a /tmp job scratchpad - the whole reason this driver is a
+# committed file and not a scratch script written fresh each session.
+export_logs() {
+  local arm="$1" stamp="$2" out="$LOGROOT/${arm}.${stamp}"
+  mkdir -p "$out"/{dfdaemon,scheduler,seed,riid}
+  for p in $(kubectl -n dragonfly-system get pods -l app=dragonfly,component=client -o name 2>/dev/null); do
+    kubectl -n dragonfly-system logs "${p#pod/}" -c client --tail=1000000 --timestamps > "$out/dfdaemon/${p#pod/}.log" 2>/dev/null; done
+  for p in $(kubectl -n dragonfly-system get pods -l app=dragonfly,component=scheduler -o name 2>/dev/null); do
+    kubectl -n dragonfly-system logs "${p#pod/}" -c scheduler --tail=1000000 --timestamps > "$out/scheduler/${p#pod/}.log" 2>/dev/null; done
+  for p in $(kubectl -n dragonfly-system get pods -l app=dragonfly,component=seed-client -o name 2>/dev/null); do
+    kubectl -n dragonfly-system logs "${p#pod/}" -c seed-client --tail=1000000 --timestamps > "$out/seed/${p#pod/}.log" 2>/dev/null; done
+  for p in $(kubectl -n riid-system get pods -l app.kubernetes.io/name=riid -o name 2>/dev/null); do
+    kubectl -n riid-system logs "${p#pod/}" -c riid --tail=1000000 --timestamps > "$out/riid/${p#pod/}.log" 2>/dev/null
+    kubectl -n riid-system logs "${p#pod/}" -c riid --previous --tail=1000000 --timestamps \
+      > "$out/riid/${p#pod/}.previous.log" 2>/dev/null
+    [ -s "$out/riid/${p#pod/}.previous.log" ] || rm -f "$out/riid/${p#pod/}.previous.log"
+    kubectl -n riid-system describe pod "${p#pod/}" > "$out/riid/${p#pod/}.describe.txt" 2>/dev/null
+  done
+  kubectl -n riid-system get events --sort-by=.lastTimestamp > "$out/riid/events.txt" 2>/dev/null
+  kubectl get nodes -o wide > "$out/riid/nodes.txt" 2>/dev/null
+  { echo "# $arm"; echo "captured: $(date -Is)"; echo;
+    find "$out" -type f -name '*.log' -printf '%p %s bytes\n' | sort; } > "$out/README.md"
+  ( cd "$out" && find . -type f -name '*.log' -exec sha256sum {} + > SHA256SUMS 2>/dev/null )
+  say "  logs exported to $out"
+}
+
+for arm in $ARMS; do
+  stamp=$(date +%Y%m%d-%H%M)
+  say "=== $arm ($stamp) ==="
+  say "clearing cluster cache"
+  if ! make -C "$PERF" clear-cluster-cache > "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1; then
+    say "  clear-cluster-cache returned non-zero - tail:"
+    tail -8 "$RUNLOG_DIR/${arm}.${stamp}.cache.log" | sed 's/^/    /'
+  fi
+  say "pruning stale scheduler rows and waiting for containerd"
+  purge_stale_scheduler_rows
+  wait_for_containerd
+  case "$arm" in dfinit-*)
+    say "dfinit-enable ENGINE=containerd"
+    if ! make -C "$BOOT" dfinit-enable ENGINE=containerd > "$RUNLOG_DIR/${arm}.${stamp}.dfinit-enable.log" 2>&1; then
+      say "  dfinit-enable FAILED - tail:"
+      tail -15 "$RUNLOG_DIR/${arm}.${stamp}.dfinit-enable.log" | sed 's/^/    /'
+      continue
+    fi
+    say "pruning stale scheduler rows and waiting for containerd"
+    purge_stale_scheduler_rows
+    wait_for_containerd;;
+  esac
+  clear_containerd_cache
+  tsv="$PERF/output/${arm}.tsv"
+  before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
+  say "running arm"
+  make -C "$PERF" "$arm" > "$RUNLOG_DIR/${arm}.${stamp}.run.log" 2>&1; rc=$?
+  after=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
+  export_logs "$arm" "$stamp"
+  case "$arm" in dfinit-*) make -C "$BOOT" dfinit-disable > "$RUNLOG_DIR/${arm}.${stamp}.dfinit-disable.log" 2>&1 || true;; esac
+  if [ "$rc" -ne 0 ] || [ "$after" = "$before" ]; then
+    say "$arm: RUN FAILED (rc=$rc, tsv rewritten=$([ "$after" != "$before" ] && echo yes || echo no))"
+    tail -5 "$RUNLOG_DIR/${arm}.${stamp}.run.log" | sed 's/^/    /'
+    continue
+  fi
+  # Only agent117-name a result AFTER validate-arm confirms it - a cp before
+  # validation once put an INVALID run in output/ under the same naming as a
+  # real result, indistinguishable without re-reading a log that no longer exists.
+  if bash "$PERF/summarize/validate-arm.sh" "$arm" "$tsv" "$LOGROOT/${arm}.${stamp}" 2>&1 | sed 's/^/  /' | tee /dev/stderr | grep -q ": VALID$"; then
+    cp "$tsv" "$PERF/output/${arm}.agent117-${stamp}.tsv"
+    say "  saved as ${arm}.agent117-${stamp}.tsv"
+  else
+    say "  NOT saved - validate-arm rejected this run"
+  fi
+done
+say "series done - logs under $LOGROOT"
