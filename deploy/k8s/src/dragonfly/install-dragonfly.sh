@@ -137,6 +137,29 @@ client:
 DFEOF
   echo ">>> dfinit engine: containerd (crio handler disabled for this install)"
   DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
+elif [ "$DFINIT_ENGINE" = "podman" ]; then
+  # podman reads /etc/containers/registries.conf, same as CRI-O - dfinit has no
+  # podman handler, so this uses the crio one (AGENT-99 finding). The base
+  # values.yaml crio block is a static leftover pointed at the old local-stand
+  # registry IP (10.96.5.146); this renders the real registry for this cluster.
+  DFINIT_OVERRIDE="$(mktemp)"
+  cleanup_dfinit_override() { rm -f "$DFINIT_OVERRIDE"; }
+  trap cleanup_dfinit_override EXIT
+  cat > "$DFINIT_OVERRIDE" <<DFEOF
+client:
+  dfinit:
+    config:
+      containerRuntime:
+        containerd: null
+        crio:
+          configPath: /etc/containers/registries.conf
+          unqualifiedSearchRegistries: ["cr.selcloud.ru"]
+          registries:
+            - prefix: ${RIID_DFINIT_REGISTRY:-}
+              location: ${RIID_DFINIT_REGISTRY:-}
+DFEOF
+  echo ">>> dfinit engine: podman (crio handler, containerd disabled for this install)"
+  DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
 else
   DFINIT_HELM_ARGS=""
 fi

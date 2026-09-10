@@ -40,7 +40,7 @@ PODMAN_NODE_WAIT_TIMEOUT ?= 900
 # in performance/backend/engine/common.inc.sh (RIID_LOCAL_REGISTRY_HOST) so that
 # dfinit mirrors exactly the address the arms use.
 REGISTRY_PULL_HOST ?=
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable ensure-dragonfly-pull-secret
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -206,7 +206,18 @@ install-podman-node:
 # node, so the switch is a Helm re-install, not a bench knob. The mirrored address
 # comes from the same function the bench uses, so the two cannot drift apart.
 # dfinit-disable is required: a leftover mirror makes the baseline a 2nd dfinit run.
-dfinit-enable:
+# Both targets call install-dragonfly.sh directly (not registry-apply-profile), so
+# they must ensure the pull secret themselves - a helm upgrade here does not
+# recreate it, and a stand where it was never (re)created leaves every dragonfly-*
+# pod in ImagePullBackOff with no other symptom (found the hard way on AGENT-117).
+ensure-dragonfly-pull-secret:
+	@if [ "$(DRAGONFLY_PROFILE)" = dockerhub ]; then \
+	  $(MAKE) -C "$(SELECTEL_DIR)/registry" dragonfly-dockerhub-pull-secret K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"; \
+	else \
+	  $(MAKE) -C "$(SELECTEL_DIR)/registry" dragonfly-selectel-registry-pull-secret K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"; \
+	fi
+
+dfinit-enable: ensure-dragonfly-pull-secret
 	@[ -n "$(strip $(ENGINE))" ] || { echo "set ENGINE=podman|containerd"; exit 1; }
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
@@ -219,7 +230,7 @@ dfinit-enable:
 	DRAGONFLY_REGISTRY_PROFILE="$(DRAGONFLY_PROFILE)" \
 	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
 
-dfinit-disable:
+dfinit-disable: ensure-dragonfly-pull-secret
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
