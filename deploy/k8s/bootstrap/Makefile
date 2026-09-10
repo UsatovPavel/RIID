@@ -118,19 +118,25 @@ mark-monitoring-node-auto:
 	kubectl config use-context "$$CTX"; \
 	if [ -n "$(MONITORING_NODE)" ]; then \
 	  NODE="$(MONITORING_NODE)"; \
+	elif NODE=$$(kubectl get nodes -l riid.monitoring=true -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) && [ -n "$$NODE" ]; then \
+	  echo "monitoring node already labelled by its node group: $$NODE"; \
 	else \
 	  NODE=$$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' \
 	    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | tail -n1); \
 	fi; \
 	[ -n "$$NODE" ] || { echo "mark-monitoring-node-auto: no worker node found"; exit 1; }; \
-	kubectl label node --all riid.monitoring- >/dev/null 2>&1 || true; \
+	for OLD in $$(kubectl get nodes -l riid.monitoring=true -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do \
+	  [ "$$OLD" = "$$NODE" ] && continue; \
+	  echo "  moving riid.monitoring off $$OLD"; \
+	  kubectl label node "$$OLD" riid.monitoring- >/dev/null 2>&1 || true; \
+	done; \
 	kubectl label node "$$NODE" riid.monitoring=true --overwrite; \
 	$(call riid_taint_node,$$NODE,riid.monitoring); \
 	echo "monitoring node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.monitoring/p'
 
 # Автовыбор registry-ноды: первый worker, который не помечен как monitoring.
-# Если задан REGISTRY_NODE, используется он.
+# Если задан REGISTRY_NODE, используется он, и метка снимается с прежней ноды.
 mark-registry-node-auto:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -138,13 +144,19 @@ mark-registry-node-auto:
 	kubectl config use-context "$$CTX"; \
 	if [ -n "$(REGISTRY_NODE)" ]; then \
 	  NODE="$(REGISTRY_NODE)"; \
+	elif NODE=$$(kubectl get nodes -l riid.registry=true -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) && [ -n "$$NODE" ]; then \
+	  echo "registry node already labelled by its node group: $$NODE"; \
 	else \
 	  NODE=$$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' \
 	    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.riid\.monitoring}{"\n"}{end}' \
 	    | awk '$$2!="true" {print $$1}' | head -n1); \
 	fi; \
 	[ -n "$$NODE" ] || { echo "mark-registry-node-auto: no worker node (excluding monitoring) found"; exit 1; }; \
-	kubectl label node --all riid.registry- >/dev/null 2>&1 || true; \
+	for OLD in $$(kubectl get nodes -l riid.registry=true -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do \
+	  [ "$$OLD" = "$$NODE" ] && continue; \
+	  echo "  moving riid.registry off $$OLD"; \
+	  kubectl label node "$$OLD" riid.registry- >/dev/null 2>&1 || true; \
+	done; \
 	kubectl label node "$$NODE" riid.registry=true --overwrite; \
 	$(call riid_taint_node,$$NODE,riid.registry); \
 	echo "registry node: $$NODE"; \
