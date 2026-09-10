@@ -36,6 +36,7 @@ spec:
       {{- if .Values.monitoringNodeAffinity.required }}
       affinity:
         {{- include "riid-observer.monitoringAffinity" . | nindent 8 }}
+      {{- include "riid-observer.monitoringTolerations" . | nindent 6 }}
       {{- end }}
       containers:
         - name: victoria-metrics

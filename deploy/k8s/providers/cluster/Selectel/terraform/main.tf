@@ -10,6 +10,10 @@ data "selectel_mks_kube_versions_v1" "available" {
 locals {
   kube_version = coalesce(var.kube_version, data.selectel_mks_kube_versions_v1.available.default_version)
   volume_type  = "${var.volume_type_family}.${var.availability_zone}"
+
+  # NODES= still means the whole stand; the two infra nodes come out of that total
+  # so the bench keeps the worker count cluster_topology asks for.
+  worker_nodes_count = var.dedicated_infra_nodes ? var.nodes_count - 2 : var.nodes_count
 }
 
 resource "selectel_mks_cluster_v1" "bench" {
@@ -31,13 +35,17 @@ resource "selectel_mks_cluster_v1" "bench" {
   }
 }
 
+# Three node groups, not one. MKS reconciles node spec and strips any taint set
+# with kubectl, so a taint only sticks when it comes from the node group itself -
+# verified on cluster 31b1314d on 2026-09-10: `kubectl taint` reported "modified"
+# and the taint was already gone when read back.
 resource "selectel_mks_nodegroup_v1" "workers" {
   cluster_id        = selectel_mks_cluster_v1.bench.id
   project_id        = var.project_id
   region            = var.region
   availability_zone = var.availability_zone
 
-  nodes_count = var.nodes_count
+  nodes_count = local.worker_nodes_count
   volume_gb   = var.volume_gb
   volume_type = local.volume_type
 
@@ -50,6 +58,77 @@ resource "selectel_mks_nodegroup_v1" "workers" {
   labels                       = var.labels
 
   # 12 nodes on network disks take noticeably longer than the provider default.
+  timeouts {
+    create = "90m"
+    update = "90m"
+    delete = "60m"
+  }
+}
+
+# Metrics only: Grafana, VictoriaMetrics, kube-state-metrics and vmagent carry the
+# matching toleration, nothing else does. Keeps the Dragonfly control plane and the
+# seed tier off the node that also serves dashboards.
+resource "selectel_mks_nodegroup_v1" "monitoring" {
+  count = var.dedicated_infra_nodes ? 1 : 0
+
+  cluster_id        = selectel_mks_cluster_v1.bench.id
+  project_id        = var.project_id
+  region            = var.region
+  availability_zone = var.availability_zone
+
+  nodes_count = 1
+  volume_gb   = var.volume_gb
+  volume_type = local.volume_type
+
+  flavor_id = var.flavor_id
+  cpus      = var.flavor_id == null ? var.cpus : null
+  ram_mb    = var.flavor_id == null ? var.ram_mb : null
+
+  install_nvidia_device_plugin = false
+  labels                       = merge(var.labels, { "riid.monitoring" = "true" })
+
+  taints {
+    key    = "riid.monitoring"
+    value  = "true"
+    effect = "NoSchedule"
+  }
+
+  timeouts {
+    create = "90m"
+    update = "90m"
+    delete = "60m"
+  }
+}
+
+# The registry node holds the image store and nothing else: local-registry, the
+# dataset loader and the registry-tx probe are the only pods that tolerate this.
+# Its page cache is never cleared between arms, so anything else living here would
+# compete with the one thing the arms measure against.
+resource "selectel_mks_nodegroup_v1" "registry" {
+  count = var.dedicated_infra_nodes ? 1 : 0
+
+  cluster_id        = selectel_mks_cluster_v1.bench.id
+  project_id        = var.project_id
+  region            = var.region
+  availability_zone = var.availability_zone
+
+  nodes_count = 1
+  volume_gb   = var.volume_gb
+  volume_type = local.volume_type
+
+  flavor_id = var.flavor_id
+  cpus      = var.flavor_id == null ? var.cpus : null
+  ram_mb    = var.flavor_id == null ? var.ram_mb : null
+
+  install_nvidia_device_plugin = false
+  labels                       = merge(var.labels, { "riid.registry" = "true" })
+
+  taints {
+    key    = "riid.registry"
+    value  = "true"
+    effect = "NoSchedule"
+  }
+
   timeouts {
     create = "90m"
     update = "90m"

@@ -14,13 +14,30 @@ output "kube_api_ip" {
 }
 
 output "nodes" {
-  description = "Hostname and ip of every node in the group."
-  value       = selectel_mks_nodegroup_v1.workers.nodes
+  description = "Hostname and ip of every node, across all three groups."
+  value = concat(
+    selectel_mks_nodegroup_v1.workers.nodes,
+    try(selectel_mks_nodegroup_v1.monitoring[0].nodes, []),
+    try(selectel_mks_nodegroup_v1.registry[0].nodes, []),
+  )
 }
 
 output "nodes_count" {
-  description = "Node group size, cross-checked by bootstrap validate-cluster-state."
-  value       = selectel_mks_nodegroup_v1.workers.nodes_count
+  description = "Whole stand, cross-checked by bootstrap validate-cluster-state."
+  value       = var.nodes_count
+}
+
+output "worker_nodes_count" {
+  description = "Bench workers only - the stand minus the monitoring and registry nodes."
+  value       = local.worker_nodes_count
+}
+
+output "infra_nodes" {
+  description = "Names of the tainted monitoring and registry nodes, empty when not carved out."
+  value = {
+    monitoring = try(selectel_mks_nodegroup_v1.monitoring[0].nodes[*].hostname, [])
+    registry   = try(selectel_mks_nodegroup_v1.registry[0].nodes[*].hostname, [])
+  }
 }
 
 output "volume_type" {

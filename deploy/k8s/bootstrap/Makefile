@@ -96,6 +96,21 @@ validate-cluster-state:
 
 # Автовыбор monitoring-ноды: последняя worker-нода (не control-plane/master).
 # Если задан MONITORING_NODE, используется он.
+# A kubectl taint sticks on a self-managed stand (Porto) but NOT on MKS, which
+# reconciles node spec and drops it within the same second. There the taint has to
+# come from the node group (terraform dedicated_infra_nodes), so verify and say
+# which of the two happened instead of reporting a taint that is already gone.
+define riid_taint_node
+kubectl taint nodes --all $(2):NoSchedule- >/dev/null 2>&1 || true; \
+kubectl taint nodes "$(1)" $(2)=true:NoSchedule --overwrite >/dev/null 2>&1 || true; \
+if kubectl get node "$(1)" -o jsonpath='{.spec.taints[*].key}' 2>/dev/null | tr ' ' '\n' | grep -qx "$(2)"; then \
+  echo "  taint $(2)=true:NoSchedule active on $(1)"; \
+else \
+  echo "  WARNING: $(2) taint did not stick on $(1) - managed control plane strips it." >&2; \
+  echo "  Nothing is kept off this node. Recreate the stand with dedicated_infra_nodes=true." >&2; \
+fi
+endef
+
 mark-monitoring-node-auto:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -110,6 +125,7 @@ mark-monitoring-node-auto:
 	[ -n "$$NODE" ] || { echo "mark-monitoring-node-auto: no worker node found"; exit 1; }; \
 	kubectl label node --all riid.monitoring- >/dev/null 2>&1 || true; \
 	kubectl label node "$$NODE" riid.monitoring=true --overwrite; \
+	$(call riid_taint_node,$$NODE,riid.monitoring); \
 	echo "monitoring node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.monitoring/p'
 
@@ -130,6 +146,7 @@ mark-registry-node-auto:
 	[ -n "$$NODE" ] || { echo "mark-registry-node-auto: no worker node (excluding monitoring) found"; exit 1; }; \
 	kubectl label node --all riid.registry- >/dev/null 2>&1 || true; \
 	kubectl label node "$$NODE" riid.registry=true --overwrite; \
+	$(call riid_taint_node,$$NODE,riid.registry); \
 	echo "registry node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.registry/p'
 

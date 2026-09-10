@@ -107,6 +107,9 @@ metadata:
 spec:
   restartPolicy: Never
   nodeName: ${REGISTRY_NODE}
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
   containers:
     - name: loader
       image: ${LOADER_IMAGE}

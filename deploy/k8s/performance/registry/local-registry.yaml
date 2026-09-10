@@ -36,6 +36,12 @@ spec:
     spec:
       nodeSelector:
         riid.registry: "true"
+      # The registry node is tainted so nothing else lands there; the registry
+      # itself, the dataset loader and the tx probe are the only tolerated pods.
+      tolerations:
+        - key: riid.registry
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: registry
           image: performance.local_registry
