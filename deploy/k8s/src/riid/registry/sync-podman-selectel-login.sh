@@ -15,10 +15,9 @@ command -v yq >/dev/null 2>&1 || { echo "$0: yq (v4) required" >&2; exit 1; }
 [[ -f "$ENV_FILE" ]] || { echo "$0: missing $ENV_FILE" >&2; exit 1; }
 [[ -f "$PROFILE_YAML" ]] || { echo "$0: missing $PROFILE_YAML" >&2; exit 1; }
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+# shellcheck source=../../../providers/cluster/Selectel/stand-common/load-env.inc.sh
+. "$K8S_DIR/providers/cluster/Selectel/stand-common/load-env.inc.sh"
+riid_load_env "$ENV_FILE"
 
 : "${RIID_SELECTEL_USER:?Set RIID_SELECTEL_USER in $ENV_FILE}"
 _PASS="${RIID_SELECTEL_TOKEN:-${RIID_SELECTEL_PASSWORD:-}}"
