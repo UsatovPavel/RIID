@@ -26,6 +26,10 @@ metadata:
     app.kubernetes.io/name: local-registry
 spec:
   replicas: 1
+  # RWO volume: RollingUpdate deadlocks, because the new pod waits for a disk the
+  # old one still holds and the old one waits for the new to be Ready.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: local-registry
