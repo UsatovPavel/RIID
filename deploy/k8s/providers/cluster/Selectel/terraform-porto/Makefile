@@ -27,7 +27,7 @@ export NODES
 SSH_OPTS := -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
 NODE_READY_TIMEOUT ?= 1800
 
-.PHONY: help init fmt validate plan apply destroy output project-id stand stand-6 stand-12 \
+.PHONY: help init fmt validate plan apply destroy purge-volumes output project-id stand stand-6 stand-12 \
         ssh-key kubeconfig wait ssh smoke nodes bootstrap
 
 help:
@@ -43,6 +43,7 @@ help:
 	@echo "make ssh           — shell on the control plane"
 	@echo "make bootstrap     — bootstrap install-all against this stand"
 	@echo "make destroy       — delete the stand"
+	@echo "make purge-volumes — list leftover Cinder volumes (CONFIRM=yes to delete)"
 
 init:
 	$(TF) init -input=false
@@ -65,6 +66,12 @@ apply:
 destroy:
 	$(TF) plan -destroy -input=false -out=tfplan-destroy
 	$(TF) apply -input=false tfplan-destroy
+
+# This module sets delete_on_termination on its own instances, so its own
+# boot volumes are already cleaned up - this is a backstop for anything still
+# left (e.g. from the MKS stand). List-only unless CONFIRM=yes, account-wide.
+purge-volumes:
+	@CONFIRM="$(CONFIRM)" bash "$(COMMON_DIR)/purge-account-volumes.sh"
 
 output:
 	$(TF) output

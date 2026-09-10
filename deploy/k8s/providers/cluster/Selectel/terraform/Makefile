@@ -17,7 +17,7 @@ export NODES
 
 NODE_READY_TIMEOUT ?= 1800
 
-.PHONY: help init fmt validate plan apply destroy output project-id kubeconfig \
+.PHONY: help init fmt validate plan apply destroy purge-volumes output project-id kubeconfig \
         stand stand-6 stand-12 wait nodes
 
 help:
@@ -32,6 +32,7 @@ help:
 	@echo "make wait          — block until every node is Ready"
 	@echo "make nodes         — kubectl get nodes through the written kubeconfig"
 	@echo "make destroy       — delete the stand"
+	@echo "make purge-volumes — list leftover Cinder volumes (CONFIRM=yes to delete)"
 
 init:
 	$(TF) init -input=false
@@ -50,6 +51,12 @@ apply:
 
 destroy:
 	$(TF) destroy -input=false
+
+# terraform destroy leaks node boot volumes and PVC-backed ones (Cinder CSI
+# creates those from inside Kubernetes, outside any terraform resource). Run
+# after destroy; list-only unless CONFIRM=yes, account-wide, not stand-scoped.
+purge-volumes:
+	@CONFIRM="$(CONFIRM)" bash "$(COMMON_DIR)/purge-account-volumes.sh"
 
 output:
 	$(TF) output
