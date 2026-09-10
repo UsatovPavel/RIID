@@ -19,6 +19,17 @@ mkdir -p "$RUNLOG_DIR"
 
 say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
+# 2026-09-10: bare-containerd hung on run-pull-scenario.sh for 8h with zero
+# progress - only the 08:00 cost-cap cron caught it. Prep steps had timeouts,
+# the arm run itself never did. Anchors: 20 images->1h, 100->2h; fit a line
+# through both (45s/image + 45min base) so other dataset sizes scale too.
+arm_timeout_seconds() {
+  local dataset="$PERF/input/dataset_a.tsv" n
+  n=$(tail -n +2 "$dataset" 2>/dev/null | grep -c '[^[:space:]]')
+  [ "$n" -gt 0 ] 2>/dev/null || n=20
+  echo $(( 2700 + 45 * n ))
+}
+
 # cache-clear/dfinit-enable restart dragonfly-client, which bounces
 # containerd; riid pods' hostPath containerd.sock mount then goes stale
 # forever (confirmed: node ctr works, pod ctr refuses, recreating the pod
@@ -116,8 +127,9 @@ for arm in $ARMS; do
   purge_stale_scheduler_rows
   wait_for_containerd
   case "$arm" in dfinit-*)
-    say "dfinit-enable ENGINE=containerd"
-    if ! make -C "$BOOT" dfinit-enable ENGINE=containerd > "$RUNLOG_DIR/${arm}.${stamp}.dfinit-enable.log" 2>&1; then
+    engine="${arm#dfinit-}"
+    say "dfinit-enable ENGINE=$engine"
+    if ! make -C "$BOOT" dfinit-enable ENGINE="$engine" > "$RUNLOG_DIR/${arm}.${stamp}.dfinit-enable.log" 2>&1; then
       say "  dfinit-enable FAILED - tail:"
       tail -15 "$RUNLOG_DIR/${arm}.${stamp}.dfinit-enable.log" | sed 's/^/    /'
       continue
@@ -129,8 +141,13 @@ for arm in $ARMS; do
   clear_containerd_cache
   tsv="$PERF/output/${arm}.tsv"
   before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
-  say "running arm"
-  make -C "$PERF" "$arm" > "$RUNLOG_DIR/${arm}.${stamp}.run.log" 2>&1; rc=$?
+  arm_timeout=$(arm_timeout_seconds)
+  say "running arm (timeout ${arm_timeout}s)"
+  timeout -k 30s "${arm_timeout}s" make -C "$PERF" "$arm" > "$RUNLOG_DIR/${arm}.${stamp}.run.log" 2>&1; rc=$?
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    say "  arm TIMED OUT after ${arm_timeout}s - sweeping leftover children"
+    pkill -9 -f "run-pull-scenario.sh" 2>/dev/null || true
+  fi
   after=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
   export_logs "$arm" "$stamp"
   case "$arm" in dfinit-*) make -C "$BOOT" dfinit-disable > "$RUNLOG_DIR/${arm}.${stamp}.dfinit-disable.log" 2>&1 || true;; esac
