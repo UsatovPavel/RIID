@@ -45,10 +45,14 @@ endif
 
 .PHONY: run riid-podman riid-containerd riid-porto bare-podman bare-containerd bare-porto \
         dfinit-podman dfinit-containerd \
-        clear-cluster-cache delete-local-registry-dataset debug-registry-node validate-arm \
+        clear-cluster-cache clear-engine-cache delete-local-registry-dataset debug-registry-node validate-arm \
         registry-node-tc-apply registry-node-tc-clear registry-node-tc-check metrics summarize-aggregate
 
-CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-all-riid-pods.sh
+# Two cleaners, picked by what the arm actually exercises. A baseline engine arm
+# has no Dragonfly or RIID state to reset, and paying for a control-plane restart
+# it does not use only adds variance between arms.
+CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-df-riid.sh
+CLEAR_ENGINES_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-engines.sh
 DELETE_REGISTRY_SCRIPT := $(PERF_DIR)/registry/delete-dataset-from-local-registry.sh
 # Удаление тегов из local-registry по TSV (см. delete-dataset-from-local-registry.sh).
 # DATASET / DATASET_FILE — как у цели run.
@@ -108,12 +112,22 @@ riid-porto:
 bare-porto:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=porto
 
+# For riid-* and dfinit-* arms: engines, RIID work dirs, dfdaemon and seed stores,
+# plus the Dragonfly control-plane reset.
 clear-cluster-cache:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	bash "$(CLEAR_CLUSTER_SCRIPT)"
+
+# For bare-* arms: podman store and the containerd riid-bench namespace, nothing else.
+clear-engine-cache:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(CLEAR_ENGINES_SCRIPT)"
 
 delete-local-registry-dataset:
 	@export KUBECONFIG="$(KUBECONFIG)"; \

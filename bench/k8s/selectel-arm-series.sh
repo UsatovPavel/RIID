@@ -68,24 +68,29 @@ purge_stale_scheduler_rows() {
   [ "$ok" = 1 ] && say "  dragonfly-client stable" || say "  WARNING: dragonfly-client not all Ready after 100s, continuing anyway"
 }
 
-# clear-cluster-cache only prunes podman, never containerd's content store -
-# all 20 dataset images were already cached before a "fresh" arm even started.
-# Wipe the riid-bench namespace specifically (not k8s.io, which holds the
-# live pod images).
-clear_containerd_cache() {
-  say "  wiping containerd riid-bench namespace on every node (real cold start)"
-  for p in $(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do
-    kubectl -n riid-system exec -c installer "$p" -- chroot /host sh -c '
-      ctr -n riid-bench images ls -q 2>/dev/null | while read -r img; do
-        [ -n "$img" ] && ctr -n riid-bench images rm --sync "$img" >/dev/null 2>&1
-      done
-      ctr -n riid-bench content prune references >/dev/null 2>&1
-    ' >/dev/null 2>&1
-  done
-  local first left
-  first=$(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-  left=$(kubectl -n riid-system exec -c installer "$first" -- chroot /host ctr -n riid-bench images ls -q 2>/dev/null | wc -l)
-  say "  riid-bench images remaining on node 0: $left"
+# Which cleaner an arm needs follows from what it exercises: bare-* touches only
+# the engine, riid-*/dfinit-* also carry Dragonfly and RIID state. Both wipe the
+# containerd riid-bench namespace, which clear-cluster-cache alone never did -
+# all 20 dataset images were still cached when a "fresh" arm started.
+clear_for_arm() {
+  local arm="$1" stamp="$2" target
+  case "$arm" in
+    bare-*) target=clear-engine-cache;;
+    *)      target=clear-cluster-cache;;
+  esac
+  say "clearing cache ($target)"
+  if ! make -C "$PERF" "$target" > "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1; then
+    say "  $target returned non-zero - tail:"
+    tail -8 "$RUNLOG_DIR/${arm}.${stamp}.cache.log" | sed 's/^/    /'
+  fi
+  # df-riid resets Dragonfly and RIID but leaves the containerd store alone, so
+  # those arms need the engine pass on top; bare-* already ran exactly that.
+  if [ "$target" = clear-cluster-cache ]; then
+    make -C "$PERF" clear-engine-cache >> "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1 || true
+  fi
+  local left
+  left=$(grep -c 'images left in riid-bench: 0' "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>/dev/null || echo 0)
+  say "  nodes reporting an empty riid-bench namespace: $left"
 }
 
 # Same shape as bench/k8s/arm-queue.sh's export_logs, repo-relative output
@@ -118,11 +123,7 @@ export_logs() {
 for arm in $ARMS; do
   stamp=$(date +%Y%m%d-%H%M)
   say "=== $arm ($stamp) ==="
-  say "clearing cluster cache"
-  if ! make -C "$PERF" clear-cluster-cache > "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1; then
-    say "  clear-cluster-cache returned non-zero - tail:"
-    tail -8 "$RUNLOG_DIR/${arm}.${stamp}.cache.log" | sed 's/^/    /'
-  fi
+  clear_for_arm "$arm" "$stamp"
   say "pruning stale scheduler rows and waiting for containerd"
   purge_stale_scheduler_rows
   wait_for_containerd
@@ -138,7 +139,6 @@ for arm in $ARMS; do
     purge_stale_scheduler_rows
     wait_for_containerd;;
   esac
-  clear_containerd_cache
   tsv="$PERF/output/${arm}.tsv"
   before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
   arm_timeout=$(arm_timeout_seconds)

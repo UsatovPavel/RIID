@@ -34,6 +34,9 @@
 #   DRAGONFLY_CONTAINER            — если пусто, kubectl exec без -c (один контейнер в поде).
 #                                    Если в поде несколько контейнеров — задать имя явно (часто client/dfdaemon).
 #   DRAGONFLY_RESET_CONTROL_PLANE  — 1/0, restart scheduler/manager (default: 1)
+#   DRAGONFLY_RESTART_DATA_PLANE   — 1/0, restart client DaemonSet + seed StatefulSet (default: 1)
+#   DRAGONFLY_CLIENT_DS            — default: daemonset/dragonfly-client
+#   DRAGONFLY_SEED_STS             — default: statefulset/dragonfly-seed-client
 #   DRAGONFLY_RECREATE_REDIS_STATE — 1/0, пересоздать state Redis (scale-down sts, delete PVC, scale-up) (default: 1)
 #   DRAGONFLY_MANAGER_RESOURCE     — default: deployment/dragonfly-manager
 #   DRAGONFLY_SCHEDULER_RESOURCE   — default: statefulset/dragonfly-scheduler
@@ -48,12 +51,17 @@ LABEL="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
 WORK_DIR="${RIID_WORK_DIR:-/var/lib/riid/work}"
 
 DFS="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
-# By default: the dfget/dfdaemon tree, RIID's hostPath output
-# (/var/run/dragonfly/output) and dfdaemon's own storage.dir (/var/run/dragonfly/data).
-# Without the last one a node's dfdaemon store still hardlink-serves content across
-# arms, so a "cold" pull resolves every layer as a leftover local P2P hit.
-DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/run/dragonfly/output /var/run/dragonfly/data}"
+# Extra dirs only. The store itself is read from each pod's own dfdaemon.yaml at
+# runtime, because client and seed do NOT share it: client keeps storage.dir at
+# /var/run/dragonfly/data, seed at /var/lib/dragonfly. A single static list meant
+# every path was absent inside a seed pod, the loop skipped them all without an
+# error, and the seed cache was never cleared once - 530 MB of it still served
+# free local hits to arms that reported a cold start (measured 2026-09-10).
+DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/run/dragonfly/output /var/run/dragonfly/data /var/lib/dragonfly}"
 DRAGONFLY_RESET_CONTROL_PLANE="${DRAGONFLY_RESET_CONTROL_PLANE:-1}"
+DRAGONFLY_RESTART_DATA_PLANE="${DRAGONFLY_RESTART_DATA_PLANE:-1}"
+DRAGONFLY_CLIENT_DS="${DRAGONFLY_CLIENT_DS:-daemonset/dragonfly-client}"
+DRAGONFLY_SEED_STS="${DRAGONFLY_SEED_STS:-statefulset/dragonfly-seed-client}"
 DRAGONFLY_RECREATE_REDIS_STATE="${DRAGONFLY_RECREATE_REDIS_STATE:-1}"
 DRAGONFLY_MANAGER_RESOURCE="${DRAGONFLY_MANAGER_RESOURCE:-deployment/dragonfly-manager}"
 DRAGONFLY_SCHEDULER_RESOURCE="${DRAGONFLY_SCHEDULER_RESOURCE:-statefulset/dragonfly-scheduler}"
@@ -62,7 +70,7 @@ DRAGONFLY_REDIS_MASTER_STS="${DRAGONFLY_REDIS_MASTER_STS:-statefulset/dragonfly-
 DRAGONFLY_REDIS_REPLICAS_STS="${DRAGONFLY_REDIS_REPLICAS_STS:-statefulset/dragonfly-redis-replicas}"
 
 if [[ -n "${KUBECONFIG:-}" && ! -f "$KUBECONFIG" ]]; then
-  echo "clear-cache-all-riid-pods: kubeconfig not found: $KUBECONFIG" >&2
+  echo "clear-cache-df-riid: kubeconfig not found: $KUBECONFIG" >&2
   exit 1
 fi
 
@@ -71,7 +79,7 @@ failed=0
 mapfile -t pods < <(kubectl -n "$NS" get pods -l "$LABEL" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 
 if ((${#pods[@]} == 0)); then
-  echo "clear-cache-all-riid-pods: no pods with label $LABEL in $NS" >&2
+  echo "clear-cache-df-riid: no pods with label $LABEL in $NS" >&2
   exit 1
 fi
 
@@ -88,7 +96,7 @@ for pod in "${pods[@]}"; do
     --field-selector "spec.nodeName=$node" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   if [[ -z "$podman_node_pod" ]] || ! kubectl -n "$NS" exec -c installer "$podman_node_pod" -- \
     chroot /host podman system prune -af --volumes; then
-    echo "clear-cache-all-riid-pods: FAILED Podman prune node=$node pod=$pod" >&2
+    echo "clear-cache-df-riid: FAILED Podman prune node=$node pod=$pod" >&2
     failed=1
   fi
   if ! kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- env RIID_WORK_DIR="$WORK_DIR" sh -ec '
@@ -99,7 +107,7 @@ for pod in "${pods[@]}"; do
         find "$d" -maxdepth 1 -type f -name '"'"'layer-*.bin'"'"' -delete
       done
     '; then
-    echo "clear-cache-all-riid-pods: FAILED RIID work cleanup pod=$pod" >&2
+    echo "clear-cache-df-riid: FAILED RIID work cleanup pod=$pod" >&2
     failed=1
   fi
 done
@@ -115,25 +123,37 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
         echo ">>> skip Dragonfly $pod (phase=$phase)" >&2
         continue
       fi
-      echo ">>> Dragonfly cache dirs [$DRAGONFLY_CACHE_DIRS]: $pod ($component)" >&2
+      echo ">>> Dragonfly cache dirs [$DRAGONFLY_CACHE_DIRS + storage.dir]: $pod ($component)" >&2
       kcmd=(kubectl -n "$DFS" exec)
       [[ -n "${DRAGONFLY_CONTAINER:-}" ]] && kcmd+=(-c "$DRAGONFLY_CONTAINER")
       # POSIX sh (/bin/sh в образе клиента); без массивов/read -a Bash.
+      # Reports what it freed and fails when nothing matched: a silent skip here
+      # is exactly how the seed store stayed warm across every arm.
       kcmd+=("$pod" -- env DFS_CLEAR_DIRS="$DRAGONFLY_CACHE_DIRS" sh -ec '
+        cfg=$(sed -n "/^storage:/,/^[a-z]/p" /etc/dragonfly/dfdaemon.yaml 2>/dev/null \
+              | sed -n "s/^[[:space:]]*dir:[[:space:]]*//p" | tr -d "\"" | head -1)
         _IFS="$IFS"
         IFS=" "
         set -f
-        for d in ${DFS_CLEAR_DIRS:-}; do
+        hit=0
+        for d in ${DFS_CLEAR_DIRS:-} ${cfg:-}; do
           [ -z "$d" ] && continue
-          [ -e "$d" ] || continue
-          [ ! -d "$d" ] && continue
+          [ -d "$d" ] || continue
+          before=$(du -sk "$d" 2>/dev/null | cut -f1)
           find "$d" -mindepth 1 -exec rm -rf {} + 2>/dev/null || true
+          after=$(du -sk "$d" 2>/dev/null | cut -f1)
+          echo "    cleared $d: ${before:-0}K -> ${after:-0}K"
+          hit=$((hit + 1))
         done
         set +f
         IFS="$_IFS"
+        if [ "$hit" -eq 0 ]; then
+          echo "    no cache directory found (checked: ${DFS_CLEAR_DIRS} ${cfg:-<no storage.dir>})" >&2
+          exit 1
+        fi
       ')
       if ! "${kcmd[@]}"; then
-        echo "clear-cache-all-riid-pods: FAILED Dragonfly pod=$pod" >&2
+        echo "clear-cache-df-riid: FAILED Dragonfly pod=$pod" >&2
         df_failed_this_ns=1
         failed=1
       fi
@@ -146,26 +166,45 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
       total_df=$((total_df + n))
     done
     if ((total_df == 0)); then
-      echo "clear-cache-all-riid-pods: namespace $DFS exists but no app=dragonfly client/seed-client pods" >&2
+      echo "clear-cache-df-riid: namespace $DFS exists but no app=dragonfly client/seed-client pods" >&2
       failed=1
     fi
+  fi
+
+  # The store was deleted underneath running dfdaemons, so their in-memory view of
+  # it is now wrong. Roll the data plane so client and seed come back on an empty
+  # store instead of carrying stale task state into the next arm.
+  if [[ "$DRAGONFLY_RESTART_DATA_PLANE" == "1" ]]; then
+    echo ">>> Dragonfly data-plane restart: $DRAGONFLY_CLIENT_DS, $DRAGONFLY_SEED_STS" >&2
+    for res in "$DRAGONFLY_CLIENT_DS" "$DRAGONFLY_SEED_STS"; do
+      kubectl -n "$DFS" get "$res" >/dev/null 2>&1 || continue
+      if ! kubectl -n "$DFS" rollout restart "$res"; then
+        echo "clear-cache-df-riid: FAILED rollout restart $res" >&2
+        failed=1
+        continue
+      fi
+      if ! kubectl -n "$DFS" rollout status "$res" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
+        echo "clear-cache-df-riid: FAILED rollout status $res" >&2
+        failed=1
+      fi
+    done
   fi
 
   if [[ "$DRAGONFLY_RESET_CONTROL_PLANE" == "1" ]]; then
     echo ">>> Dragonfly control-plane reset: restart $DRAGONFLY_MANAGER_RESOURCE, $DRAGONFLY_SCHEDULER_RESOURCE" >&2
     for res in "$DRAGONFLY_MANAGER_RESOURCE" "$DRAGONFLY_SCHEDULER_RESOURCE"; do
       if ! kubectl -n "$DFS" get "$res" >/dev/null 2>&1; then
-        echo "clear-cache-all-riid-pods: REQUIRED resource not found: $res" >&2
+        echo "clear-cache-df-riid: REQUIRED resource not found: $res" >&2
         failed=1
         continue
       fi
       if ! kubectl -n "$DFS" rollout restart "$res"; then
-        echo "clear-cache-all-riid-pods: FAILED rollout restart $res" >&2
+        echo "clear-cache-df-riid: FAILED rollout restart $res" >&2
         failed=1
         continue
       fi
       if ! kubectl -n "$DFS" rollout status "$res" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
-        echo "clear-cache-all-riid-pods: FAILED rollout status $res" >&2
+        echo "clear-cache-df-riid: FAILED rollout status $res" >&2
         failed=1
       fi
     done
@@ -174,11 +213,11 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
   if [[ "$DRAGONFLY_RECREATE_REDIS_STATE" == "1" ]]; then
     echo ">>> Dragonfly redis state recreation: $DRAGONFLY_REDIS_MASTER_STS, $DRAGONFLY_REDIS_REPLICAS_STS" >&2
     if ! kubectl -n "$DFS" get "$DRAGONFLY_REDIS_MASTER_STS" >/dev/null 2>&1; then
-      echo "clear-cache-all-riid-pods: REQUIRED resource not found: $DRAGONFLY_REDIS_MASTER_STS" >&2
+      echo "clear-cache-df-riid: REQUIRED resource not found: $DRAGONFLY_REDIS_MASTER_STS" >&2
       failed=1
     fi
     if ! kubectl -n "$DFS" get "$DRAGONFLY_REDIS_REPLICAS_STS" >/dev/null 2>&1; then
-      echo "clear-cache-all-riid-pods: REQUIRED resource not found: $DRAGONFLY_REDIS_REPLICAS_STS" >&2
+      echo "clear-cache-df-riid: REQUIRED resource not found: $DRAGONFLY_REDIS_REPLICAS_STS" >&2
       failed=1
     fi
 
@@ -190,7 +229,7 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
 
       mapfile -t redis_pods < <(kubectl -n "$DFS" get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | awk '/^dragonfly-redis-(master|replicas)-/')
       if ((${#redis_pods[@]} == 0)); then
-        echo "clear-cache-all-riid-pods: REQUIRED redis pods not found (pattern: dragonfly-redis-(master|replicas)-*)" >&2
+        echo "clear-cache-df-riid: REQUIRED redis pods not found (pattern: dragonfly-redis-(master|replicas)-*)" >&2
         failed=1
       else
         declare -A redis_pvcs=()
@@ -202,41 +241,41 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
           done
         done
         if ((${#redis_pvcs[@]} == 0)); then
-          echo "clear-cache-all-riid-pods: REQUIRED redis PVCs not found from redis pods" >&2
+          echo "clear-cache-df-riid: REQUIRED redis PVCs not found from redis pods" >&2
           failed=1
         else
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_MASTER_STS" --replicas=0; then
-            echo "clear-cache-all-riid-pods: FAILED scale down $DRAGONFLY_REDIS_MASTER_STS" >&2
+            echo "clear-cache-df-riid: FAILED scale down $DRAGONFLY_REDIS_MASTER_STS" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_REPLICAS_STS" --replicas=0; then
-            echo "clear-cache-all-riid-pods: FAILED scale down $DRAGONFLY_REDIS_REPLICAS_STS" >&2
+            echo "clear-cache-df-riid: FAILED scale down $DRAGONFLY_REDIS_REPLICAS_STS" >&2
             failed=1
           fi
 
           if ((failed == 0)); then
             for pvc in "${!redis_pvcs[@]}"; do
               if ! kubectl -n "$DFS" delete pvc "$pvc"; then
-                echo "clear-cache-all-riid-pods: FAILED delete redis pvc=$pvc" >&2
+                echo "clear-cache-df-riid: FAILED delete redis pvc=$pvc" >&2
                 failed=1
               fi
             done
           fi
 
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_MASTER_STS" --replicas="$master_replicas"; then
-            echo "clear-cache-all-riid-pods: FAILED scale up $DRAGONFLY_REDIS_MASTER_STS to $master_replicas" >&2
+            echo "clear-cache-df-riid: FAILED scale up $DRAGONFLY_REDIS_MASTER_STS to $master_replicas" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_REPLICAS_STS" --replicas="$replicas_replicas"; then
-            echo "clear-cache-all-riid-pods: FAILED scale up $DRAGONFLY_REDIS_REPLICAS_STS to $replicas_replicas" >&2
+            echo "clear-cache-df-riid: FAILED scale up $DRAGONFLY_REDIS_REPLICAS_STS to $replicas_replicas" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" rollout status "$DRAGONFLY_REDIS_MASTER_STS" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
-            echo "clear-cache-all-riid-pods: FAILED rollout status $DRAGONFLY_REDIS_MASTER_STS" >&2
+            echo "clear-cache-df-riid: FAILED rollout status $DRAGONFLY_REDIS_MASTER_STS" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" rollout status "$DRAGONFLY_REDIS_REPLICAS_STS" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
-            echo "clear-cache-all-riid-pods: FAILED rollout status $DRAGONFLY_REDIS_REPLICAS_STS" >&2
+            echo "clear-cache-df-riid: FAILED rollout status $DRAGONFLY_REDIS_REPLICAS_STS" >&2
             failed=1
           fi
         fi
@@ -244,7 +283,7 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
     fi
   fi
 else
-  echo "clear-cache-all-riid-pods: REQUIRED namespace not found: $DFS" >&2
+  echo "clear-cache-df-riid: REQUIRED namespace not found: $DFS" >&2
   failed=1
 fi
 

@@ -123,7 +123,7 @@ engine_no_mirror_check() {
 }
 
 # --volumes: a pull creates no anonymous volumes, so it does not affect the
-# measurement, but it matches scenario/clear/clear-cache-all-riid-pods.sh —
+# measurement, but it matches scenario/clear/clear-cache-df-riid.sh —
 # one meaning of "clean". Now wipes the node's store, which is the store both
 # the baseline and the RIID import write into.
 engine_clear_cache() {
