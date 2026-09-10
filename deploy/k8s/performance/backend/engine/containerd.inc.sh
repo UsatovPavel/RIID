@@ -89,12 +89,55 @@ engine_ref() {
   printf '%s/%s:%s\n' "${host%/}" "$repo" "$tag"
 }
 
+# Drops one image and the content only it referenced. Other images stay, so
+# layers they share are not silently thrown away mid-arm.
+_ctr_drop_image() {
+  local pod="$1" ref="$2"
+  riid_engine_exec "$pod" env "CTR_NS=$CTR_NAMESPACE" "CTR_ADDR=$CTR_ADDRESS" "REF=$ref" sh -ec '
+    set -- ctr
+    if [ -n "$CTR_ADDR" ]; then set -- "$@" -a "$CTR_ADDR"; fi
+    set -- "$@" -n "$CTR_NS"
+    "$@" images rm --sync "$REF" >/dev/null 2>&1 || true
+    "$@" content prune references >/dev/null 2>&1 || true
+  ' >/dev/null 2>&1 || true
+}
+
+# The workstation reaches the API through a VPN (awg0), and a tunnel hiccup drops
+# every open exec stream at once - three AGENT-117 arms died that way, ten pods
+# in the same second with "error reading from error stream: i/o timeout".
+# ctr is SIGKILLed mid-pull and leaves partial blobs, so a plain retry would
+# resume warm and understate the arm; drop the image first and the retry is as
+# cold as the first attempt. Transport errors only - a registry or engine failure
+# does not match these patterns and still fails the arm, as it must.
+_ctr_pull_cold_retry() {
+  local pod="$1" ref="$2"
+  shift 2
+  local attempt=1 max="${RIID_PULL_STREAM_RETRIES:-3}" err rc
+  err="$(mktemp)"
+  while :; do
+    rc=0
+    "$@" 2>"$err" || rc=$?
+    cat "$err" >&2
+    if ((rc != 0)) && ((attempt < max)) && grep -qE \
+        'error reading from error stream|Copying std(out|err) failed|i/o timeout|unexpected EOF|error dialing backend' "$err"; then
+      echo "containerd: exec stream broke on $ref (attempt $attempt/$max), dropping the partial image for a cold retry" >&2
+      _ctr_drop_image "$pod" "$ref"
+      attempt=$((attempt + 1))
+      sleep 5
+      continue
+    fi
+    rm -f "$err"
+    return "$rc"
+  done
+}
+
 engine_pull() {
   local pod="$1" ref="$2"
   local -a base flags
   mapfile -t base < <(_ctr_base)
   mapfile -t flags < <(_ctr_pull_flags)
-  _ctr_run riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" "$ref"
+  _ctr_pull_cold_retry "$pod" "$ref" \
+    _ctr_run riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" "$ref"
 }
 
 # The mirror is switched on by an argument, not a file: without --hosts-dir the
@@ -105,7 +148,8 @@ engine_pull_mirrored() {
   local -a base flags
   mapfile -t base < <(_ctr_base)
   mapfile -t flags < <(_ctr_pull_flags)
-  _ctr_run riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" --hosts-dir "$CTR_HOSTS_DIR" "$ref"
+  _ctr_pull_cold_retry "$pod" "$ref" \
+    _ctr_run riid_engine_exec "$pod" "${base[@]}" images pull "${flags[@]}" --hosts-dir "$CTR_HOSTS_DIR" "$ref"
 }
 
 # containerd falls back to _default/hosts.toml when a registry has no entry of its
