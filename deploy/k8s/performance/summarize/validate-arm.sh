@@ -86,6 +86,22 @@ case "$ARM" in
     ;;
 esac
 
+# Did the arm start cold? The driver wipes the containerd riid-bench namespace on
+# every node and records what was left; a node that kept the dataset makes the arm
+# a warm run wearing a cold label, and nothing else in this gate would notice.
+if [ -n "$LOGDIR" ] && [ -f "$LOGDIR/cache-clear.log" ]; then
+  cleared=$(grep -c 'images left in riid-bench: 0' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  left=$(grep -cE 'images left in riid-bench: [1-9]' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  failed_clean=$(grep -cE 'FAILED (containerd|podman) ' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  if [ "$cleared" -gt 0 ] && [ "$left" -eq 0 ] && [ "$failed_clean" -eq 0 ]; then
+    ok "cold start: $cleared node(s) reported an empty riid-bench namespace"
+  else
+    bad "cold start not proven: $cleared empty, $left still holding images, $failed_clean cleanup failure(s)"
+  fi
+else
+  note "no cache-clear.log in the logdir - cold start unverified"
+fi
+
 egress=$(grep registry_tx_bytes_delta "$TSV" 2>/dev/null | awk -F'\t' '{printf "%.2f", $2/1073741824}')
 [ -n "$egress" ] && note "egress: $egress GiB"
 awk -F, 'NR>1 && $4=="AGGREGATE"{s+=$8} END{if(s>0) printf "  --   sum AGGREGATE: %.1f s\n", s/1000}' "$TSV"

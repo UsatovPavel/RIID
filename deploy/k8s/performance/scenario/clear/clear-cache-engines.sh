@@ -29,7 +29,27 @@ if [[ -n "${KUBECONFIG:-}" && ! -f "$KUBECONFIG" ]]; then
   exit 1
 fi
 
-mapfile -t node_pods < <(kubectl -n "$NS" get pods -l "$PODMAN_NODE_LABEL" \
+# The workstation reaches the API over a VPN, and a dropped handshake here leaves
+# a node holding the whole dataset while the arm reports a cold start - it happened
+# on riid-bench-node-4ow4d at 20:38 on 2026-09-10. Retry only when the connection
+# never opened; a real engine error still fails, which is the point of this script.
+riid_kc() {
+  local attempt=1 max="${CLEAR_CONNECT_RETRIES:-4}" err rc
+  err="$(mktemp)"
+  while :; do
+    rc=0
+    kubectl "$@" 2>"$err" || rc=$?
+    cat "$err" >&2
+    if ((rc != 0)) && ((attempt < max)) && grep -qE \
+        'connect: connection (timed out|refused)|connect: no route to host|Unable to connect to the server|TLS handshake timeout|i/o timeout|error dialing backend' "$err"; then
+      echo "clear-cache-engines: API unreachable, attempt $attempt/$max, retrying in 5s" >&2
+      attempt=$((attempt + 1)); sleep 5; continue
+    fi
+    rm -f "$err"; return "$rc"
+  done
+}
+
+mapfile -t node_pods < <(riid_kc -n "$NS" get pods -l "$PODMAN_NODE_LABEL" \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 
 if ((${#node_pods[@]} == 0)); then
@@ -41,16 +61,16 @@ failed=0
 
 for pod in "${node_pods[@]}"; do
   [[ -z "$pod" ]] && continue
-  phase=$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.status.phase}')
+  phase=$(riid_kc -n "$NS" get pod "$pod" -o jsonpath='{.status.phase}')
   if [[ "$phase" != Running ]]; then
     echo ">>> skip $pod (phase=$phase)" >&2
     continue
   fi
-  node="$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.spec.nodeName}')"
+  node="$(riid_kc -n "$NS" get pod "$pod" -o jsonpath='{.spec.nodeName}')"
 
   if [[ "$CLEAR_PODMAN" == 1 ]]; then
     echo ">>> podman prune: $node" >&2
-    if ! kubectl -n "$NS" exec -c installer "$pod" -- \
+    if ! riid_kc -n "$NS" exec -c installer "$pod" -- \
       chroot /host podman system prune -af --volumes >/dev/null; then
       echo "clear-cache-engines: FAILED podman prune node=$node" >&2
       failed=1
@@ -61,7 +81,7 @@ for pod in "${node_pods[@]}"; do
   # leaves the content store populated and the next "cold" pull resolves locally.
   if [[ "$CLEAR_CONTAINERD" == 1 ]]; then
     echo ">>> containerd namespace $CTR_NS: $node" >&2
-    if ! kubectl -n "$NS" exec -c installer "$pod" -- chroot /host \
+    if ! riid_kc -n "$NS" exec -c installer "$pod" -- chroot /host \
       env CTR_NS="$CTR_NS" CTR_ADDR="$CTR_ADDR" sh -ec '
         set -- ctr
         if [ -n "$CTR_ADDR" ]; then set -- "$@" -a "$CTR_ADDR"; fi

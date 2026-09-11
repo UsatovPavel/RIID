@@ -136,6 +136,10 @@ export_logs() {
     [ -s "$out/riid/${p#pod/}.previous.log" ] || rm -f "$out/riid/${p#pod/}.previous.log"
     kubectl -n riid-system describe pod "${p#pod/}" > "$out/riid/${p#pod/}.describe.txt" 2>/dev/null
   done
+  # The cache-clear output is the only evidence the arm started cold, and
+  # validate-arm.sh only ever sees this directory - without the copy the gate
+  # cannot tell a cold start from a node that kept the whole dataset.
+  cp "$RUNLOG_DIR/${arm}.${stamp}.cache.log" "$out/cache-clear.log" 2>/dev/null || true
   kubectl -n riid-system get events --sort-by=.lastTimestamp > "$out/riid/events.txt" 2>/dev/null
   kubectl get nodes -o wide > "$out/riid/nodes.txt" 2>/dev/null
   { echo "# $arm"; echo "captured: $(date -Is)"; echo;
