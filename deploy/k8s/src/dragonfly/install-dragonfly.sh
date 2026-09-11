@@ -146,14 +146,15 @@ elif [ "$DFINIT_ENGINE" = "podman" ]; then
   cleanup_dfinit_override() { rm -f "$DFINIT_OVERRIDE"; }
   trap cleanup_dfinit_override EXIT
   cat > "$DFINIT_OVERRIDE" <<DFEOF
+# registries.conf carries no per-request upstream the way containerd's certs.d
+# header does, so every dfdaemon that may fetch from source has to be told the
+# registry in its own config. Both the client (podman talks to it) and the seed
+# (it is the one going back to source) default to https://index.docker.io, which
+# is why a pull missed and podman silently fell back to the direct address.
 client:
   config:
     proxy:
       registryMirror:
-        # Two addresses have to agree, not one: registries.conf sends podman to
-        # the proxy, and the proxy forwards here. Left at the values.yaml default
-        # (an old stand's registry) the forward fails and podman silently falls
-        # back to the direct address - zero Dragonfly tasks, baseline egress.
         addr: http://${RIID_DFINIT_REGISTRY:-}
   dfinit:
     config:
@@ -165,6 +166,11 @@ client:
           registries:
             - prefix: ${RIID_DFINIT_REGISTRY:-}
               location: ${RIID_DFINIT_REGISTRY:-}
+seedClient:
+  config:
+    proxy:
+      registryMirror:
+        addr: http://${RIID_DFINIT_REGISTRY:-}
 DFEOF
   echo ">>> dfinit engine: podman (crio handler, containerd disabled for this install)"
   DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
