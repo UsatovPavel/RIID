@@ -95,7 +95,7 @@ resource "selectel_mks_nodegroup_v1" "infra" {
   availability_zone = var.availability_zone
 
   nodes_count = 1
-  volume_gb   = var.volume_gb
+  volume_gb   = var.infra_volume_gb[each.key]
   volume_type = local.volume_type
 
   flavor_id = var.flavor_id

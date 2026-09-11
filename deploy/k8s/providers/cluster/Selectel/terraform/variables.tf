@@ -101,9 +101,29 @@ variable "ram_mb" {
 }
 
 variable "volume_gb" {
-  description = "Boot disk per node, GiB."
+  description = "Boot disk per worker node, GiB."
   type        = number
   default     = 100
+}
+
+# scheduler/manager keep their state in PVCs (mysql/redis/manager have no local
+# data at all); registry's dataset and monitoring's VictoriaMetrics+Grafana
+# emptyDir are the only infra roles that actually write to the node's own disk,
+# and even registry's dataset lives in its own 30Gi PVC, not the boot disk.
+variable "infra_volume_gb" {
+  description = "Boot disk per infra node, GiB, keyed by role (monitoring/registry/scheduler/manager). Only used when dedicated_infra_nodes is true."
+  type        = map(number)
+  default = {
+    monitoring = 40
+    registry   = 40
+    scheduler  = 20
+    manager    = 30
+  }
+
+  validation {
+    condition     = alltrue([for k in ["monitoring", "registry", "scheduler", "manager"] : contains(keys(var.infra_volume_gb), k)])
+    error_message = "infra_volume_gb must set all four infra roles: monitoring, registry, scheduler, manager."
+  }
 }
 
 variable "volume_type_family" {
