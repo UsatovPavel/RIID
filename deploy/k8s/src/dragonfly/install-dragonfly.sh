@@ -113,30 +113,27 @@ if ! kubectl cluster-info &>/dev/null; then
   exit 1
 fi
 
-# The control plane is pinned to tainted infra nodes only on a stand that has
-# them. CI runs the same chart on one unlabelled minikube node, where every
-# pinned pod stays Pending until helm times out.
-# RIID_DEDICATED_INFRA_NODES: 1 requires the nodes, 0 skips, unset autodetects.
+# The control plane always goes on its own tainted nodes: a manager, scheduler
+# or MySQL that lands on a measured worker silently distorts the arm. Missing
+# labels mean the node group never applied them - stop rather than install an
+# unpinned stand that still looks healthy.
 DEDICATED_INFRA_VALUES="${SCRIPT_DIR}/values-dedicated-infra.yaml"
-WANT_INFRA="${RIID_DEDICATED_INFRA_NODES:-auto}"
-if [[ "${WANT_INFRA}" != 0 && -f "${DEDICATED_INFRA_VALUES}" ]]; then
-  HAVE_INFRA=1
-  for label in riid.dragonfly.manager riid.dragonfly.scheduler; do
-    [[ -n "$(kubectl get nodes -l "${label}" -o name 2>/dev/null)" ]] || HAVE_INFRA=0
-  done
-  if [[ "${HAVE_INFRA}" == 1 ]]; then
-    TMP_INFRA_MERGED="$(mktemp)"
-    yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${HELM_VALUES}" "${DEDICATED_INFRA_VALUES}" >"${TMP_INFRA_MERGED}"
-    HELM_VALUES="${TMP_INFRA_MERGED}"
-    echo ">>> Dragonfly Helm: control plane pinned to the infra nodes (${DEDICATED_INFRA_VALUES})" >&2
-  elif [[ "${WANT_INFRA}" == 1 ]]; then
-    echo "install-dragonfly.sh: RIID_DEDICATED_INFRA_NODES=1 but no node carries" >&2
-    echo "  riid.dragonfly.manager / riid.dragonfly.scheduler - the node group never applied them." >&2
+[[ -f "${DEDICATED_INFRA_VALUES}" ]] || {
+  echo "install-dragonfly.sh: missing ${DEDICATED_INFRA_VALUES}" >&2
+  exit 1
+}
+for label in riid.dragonfly.manager riid.dragonfly.scheduler; do
+  [[ -n "$(kubectl get nodes -l "${label}" -o name 2>/dev/null)" ]] || {
+    echo "install-dragonfly.sh: no node carries ${label}." >&2
+    echo "  The Selectel node group sets it (terraform local.infra_roles); a kubectl" >&2
+    echo "  label/taint on MKS does not stick. Re-apply terraform before installing." >&2
     exit 1
-  else
-    echo ">>> Dragonfly Helm: no infra-labelled nodes, control plane left unpinned" >&2
-  fi
-fi
+  }
+done
+TMP_INFRA_MERGED="$(mktemp)"
+yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${HELM_VALUES}" "${DEDICATED_INFRA_VALUES}" >"${TMP_INFRA_MERGED}"
+HELM_VALUES="${TMP_INFRA_MERGED}"
+echo ">>> Dragonfly Helm: control plane pinned to the infra nodes (${DEDICATED_INFRA_VALUES})" >&2
 
 # dfinit rewrites one engine's registry config, and the chart values hold only one
 # answer - so scripts/values.yaml keeps dfinit off and carries no containerd/crio

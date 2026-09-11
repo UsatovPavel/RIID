@@ -2,7 +2,7 @@
 # Kept out of scripts/values.yaml on purpose: CI installs the same chart on a
 # single-node minikube where these labels do not exist, and every pinned pod
 # stayed Pending until helm timed out.
-# install-dragonfly.sh merges this only when the labelled nodes are there.
+# install-dragonfly.sh always merges it and refuses to install without the nodes.
 manager:
   nodeSelector:
     riid.dragonfly.manager: "true"
