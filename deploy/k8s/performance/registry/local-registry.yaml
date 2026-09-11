@@ -50,6 +50,14 @@ spec:
         - name: registry
           image: performance.local_registry
           imagePullPolicy: IfNotPresent
+          # Without a request this pod is BestEffort, which kubelet evicts first
+          # under MemoryPressure - and on a dedicated node the registry is both
+          # the cause of the pressure and its only victim: it was evicted 66
+          # times in a row on 2026-09-11, failing every pull of the arm.
+          resources:
+            requests:
+              cpu: 200m
+              memory: 2Gi
           ports:
             - name: http
               containerPort: 5000
