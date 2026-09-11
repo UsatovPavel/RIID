@@ -103,7 +103,7 @@ variable "ram_mb" {
 variable "volume_gb" {
   description = "Boot disk per worker node, GiB."
   type        = number
-  default     = 100
+  default     = 50
 }
 
 # scheduler/manager keep their state in PVCs (mysql/redis/manager have no local
