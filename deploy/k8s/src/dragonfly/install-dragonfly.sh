@@ -139,14 +139,22 @@ DFEOF
   DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
 elif [ "$DFINIT_ENGINE" = "podman" ]; then
   # podman reads /etc/containers/registries.conf, same as CRI-O - dfinit has no
-  # podman handler, so this uses the crio one (AGENT-99 finding). The base
-  # values.yaml crio block is a static leftover pointed at the old local-stand
-  # registry IP (10.96.5.146); this renders the real registry for this cluster.
+  # podman handler, so this uses the crio one (AGENT-99 finding). Both the crio
+  # block and the proxy upstream are static leftovers pinned to an old stand's
+  # registry (10.96.5.146); this renders the real registry for this cluster.
   DFINIT_OVERRIDE="$(mktemp)"
   cleanup_dfinit_override() { rm -f "$DFINIT_OVERRIDE"; }
   trap cleanup_dfinit_override EXIT
   cat > "$DFINIT_OVERRIDE" <<DFEOF
 client:
+  config:
+    proxy:
+      registryMirror:
+        # Two addresses have to agree, not one: registries.conf sends podman to
+        # the proxy, and the proxy forwards here. Left at the values.yaml default
+        # (an old stand's registry) the forward fails and podman silently falls
+        # back to the direct address - zero Dragonfly tasks, baseline egress.
+        addr: http://${RIID_DFINIT_REGISTRY:-}
   dfinit:
     config:
       containerRuntime:
