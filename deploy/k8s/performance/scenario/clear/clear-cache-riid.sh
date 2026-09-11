@@ -4,10 +4,10 @@
 # (clear-cache-dragonfly.sh) - RIID writes into all three and each is cleared by
 # its own script so an arm can wipe exactly what it used.
 #
-# What lives here: riid-cache-tmp-*, riid-prefix-* and oci-layout-* directories
-# plus orphaned layer-*.bin, under app.tempDirectory (RIID_WORK_DIR) and /tmp.
-# Everything in the work dir except config.yaml is scratch, so the leftovers are
-# measured in bytes rather than matched by name - an unlisted pattern reported 0.
+# Two directories, both hostPath: app.tempDirectory (RIID_WORK_DIR) holds the
+# oci-layout-* staging trees, and the pod's /tmp - mounted from the node's
+# /var/lib/riid/tmp - holds riid-cache-tmp-*, which is where the bulk goes: 12 GB
+# per node mid-arm on 2026-09-11. Both are measured, in bytes, not by name.
 #
 # Env:
 #   RIID_NAMESPACE       - default: riid-system
@@ -55,12 +55,17 @@ for pod in "${pods[@]}"; do
         find "$d" -maxdepth 1 -type d -name "oci-layout-*"     -exec rm -rf {} + 2>/dev/null
         find "$d" -maxdepth 1 -type f -name "layer-*.bin"      -delete 2>/dev/null
       done
-      # config.yaml is written by the init container and must survive; anything
-      # else in the work dir is scratch. Report bytes, not pattern hits, so a
-      # leftover nobody thought to name still shows up.
-      left=$(find "$RIID_WORK_DIR" -mindepth 1 -maxdepth 1 ! -name config.yaml \
-               -exec du -sb {} + 2>/dev/null | awk "{s+=\$1} END{print s+0}")
-      echo "    riid scratch left: $left bytes"
+      # Report bytes, not pattern hits, so a leftover nobody thought to name still
+      # shows up. Two exclusion sets, because each directory has live residents:
+      # config.yaml is written by the init container, and /tmp carries the daemon
+      # socket plus hsperfdata from the JVM while RIID runs. No apostrophes here:
+      # the whole block is one quoted argument.
+      w=$(find "$RIID_WORK_DIR" -mindepth 1 -maxdepth 1 ! -name config.yaml \
+            -exec du -sb {} + 2>/dev/null | awk "{s+=\$1} END{print s+0}")
+      t=$(find /tmp -mindepth 1 -maxdepth 1 ! -name "riid.sock" ! -name "hsperfdata_*" \
+            -exec du -sb {} + 2>/dev/null | awk "{s+=\$1} END{print s+0}")
+      left=$((w + t))
+      echo "    riid scratch left: $left bytes (work=$w tmp=$t)"
       [ "$left" -eq 0 ]
     '; then
     cleaned=$((cleaned + 1))
