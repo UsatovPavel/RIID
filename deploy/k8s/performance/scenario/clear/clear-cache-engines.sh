@@ -30,25 +30,7 @@ if [[ -n "${KUBECONFIG:-}" && ! -f "$KUBECONFIG" ]]; then
   exit 1
 fi
 
-# The workstation reaches the API over a VPN, and a dropped handshake here leaves
-# a node holding the whole dataset while the arm reports a cold start - it happened
-# on riid-bench-node-4ow4d at 20:38 on 2026-09-10. Retry only when the connection
-# never opened; a real engine error still fails, which is the point of this script.
-riid_kc() {
-  local attempt=1 max="${CLEAR_CONNECT_RETRIES:-4}" err rc
-  err="$(mktemp)"
-  while :; do
-    rc=0
-    kubectl "$@" 2>"$err" || rc=$?
-    cat "$err" >&2
-    if ((rc != 0)) && ((attempt < max)) && grep -qE \
-        'connect: connection (timed out|refused)|connect: no route to host|Unable to connect to the server|TLS handshake timeout|i/o timeout|error dialing backend' "$err"; then
-      echo "clear-cache-engines: API unreachable, attempt $attempt/$max, retrying in 5s" >&2
-      attempt=$((attempt + 1)); sleep 5; continue
-    fi
-    rm -f "$err"; return "$rc"
-  done
-}
+. "$(dirname "${BASH_SOURCE[0]}")/kubectl-retry.inc.sh"
 
 mapfile -t node_pods < <(riid_kc -n "$NS" get pods -l "$PODMAN_NODE_LABEL" \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')

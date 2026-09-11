@@ -21,12 +21,14 @@ CONTAINER="${RIID_CONTAINER:-riid}"
 LABEL="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
 WORK_DIR="${RIID_WORK_DIR:-/var/lib/riid/work}"
 
+. "$(dirname "${BASH_SOURCE[0]}")/kubectl-retry.inc.sh"
+
 if [[ -n "${KUBECONFIG:-}" && ! -f "$KUBECONFIG" ]]; then
   echo "clear-cache-riid: kubeconfig not found: $KUBECONFIG" >&2
   exit 1
 fi
 
-mapfile -t pods < <(kubectl -n "$NS" get pods -l "$LABEL" \
+mapfile -t pods < <(riid_kc -n "$NS" get pods -l "$LABEL" \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 
 if ((${#pods[@]} == 0)); then
@@ -39,12 +41,12 @@ cleaned=0
 
 for pod in "${pods[@]}"; do
   [[ -z "$pod" ]] && continue
-  phase=$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.status.phase}')
+  phase=$(riid_kc -n "$NS" get pod "$pod" -o jsonpath='{.status.phase}')
   if [[ "$phase" != Running ]]; then
     echo ">>> skip $pod (phase=$phase)" >&2
     continue
   fi
-  if kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- env RIID_WORK_DIR="$WORK_DIR" sh -ec '
+  if riid_kc -n "$NS" exec -c "$CONTAINER" "$pod" -- env RIID_WORK_DIR="$WORK_DIR" sh -ec '
       # oci-layout-* is the staging tree RIID hands to the engine. A killed arm
       # leaves one behind: 4.4 GiB per node went unnoticed on 2026-09-11 because
       # the cleanup matched three names and this was not one of them.

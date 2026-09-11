@@ -74,15 +74,18 @@ purge_stale_scheduler_rows() {
 # One wrapper decides which of the three caches the arm uses: bare-* the engine,
 # dfinit-* engine+dragonfly, riid-* all three. The driver no longer encodes that.
 clear_for_arm() {
-  local arm="$1" stamp="$2"
+  local arm="$1" stamp="$2" log="$RUNLOG_DIR/${arm}.${stamp}.cache.log"
   say "clearing cache for $arm"
-  if ! make -C "$PERF" clear-cache ARM="$arm" > "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1; then
-    say "  clear-cache FAILED - tail:"
-    tail -8 "$RUNLOG_DIR/${arm}.${stamp}.cache.log" | sed 's/^/    /'
+  # A half-done clear is not a warning, it is a dead arm: on 2026-09-11 the RIID
+  # pass stopped after 6 of 10 pods on an API timeout, the run went ahead anyway
+  # and burned 20 minutes to reach INVALID. Refuse instead of measuring warm.
+  if ! make -C "$PERF" clear-cache ARM="$arm" > "$log" 2>&1; then
+    say "  clear-cache FAILED - not running this arm. Tail:"
+    tail -8 "$log" | sed 's/^/    /'
+    return 1
   fi
-  local left
-  left=$(grep -cE 'images left in [^:]+: 0$' "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>/dev/null || echo 0)
-  say "  containerd namespaces reported empty: $left"
+  say "  nodes reported empty: $(grep -cE 'node containerd images left: 0 ' "$log" 2>/dev/null)"
+  say "  riid scratch empty on: $(grep -cE 'riid scratch left: 0 bytes' "$log" 2>/dev/null) pod(s)"
 }
 
 # kubectl logs serves only the *current* container log file and kubelet rotates
@@ -138,7 +141,10 @@ export_logs() {
 for arm in $ARMS; do
   stamp=$(date +%Y%m%d-%H%M)
   say "=== $arm ($stamp) ==="
-  clear_for_arm "$arm" "$stamp"
+  if ! clear_for_arm "$arm" "$stamp"; then
+    say "$arm: SKIPPED - cache not cleared"
+    continue
+  fi
   say "pruning stale scheduler rows and waiting for containerd"
   purge_stale_scheduler_rows
   wait_for_containerd
