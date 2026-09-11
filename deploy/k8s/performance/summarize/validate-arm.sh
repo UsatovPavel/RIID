@@ -107,6 +107,20 @@ if [ -n "$LOGDIR" ] && [ -f "$LOGDIR/cache-clear.log" ]; then
   else
     bad "cold start not proven: $nodes_clean node(s) empty vs $pods pod(s), $nodes_dirty node(s) and $left namespace(s) still holding images, $failed_clean cleanup failure(s)"
   fi
+
+  # RIID's own scratch, reported in bytes: a killed arm leaves an oci-layout-*
+  # tree behind, and the old name-matched check called that clean.
+  case "$ARM" in
+    riid-*)
+      scratch_clean=$(grep -cE 'riid scratch left: 0 bytes' "$LOGDIR/cache-clear.log" 2>/dev/null)
+      scratch_left=$(grep -cE 'riid scratch left: [1-9][0-9]* bytes' "$LOGDIR/cache-clear.log" 2>/dev/null)
+      if [ "$scratch_clean" -ge "$pods" ] && [ "$scratch_left" -eq 0 ]; then
+        ok "riid scratch empty on $scratch_clean pod(s)"
+      else
+        bad "riid scratch not empty: $scratch_clean clean vs $pods pod(s), $scratch_left still holding bytes"
+      fi
+      ;;
+  esac
 else
   note "no cache-clear.log in the logdir - cold start unverified"
 fi

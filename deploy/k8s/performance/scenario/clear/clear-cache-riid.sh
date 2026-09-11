@@ -4,8 +4,10 @@
 # (clear-cache-dragonfly.sh) - RIID writes into all three and each is cleared by
 # its own script so an arm can wipe exactly what it used.
 #
-# What lives here: riid-cache-tmp-* and riid-prefix-* directories plus orphaned
-# layer-*.bin, under app.tempDirectory (RIID_WORK_DIR) and /tmp inside the pod.
+# What lives here: riid-cache-tmp-*, riid-prefix-* and oci-layout-* directories
+# plus orphaned layer-*.bin, under app.tempDirectory (RIID_WORK_DIR) and /tmp.
+# Everything in the work dir except config.yaml is scratch, so the leftovers are
+# measured in bytes rather than matched by name - an unlisted pattern reported 0.
 #
 # Env:
 #   RIID_NAMESPACE       - default: riid-system
@@ -43,16 +45,22 @@ for pod in "${pods[@]}"; do
     continue
   fi
   if kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- env RIID_WORK_DIR="$WORK_DIR" sh -ec '
-      left=0
+      # oci-layout-* is the staging tree RIID hands to the engine. A killed arm
+      # leaves one behind: 4.4 GiB per node went unnoticed on 2026-09-11 because
+      # the cleanup matched three names and this was not one of them.
       for d in "$RIID_WORK_DIR" /tmp; do
         [ -d "$d" ] || continue
         find "$d" -maxdepth 1 -type d -name "riid-cache-tmp-*" -exec rm -rf {} + 2>/dev/null
         find "$d" -maxdepth 1 -type d -name "riid-prefix-*"    -exec rm -rf {} + 2>/dev/null
+        find "$d" -maxdepth 1 -type d -name "oci-layout-*"     -exec rm -rf {} + 2>/dev/null
         find "$d" -maxdepth 1 -type f -name "layer-*.bin"      -delete 2>/dev/null
-        n=$(find "$d" -maxdepth 1 \( -name "riid-cache-tmp-*" -o -name "riid-prefix-*" -o -name "layer-*.bin" \) 2>/dev/null | wc -l)
-        left=$((left + n))
       done
-      echo "    riid scratch left: $left"
+      # config.yaml is written by the init container and must survive; anything
+      # else in the work dir is scratch. Report bytes, not pattern hits, so a
+      # leftover nobody thought to name still shows up.
+      left=$(find "$RIID_WORK_DIR" -mindepth 1 -maxdepth 1 ! -name config.yaml \
+               -exec du -sb {} + 2>/dev/null | awk "{s+=\$1} END{print s+0}")
+      echo "    riid scratch left: $left bytes"
       [ "$left" -eq 0 ]
     '; then
     cleaned=$((cleaned + 1))
