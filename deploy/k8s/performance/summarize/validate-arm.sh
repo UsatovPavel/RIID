@@ -90,11 +90,13 @@ esac
 # every node and records what was left; a node that kept the dataset makes the arm
 # a warm run wearing a cold label, and nothing else in this gate would notice.
 if [ -n "$LOGDIR" ] && [ -f "$LOGDIR/cache-clear.log" ]; then
-  cleared=$(grep -c 'images left in riid-bench: 0' "$LOGDIR/cache-clear.log" 2>/dev/null)
-  left=$(grep -cE 'images left in riid-bench: [1-9]' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  # Any containerd namespace, not just riid-bench: RIID imports into "default",
+  # so a check scoped to riid-bench proved an unused namespace was empty.
+  cleared=$(grep -cE 'images left in [^:]+: 0$' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  left=$(grep -cE 'images left in [^:]+: [1-9]' "$LOGDIR/cache-clear.log" 2>/dev/null)
   failed_clean=$(grep -cE 'FAILED (containerd|podman) ' "$LOGDIR/cache-clear.log" 2>/dev/null)
   if [ "$cleared" -gt 0 ] && [ "$left" -eq 0 ] && [ "$failed_clean" -eq 0 ]; then
-    ok "cold start: $cleared node(s) reported an empty riid-bench namespace"
+    ok "cold start: $cleared containerd namespace(s) reported empty"
   else
     bad "cold start not proven: $cleared empty, $left still holding images, $failed_clean cleanup failure(s)"
   fi

@@ -92,8 +92,8 @@ clear_for_arm() {
     make -C "$PERF" clear-engine-cache >> "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1 || true
   fi
   local left
-  left=$(grep -c 'images left in riid-bench: 0' "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>/dev/null || echo 0)
-  say "  nodes reporting an empty riid-bench namespace: $left"
+  left=$(grep -cE 'images left in [^:]+: 0$' "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>/dev/null || echo 0)
+  say "  containerd namespaces reported empty: $left"
 }
 
 # kubectl logs serves only the *current* container log file and kubelet rotates

@@ -19,10 +19,11 @@ set -euo pipefail
 
 NS="${RIID_NAMESPACE:-riid-system}"
 PODMAN_NODE_LABEL="${PODMAN_NODE_LABEL:-app.kubernetes.io/name=podman-node}"
-CTR_NS="${CTR_NAMESPACE:-riid-bench}"
+CTR_KEEP_NAMESPACES="${CTR_KEEP_NAMESPACES:-k8s.io}"
 CTR_ADDR="${CTR_ADDRESS:-}"
 CLEAR_PODMAN="${CLEAR_PODMAN:-1}"
 CLEAR_CONTAINERD="${CLEAR_CONTAINERD:-1}"
+CLEAR_PORTO="${CLEAR_PORTO:-1}"
 
 if [[ -n "${KUBECONFIG:-}" && ! -f "$KUBECONFIG" ]]; then
   echo "clear-cache-engines: kubeconfig not found: $KUBECONFIG" >&2
@@ -77,26 +78,46 @@ for pod in "${node_pods[@]}"; do
     fi
   fi
 
-  # containerd keeps images and their blobs separately: dropping the images alone
-  # leaves the content store populated and the next "cold" pull resolves locally.
+  # Every containerd namespace except the cluster's own, not just the one the
+  # bench pulls into: `ctr images import` without -n lands in "default", which is
+  # where RIID puts every containerd import, so clearing only riid-bench left
+  # RIID's images in place and the next arm started warm.
   if [[ "$CLEAR_CONTAINERD" == 1 ]]; then
-    echo ">>> containerd namespace $CTR_NS: $node" >&2
+    echo ">>> containerd, all namespaces but [$CTR_KEEP_NAMESPACES]: $node" >&2
     if ! riid_kc -n "$NS" exec -c installer "$pod" -- chroot /host \
-      env CTR_NS="$CTR_NS" CTR_ADDR="$CTR_ADDR" sh -ec '
-        set -- ctr
-        if [ -n "$CTR_ADDR" ]; then set -- "$@" -a "$CTR_ADDR"; fi
-        set -- "$@" -n "$CTR_NS"
-        "$@" images ls -q 2>/dev/null | while read -r img; do
-          [ -n "$img" ] && "$@" images rm --sync "$img" >/dev/null 2>&1
+      env KEEP="$CTR_KEEP_NAMESPACES" CTR_ADDR="$CTR_ADDR" sh -ec '
+        base="ctr"
+        if [ -n "$CTR_ADDR" ]; then base="$base -a $CTR_ADDR"; fi
+        left_total=0
+        for ns in $($base namespaces ls -q 2>/dev/null); do
+          skip=0
+          IFS=,; for k in $KEEP; do [ "$ns" = "$k" ] && skip=1; done; unset IFS
+          [ "$skip" = 1 ] && continue
+          $base -n "$ns" images ls -q 2>/dev/null | while read -r img; do
+            [ -n "$img" ] && $base -n "$ns" images rm --sync "$img" >/dev/null 2>&1
+          done
+          $base -n "$ns" content prune references >/dev/null 2>&1 || true
+          left=$($base -n "$ns" images ls -q 2>/dev/null | wc -l)
+          echo "    images left in $ns: $left"
+          left_total=$((left_total + left))
         done
-        "$@" content prune references >/dev/null 2>&1 || true
-        left=$("$@" images ls -q 2>/dev/null | wc -l)
-        echo "    images left in $CTR_NS: $left"
-        [ "$left" -eq 0 ]
+        [ "$left_total" -eq 0 ]
       '; then
       echo "clear-cache-engines: FAILED containerd cleanup node=$node" >&2
       failed=1
     fi
+  fi
+
+  # Porto keeps RIID's work as riid-layer-<digest> layers plus a marker layer per
+  # image; podman prune and ctr never see them. Best effort: a stand without Porto
+  # has only the stub socket and portoctl is absent.
+  if [[ "$CLEAR_PORTO" == 1 ]]; then
+    riid_kc -n "$NS" exec -c installer "$pod" -- chroot /host sh -ec '
+      command -v portoctl >/dev/null 2>&1 || exit 0
+      portoctl layer -L 2>/dev/null | awk "/^riid-/ {print \$1}" | while read -r l; do
+        [ -n "$l" ] && portoctl layer -R "$l" >/dev/null 2>&1
+      done
+    ' >/dev/null 2>&1 || true
   fi
 done
 
