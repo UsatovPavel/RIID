@@ -69,8 +69,9 @@ spec:
                   apt-get $APT_OPT update
                   apt-get $APT_OPT install -y --no-install-recommends podman
                 fi
-                # With Calico's conflist present podman picks CNI and shares
-                # /etc/cni/net.d - a prune took 9 nodes NotReady. netavark is off PATH.
+                # With the Calico conflist present podman picks CNI and shares
+                # /etc/cni/net.d - a prune took 9 nodes NotReady. netavark is off
+                # PATH. Keep apostrophes out: this block is one quoted argument.
                 if ! dpkg -s netavark >/dev/null 2>&1; then
                   apt-get $APT_OPT update
                   apt-get $APT_OPT install -y --no-install-recommends netavark aardvark-dns
