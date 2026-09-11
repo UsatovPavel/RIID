@@ -13,7 +13,10 @@ KC="$REPO/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml"
 export KUBECONFIG="$KC"
 ARMS="$*"
 STAMP_ROOT="$(date +%Y%m%d-%H%M)"
-LOGROOT="zOptimization/clusterLogs-agent117-${STAMP_ROOT}"
+# Which ticket these artifacts belong to. Hardcoding it once mislabelled an
+# AGENT-118 result as agent117, in both the log directory and the TSV name.
+AGENT="${AGENT:-agent117}"
+LOGROOT="zOptimization/clusterLogs-${AGENT}-${STAMP_ROOT}"
 RUNLOG_DIR="$LOGROOT/run-logs"
 mkdir -p "$RUNLOG_DIR"
 
@@ -93,6 +96,21 @@ clear_for_arm() {
   say "  nodes reporting an empty riid-bench namespace: $left"
 }
 
+# kubectl logs serves only the *current* container log file and kubelet rotates
+# that at 10Mi, so AGENT-117 kept 87s of a 427s arm. Dragonfly keeps its own
+# rotating copy under /var/log/dragonfly (6 files); take that too. Verified:
+# client v1.3.8 and scheduler v2.4.4-rc.1 both ship tar.
+export_file_logs() {
+  local ns="$1" pod="$2" container="$3" dest="$4"
+  mkdir -p "$dest"
+  kubectl -n "$ns" exec "$pod" -c "$container" -- \
+    tar cf - -C /var/log/dragonfly . 2>/dev/null | tar xf - -C "$dest" 2>/dev/null
+  if [ -z "$(find "$dest" -type f -size +0c -print -quit 2>/dev/null)" ]; then
+    rm -rf "$dest"
+    say "  no on-disk log from $pod ($container); only the stdout copy survives"
+  fi
+}
+
 # Same shape as bench/k8s/arm-queue.sh's export_logs, repo-relative output
 # instead of a /tmp job scratchpad - the whole reason this driver is a
 # committed file and not a scratch script written fresh each session.
@@ -100,11 +118,17 @@ export_logs() {
   local arm="$1" stamp="$2" out="$LOGROOT/${arm}.${stamp}"
   mkdir -p "$out"/{dfdaemon,scheduler,seed,riid}
   for p in $(kubectl -n dragonfly-system get pods -l app=dragonfly,component=client -o name 2>/dev/null); do
-    kubectl -n dragonfly-system logs "${p#pod/}" -c client --tail=1000000 --timestamps > "$out/dfdaemon/${p#pod/}.log" 2>/dev/null; done
+    kubectl -n dragonfly-system logs "${p#pod/}" -c client --tail=1000000 --timestamps > "$out/dfdaemon/${p#pod/}.log" 2>/dev/null
+    export_file_logs dragonfly-system "${p#pod/}" client "$out/dfdaemon-files/${p#pod/}"
+  done
   for p in $(kubectl -n dragonfly-system get pods -l app=dragonfly,component=scheduler -o name 2>/dev/null); do
-    kubectl -n dragonfly-system logs "${p#pod/}" -c scheduler --tail=1000000 --timestamps > "$out/scheduler/${p#pod/}.log" 2>/dev/null; done
+    kubectl -n dragonfly-system logs "${p#pod/}" -c scheduler --tail=1000000 --timestamps > "$out/scheduler/${p#pod/}.log" 2>/dev/null
+    export_file_logs dragonfly-system "${p#pod/}" scheduler "$out/scheduler-files/${p#pod/}"
+  done
   for p in $(kubectl -n dragonfly-system get pods -l app=dragonfly,component=seed-client -o name 2>/dev/null); do
-    kubectl -n dragonfly-system logs "${p#pod/}" -c seed-client --tail=1000000 --timestamps > "$out/seed/${p#pod/}.log" 2>/dev/null; done
+    kubectl -n dragonfly-system logs "${p#pod/}" -c seed-client --tail=1000000 --timestamps > "$out/seed/${p#pod/}.log" 2>/dev/null
+    export_file_logs dragonfly-system "${p#pod/}" seed-client "$out/seed-files/${p#pod/}"
+  done
   for p in $(kubectl -n riid-system get pods -l app.kubernetes.io/name=riid -o name 2>/dev/null); do
     kubectl -n riid-system logs "${p#pod/}" -c riid --tail=1000000 --timestamps > "$out/riid/${p#pod/}.log" 2>/dev/null
     kubectl -n riid-system logs "${p#pod/}" -c riid --previous --tail=1000000 --timestamps \
@@ -115,8 +139,8 @@ export_logs() {
   kubectl -n riid-system get events --sort-by=.lastTimestamp > "$out/riid/events.txt" 2>/dev/null
   kubectl get nodes -o wide > "$out/riid/nodes.txt" 2>/dev/null
   { echo "# $arm"; echo "captured: $(date -Is)"; echo;
-    find "$out" -type f -name '*.log' -printf '%p %s bytes\n' | sort; } > "$out/README.md"
-  ( cd "$out" && find . -type f -name '*.log' -exec sha256sum {} + > SHA256SUMS 2>/dev/null )
+    find "$out" -type f \( -name '*.log*' -o -path '*-files/*' \) -printf '%p %s bytes\n' | sort; } > "$out/README.md"
+  ( cd "$out" && find . -type f \( -name '*.log*' -o -path '*-files/*' \) -exec sha256sum {} + > SHA256SUMS 2>/dev/null )
   say "  logs exported to $out"
 }
 
@@ -156,12 +180,12 @@ for arm in $ARMS; do
     tail -5 "$RUNLOG_DIR/${arm}.${stamp}.run.log" | sed 's/^/    /'
     continue
   fi
-  # Only agent117-name a result AFTER validate-arm confirms it - a cp before
+  # Only stamp a result AFTER validate-arm confirms it - a cp before
   # validation once put an INVALID run in output/ under the same naming as a
   # real result, indistinguishable without re-reading a log that no longer exists.
   if bash "$PERF/summarize/validate-arm.sh" "$arm" "$tsv" "$LOGROOT/${arm}.${stamp}" 2>&1 | sed 's/^/  /' | tee /dev/stderr | grep -q ": VALID$"; then
-    cp "$tsv" "$PERF/output/${arm}.agent117-${stamp}.tsv"
-    say "  saved as ${arm}.agent117-${stamp}.tsv"
+    cp "$tsv" "$PERF/output/${arm}.${AGENT}-${stamp}.tsv"
+    say "  saved as ${arm}.${AGENT}-${stamp}.tsv"
   else
     say "  NOT saved - validate-arm rejected this run"
   fi
