@@ -71,44 +71,18 @@ purge_stale_scheduler_rows() {
   [ "$ok" = 1 ] && say "  dragonfly-client stable" || say "  WARNING: dragonfly-client not all Ready after 100s, continuing anyway"
 }
 
-# Which cleaner an arm needs follows from what it exercises: bare-* touches only
-# the engine, riid-*/dfinit-* also carry Dragonfly and RIID state. Both wipe the
-# containerd riid-bench namespace, which clear-cluster-cache alone never did -
-# all 20 dataset images were still cached when a "fresh" arm started.
+# One wrapper decides which of the three caches the arm uses: bare-* the engine,
+# dfinit-* engine+dragonfly, riid-* all three. The driver no longer encodes that.
 clear_for_arm() {
-  local arm="$1" stamp="$2" target
-  case "$arm" in
-    bare-*) target=clear-engine-cache;;
-    *)      target=clear-cluster-cache;;
-  esac
-  say "clearing cache ($target)"
-  if ! make -C "$PERF" "$target" > "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1; then
-    say "  $target returned non-zero - tail:"
+  local arm="$1" stamp="$2"
+  say "clearing cache for $arm"
+  if ! make -C "$PERF" clear-cache ARM="$arm" > "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1; then
+    say "  clear-cache FAILED - tail:"
     tail -8 "$RUNLOG_DIR/${arm}.${stamp}.cache.log" | sed 's/^/    /'
-  fi
-  # df-riid resets Dragonfly and RIID but leaves the containerd store alone, so
-  # those arms need the engine pass on top; bare-* already ran exactly that.
-  if [ "$target" = clear-cluster-cache ]; then
-    make -C "$PERF" clear-engine-cache >> "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>&1 || true
   fi
   local left
   left=$(grep -cE 'images left in [^:]+: 0$' "$RUNLOG_DIR/${arm}.${stamp}.cache.log" 2>/dev/null || echo 0)
   say "  containerd namespaces reported empty: $left"
-}
-
-# kubectl logs serves only the *current* container log file and kubelet rotates
-# that at 10Mi, so AGENT-117 kept 87s of a 427s arm. Dragonfly keeps its own
-# rotating copy under /var/log/dragonfly (6 files); take that too. Verified:
-# client v1.3.8 and scheduler v2.4.4-rc.1 both ship tar.
-export_file_logs() {
-  local ns="$1" pod="$2" container="$3" dest="$4"
-  mkdir -p "$dest"
-  kubectl -n "$ns" exec "$pod" -c "$container" -- \
-    tar cf - -C /var/log/dragonfly . 2>/dev/null | tar xf - -C "$dest" 2>/dev/null
-  if [ -z "$(find "$dest" -type f -size +0c -print -quit 2>/dev/null)" ]; then
-    rm -rf "$dest"
-    say "  no on-disk log from $pod ($container); only the stdout copy survives"
-  fi
 }
 
 # Same shape as bench/k8s/arm-queue.sh's export_logs, repo-relative output

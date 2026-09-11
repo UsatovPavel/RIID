@@ -1,62 +1,26 @@
 #!/usr/bin/env bash
-# Кластер: на каждом Running-поде RIID и подах Dragonfly client/seed-client:
+# Dragonfly's cache only: the dfdaemon stores plus the control-plane state that
+# indexes them. Not the engine store (clear-cache-engines.sh) and not RIID's
+# scratch (clear-cache-riid.sh) - each of the three is cleared by its own script.
 #
-# RIID (namespace по умолчанию riid-system):
-#   • Podman: podman system prune -af --volumes через podman-node; в RIID-образе
-#     CLI нет. Prune чистит общий стор ноды.
-#   • RIID OCI-темп-кэш: каталоги riid-cache-tmp-* / riid-prefix-* и сироты
-#     layer-*.bin. Лежат в RIID_WORK_DIR (app.tempDirectory, emptyDir пода).
-#
-# Dragonfly (namespace по умолчанию dragonfly-system, см. DRAGONFLY_NAMESPACE):
-#   • Поды app=dragonfly, component=client | seed-client (Helm OSS): очистить содержимое
-#     каталогов из DRAGONFLY_CACHE_DIRS (по умолчанию логический кэш dfdaemon, P2P output
-#     и storage.dir — см. scripts/values.yaml client.config.storage.dir и
-#     extraVolumeMounts /var/run/dragonfly/output). storage.dir is dfdaemon's own
-#     content-addressable task store, the hardlink source for P2P output; it survives pod
-#     restarts on its hostPath, so omitting it here let a previous arm's already-fetched
-#     images serve a later arm as free instant local-cache hits instead of a genuine cold pull.
-#   • Namespace и обязательные control-plane ресурсы считаются обязательными:
-#     при отсутствии скрипт падает.
-#
-# Ноды без соответствующих подов здесь не трогаются.
-# По умолчанию в конце выполняется reset control-plane Dragonfly (manager/scheduler + Redis FLUSHALL).
-# Не вызывайте во время активных pull.
+# storage.dir differs per component: the client keeps it at /var/run/dragonfly/data,
+# the seed at /var/lib/dragonfly. A single static list missed the seed entirely, so
+# the dir is read from each pod's own dfdaemon.yaml at runtime and the pass fails
+# when it matched nothing. Content and control-plane state are reset together: with
+# content left behind the scheduler no longer knows about it and every client goes
+# back to source, which measured *worse* than a genuinely cold tier.
 #
 # Env:
-#   RIID_NAMESPACE        — default: riid-system
-#   RIID_CONTAINER        — default: riid
-#   RIID_LABEL_SELECTOR   — default: app.kubernetes.io/name=riid
-#   RIID_WORK_DIR         — default: /var/lib/riid/work (== app.tempDirectory
-#                           в configmap.yaml и emptyDir riid-work)
-#
-#   DRAGONFLY_NAMESPACE           — default: dragonfly-system
-#   DRAGONFLY_CACHE_DIRS           — пробел‑разделённый список каталогов (default: см. ниже)
-#   DRAGONFLY_CONTAINER            — если пусто, kubectl exec без -c (один контейнер в поде).
-#                                    Если в поде несколько контейнеров — задать имя явно (часто client/dfdaemon).
-#   DRAGONFLY_RESET_CONTROL_PLANE  — 1/0, restart scheduler/manager (default: 1)
-#   DRAGONFLY_RESTART_DATA_PLANE   — 1/0, restart client DaemonSet + seed StatefulSet (default: 1)
-#   DRAGONFLY_CLIENT_DS            — default: daemonset/dragonfly-client
-#   DRAGONFLY_SEED_STS             — default: statefulset/dragonfly-seed-client
-#   DRAGONFLY_RECREATE_REDIS_STATE — 1/0, пересоздать state Redis (scale-down sts, delete PVC, scale-up) (default: 1)
-#   DRAGONFLY_MANAGER_RESOURCE     — default: deployment/dragonfly-manager
-#   DRAGONFLY_SCHEDULER_RESOURCE   — default: statefulset/dragonfly-scheduler
-#   DRAGONFLY_ROLLOUT_TIMEOUT      — default: 5m
-#   DRAGONFLY_REDIS_MASTER_STS     — default: statefulset/dragonfly-redis-master
-#   DRAGONFLY_REDIS_REPLICAS_STS   — default: statefulset/dragonfly-redis-replicas
+#   DRAGONFLY_NAMESPACE            - default: dragonfly-system
+#   DRAGONFLY_CACHE_DIRS           - extra dirs; storage.dir is added per pod
+#   DRAGONFLY_CONTAINER            - empty means kubectl exec without -c
+#   DRAGONFLY_RESET_CONTROL_PLANE  - 1/0, restart manager+scheduler (default 1)
+#   DRAGONFLY_RESTART_DATA_PLANE   - 1/0, restart client+seed (default 1)
+#   DRAGONFLY_RECREATE_REDIS_STATE - 1/0, recreate Redis PVCs (default 1)
+#   DRAGONFLY_ROLLOUT_TIMEOUT      - default: 5m
 set -euo pipefail
 
-NS="${RIID_NAMESPACE:-riid-system}"
-CONTAINER="${RIID_CONTAINER:-riid}"
-LABEL="${RIID_LABEL_SELECTOR:-app.kubernetes.io/name=riid}"
-WORK_DIR="${RIID_WORK_DIR:-/var/lib/riid/work}"
-
 DFS="${DRAGONFLY_NAMESPACE:-dragonfly-system}"
-# Extra dirs only. The store itself is read from each pod's own dfdaemon.yaml at
-# runtime, because client and seed do NOT share it: client keeps storage.dir at
-# /var/run/dragonfly/data, seed at /var/lib/dragonfly. A single static list meant
-# every path was absent inside a seed pod, the loop skipped them all without an
-# error, and the seed cache was never cleared once - 530 MB of it still served
-# free local hits to arms that reported a cold start (measured 2026-09-10).
 DRAGONFLY_CACHE_DIRS="${DRAGONFLY_CACHE_DIRS:-/var/cache/dragonfly /var/run/dragonfly/output /var/run/dragonfly/data /var/lib/dragonfly}"
 DRAGONFLY_RESET_CONTROL_PLANE="${DRAGONFLY_RESET_CONTROL_PLANE:-1}"
 DRAGONFLY_RESTART_DATA_PLANE="${DRAGONFLY_RESTART_DATA_PLANE:-1}"
@@ -70,47 +34,11 @@ DRAGONFLY_REDIS_MASTER_STS="${DRAGONFLY_REDIS_MASTER_STS:-statefulset/dragonfly-
 DRAGONFLY_REDIS_REPLICAS_STS="${DRAGONFLY_REDIS_REPLICAS_STS:-statefulset/dragonfly-redis-replicas}"
 
 if [[ -n "${KUBECONFIG:-}" && ! -f "$KUBECONFIG" ]]; then
-  echo "clear-cache-df-riid: kubeconfig not found: $KUBECONFIG" >&2
+  echo "clear-cache-dragonfly: kubeconfig not found: $KUBECONFIG" >&2
   exit 1
 fi
 
 failed=0
-
-mapfile -t pods < <(kubectl -n "$NS" get pods -l "$LABEL" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
-
-if ((${#pods[@]} == 0)); then
-  echo "clear-cache-df-riid: no pods with label $LABEL in $NS" >&2
-  exit 1
-fi
-
-for pod in "${pods[@]}"; do
-  [[ -z "$pod" ]] && continue
-  phase=$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.status.phase}')
-  if [[ "$phase" != Running ]]; then
-    echo ">>> skip RIID $pod (phase=$phase)" >&2
-    continue
-  fi
-  echo ">>> RIID podman prune (node store) + RIID work cache [$WORK_DIR]: $pod" >&2
-  node="$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.spec.nodeName}')"
-  podman_node_pod="$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
-    --field-selector "spec.nodeName=$node" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-  if [[ -z "$podman_node_pod" ]] || ! kubectl -n "$NS" exec -c installer "$podman_node_pod" -- \
-    chroot /host podman system prune -af --volumes; then
-    echo "clear-cache-df-riid: FAILED Podman prune node=$node pod=$pod" >&2
-    failed=1
-  fi
-  if ! kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- env RIID_WORK_DIR="$WORK_DIR" sh -ec '
-      for d in "$RIID_WORK_DIR" /tmp; do
-        [ -d "$d" ] || continue
-        find "$d" -maxdepth 1 -type d -name '"'"'riid-cache-tmp-*'"'"' -exec rm -rf {} +
-        find "$d" -maxdepth 1 -type d -name '"'"'riid-prefix-*'"'"' -exec rm -rf {} +
-        find "$d" -maxdepth 1 -type f -name '"'"'layer-*.bin'"'"' -delete
-      done
-    '; then
-    echo "clear-cache-df-riid: FAILED RIID work cleanup pod=$pod" >&2
-    failed=1
-  fi
-done
 
 if kubectl get namespace "$DFS" >/dev/null 2>&1; then
   df_failed_this_ns=0
@@ -153,7 +81,7 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
         fi
       ')
       if ! "${kcmd[@]}"; then
-        echo "clear-cache-df-riid: FAILED Dragonfly pod=$pod" >&2
+        echo "clear-cache-dragonfly: FAILED Dragonfly pod=$pod" >&2
         df_failed_this_ns=1
         failed=1
       fi
@@ -166,7 +94,7 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
       total_df=$((total_df + n))
     done
     if ((total_df == 0)); then
-      echo "clear-cache-df-riid: namespace $DFS exists but no app=dragonfly client/seed-client pods" >&2
+      echo "clear-cache-dragonfly: namespace $DFS exists but no app=dragonfly client/seed-client pods" >&2
       failed=1
     fi
   fi
@@ -179,12 +107,12 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
     for res in "$DRAGONFLY_CLIENT_DS" "$DRAGONFLY_SEED_STS"; do
       kubectl -n "$DFS" get "$res" >/dev/null 2>&1 || continue
       if ! kubectl -n "$DFS" rollout restart "$res"; then
-        echo "clear-cache-df-riid: FAILED rollout restart $res" >&2
+        echo "clear-cache-dragonfly: FAILED rollout restart $res" >&2
         failed=1
         continue
       fi
       if ! kubectl -n "$DFS" rollout status "$res" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
-        echo "clear-cache-df-riid: FAILED rollout status $res" >&2
+        echo "clear-cache-dragonfly: FAILED rollout status $res" >&2
         failed=1
       fi
     done
@@ -194,17 +122,17 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
     echo ">>> Dragonfly control-plane reset: restart $DRAGONFLY_MANAGER_RESOURCE, $DRAGONFLY_SCHEDULER_RESOURCE" >&2
     for res in "$DRAGONFLY_MANAGER_RESOURCE" "$DRAGONFLY_SCHEDULER_RESOURCE"; do
       if ! kubectl -n "$DFS" get "$res" >/dev/null 2>&1; then
-        echo "clear-cache-df-riid: REQUIRED resource not found: $res" >&2
+        echo "clear-cache-dragonfly: REQUIRED resource not found: $res" >&2
         failed=1
         continue
       fi
       if ! kubectl -n "$DFS" rollout restart "$res"; then
-        echo "clear-cache-df-riid: FAILED rollout restart $res" >&2
+        echo "clear-cache-dragonfly: FAILED rollout restart $res" >&2
         failed=1
         continue
       fi
       if ! kubectl -n "$DFS" rollout status "$res" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
-        echo "clear-cache-df-riid: FAILED rollout status $res" >&2
+        echo "clear-cache-dragonfly: FAILED rollout status $res" >&2
         failed=1
       fi
     done
@@ -213,11 +141,11 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
   if [[ "$DRAGONFLY_RECREATE_REDIS_STATE" == "1" ]]; then
     echo ">>> Dragonfly redis state recreation: $DRAGONFLY_REDIS_MASTER_STS, $DRAGONFLY_REDIS_REPLICAS_STS" >&2
     if ! kubectl -n "$DFS" get "$DRAGONFLY_REDIS_MASTER_STS" >/dev/null 2>&1; then
-      echo "clear-cache-df-riid: REQUIRED resource not found: $DRAGONFLY_REDIS_MASTER_STS" >&2
+      echo "clear-cache-dragonfly: REQUIRED resource not found: $DRAGONFLY_REDIS_MASTER_STS" >&2
       failed=1
     fi
     if ! kubectl -n "$DFS" get "$DRAGONFLY_REDIS_REPLICAS_STS" >/dev/null 2>&1; then
-      echo "clear-cache-df-riid: REQUIRED resource not found: $DRAGONFLY_REDIS_REPLICAS_STS" >&2
+      echo "clear-cache-dragonfly: REQUIRED resource not found: $DRAGONFLY_REDIS_REPLICAS_STS" >&2
       failed=1
     fi
 
@@ -229,7 +157,7 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
 
       mapfile -t redis_pods < <(kubectl -n "$DFS" get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | awk '/^dragonfly-redis-(master|replicas)-/')
       if ((${#redis_pods[@]} == 0)); then
-        echo "clear-cache-df-riid: REQUIRED redis pods not found (pattern: dragonfly-redis-(master|replicas)-*)" >&2
+        echo "clear-cache-dragonfly: REQUIRED redis pods not found (pattern: dragonfly-redis-(master|replicas)-*)" >&2
         failed=1
       else
         declare -A redis_pvcs=()
@@ -241,41 +169,41 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
           done
         done
         if ((${#redis_pvcs[@]} == 0)); then
-          echo "clear-cache-df-riid: REQUIRED redis PVCs not found from redis pods" >&2
+          echo "clear-cache-dragonfly: REQUIRED redis PVCs not found from redis pods" >&2
           failed=1
         else
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_MASTER_STS" --replicas=0; then
-            echo "clear-cache-df-riid: FAILED scale down $DRAGONFLY_REDIS_MASTER_STS" >&2
+            echo "clear-cache-dragonfly: FAILED scale down $DRAGONFLY_REDIS_MASTER_STS" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_REPLICAS_STS" --replicas=0; then
-            echo "clear-cache-df-riid: FAILED scale down $DRAGONFLY_REDIS_REPLICAS_STS" >&2
+            echo "clear-cache-dragonfly: FAILED scale down $DRAGONFLY_REDIS_REPLICAS_STS" >&2
             failed=1
           fi
 
           if ((failed == 0)); then
             for pvc in "${!redis_pvcs[@]}"; do
               if ! kubectl -n "$DFS" delete pvc "$pvc"; then
-                echo "clear-cache-df-riid: FAILED delete redis pvc=$pvc" >&2
+                echo "clear-cache-dragonfly: FAILED delete redis pvc=$pvc" >&2
                 failed=1
               fi
             done
           fi
 
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_MASTER_STS" --replicas="$master_replicas"; then
-            echo "clear-cache-df-riid: FAILED scale up $DRAGONFLY_REDIS_MASTER_STS to $master_replicas" >&2
+            echo "clear-cache-dragonfly: FAILED scale up $DRAGONFLY_REDIS_MASTER_STS to $master_replicas" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" scale "$DRAGONFLY_REDIS_REPLICAS_STS" --replicas="$replicas_replicas"; then
-            echo "clear-cache-df-riid: FAILED scale up $DRAGONFLY_REDIS_REPLICAS_STS to $replicas_replicas" >&2
+            echo "clear-cache-dragonfly: FAILED scale up $DRAGONFLY_REDIS_REPLICAS_STS to $replicas_replicas" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" rollout status "$DRAGONFLY_REDIS_MASTER_STS" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
-            echo "clear-cache-df-riid: FAILED rollout status $DRAGONFLY_REDIS_MASTER_STS" >&2
+            echo "clear-cache-dragonfly: FAILED rollout status $DRAGONFLY_REDIS_MASTER_STS" >&2
             failed=1
           fi
           if ! kubectl -n "$DFS" rollout status "$DRAGONFLY_REDIS_REPLICAS_STS" --timeout="$DRAGONFLY_ROLLOUT_TIMEOUT"; then
-            echo "clear-cache-df-riid: FAILED rollout status $DRAGONFLY_REDIS_REPLICAS_STS" >&2
+            echo "clear-cache-dragonfly: FAILED rollout status $DRAGONFLY_REDIS_REPLICAS_STS" >&2
             failed=1
           fi
         fi
@@ -283,7 +211,7 @@ if kubectl get namespace "$DFS" >/dev/null 2>&1; then
     fi
   fi
 else
-  echo "clear-cache-df-riid: REQUIRED namespace not found: $DFS" >&2
+  echo "clear-cache-dragonfly: REQUIRED namespace not found: $DFS" >&2
   failed=1
 fi
 
