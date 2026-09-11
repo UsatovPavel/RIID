@@ -57,10 +57,16 @@ if ! command -v kubectl >/dev/null 2>&1; then
   exit 2
 fi
 
-if ! kubectl get namespace "$NS" >/dev/null 2>&1; then
-  echo "namespace not found: $NS" >&2
+# Separating "namespace is absent" from "the API did not answer": a dropped
+# connection used to be reported as a missing namespace, which sent the reader
+# looking for a deleted cluster while the cluster was fine.
+ns_err="$(kubectl get namespace "$NS" 2>&1 >/dev/null)" || {
+  case "$ns_err" in
+    *NotFound*|*not\ found*) echo "namespace not found: $NS" >&2 ;;
+    *) echo "cannot reach the API to check namespace $NS: $ns_err" >&2 ;;
+  esac
   exit 2
-fi
+}
 
 if ! [[ "$FILE_SIZE_MB" =~ ^[1-9][0-9]*$ ]]; then
   echo "FILE_SIZE_MB must be a positive integer, got: $FILE_SIZE_MB" >&2
@@ -72,7 +78,12 @@ if ! [[ "$ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-mapfile -t workers < <(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+# Bench workers only. monitoring and registry nodes are tainted and carry their
+# own load, so a pair landing there measures something other than the channel the
+# arms actually use.
+mapfile -t workers < <(kubectl get nodes \
+  -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master,!riid.monitoring,!riid.registry' \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 if ((${#workers[@]} < 2)); then
   echo "need at least 2 worker nodes (found ${#workers[@]})" >&2
   exit 2

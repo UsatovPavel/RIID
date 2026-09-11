@@ -63,6 +63,29 @@ case "$ARM" in
     ;;
 esac
 
+# Which import mode did RIID actually use? layer.import is emitted only from
+# OciArchiveBuilder.streamLayers, reached only through importIncrementally, i.e.
+# only on the prefix path - so its presence is the mode, not a proxy for it.
+# Without this the two arms differ by filename alone and -noprefix can silently
+# measure prefix mode a second time.
+case "$ARM" in
+  riid-*)
+    if [ -n "$LOGDIR" ] && [ -d "$LOGDIR" ]; then
+      li=$(grep -rho 'layer\.import' "$LOGDIR/riid" 2>/dev/null | wc -l)
+      case "$ARM" in
+        *-noprefix)
+          [ "$li" -eq 0 ] && ok "prefix import off: layer.import=0" \
+            || bad "layer.import=$li - prefixImport was ON, this arm measured prefix mode" ;;
+        *)
+          # A single-layer image never takes the prefix path (supportsIncrementalImport
+          # needs layers>1), so only "> 0" is load-bearing, not a per-image count.
+          [ "$li" -gt 0 ] && ok "prefix import on: layer.import=$li" \
+            || bad "layer.import=0 - prefixImport was OFF, this arm is not a prefix run" ;;
+      esac
+    fi
+    ;;
+esac
+
 egress=$(grep registry_tx_bytes_delta "$TSV" 2>/dev/null | awk -F'\t' '{printf "%.2f", $2/1073741824}')
 [ -n "$egress" ] && note "egress: $egress GiB"
 awk -F, 'NR>1 && $4=="AGGREGATE"{s+=$8} END{if(s>0) printf "  --   sum AGGREGATE: %.1f s\n", s/1000}' "$TSV"

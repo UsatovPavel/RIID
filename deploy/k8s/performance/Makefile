@@ -19,6 +19,7 @@ ENGINE ?= podman
 export SCENARIO ?= pr18
 DATASET ?= A
 DATASET_FILE ?=
+BACKEND_LABEL ?=
 OUTPUT_TSV ?=
 CLEAR_CACHE_BEFORE_PULL ?= 0
 # Local in-cluster registry; leave empty to pull from the Selectel registry.
@@ -43,7 +44,7 @@ ifeq ($(DATASET_FILE),)
   endif
 endif
 
-.PHONY: run riid-podman riid-containerd riid-porto bare-podman bare-containerd bare-porto \
+.PHONY: run riid-podman riid-containerd riid-containerd-noprefix riid-porto bare-podman bare-containerd bare-porto \
         dfinit-podman dfinit-containerd \
         clear-cluster-cache clear-engine-cache delete-local-registry-dataset debug-registry-node validate-arm \
         registry-node-tc-apply registry-node-tc-clear registry-node-tc-check metrics summarize-aggregate
@@ -73,6 +74,7 @@ run:
 	if [ -n "$(strip $(EXPECTED_RIID_PODS))" ]; then export EXPECTED_RIID_PODS="$(EXPECTED_RIID_PODS)"; fi; \
 	BACKEND="$(BACKEND)" \
 	ENGINE="$(ENGINE)" \
+	BACKEND_LABEL="$(BACKEND_LABEL)" \
 	DATASET_FILE="$(DATASET_FILE)" \
 	CLEAR_CACHE_BEFORE_PULL="$(CLEAR_CACHE_BEFORE_PULL)" \
 	REGISTRY_PULL_HOST="$(REGISTRY_PULL_HOST)" \
@@ -87,8 +89,22 @@ run:
 riid-podman:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=podman
 
+# Sets the mode explicitly rather than trusting whatever the previous arm left
+# behind: after a -noprefix run the config still says false, and this arm would
+# silently measure noprefix a second time.
 riid-containerd:
+	@bash "$(PERF_DIR)/scenario/set-prefix-import.sh" true
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=containerd
+
+# AGENT-118: the only cell of the matrix never measured — every recorded
+# riid-containerd* run was prefix mode, since the code default is true.
+# The switch lives in RIID's config, so the arm sets it and restarts the
+# DaemonSet before measuring; validate-arm.sh then proves the mode from the logs.
+riid-containerd-noprefix:
+	@bash "$(PERF_DIR)/scenario/set-prefix-import.sh" false
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=containerd \
+	  BACKEND_LABEL=riid-containerd-noprefix \
+	  OUTPUT_TSV="$(OUTPUT_DIR)/riid-containerd-noprefix.tsv"
 
 bare-podman:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=podman

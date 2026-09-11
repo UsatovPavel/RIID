@@ -43,6 +43,11 @@ data:
         requestTimeout: "PT30M"
         maxCacheBytes: 42949672960 # 40 GB
         overloadPolicy: REJECT
+    runtime:
+      # Matches the code default (RuntimeAdapter.PREFIX_IMPORT_ENABLED_BY_DEFAULT);
+      # the riid-containerd-noprefix arm flips it from here, there is no other
+      # switch. Read once at startup, so a change needs a riid DaemonSet restart.
+      prefixImport: true
     p2p:
       dragonfly:
         enabled: true
