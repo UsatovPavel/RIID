@@ -50,14 +50,18 @@ spec:
         - name: registry
           image: performance.local_registry
           imagePullPolicy: IfNotPresent
-          # Without a request this pod is BestEffort, which kubelet evicts first
-          # under MemoryPressure - and on a dedicated node the registry is both
-          # the cause of the pressure and its only victim: it was evicted 66
-          # times in a row on 2026-09-11, failing every pull of the arm.
+          # The request keeps this off BestEffort (evicted first); the limit is what
+          # actually bounds it. Serving one 2.4 GiB blob to 10 pods filled the whole
+          # 5.86 GiB allocatable with page cache, the node hit MemoryPressure and
+          # kubelet evicted the pod furthest over its request - the registry itself.
+          # A limit makes the cgroup reclaim its own cache instead. No CPU limit:
+          # throttling the registry would land inside the measured pull.
           resources:
             requests:
               cpu: 200m
               memory: 2Gi
+            limits:
+              memory: 4Gi
           ports:
             - name: http
               containerPort: 5000

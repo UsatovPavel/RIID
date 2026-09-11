@@ -92,13 +92,20 @@ esac
 if [ -n "$LOGDIR" ] && [ -f "$LOGDIR/cache-clear.log" ]; then
   # Any containerd namespace, not just riid-bench: RIID imports into "default",
   # so a check scoped to riid-bench proved an unused namespace was empty.
-  cleared=$(grep -cE 'images left in [^:]+: 0$' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  # Count nodes, not namespaces: a brand-new stand has no containerd namespace
+  # besides k8s.io, so the per-namespace lines are absent exactly when the node
+  # is most certainly cold. Each node prints one verdict either way.
+  nodes_clean=$(grep -cE 'node containerd images left: 0 ' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  nodes_dirty=$(grep -cE 'node containerd images left: [1-9]' "$LOGDIR/cache-clear.log" 2>/dev/null)
   left=$(grep -cE 'images left in [^:]+: [1-9]' "$LOGDIR/cache-clear.log" 2>/dev/null)
   failed_clean=$(grep -cE 'FAILED (containerd|podman) ' "$LOGDIR/cache-clear.log" 2>/dev/null)
-  if [ "$cleared" -gt 0 ] && [ "$left" -eq 0 ] && [ "$failed_clean" -eq 0 ]; then
-    ok "cold start: $cleared containerd namespace(s) reported empty"
+  # Every pod that pulled must sit on a node the clear actually reached.
+  pods=$(awk -F, 'NR>1 && $4!="AGGREGATE"{print $4}' "$TSV" | sort -u | grep -c .)
+  if [ "$nodes_clean" -ge "$pods" ] && [ "$nodes_dirty" -eq 0 ] && [ "$left" -eq 0 ] \
+     && [ "$failed_clean" -eq 0 ]; then
+    ok "cold start: $nodes_clean node(s) empty, covering $pods pulling pod(s)"
   else
-    bad "cold start not proven: $cleared empty, $left still holding images, $failed_clean cleanup failure(s)"
+    bad "cold start not proven: $nodes_clean node(s) empty vs $pods pod(s), $nodes_dirty node(s) and $left namespace(s) still holding images, $failed_clean cleanup failure(s)"
   fi
 else
   note "no cache-clear.log in the logdir - cold start unverified"

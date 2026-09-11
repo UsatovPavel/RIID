@@ -89,10 +89,12 @@ for pod in "${node_pods[@]}"; do
         base="ctr"
         if [ -n "$CTR_ADDR" ]; then base="$base -a $CTR_ADDR"; fi
         left_total=0
+        seen=0
         for ns in $($base namespaces ls -q 2>/dev/null); do
           skip=0
           IFS=,; for k in $KEEP; do [ "$ns" = "$k" ] && skip=1; done; unset IFS
           [ "$skip" = 1 ] && continue
+          seen=$((seen + 1))
           $base -n "$ns" images ls -q 2>/dev/null | while read -r img; do
             [ -n "$img" ] && $base -n "$ns" images rm --sync "$img" >/dev/null 2>&1
           done
@@ -101,6 +103,10 @@ for pod in "${node_pods[@]}"; do
           echo "    images left in $ns: $left"
           left_total=$((left_total + left))
         done
+        # Always one verdict per node, even when no namespace exists yet: on a
+        # fresh stand the loop above prints nothing, and the gate cannot tell
+        # "provably empty" from "the clear never ran".
+        echo "    node containerd images left: $left_total (namespaces scanned: $seen)"
         [ "$left_total" -eq 0 ]
       '; then
       echo "clear-cache-engines: FAILED containerd cleanup node=$node" >&2
