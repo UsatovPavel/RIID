@@ -127,12 +127,12 @@ variable "labels" {
 # The bench needs the registry and the metrics stack off the measured nodes, and on
 # MKS only a node-group taint survives - the control plane strips a kubectl one.
 variable "dedicated_infra_nodes" {
-  description = "Carve one tainted monitoring node and one tainted registry node out of nodes_count."
+  description = "Carve tainted monitoring, registry, scheduler and manager nodes out of nodes_count."
   type        = bool
   default     = true
 
   validation {
-    condition     = !var.dedicated_infra_nodes || var.nodes_count >= 3
-    error_message = "dedicated_infra_nodes takes 2 nodes out of nodes_count, so nodes_count must be at least 3."
+    condition     = !var.dedicated_infra_nodes || var.nodes_count >= 5
+    error_message = "dedicated_infra_nodes takes 4 nodes out of nodes_count, so nodes_count must be at least 5."
   }
 }

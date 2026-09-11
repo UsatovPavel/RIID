@@ -1,3 +1,6 @@
+# Upstream sizes manager, scheduler and seed peer as machines separate from the
+# peers doing the pulling, so the bench gives each of them its own tainted node
+# instead of letting them land on a measured worker.
 manager:
   replicas: 1
   image:
@@ -5,6 +8,12 @@ manager:
     tag: v2.4.4-rc.1
   metrics:
     enable: true
+  nodeSelector:
+    riid.dragonfly.manager: "true"
+  tolerations:
+    - key: riid.dragonfly.manager
+      operator: Exists
+      effect: NoSchedule
 scheduler:
   replicas: 1
   image:
@@ -12,6 +21,22 @@ scheduler:
     tag: v2.4.4-rc.1
   metrics:
     enable: true
+  nodeSelector:
+    riid.dragonfly.scheduler: "true"
+  tolerations:
+    - key: riid.dragonfly.scheduler
+      operator: Exists
+      effect: NoSchedule
+  # The chart ships requests: 0, so the kube scheduler reserves nothing and packs
+  # this next to anything. It answers an RPC per downloaded piece - 2072/s at peak
+  # on 2026-09-11 - so it is the one component that needs guaranteed CPU.
+  resources:
+    requests:
+      cpu: "2"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 6Gi
 seedClient:
   replicas: 2
   image:
@@ -23,12 +48,20 @@ client:
   image:
     repository: dragonflyoss/client
     tag: v1.3.8
+  # A dfdaemon on an infra node is a peer that never pulls: it skews the mesh and
+  # the seed tier without ever being measured.
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
           - matchExpressions:
               - key: riid.monitoring
+                operator: DoesNotExist
+              - key: riid.registry
+                operator: DoesNotExist
+              - key: riid.dragonfly.scheduler
+                operator: DoesNotExist
+              - key: riid.dragonfly.manager
                 operator: DoesNotExist
   metrics:
     enable: true
@@ -100,6 +133,29 @@ client:
   # at 10% of RAM (873 MB on an 8 GB node), so every image larger than that
   # failed with "no space left on device: not enough space to store the task"
   # and silently fell back to the registry - P2P could never serve a big layer.
+# The manager's datastores follow it onto the same node: they serve only the
+# manager, which our logs show is contacted every 5 minutes, not per piece.
+mysql:
+  primary:
+    nodeSelector:
+      riid.dragonfly.manager: "true"
+    tolerations:
+      - key: riid.dragonfly.manager
+        operator: Exists
+        effect: NoSchedule
 redis:
+  master:
+    nodeSelector:
+      riid.dragonfly.manager: "true"
+    tolerations:
+      - key: riid.dragonfly.manager
+        operator: Exists
+        effect: NoSchedule
   replica:
     replicaCount: 1
+    nodeSelector:
+      riid.dragonfly.manager: "true"
+    tolerations:
+      - key: riid.dragonfly.manager
+        operator: Exists
+        effect: NoSchedule

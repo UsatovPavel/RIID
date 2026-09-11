@@ -17,8 +17,7 @@ output "nodes" {
   description = "Hostname and ip of every node, across all three groups."
   value = concat(
     selectel_mks_nodegroup_v1.workers.nodes,
-    try(selectel_mks_nodegroup_v1.monitoring[0].nodes, []),
-    try(selectel_mks_nodegroup_v1.registry[0].nodes, []),
+    flatten([for g in selectel_mks_nodegroup_v1.infra : g.nodes]),
   )
 }
 
@@ -33,11 +32,8 @@ output "worker_nodes_count" {
 }
 
 output "infra_nodes" {
-  description = "Names of the tainted monitoring and registry nodes, empty when not carved out."
-  value = {
-    monitoring = try(selectel_mks_nodegroup_v1.monitoring[0].nodes[*].hostname, [])
-    registry   = try(selectel_mks_nodegroup_v1.registry[0].nodes[*].hostname, [])
-  }
+  description = "Hostname of each tainted infra node by role; empty when not carved out."
+  value       = { for k, g in selectel_mks_nodegroup_v1.infra : k => g.nodes[*].hostname }
 }
 
 output "volume_type" {
