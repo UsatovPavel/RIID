@@ -73,7 +73,12 @@ case "$ARM" in
     if [ -n "$LOGDIR" ] && [ -d "$LOGDIR" ]; then
       li=$(grep -rho 'layer\.import' "$LOGDIR/riid" 2>/dev/null | wc -l)
       case "$ARM" in
-        *-noprefix)
+        # podman never takes the prefix path while the libpod socket is in use:
+        # PodmanRuntimeAdapter.supportsIncrementalImport requires socketClient
+        # .isEmpty(), and the DaemonSet always sets CONTAINER_HOST. Demanding
+        # layer.import>0 here would fail a correct arm for a mode podman cannot
+        # reach; whole-image import over the socket is its only one.
+        *-noprefix|riid-podman*)
           [ "$li" -eq 0 ] && ok "prefix import off: layer.import=0" \
             || bad "layer.import=$li - prefixImport was ON, this arm measured prefix mode" ;;
         *)
