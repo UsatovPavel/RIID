@@ -63,7 +63,7 @@ nodes:
 	kubectl get nodes -o wide
 
 # Проверяет, что число нод без control-plane/master совпадает с суммой
-# cluster_topology.(workers + observers + registry_nodes) в config.yaml.
+# cluster_topology.(workers + observers + registry_nodes + dragonfly_infra_nodes).
 #
 # This target and the two node-auto-pick targets below used to read
 # node-role.kubernetes.io/control-plane's jsonpath *value* to detect the
@@ -85,14 +85,16 @@ validate-cluster-state:
 	W=$$(yq e '.cluster_topology.workers // 0' "$(GLOBAL_CONFIG_FILE)"); \
 	O=$$(yq e '.cluster_topology.observers // 0' "$(GLOBAL_CONFIG_FILE)"); \
 	R=$$(yq e '.cluster_topology.registry_nodes // 0' "$(GLOBAL_CONFIG_FILE)"); \
+	D=$$(yq e '.cluster_topology.dragonfly_infra_nodes // 0' "$(GLOBAL_CONFIG_FILE)"); \
 	[ "$$W" != "null" ] && [ -n "$$W" ] || W=0; \
 	[ "$$O" != "null" ] && [ -n "$$O" ] || O=0; \
 	[ "$$R" != "null" ] && [ -n "$$R" ] || R=0; \
-	EXPECTED_TOTAL=$$((W + O + R)); \
-	[ "$$EXPECTED_TOTAL" -gt 0 ] || { echo "cluster_topology sum (workers+observers+registry_nodes) is 0 in $(GLOBAL_CONFIG_FILE)"; exit 1; }; \
+	[ "$$D" != "null" ] && [ -n "$$D" ] || D=0; \
+	EXPECTED_TOTAL=$$((W + O + R + D)); \
+	[ "$$EXPECTED_TOTAL" -gt 0 ] || { echo "cluster_topology sum (workers+observers+registry_nodes+dragonfly_infra_nodes) is 0 in $(GLOBAL_CONFIG_FILE)"; exit 1; }; \
 	ACTUAL_WORKERS=$$(kubectl get nodes --no-headers -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' | wc -l); \
-	echo "validate-cluster-state: non-control-plane nodes actual=$$ACTUAL_WORKERS expected=$$EXPECTED_TOTAL (config workers=$$W observers=$$O registry_nodes=$$R)"; \
-	[ "$$ACTUAL_WORKERS" -eq "$$EXPECTED_TOTAL" ] || { echo "node count mismatch: expected=$$EXPECTED_TOTAL (W+O+R) actual=$$ACTUAL_WORKERS"; exit 1; }
+	echo "validate-cluster-state: non-control-plane nodes actual=$$ACTUAL_WORKERS expected=$$EXPECTED_TOTAL (config workers=$$W observers=$$O registry_nodes=$$R dragonfly_infra=$$D)"; \
+	[ "$$ACTUAL_WORKERS" -eq "$$EXPECTED_TOTAL" ] || { echo "node count mismatch: expected=$$EXPECTED_TOTAL (W+O+R+D) actual=$$ACTUAL_WORKERS"; exit 1; }
 
 # Автовыбор monitoring-ноды: последняя worker-нода (не control-plane/master).
 # Если задан MONITORING_NODE, используется он.

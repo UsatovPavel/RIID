@@ -11,7 +11,7 @@ COMMON_DIR := $(abspath $(TF_DIR)/../stand-common)
 TF := $(COMMON_DIR)/tf.sh $(TF_DIR)
 
 # Single source of truth for the stand size: cluster_topology in config/config.yaml.
-NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers + .cluster_topology.registry_nodes' "$(CONFIG_YAML)" 2>/dev/null)
+NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers + .cluster_topology.registry_nodes + (.cluster_topology.dragonfly_infra_nodes // 0)' "$(CONFIG_YAML)" 2>/dev/null)
 
 export NODES
 
