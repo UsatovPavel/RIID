@@ -97,29 +97,61 @@ engine_pull_mirrored() {
   _podman_node_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
 }
 
-# Without this check the dfinit arm silently degrades into a plain pull and
-# measures overhead instead of P2P — exactly how one run was already lost.
-engine_mirror_check() {
-  local pod="$1"
-  if ! _podman_registries "$pod" | grep -qF "$RIID_DFINIT_PROXY_LOCATION"; then
-    echo "dfinit mirror not found: the node daemon behind pod=$pod has no '$RIID_DFINIT_PROXY_LOCATION'" >&2
-    echo "  dfinit writes /etc/containers/registries.conf on the NODE; check client.dfinit in values" >&2
-    return 1
-  fi
+# Whether the registry under test is mirrored - not whether the file mentions the
+# proxy anywhere. scripts/values.yaml carries a hardcoded crio block for
+# 10.96.5.146:5000 (an old stand's registry) and dfinit.enable is unconditional,
+# so every stand gets a mirror for a registry it does not use. A substring check
+# passes on that and the arm measures a plain pull, which is how every recorded
+# dfinit-podman run ended up with baseline egress.
+_podman_mirror_of() {
+  local pod="$1" host
+  host="$(riid_registry_node_host)" || return 1
+  [ -n "$host" ] || { echo "registry host is empty, set REGISTRY_PULL_HOST" >&2; return 1; }
+  _podman_registries "$pod" | HOST="$host" python3 -c '
+import json, os, sys
+host = os.environ["HOST"]
+try:
+    regs = json.load(sys.stdin)
+except Exception:
+    sys.exit(2)
+entry = regs.get(host)
+if not isinstance(entry, dict):
+    print("")
+    sys.exit(0)
+print(",".join(m.get("Location", "") for m in (entry.get("Mirrors") or [])))
+'
 }
 
-# The mirror image of the check above, for the baseline arm: the same node file
-# serves both arms now, so a leftover dfinit mirror would turn this arm into a
-# second dfinit run without anything looking wrong.
+engine_mirror_check() {
+  local pod="$1" host mirrors
+  host="$(riid_registry_node_host)"
+  mirrors="$(_podman_mirror_of "$pod")" || return 1
+  case ",$mirrors," in
+    *",$RIID_DFINIT_PROXY_LOCATION,"*) return 0 ;;
+  esac
+  echo "dfinit mirror not found for the registry under test: pod=$pod, registry='$host'" >&2
+  echo "  its mirrors: [${mirrors:-none}], expected '$RIID_DFINIT_PROXY_LOCATION'" >&2
+  echo "  dfinit writes /etc/containers/registries.conf on the NODE; check client.dfinit" >&2
+  echo "  in values - a block pinned to another address mirrors the wrong registry" >&2
+  return 1
+}
+
+# The mirror image of the check above, for the baseline arm. Scoped to the same
+# registry: a stale block for some other address does not route our pulls, so it
+# must not fail the baseline - only a mirror on the registry under test does.
 engine_no_mirror_check() {
-  local pod="$1"
-  if _podman_registries "$pod" | grep -qF "$RIID_DFINIT_PROXY_LOCATION"; then
-    echo "baseline arm is contaminated: the node daemon behind pod=$pod still mirrors through" >&2
-    echo "  '$RIID_DFINIT_PROXY_LOCATION'. Disable client.dfinit and let the node's" >&2
-    echo "  /etc/containers/registries.conf go back to the pristine copy taken at install:" >&2
-    echo "  /etc/containers/registries.conf.riid-baseline (src/engines/podman-node.yaml)" >&2
-    return 1
-  fi
+  local pod="$1" host mirrors
+  host="$(riid_registry_node_host)"
+  mirrors="$(_podman_mirror_of "$pod")" || return 1
+  case ",$mirrors," in
+    *",$RIID_DFINIT_PROXY_LOCATION,"*) ;;
+    *) return 0 ;;
+  esac
+  echo "baseline arm is contaminated: pod=$pod still mirrors registry '$host' through" >&2
+  echo "  '$RIID_DFINIT_PROXY_LOCATION'. Disable client.dfinit and restore the node's" >&2
+  echo "  /etc/containers/registries.conf from the pristine copy taken at install:" >&2
+  echo "  /etc/containers/registries.conf.riid-baseline (src/engines/podman-node.yaml)" >&2
+  return 1
 }
 
 # --volumes: a pull creates no anonymous volumes, so it does not affect the
