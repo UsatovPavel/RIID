@@ -34,9 +34,10 @@ DRAGONFLY_CHART_VERSION="${DRAGONFLY_CHART_VERSION:-1.6.26}"
 TMP_VALUES="$(mktemp)"
 TMP_MERGED=""
 TMP_PROVIDER_MERGED=""
+TMP_INFRA_MERGED=""
 
 cleanup() {
-  rm -f "${TMP_VALUES}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}"
+  rm -f "${TMP_VALUES}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}" "${TMP_INFRA_MERGED}"
 }
 trap cleanup EXIT
 
@@ -112,10 +113,35 @@ if ! kubectl cluster-info &>/dev/null; then
   exit 1
 fi
 
-# dfinit rewrites one engine's registry config, but the chart values hold only one
-# answer and dfinit.enable is unconditional - a containerd block left in values.yaml
-# is live for EVERY arm. It once crashlooped the whole client DaemonSet ("failed to
-# run container runtime: Is a directory"). Render the requested engine, null the other.
+# The control plane is pinned to tainted infra nodes only on a stand that has
+# them. CI runs the same chart on one unlabelled minikube node, where every
+# pinned pod stays Pending until helm times out.
+# RIID_DEDICATED_INFRA_NODES: 1 requires the nodes, 0 skips, unset autodetects.
+DEDICATED_INFRA_VALUES="${SCRIPT_DIR}/values-dedicated-infra.yaml"
+WANT_INFRA="${RIID_DEDICATED_INFRA_NODES:-auto}"
+if [[ "${WANT_INFRA}" != 0 && -f "${DEDICATED_INFRA_VALUES}" ]]; then
+  HAVE_INFRA=1
+  for label in riid.dragonfly.manager riid.dragonfly.scheduler; do
+    [[ -n "$(kubectl get nodes -l "${label}" -o name 2>/dev/null)" ]] || HAVE_INFRA=0
+  done
+  if [[ "${HAVE_INFRA}" == 1 ]]; then
+    TMP_INFRA_MERGED="$(mktemp)"
+    yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${HELM_VALUES}" "${DEDICATED_INFRA_VALUES}" >"${TMP_INFRA_MERGED}"
+    HELM_VALUES="${TMP_INFRA_MERGED}"
+    echo ">>> Dragonfly Helm: control plane pinned to the infra nodes (${DEDICATED_INFRA_VALUES})" >&2
+  elif [[ "${WANT_INFRA}" == 1 ]]; then
+    echo "install-dragonfly.sh: RIID_DEDICATED_INFRA_NODES=1 but no node carries" >&2
+    echo "  riid.dragonfly.manager / riid.dragonfly.scheduler - the node group never applied them." >&2
+    exit 1
+  else
+    echo ">>> Dragonfly Helm: no infra-labelled nodes, control plane left unpinned" >&2
+  fi
+fi
+
+# dfinit rewrites one engine's registry config, and the chart values hold only one
+# answer - so scripts/values.yaml keeps dfinit off and carries no containerd/crio
+# block at all. Both are rendered here, for the requested engine only: a static
+# containerd block once crashlooped the whole client DaemonSet on a riid-* arm.
 DFINIT_ENGINE="${RIID_DFINIT_ENGINE:-}"
 if [ "$DFINIT_ENGINE" = "containerd" ]; then
   DFINIT_OVERRIDE="$(mktemp)"
@@ -124,6 +150,8 @@ if [ "$DFINIT_ENGINE" = "containerd" ]; then
   cat > "$DFINIT_OVERRIDE" <<DFEOF
 client:
   dfinit:
+    enable: true
+    restartContainerRuntime: true
     config:
       containerRuntime:
         crio: null
@@ -157,6 +185,8 @@ client:
       registryMirror:
         addr: http://${RIID_DFINIT_REGISTRY:-}
   dfinit:
+    enable: true
+    restartContainerRuntime: true
     config:
       containerRuntime:
         containerd: null

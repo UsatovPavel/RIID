@@ -1,6 +1,3 @@
-# Upstream sizes manager, scheduler and seed peer as machines separate from the
-# peers doing the pulling, so the bench gives each of them its own tainted node
-# instead of letting them land on a measured worker.
 manager:
   replicas: 1
   image:
@@ -8,12 +5,6 @@ manager:
     tag: v2.4.4-rc.1
   metrics:
     enable: true
-  nodeSelector:
-    riid.dragonfly.manager: "true"
-  tolerations:
-    - key: riid.dragonfly.manager
-      operator: Exists
-      effect: NoSchedule
 scheduler:
   replicas: 1
   image:
@@ -21,22 +12,6 @@ scheduler:
     tag: v2.4.4-rc.1
   metrics:
     enable: true
-  nodeSelector:
-    riid.dragonfly.scheduler: "true"
-  tolerations:
-    - key: riid.dragonfly.scheduler
-      operator: Exists
-      effect: NoSchedule
-  # The chart ships requests: 0, so the kube scheduler reserves nothing and packs
-  # this next to anything. It answers an RPC per downloaded piece - 2072/s at peak
-  # on 2026-09-11 - so it is the one component that needs guaranteed CPU.
-  resources:
-    requests:
-      cpu: "2"
-      memory: 2Gi
-    limits:
-      cpu: "4"
-      memory: 6Gi
 seedClient:
   replicas: 2
   image:
@@ -66,48 +41,21 @@ client:
   metrics:
     enable: true
   dfinit:
-    # AGENT-99 dfinit-podman arm: dfinit rewrites the node's
-    # /etc/containers/registries.conf so podman resolves pulls through
-    # dfdaemon's proxy instead of going straight to the registry.
-    enable: true
-    restartContainerRuntime: true
+    # Off here on purpose: dfinit rewrites the node's registry config and
+    # restarts the container runtime, which a bare or riid arm must not get -
+    # and CI installs this same file on the runner itself. install-dragonfly.sh
+    # turns it on for the engine named by RIID_DFINIT_ENGINE.
+    enable: false
     image:
       repository: dragonflyoss/dfinit
       tag: v1.3.8
     config:
       proxy:
         addr: http://127.0.0.1:4001
-      containerRuntime:
-        # dfinit v1.3.8 has no `podman` handler - a podman section is silently
-        # ignored (its log never mentions podman). podman reads the same
-        # /etc/containers/registries.conf as CRI-O, so the crio handler is what
-        # actually rewrites the file the podman arm needs.
-        #
-        # AGENT-99 riid-containerd (2026-09-04): containerd is nulled out again.
-        # dfinit.enable is unconditional and RIID_DFINIT_ENGINE is not actually
-        # read by any script (grep confirms it - install-dragonfly.sh and
-        # render-values-from-infra.sh never touch it), so a non-null containerd
-        # block here is live on every dragonfly-client pod for every arm, not
-        # just dfinit-containerd. It was live for the first time today (an
-        # earlier helm upgrade had never picked up this file's change) and
-        # crashlooped the whole client DaemonSet on all nodes with "failed to
-        # run container runtime: Is a directory (os error 21)" - a real bug in
-        # the dfinit containerd handler, still unfixed, that took down P2P for
-        # riid-containerd, a plain non-dfinit arm. The dfinit-containerd arm
-        # needs a real ENGINE-gated render (e.g. render-values-from-infra.sh
-        # nulling this block unless RIID_DFINIT_ENGINE=containerd) before it can
-        # be attempted again - reinstating this static block is not enough by
-        # itself, since it still needs the "Is a directory" error root-caused.
-        containerd: null
-        crio:
-          configPath: /etc/containers/registries.conf
-          unqualifiedSearchRegistries: ["cr.selcloud.ru"]
-          registries:
-            # Node-side engines resolve names in the host netns, where the
-            # cluster DNS does not exist - the local registry has to be named
-            # by its Service ClusterIP.
-            - prefix: 10.96.5.146:5000
-              location: 10.96.5.146:5000
+      # containerRuntime is rendered per engine by install-dragonfly.sh. A static
+      # block here was live for every arm, not just dfinit-*: the containerd one
+      # crashlooped the whole client DaemonSet and the crio one carried a dead
+      # stand's registry address (10.96.5.146).
   # dfdaemon hardlinks a finished task from storage.dir into the requested
   # outputPath (RIID outputPath=/var/run/dragonfly/output/p2p-*.bin); hardlink
   # requires both paths on the same filesystem, so storage.dir is moved onto
@@ -117,15 +65,6 @@ client:
   config:
     storage:
       dir: /var/run/dragonfly/data/
-    # AGENT-99: dfinit points podman's mirror at this proxy, but the proxy's own
-    # upstream defaulted to https://index.docker.io - so a pull of
-    # 10.96.5.146:5000/riid/... was forwarded to Docker Hub, missed, and podman
-    # silently fell back to the direct address. The dfinit arm then measured
-    # plain podman: dfdaemon logged zero download tasks and the arm's wall time
-    # matched the bare baseline. The upstream has to be the registry under test.
-    proxy:
-      registryMirror:
-        addr: http://10.96.5.146:5000
   # AGENT-99: the dragonfly-run-tmpfs emptyDir that used to be mounted at
   # /run/dragonfly is removed. In the container /var/run is a symlink to /run,
   # so that mount shadowed the socket-dir hostPath at the same path and pushed
@@ -133,29 +72,9 @@ client:
   # at 10% of RAM (873 MB on an 8 GB node), so every image larger than that
   # failed with "no space left on device: not enough space to store the task"
   # and silently fell back to the registry - P2P could never serve a big layer.
-# The manager's datastores follow it onto the same node: they serve only the
-# manager, which our logs show is contacted every 5 minutes, not per piece.
-mysql:
-  primary:
-    nodeSelector:
-      riid.dragonfly.manager: "true"
-    tolerations:
-      - key: riid.dragonfly.manager
-        operator: Exists
-        effect: NoSchedule
+# Node pinning for manager/scheduler/mysql/redis lives in
+# deploy/k8s/src/dragonfly/values-dedicated-infra.yaml: CI installs this same
+# file on a single-node minikube that has no infra labels.
 redis:
-  master:
-    nodeSelector:
-      riid.dragonfly.manager: "true"
-    tolerations:
-      - key: riid.dragonfly.manager
-        operator: Exists
-        effect: NoSchedule
   replica:
     replicaCount: 1
-    nodeSelector:
-      riid.dragonfly.manager: "true"
-    tolerations:
-      - key: riid.dragonfly.manager
-        operator: Exists
-        effect: NoSchedule
