@@ -56,6 +56,10 @@ for pod in "${pods[@]}"; do
         find "$d" -maxdepth 1 -type d -name "riid-prefix-*"    -exec rm -rf {} + 2>/dev/null
         find "$d" -maxdepth 1 -type d -name "oci-layout-*"     -exec rm -rf {} + 2>/dev/null
         find "$d" -maxdepth 1 -type f -name "layer-*.bin"      -delete 2>/dev/null
+        # The dfinit mirror check writes this marker to run once per pod; /tmp is
+        # a hostPath, so it outlived restarts and clears and would skip the check
+        # on a later arm whose mirror is broken.
+        find "$d" -maxdepth 1 -type f -name ".riid-dfinit-mirror-ok-*" -delete 2>/dev/null
       done
       # Report bytes, not pattern hits, so a leftover nobody thought to name still
       # shows up. Two exclusion sets, because each directory has live residents:

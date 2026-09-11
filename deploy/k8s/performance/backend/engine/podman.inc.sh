@@ -9,9 +9,11 @@
 # Two consequences of the engine living on the node, both of which used to be
 # handled in the pod and are now checked instead:
 #
-#   1. The pull happens in the HOST netns, where the cluster resolver does not
-#      exist. The reference therefore carries the registry's ClusterIP, not its
-#      *.svc.cluster.local name — see riid_registry_node_host in common.inc.sh.
+#   1. The pull must happen in the HOST netns, and getting there takes nsenter:
+#      chroot swaps the filesystem only, so `chroot /host podman pull` still runs
+#      in the installer pod's Calico netns. The cluster resolver does not exist
+#      there either, so the reference carries the registry's ClusterIP rather
+#      than its *.svc.cluster.local name - see riid_registry_node_host.
 #   2. dfinit edits the node's own /etc/containers/registries.conf, which is the
 #      file the daemon reads. The baseline arm can no longer be pointed at a
 #      private copy through CONTAINERS_REGISTRIES_CONF, because that variable
@@ -41,7 +43,13 @@ _podman_node_exec() {
     echo "no podman-node pod on node=$node for RIID pod=$riid_pod" >&2
     return 1
   fi
-  kubectl -n "$NS" exec -c installer "$node_pod" -- chroot /host "$@"
+  # nsenter into PID 1's netns (hostPID is on), not just chroot: dfinit points
+  # podman at the dfdaemon proxy on 127.0.0.1:4001, which lives in the HOST
+  # netns. From the pod's own netns that port is closed, podman reports
+  # "connection refused" and falls back to the registry without failing - which
+  # is how a whole dfinit-podman arm measured a plain pull on 2026-09-11 while
+  # `podman info` still listed the mirror, because reading config needs no socket.
+  kubectl -n "$NS" exec -c installer "$node_pod" -- nsenter -t 1 -n chroot /host "$@"
 }
 
 # What the daemon resolved, not what some file says: this is the engine's own
@@ -122,12 +130,34 @@ print(",".join(m.get("Location", "") for m in (entry.get("Mirrors") or [])))
 '
 }
 
+# Configured is not the same as reachable. `podman info` parses a file and needs
+# no socket, so it kept reporting the mirror while every pull got "connection
+# refused" from it and fell back to the registry. Probe the proxy from the same
+# netns the pull runs in, which is the only place its reachability matters.
+_podman_mirror_reachable() {
+  local pod="$1" loc="$RIID_DFINIT_PROXY_LOCATION"
+  _podman_node_exec "$pod" sh -ec "
+    h=\${0%%:*}; p=\${0##*:}
+    (command -v nc >/dev/null 2>&1 && nc -z -w5 \"\$h\" \"\$p\") ||
+    (command -v curl >/dev/null 2>&1 && curl -s -o /dev/null --max-time 5 \"http://\$h:\$p/v2/\")
+  " "$loc"
+}
+
 engine_mirror_check() {
   local pod="$1" host mirrors
   host="$(riid_registry_node_host)"
   mirrors="$(_podman_mirror_of "$pod")" || return 1
   case ",$mirrors," in
-    *",$RIID_DFINIT_PROXY_LOCATION,"*) return 0 ;;
+    *",$RIID_DFINIT_PROXY_LOCATION,"*)
+      if ! _podman_mirror_reachable "$pod"; then
+        echo "dfinit mirror '$RIID_DFINIT_PROXY_LOCATION' is configured for '$host' but" >&2
+        echo "  unreachable from where the pull runs: podman would log 'connection refused'" >&2
+        echo "  and silently fall back to the registry, measuring a plain pull." >&2
+        echo "  The dfdaemon proxy listens in the HOST netns - check that the engine" >&2
+        echo "  command enters it (nsenter -t 1 -n), not just chroot /host." >&2
+        return 1
+      fi
+      return 0 ;;
   esac
   echo "dfinit mirror not found for the registry under test: pod=$pod, registry='$host'" >&2
   echo "  its mirrors: [${mirrors:-none}], expected '$RIID_DFINIT_PROXY_LOCATION'" >&2
