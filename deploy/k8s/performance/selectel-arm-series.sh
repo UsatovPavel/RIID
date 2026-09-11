@@ -5,7 +5,7 @@
 # logs on session rotation. Usage: selectel-arm-series.sh <arm> [<arm> ...]
 set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO"
 PERF=deploy/k8s/performance
 BOOT=deploy/k8s/bootstrap
@@ -85,9 +85,22 @@ clear_for_arm() {
   say "  containerd namespaces reported empty: $left"
 }
 
-# Same shape as bench/k8s/arm-queue.sh's export_logs, repo-relative output
-# instead of a /tmp job scratchpad - the whole reason this driver is a
-# committed file and not a scratch script written fresh each session.
+# kubectl logs serves only the *current* container log file and kubelet rotates
+# it at 10Mi, so AGENT-117 kept 87s of a 427s arm. Dragonfly keeps its own
+# rotating copy under /var/log/dragonfly; take that too.
+export_file_logs() {
+  local ns="$1" pod="$2" container="$3" dest="$4"
+  mkdir -p "$dest"
+  kubectl -n "$ns" exec "$pod" -c "$container" -- \
+    tar cf - -C /var/log/dragonfly . 2>/dev/null | tar xf - -C "$dest" 2>/dev/null
+  if [ -z "$(find "$dest" -type f -size +0c -print -quit 2>/dev/null)" ]; then
+    rm -rf "$dest"
+    say "  no on-disk log from $pod ($container); only the stdout copy survives"
+  fi
+}
+
+# Repo-relative output instead of a /tmp job scratchpad - the whole reason this
+# driver is a committed file and not a scratch script written each session.
 export_logs() {
   local arm="$1" stamp="$2" out="$LOGROOT/${arm}.${stamp}"
   mkdir -p "$out"/{dfdaemon,scheduler,seed,riid}

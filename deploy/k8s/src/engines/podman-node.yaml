@@ -62,25 +62,15 @@ spec:
               set -e
               chroot /host /bin/sh -ec '
                 export DEBIAN_FRONTEND=noninteractive
-                # 91proxy on Selectel MKS nodes points apt at 127.0.0.1:3128, a
-                # proxy reachable only from the host netns. This pod has its
-                # own (Calico) netns, so that address refuses the connection.
-                # --force-confold: dfinit and our own baseline-copy step below both
-                # edit registries.conf, so any later apt-get touching a containers
-                # package hits an interactive "conffile changed" prompt with no
-                # stdin - it left podman itself unconfigured on 4 nodes once already.
+                # MKS apt proxy is host-netns only; confold skips the prompt on
+                # registries.conf, which dfinit and the baseline copy below edit.
                 APT_OPT="-o Acquire::http::Proxy=false -o Acquire::https::Proxy=false -o Dpkg::Options::=--force-confold"
                 if ! command -v podman >/dev/null 2>&1; then
                   apt-get $APT_OPT update
                   apt-get $APT_OPT install -y --no-install-recommends podman
                 fi
-                # podman defaults to the CNI backend when a CNI conflist (Calicos)
-                # already exists on the node, and then shares /etc/cni/net.d with
-                # it - "podman system prune" deleted 10-calico.conflist there and
-                # took 9 of 10 nodes NotReady. netavark keeps its own state and
-                # never touches that directory; pin it explicitly, do not rely on
-                # auto-detection order. The netavark binary is not on PATH (it
-                # lives under /usr/lib/podman/), so check the package, not PATH.
+                # With Calico's conflist present podman picks CNI and shares
+                # /etc/cni/net.d - a prune took 9 nodes NotReady. netavark is off PATH.
                 if ! dpkg -s netavark >/dev/null 2>&1; then
                   apt-get $APT_OPT update
                   apt-get $APT_OPT install -y --no-install-recommends netavark aardvark-dns
@@ -96,10 +86,7 @@ spec:
                    && [ -f /etc/containers/registries.conf ]; then
                   cp /etc/containers/registries.conf /etc/containers/registries.conf.riid-baseline
                 fi
-                # daemonset.yaml mounts /run/portod.socket as type Socket on
-                # every engine (same shape as podman/containerd), but a stand
-                # with no Porto never runs portod. A stub listener satisfies
-                # the mount check without a real Porto install.
+                # daemonset.yaml mounts /run/portod.socket (Socket); no Porto here.
                 if [ ! -S /run/portod.socket ]; then
                   command -v socat >/dev/null 2>&1 || { apt-get $APT_OPT update; apt-get $APT_OPT install -y --no-install-recommends socat; }
                   printf "%s\n" \
@@ -110,8 +97,7 @@ spec:
                   systemctl daemon-reload
                   systemctl enable --now riid-portod-stub.service
                 fi
-                # daemonset.yaml hostPath-mounts /usr/bin/ctr; Selectel MKS
-                # nodes ship containerd with ctr at /usr/local/bin/ctr instead.
+                # MKS ships ctr at /usr/local/bin; daemonset.yaml mounts /usr/bin/ctr.
                 if [ ! -e /usr/bin/ctr ] && [ -e /usr/local/bin/ctr ]; then
                   ln -s /usr/local/bin/ctr /usr/bin/ctr
                 fi
