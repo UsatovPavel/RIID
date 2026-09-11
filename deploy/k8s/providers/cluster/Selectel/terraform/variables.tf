@@ -103,11 +103,11 @@ variable "ram_mb" {
 variable "volume_gb" {
   description = "Boot disk per worker node, GiB."
   type        = number
-  # Not the 11.8 GiB of compressed egress per pull: a worker holds three copies
-  # at once. 50 GiB died of DiskPressure mid-arm on 2026-09-11 - RIID oci-layouts
-  # 22 GB + unpacked containerd 8 GB (a third in) + dfdaemon pieces 7.3 GB.
-  # Full-arm projection is ~61 GB against 68 GB usable here (kubelet keeps 15%).
-  default = 80
+  # Not the 11.8 GiB of compressed egress per pull: a worker holds three copies at
+  # once - RIID's cache, containerd unpacked, dfdaemon pieces. A full noprefix arm
+  # measured 66.2 GiB of them on 2026-09-11, and kubelet keeps another 15% free,
+  # so 50 GiB died mid-arm and 80 GiB finished with 1 GiB to spare.
+  default = 100
 }
 
 # scheduler/manager keep their state in PVCs (mysql/redis/manager have no local

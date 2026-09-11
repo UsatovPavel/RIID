@@ -41,7 +41,11 @@ data:
         metricsPort: 9090
         maxConcurrentPulls: 32
         requestTimeout: "PT30M"
-        maxCacheBytes: 42949672960 # 40 GB
+        # 20 GiB, not 40: the cache shares the node disk with containerd's
+        # unpacked images and dfdaemon's pieces, and a full arm needs 66 GiB of
+        # the three together. Measured use was 12 GiB, so this bounds the worst
+        # case without binding the normal one.
+        maxCacheBytes: 21474836480
         overloadPolicy: REJECT
     runtime:
       # Matches the code default (RuntimeAdapter.PREFIX_IMPORT_ENABLED_BY_DEFAULT);
