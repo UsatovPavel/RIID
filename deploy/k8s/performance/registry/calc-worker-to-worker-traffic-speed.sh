@@ -78,11 +78,17 @@ if ! [[ "$ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-# Bench workers only. monitoring and registry nodes are tainted and carry their
-# own load, so a pair landing there measures something other than the channel the
-# arms actually use.
-mapfile -t workers < <(kubectl get nodes \
-  -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master,!riid.monitoring,!riid.registry' \
+# Bench workers only: every infra node is tainted and carries its own load, so a
+# pair landing on one measures something other than the channel the arms use.
+# Keep this list in step with infra_roles in the Selectel terraform module.
+RIID_INFRA_LABELS="${RIID_INFRA_LABELS:-riid.monitoring,riid.registry,riid.dragonfly.scheduler,riid.dragonfly.manager}"
+_worker_selector="!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master"
+_OLD_IFS="$IFS"; IFS=,
+for _l in $RIID_INFRA_LABELS; do
+  [ -n "$_l" ] && _worker_selector="$_worker_selector,!$_l"
+done
+IFS="$_OLD_IFS"
+mapfile -t workers < <(kubectl get nodes -l "$_worker_selector" \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 if ((${#workers[@]} < 2)); then
   echo "need at least 2 worker nodes (found ${#workers[@]})" >&2
