@@ -96,6 +96,33 @@ All 10 RIID pods pulling 91 images simultaneously (Kubernetes `Recreate` deploym
 - **Sum of aggregates**: сумма максимумов (wall-clock времени кластера на каждый образ)
 - Recreate сценарий демонстрирует лучшую эффективность P2P при одновременной нагрузке
 
+Датасет обоих сценариев (91 образ): `config/imagelist/dataset_a_91_sizes.tsv`.
+
+### Top-20 dataset (2 engines × 3 sources)
+
+Второй, меньший датасет: 20 самых скачиваемых образов Docker Hub по `pull_count × size_bytes`,
+с размерами, дайджестами и временем снятия — `config/imagelist/dataset_top20_sizes.tsv`.
+Каждый арм: 10 подов × 20 образов, все поды стартуют одновременно (`recreate`).
+
+Отчётное число — **сумма wall-clock по образам** (строка `AGGREGATE`: от старта первого пода
+до финиша последнего), а не медиана по подам: медиана прячет отстающих, а готовность флота
+определяет последний под.
+
+| Engine | Source | Wall-clock | Registry TX | Run |
+|--------|--------|-----------:|------------:|-----|
+| containerd | registry, direct | TBD | TBD | `bare-containerd.agent117-20260910-2248` |
+| containerd | Dragonfly via dfinit | TBD | TBD | `dfinit-containerd.agent117-20260910-2228` |
+| containerd | RIID + Dragonfly | TBD | TBD | `riid-containerd-noprefix.agent118-20260911-1956` |
+| podman | registry, direct | TBD | TBD | `bare-podman.agent119-20260912-1647` |
+| podman | Dragonfly via dfinit | TBD | TBD | `dfinit-podman.agent119-20260912-2004` |
+| podman | RIID + Dragonfly | TBD | TBD | `riid-podman.agent120-20260912-1620` |
+
+Числа не проставлены, пока все шесть армов не сняты на одном стенде. Сами прогоны реальны и
+опубликованы в [`performance/results/`](performance/results/), но сняты на трёх разных
+стендах, а один и тот же арм между стендами расходится до 46% — больше сравниваемого эффекта.
+Containerd-строке вдобавок не хватает варианта с префиксным импортом. Подробности —
+[`performance/results/README.md`](performance/results/README.md).
+
 ## Change test registry_provider:
 Change config.yaml
 Generate test dataset.

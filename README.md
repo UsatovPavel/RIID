@@ -59,6 +59,8 @@ Results are presented in the interactive chart:
 
 ### P2P cluster benchmark — dataset A (91 images, Selectel cluster)
 
+Dataset: [`deploy/k8s/config/imagelist/dataset_a_91_sizes.tsv`](deploy/k8s/config/imagelist/dataset_a_91_sizes.tsv).
+
 **Recreate scenario** (all 10 RIID pods pull simultaneously):
 
 | Metric | Formula | RIID+Dragonfly | Podman (baseline) | Ratio |
@@ -73,6 +75,25 @@ On big images riid keep **p2p advantage** and overcome podman
 **[Interactive scatter: RIID P2P vs Podman — recreate scenario](docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
 
 **Rolling scenario** (concurrency-limited sequential pulls) showed comparable download speed with **−82.6% registry traffic** reduction (19.7 GiB vs 112.6 GiB). See **[deploy/k8s/README.md](deploy/k8s/README.md)** for detailed methodology and rolling scenario results.
+
+### P2P cluster benchmark — top-20 dataset (2 engines × 3 sources)
+
+A second, smaller dataset: the 20 most-pulled Docker Hub images by `pull_count × size_bytes`,
+pinned with sizes, digests and capture timestamps in
+[`deploy/k8s/config/imagelist/dataset_top20_sizes.tsv`](deploy/k8s/config/imagelist/dataset_top20_sizes.tsv).
+Each arm is 10 pods × 20 images, all pods starting together (`recreate`).
+
+| Engine | Source | Wall-clock | Registry TX | Run |
+|--------|--------|-----------:|------------:|-----|
+| containerd | registry, direct | TBD | TBD | `bare-containerd.agent117-20260910-2248` |
+| containerd | Dragonfly via dfinit | TBD | TBD | `dfinit-containerd.agent117-20260910-2228` |
+| containerd | RIID + Dragonfly | TBD | TBD | `riid-containerd-noprefix.agent118-20260911-1956` |
+| podman | registry, direct | TBD | TBD | `bare-podman.agent119-20260912-1647` |
+| podman | Dragonfly via dfinit | TBD | TBD | `dfinit-podman.agent119-20260912-2004` |
+| podman | RIID + Dragonfly | TBD | TBD | `riid-podman.agent120-20260912-1620` |
+
+Numbers are pending a single-cluster series. Metric, why they are withheld and the raw runs:
+**[deploy/k8s/README.md — Top-20 dataset](deploy/k8s/README.md#top-20-dataset-2-engines--3-sources)**.
 
 Full cluster setup, test methodology: **[deploy/k8s/README.md](deploy/k8s/README.md)**
 
