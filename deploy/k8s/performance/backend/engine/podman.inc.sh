@@ -32,17 +32,26 @@ _podman_tls_verify() {
   printf '%s\n' "$v"
 }
 
-_podman_node_exec() {
-  local riid_pod="$1" node node_pod
-  shift
+# Cached per RIID pod in a local file: run-pull-scenario.sh starts the driver as a
+# new process for every image, and resolving the podman-node pod each time put two
+# API reads inside every measured pull - 4 calls against containerd's 2, and twice
+# the exposure to a control-path stall.
+_podman_node_pod_cache_file() {
+  local dir="${RIID_PODMAN_NODE_CACHE_DIR:-${TMPDIR:-/tmp}/riid-podman-node-pods}"
+  mkdir -p "$dir" 2>/dev/null || return 1
+  printf '%s/%s.%s\n' "$dir" "$NS" "$1"
+}
+
+_podman_resolve_node_pod() {
+  local riid_pod="$1" node node_pod attempt=1
   # riid_kubectl, not bare kubectl: it retries only failures to *reach* the API
   # (timeout/refused/no route/TLS), where the command never ran, so a retried pull
   # is still cold. A mid-stream break still fails. Nine rows of a dfinit-podman arm
   # died on API drops through a full-tunnel VPN on 2026-09-12 for want of this.
-  node="$(riid_kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')"
+  node="$(riid_kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')" || return 1
+  [[ -n "$node" ]] || { echo "RIID pod=$riid_pod has no node" >&2; return 1; }
   # Two pure reads, so an empty answer is retried as well: a slow API returned no
   # podman-node for a node whose pod was Running all along.
-  local attempt=1
   while :; do
     node_pod="$(riid_kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
       --field-selector "spec.nodeName=$node,status.phase=Running" \
@@ -55,13 +64,47 @@ _podman_node_exec() {
     attempt=$((attempt + 1))
     sleep 3
   done
-  # nsenter into PID 1's netns (hostPID is on), not just chroot: dfinit points
-  # podman at the dfdaemon proxy on 127.0.0.1:4001, which lives in the HOST
-  # netns. From the pod's own netns that port is closed, podman reports
-  # "connection refused" and falls back to the registry without failing - which
-  # is how a whole dfinit-podman arm measured a plain pull on 2026-09-11 while
-  # `podman info` still listed the mirror, because reading config needs no socket.
+  printf '%s\n' "$node_pod"
+}
+
+# nsenter into PID 1's netns (hostPID is on), not just chroot: dfinit points
+# podman at the dfdaemon proxy on 127.0.0.1:4001, which lives in the HOST
+# netns. From the pod's own netns that port is closed, podman reports
+# "connection refused" and falls back to the registry without failing - which
+# is how a whole dfinit-podman arm measured a plain pull on 2026-09-11 while
+# `podman info` still listed the mirror, because reading config needs no socket.
+_podman_exec_on() {
+  local node_pod="$1"
+  shift
   riid_kubectl -n "$NS" exec -c installer "$node_pod" -- nsenter -t 1 -n chroot /host "$@"
+}
+
+_podman_node_exec() {
+  local riid_pod="$1" cache node_pod="" err rc=0
+  shift
+  cache="$(_podman_node_pod_cache_file "$riid_pod")" || cache=""
+  [[ -n "$cache" ]] && node_pod="$(cat "$cache" 2>/dev/null || true)"
+  if [[ -z "$node_pod" ]]; then
+    node_pod="$(_podman_resolve_node_pod "$riid_pod")" || return 1
+    [[ -z "$cache" ]] || printf '%s\n' "$node_pod" > "$cache" 2>/dev/null || true
+  fi
+  err="$(mktemp)"
+  _podman_exec_on "$node_pod" "$@" 2>"$err" || rc=$?
+  # A cached podman-node pod can be gone, restarted between images; the API then
+  # refuses the exec before anything runs, so re-resolving keeps the retry cold.
+  # Matched on kubectl's wording only: podman's own "404 page not found" means the
+  # pull did run, and retrying that would measure it warm.
+  if ((rc != 0)) && grep -qE '^Error from server \(NotFound\): pods "|unable to upgrade connection: (container not found|pod does not exist)' "$err"; then
+    echo "podman-node pod $node_pod is gone, resolving again for RIID pod=$riid_pod" >&2
+    [[ -z "$cache" ]] || rm -f "$cache"
+    node_pod="$(_podman_resolve_node_pod "$riid_pod")" || { rm -f "$err"; return 1; }
+    [[ -z "$cache" ]] || printf '%s\n' "$node_pod" > "$cache" 2>/dev/null || true
+    rc=0
+    _podman_exec_on "$node_pod" "$@" 2>"$err" || rc=$?
+  fi
+  cat "$err" >&2
+  rm -f "$err"
+  return "$rc"
 }
 
 # What the daemon resolved, not what some file says: this is the engine's own
