@@ -58,8 +58,27 @@ purge_stale_scheduler_rows() {
   kubectl -n dragonfly-system exec dragonfly-mysql-0 -- \
     mysql -uroot -pdragonfly-root -e "DELETE FROM manager.scheduler WHERE ip != '$live_ip';" >/dev/null 2>&1
   say "  scheduler table pruned to live IP $live_ip - restarting manager to pick it up"
+  local before_restarts
+  before_restarts=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
+    -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo 0)
   kubectl -n dragonfly-system rollout restart deployment/dragonfly-manager >/dev/null 2>&1
   kubectl -n dragonfly-system rollout status deployment/dragonfly-manager --timeout=120s >/dev/null 2>&1
+  # The scheduler dies with the manager: announcer.New dials manager:65003 at
+  # startup and exits 1 on timeout. On 2026-09-12 it did exactly that 4 min into
+  # dfinit-podman, came back on a new pod IP, and left ten dfdaemons wedged on
+  # the dead one - ten podman pulls hung 35 min with no error.
+  kubectl -n dragonfly-system rollout status statefulset/dragonfly-scheduler --timeout=300s >/dev/null 2>&1
+  local after_restarts new_ip
+  after_restarts=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
+    -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo 0)
+  new_ip=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 -o jsonpath='{.status.podIP}' 2>/dev/null)
+  if [ "$after_restarts" != "$before_restarts" ] || [ "$new_ip" != "$live_ip" ]; then
+    say "  scheduler restarted with the manager (restarts $before_restarts->$after_restarts, ip $live_ip->$new_ip)"
+    kubectl -n dragonfly-system exec dragonfly-mysql-0 -- \
+      mysql -uroot -pdragonfly-root -e "DELETE FROM manager.scheduler WHERE ip != '$new_ip';" >/dev/null 2>&1
+    restart_dragonfly_data_plane
+    return
+  fi
   local ok=0
   for _ in $(seq 1 20); do
     local total ready
@@ -69,6 +88,75 @@ purge_stale_scheduler_rows() {
     sleep 5
   done
   [ "$ok" = 1 ] && say "  dragonfly-client stable" || say "  WARNING: dragonfly-client not all Ready after 100s, continuing anyway"
+}
+
+# A dfdaemon keeps talking to the scheduler pod IP it first connected to, so a
+# scheduler that moved leaves every client stuck there until it is bounced.
+restart_dragonfly_data_plane() {
+  say "  bouncing the data plane so no client keeps the dead scheduler address"
+  kubectl -n dragonfly-system rollout restart daemonset/dragonfly-client >/dev/null 2>&1
+  kubectl -n dragonfly-system rollout restart statefulset/dragonfly-seed-client >/dev/null 2>&1
+  kubectl -n dragonfly-system rollout status daemonset/dragonfly-client --timeout=300s >/dev/null 2>&1
+  kubectl -n dragonfly-system rollout status statefulset/dragonfly-seed-client --timeout=300s >/dev/null 2>&1
+  local rows
+  rows=$(kubectl -n dragonfly-system exec dragonfly-mysql-0 -- \
+    mysql -uroot -pdragonfly-root -N -e \
+    "SELECT ip FROM manager.scheduler WHERE state='active';" 2>/dev/null | tr -d '\r')
+  say "  active scheduler rows after the bounce: $(echo "$rows" | tr '\n' ' ')"
+}
+# The registry keeps server-side connections of a killed arm and can end up
+# pinned at its memory limit, answering /v2/ in minutes instead of milliseconds.
+# Three killed runs did that on 2026-09-12 and every later pull hung with no
+# error, so probe it from the pull's own netns before spending an arm on it.
+registry_reachable() {
+  local pod host t
+  pod=$(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  [ -n "$pod" ] || { say "  registry probe: no podman-node pod, skipping probe"; return 0; }
+  host=$(kubectl -n registry-system get svc local-registry \
+    -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+  [ -n "$host" ] || { say "  registry probe: no local-registry ClusterIP, skipping probe"; return 0; }
+  t=$(kubectl -n riid-system exec -c installer "$pod" -- nsenter -t 1 -n chroot /host \
+    sh -c "timeout 10 curl -s -o /dev/null -w '%{http_code} %{time_total}' http://$host:5000/v2/" 2>/dev/null)
+  case "$t" in
+    200*|401*) say "  registry probe: $host:5000/v2/ -> $t"; return 0 ;;
+    *)         say "  registry probe FAILED: $host:5000/v2/ -> '${t:-timeout}'"; return 1 ;;
+  esac
+}
+
+# A podman pull through the dfinit mirror blocks forever - no error, no timeout -
+# if the scheduler moves after the pull began: on 2026-09-12 ten pulls sat 35 min
+# with zero dfdaemon tasks. So the control plane must be final before an arm runs,
+# not merely "all clients Ready", which it was in both hung runs.
+wait_p2p_settled() {
+  local tries="${1:-60}" stable=0 prev_ip="" prev_restarts=""
+  while [ "$tries" -gt 0 ]; do
+    tries=$((tries - 1))
+    local ip restarts ready total active
+    ip=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
+      -o jsonpath='{.status.podIP}' 2>/dev/null)
+    restarts=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
+      -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
+    ready=$(kubectl -n dragonfly-system get pods --no-headers 2>/dev/null | awk '$2=="1/1"' | wc -l)
+    total=$(kubectl -n dragonfly-system get pods --no-headers 2>/dev/null | wc -l)
+    active=$(kubectl -n dragonfly-system exec dragonfly-mysql-0 -- mysql -uroot -pdragonfly-root -N \
+      -e "SELECT ip FROM manager.scheduler WHERE state='active';" 2>/dev/null | tr -d '\r' | tr '\n' ' ')
+    active="${active% }"
+    if [ -n "$ip" ] && [ "$total" -gt 0 ] && [ "$ready" = "$total" ] \
+       && [ "$active" = "$ip" ] && [ "$ip" = "$prev_ip" ] && [ "$restarts" = "$prev_restarts" ]; then
+      stable=$((stable + 1))
+      if [ "$stable" -ge 3 ]; then
+        say "  P2P settled: scheduler $ip, $ready/$total dragonfly pods Ready"
+        return 0
+      fi
+    else
+      stable=0
+    fi
+    prev_ip="$ip"; prev_restarts="$restarts"
+    sleep 10
+  done
+  say "  P2P did not settle (scheduler still moving or manager row stale)"
+  return 1
 }
 
 # One wrapper decides which of the three caches the arm uses: bare-* the engine,
@@ -159,6 +247,18 @@ for arm in $ARMS; do
     say "pruning stale scheduler rows and waiting for containerd"
     purge_stale_scheduler_rows
     wait_for_containerd;;
+  esac
+  if ! registry_reachable; then
+    say "$arm: SKIPPED - the registry is not answering, restart local-registry first"
+    continue
+  fi
+  # bare-* never touches Dragonfly, so only the P2P arms need the settle gate.
+  case "$arm" in
+    riid-*|dfinit-*)
+      if ! wait_p2p_settled; then
+        say "$arm: SKIPPED - P2P control plane not settled"
+        continue
+      fi ;;
   esac
   tsv="$PERF/output/${arm}.tsv"
   before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)

@@ -35,21 +35,33 @@ _podman_tls_verify() {
 _podman_node_exec() {
   local riid_pod="$1" node node_pod
   shift
-  node="$(kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')"
-  node_pod="$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
-    --field-selector "spec.nodeName=$node,status.phase=Running" \
-    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-  if [[ -z "$node_pod" ]]; then
-    echo "no podman-node pod on node=$node for RIID pod=$riid_pod" >&2
-    return 1
-  fi
+  # riid_kubectl, not bare kubectl: it retries only failures to *reach* the API
+  # (timeout/refused/no route/TLS), where the command never ran, so a retried pull
+  # is still cold. A mid-stream break still fails. Nine rows of a dfinit-podman arm
+  # died on API drops through a full-tunnel VPN on 2026-09-12 for want of this.
+  node="$(riid_kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')"
+  # Two pure reads, so an empty answer is retried as well: a slow API returned no
+  # podman-node for a node whose pod was Running all along.
+  local attempt=1
+  while :; do
+    node_pod="$(riid_kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
+      --field-selector "spec.nodeName=$node,status.phase=Running" \
+      -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    [[ -n "$node_pod" ]] && break
+    if ((attempt >= ${RIID_NODE_POD_LOOKUP_RETRIES:-3})); then
+      echo "no podman-node pod on node=$node for RIID pod=$riid_pod" >&2
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    sleep 3
+  done
   # nsenter into PID 1's netns (hostPID is on), not just chroot: dfinit points
   # podman at the dfdaemon proxy on 127.0.0.1:4001, which lives in the HOST
   # netns. From the pod's own netns that port is closed, podman reports
   # "connection refused" and falls back to the registry without failing - which
   # is how a whole dfinit-podman arm measured a plain pull on 2026-09-11 while
   # `podman info` still listed the mirror, because reading config needs no socket.
-  kubectl -n "$NS" exec -c installer "$node_pod" -- nsenter -t 1 -n chroot /host "$@"
+  riid_kubectl -n "$NS" exec -c installer "$node_pod" -- nsenter -t 1 -n chroot /host "$@"
 }
 
 # What the daemon resolved, not what some file says: this is the engine's own
