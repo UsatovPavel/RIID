@@ -59,6 +59,8 @@ Results are presented in the interactive chart:
 
 ### P2P cluster benchmark — dataset A (91 images, Selectel cluster)
 
+Dataset: [`deploy/k8s/bootstrap/registry/init/images_list.sizes.tsv`](deploy/k8s/bootstrap/registry/init/images_list.sizes.tsv); 88 of its images carry a per-image point in the scatter pages below.
+
 **Recreate scenario** (all 10 RIID pods pull simultaneously):
 
 | Metric | Formula | RIID+Dragonfly | Podman (baseline) | Ratio |
@@ -73,6 +75,33 @@ On big images riid keep **p2p advantage** and overcome podman
 **[Interactive scatter: RIID P2P vs Podman — recreate scenario](docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
 
 **Rolling scenario** (concurrency-limited sequential pulls) showed comparable download speed with **−82.6% registry traffic** reduction (19.7 GiB vs 112.6 GiB). See **[deploy/k8s/README.md](deploy/k8s/README.md)** for detailed methodology and rolling scenario results.
+
+### P2P cluster benchmark — top-20 dataset (2 engines × 3 sources)
+
+A second, smaller dataset: the 20 most-pulled Docker Hub images by `pull_count × size_bytes`,
+pinned with sizes, digests and capture timestamps in
+[`deploy/k8s/config/imagelist/dataset_top20_sizes.tsv`](deploy/k8s/config/imagelist/dataset_top20_sizes.tsv).
+Each arm is 10 pods × 20 images, all pods starting together (`recreate`).
+
+The reported number is the **sum of per-image cluster wall-clock** — first pod start to last
+pod finish, summed over the 20 images. A per-pod median is not used: it hides stragglers, and
+a rollout is finished only when its last pod is.
+
+| Engine | Source | Wall-clock | Registry TX | Run |
+|--------|--------|-----------:|------------:|-----|
+| containerd | registry, direct | TBD | TBD | `bare-containerd.agent117-20260910-2248` |
+| containerd | Dragonfly via dfinit | TBD | TBD | `dfinit-containerd.agent117-20260910-2228` |
+| containerd | RIID + Dragonfly | TBD | TBD | `riid-containerd-noprefix.agent118-20260911-1956` |
+| podman | registry, direct | TBD | TBD | `bare-podman.agent119-20260912-1647` |
+| podman | Dragonfly via dfinit | TBD | TBD | `dfinit-podman.agent119-20260912-2004` |
+| podman | RIID + Dragonfly | TBD | TBD | `riid-podman.agent120-20260912-1620` |
+
+Numbers are withheld until all six arms exist on a single cluster. Each listed run is real and
+its raw measurements are published in
+[`deploy/k8s/performance/results/`](deploy/k8s/performance/results/), but they were taken on
+three different clusters, and the same arm re-measured on another cluster has drifted by up to
+46% — more than the effects being compared. The containerd row also still needs its prefix-import
+variant. See [`deploy/k8s/performance/results/README.md`](deploy/k8s/performance/results/README.md).
 
 Full cluster setup, test methodology: **[deploy/k8s/README.md](deploy/k8s/README.md)**
 
