@@ -80,9 +80,10 @@ engine_pull() {
   # docker-pull prints the image id — harmless for the measurement, but it has
   # no place in the TSV.
   if [[ -n "${DOCKER_TOKEN:-}" ]]; then
-    riid_engine_exec "$pod" env "DOCKER_TOKEN=$DOCKER_TOKEN" "${args[@]}" "$ref" >/dev/null
+    riid_pull_with_retry "$pod" "$ref" \
+      riid_engine_exec "$pod" env "DOCKER_TOKEN=$DOCKER_TOKEN" "${args[@]}" "$ref" >/dev/null
   else
-    riid_engine_exec "$pod" "${args[@]}" "$ref" >/dev/null
+    riid_pull_with_retry "$pod" "$ref" riid_engine_exec "$pod" "${args[@]}" "$ref" >/dev/null
   fi
 }
 

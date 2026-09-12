@@ -167,6 +167,22 @@ export_logs() {
   say "  logs exported to $out"
 }
 
+# Before the series, not per arm: a stand where p2p serves nothing produces a
+# full matrix of numbers that all mean the same thing. SKIP_P2P_SMOKE=1 is for
+# re-running a single arm on a stand already proven this session.
+if [ "${SKIP_P2P_SMOKE:-0}" != 1 ]; then
+  say "=== p2p smoke ==="
+  smoke_engine="${ARMS##*-}"
+  if ENGINE="$smoke_engine" bash "$PERF/scenario/p2p-smoke.sh" \
+       > "$RUNLOG_DIR/p2p-smoke.${STAMP_ROOT}.log" 2>&1; then
+    say "  p2p smoke OK"
+  else
+    say "  p2p smoke FAILED - not running the series. Tail:"
+    tail -6 "$RUNLOG_DIR/p2p-smoke.${STAMP_ROOT}.log" | sed 's/^/    /'
+    exit 1
+  fi
+fi
+
 for arm in $ARMS; do
   stamp=$(date +%Y%m%d-%H%M)
   say "=== $arm ($stamp) ==="

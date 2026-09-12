@@ -270,29 +270,9 @@ dfinit-disable: ensure-dragonfly-pull-secret
 	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"; \
 	$(MAKE) -C "$(SELECTEL_DIR)" restore-registries-conf K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"
 
-# dfinit edits the node's /etc/containers/registries.conf and turning dfinit off
-# does not undo that, so a baseline arm would keep pulling through the mirror and
-# quietly become a second dfinit run. podman-node.yaml keeps a pristine copy from
-# before dfinit ever touched the file; this puts it back on every worker.
+# Stand repairs live in debug.sh so this Makefile stays a list of steps.
 restore-registries-conf:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	fail=0; done_n=0; \
-	for p in $$(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node \
-	    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do \
-	  [ -n "$$p" ] || continue; \
-	  if kubectl -n riid-system exec -c installer "$$p" -- chroot /host sh -ec '\
-	       [ -f /etc/containers/registries.conf.riid-baseline ] || { echo "no pristine copy"; exit 1; }; \
-	       cp /etc/containers/registries.conf.riid-baseline /etc/containers/registries.conf'; then \
-	    done_n=$$((done_n+1)); \
-	  else \
-	    echo "restore-registries-conf: FAILED on $$p" >&2; fail=1; \
-	  fi; \
-	done; \
-	echo "restore-registries-conf: restored on $$done_n node(s)"; \
-	[ "$$fail" = 0 ] || { echo "restore-registries-conf: a node kept the mirror - the baseline arm would measure dfinit" >&2; exit 1; }
+	@KUBECONFIG="$(KUBECONFIG)" bash "$(SELECTEL_DIR)/debug.sh" restore-registries-conf
 
 # Ждём готовности podman на всех нодах и печатаем версии — окружение AGENT-99
 # должно быть записано, а не запомнено.
@@ -319,23 +299,8 @@ wait-podman-node:
 	kubectl -n riid-system logs -l app.kubernetes.io/name=podman-node --tail=3 --prefix; \
 	$(MAKE) -C "$(SELECTEL_DIR)" repair-cni K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"
 
-# Installing podman drops containernetworking-plugins into /etc/cni/net.d, which
-# belongs to the cluster CNI - nodes have gone NotReady with "cni plugin not
-# initialized" minutes after the package landed. Rolling calico-node puts its
-# conflist back. Cheap, idempotent, and the alternative is noticing by hand.
 repair-cni:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	echo ">>> repair-cni: rolling calico-node after the engine install"; \
-	kubectl -n kube-system rollout restart daemonset/calico-node >/dev/null; \
-	kubectl -n kube-system rollout status daemonset/calico-node --timeout=10m; \
-	notready=$$(kubectl get nodes --no-headers | awk '$$2 != "Ready"' | wc -l); \
-	[ "$$notready" -eq 0 ] || { \
-	  echo "repair-cni: $$notready node(s) still not Ready:" >&2; \
-	  kubectl get nodes --no-headers | awk '$$2 != "Ready"' >&2; exit 1; }; \
-	echo "repair-cni: every node Ready"
+	@KUBECONFIG="$(KUBECONFIG)" bash "$(SELECTEL_DIR)/debug.sh" repair-cni
 
 install-riid:
 	@$(RUN_PROVIDER_APPLY)

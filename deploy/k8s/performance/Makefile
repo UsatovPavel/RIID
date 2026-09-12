@@ -46,16 +46,13 @@ endif
 
 .PHONY: run riid-podman riid-containerd riid-containerd-noprefix riid-porto bare-podman bare-containerd bare-porto \
         dfinit-podman dfinit-containerd \
-        clear-cache clear-cluster-cache clear-engine-cache clear-riid-cache delete-local-registry-dataset debug-registry-node validate-arm \
+        clear-cache clear-cache-riid clear-cache-dfinit clear-cache-engine p2p-smoke delete-local-registry-dataset debug-registry-node validate-arm \
         registry-node-tc-apply registry-node-tc-clear registry-node-tc-check metrics summarize-aggregate
 
 # Three caches, one script each, and a wrapper that picks by arm name: bare-*
 # touches only the engine, dfinit-* adds Dragonfly, riid-* adds RIID's own scratch.
 # Clearing less leaves a warm layer no timing reveals; clearing more only costs time.
 CLEAR_SCRIPT         := $(PERF_DIR)/scenario/clear/clear-cache.sh
-CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-dragonfly.sh
-CLEAR_ENGINES_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-engines.sh
-CLEAR_RIID_SCRIPT    := $(PERF_DIR)/scenario/clear/clear-cache-riid.sh
 DELETE_REGISTRY_SCRIPT := $(PERF_DIR)/registry/delete-dataset-from-local-registry.sh
 # Удаление тегов из local-registry по TSV (см. delete-dataset-from-local-registry.sh).
 # DATASET / DATASET_FILE — как у цели run.
@@ -130,7 +127,18 @@ riid-porto:
 bare-porto:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=porto
 
-# clear-cache ARM=<name> picks the caches the arm actually uses.
+# The first thing to run on a fresh stand: one image that shares no layer with
+# the dataset must arrive faster through RIID than through the bare engine.
+# A stand that fails this cannot produce a meaningful matrix.
+p2p-smoke:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	ENGINE="$(ENGINE)" bash "$(PERF_DIR)/scenario/p2p-smoke.sh"
+
+# clear-cache ARM=<full arm name> picks the caches that arm uses. For a case
+# without an arm name in hand, use clear-cache-riid/-dfinit/-engine below.
 clear-cache:
 	@[ -n "$(strip $(ARM))" ] || { echo "set ARM=<arm name>, e.g. ARM=riid-containerd"; exit 1; }
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -139,29 +147,18 @@ clear-cache:
 	kubectl config use-context "$$CTX"; \
 	bash "$(CLEAR_SCRIPT)" "$(ARM)"
 
-# Individual caches, for when you know exactly which one you want.
-clear-riid-cache:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	bash "$(CLEAR_RIID_SCRIPT)"
-
-# Dragonfly only: dfdaemon and seed stores plus the control-plane reset.
-clear-cluster-cache:
+# One target per kind of arm, not per cache: the caller names the case it is
+# about to measure and clear-cache.sh maps it. Clearing less than the arm uses
+# leaves a warm layer that no timing reveals.
+clear-cache-riid:   CLEAR_CASE := riid
+clear-cache-dfinit: CLEAR_CASE := dfinit
+clear-cache-engine: CLEAR_CASE := engine
+clear-cache-riid clear-cache-dfinit clear-cache-engine:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
-	bash "$(CLEAR_CLUSTER_SCRIPT)"
-
-# For bare-* arms: podman store and the containerd riid-bench namespace, nothing else.
-clear-engine-cache:
-	@export KUBECONFIG="$(KUBECONFIG)"; \
-	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
-	CTX=$$(kubectl config current-context) || exit 1; \
-	kubectl config use-context "$$CTX"; \
-	bash "$(CLEAR_ENGINES_SCRIPT)"
+	bash "$(CLEAR_SCRIPT)" "$(CLEAR_CASE)"
 
 delete-local-registry-dataset:
 	@export KUBECONFIG="$(KUBECONFIG)"; \

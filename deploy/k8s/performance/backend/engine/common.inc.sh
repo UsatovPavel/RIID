@@ -7,20 +7,18 @@
 #   engine_ref <repo> <tag>           prints the full reference to pull
 #   engine_pull <pod> <ref>           baseline pull, no dfinit mirror
 #   engine_pull_mirrored <pod> <ref>  pull through the mirror dfinit wrote
-#   engine_mirror_check <pod>         the mirror really did apply
 #   engine_clear_cache <pod>          wipe the local image store
 #
-# Optional, called by bare.sh only when the driver defines it:
-#   engine_no_mirror_check <pod>      the mirror is really ABSENT
-# It exists because engines that run on the node share one config with the
-# dfinit arm: for podman, dfinit edits the node's /etc/containers/registries.conf
-# and the baseline can no longer be pointed at a private copy of that file
-# through a client-side env var. Without the check the baseline silently becomes
-# a second dfinit arm. containerd and Porto do not define it yet.
+# For the p2p verdict in mirror-check.inc.sh, which implements engine_mirror_check
+# once for every engine, a driver supplies only what its own config says:
+#   engine_mirror_location <pod>          the mirror configured for this registry
+#   engine_exec_where_pull_runs <pod> ..  a command in the netns the pull uses
+# An engine that cannot take a mirror at all (Porto) overrides engine_mirror_check
+# instead; a driver whose baseline shares one config file with the dfinit arm
+# opts into engine_no_mirror_check (podman does, containerd needs no such check).
 #
-# Engines take the mirror differently: podman reads a registries.conf file,
-# containerd takes --hosts-dir as an argument. Hence two separate functions
-# instead of one with a boolean flag.
+# Optional, called by riid_pull_with_retry when the driver defines it:
+#   engine_drop_image <pod> <ref>     drop a partial image before a cold retry
 
 # The workstation reaches the MKS API over the public internet, and one dropped
 # TCP handshake there kills a whole arm: two AGENT-117 runs died on a single pod
@@ -53,6 +51,41 @@ riid_engine_exec() {
   local pod="$1"
   shift
   riid_kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- "$@"
+}
+
+# One transport-error list for every engine, not one per driver: the workstation
+# reaches the API over a VPN and a single hiccup drops every open exec stream at
+# once - three AGENT-117 arms died that way, ten pods in the same second. An
+# engine's own error does not match these and still fails the arm, as it must.
+riid_stream_broke() {
+  grep -qE 'error reading from error stream|Copying std(out|err) failed|i/o timeout|unexpected EOF|error dialing backend' "$1"
+}
+
+# Runs a pull and retries it when the exec stream - not the pull - broke. The
+# killed pull leaves partial blobs, so a driver that defines engine_drop_image
+# gets a retry as cold as the first attempt; a warm resume would understate it.
+# Usage: riid_pull_with_retry <pod> <ref> <command...>
+riid_pull_with_retry() {
+  local pod="$1" ref="$2"
+  shift 2
+  local attempt=1 max="${RIID_PULL_STREAM_RETRIES:-3}" err rc
+  err="$(mktemp)"
+  while :; do
+    rc=0
+    "$@" 2>"$err" || rc=$?
+    cat "$err" >&2
+    if ((rc != 0)) && ((attempt < max)) && riid_stream_broke "$err"; then
+      echo "engine: exec stream broke on $ref (attempt $attempt/$max), retrying cold" >&2
+      if declare -F engine_drop_image >/dev/null; then
+        engine_drop_image "$pod" "$ref"
+      fi
+      attempt=$((attempt + 1))
+      sleep 5
+      continue
+    fi
+    rm -f "$err"
+    return "$rc"
+  done
 }
 
 # Reads a single value from config/.env literally.
@@ -157,3 +190,8 @@ riid_registry_is_plain_http() {
 # Address of the dfdaemon proxy that dfinit writes into the engine as a mirror.
 # Chart default (client.dfinit.config.proxy.addr: http://127.0.0.1:4001).
 RIID_DFINIT_PROXY_LOCATION="${RIID_DFINIT_PROXY_LOCATION:-127.0.0.1:4001}"
+
+# After RIID_DFINIT_PROXY_LOCATION, which it uses, and before the driver, which
+# may override engine_mirror_check (Porto cannot take a mirror at all).
+# shellcheck source=mirror-check.inc.sh
+source "$(dirname "${BASH_SOURCE[0]}")/mirror-check.inc.sh"
