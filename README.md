@@ -59,7 +59,7 @@ Results are presented in the interactive chart:
 
 ### P2P cluster benchmark — dataset A (91 images, Selectel cluster)
 
-Dataset: [`deploy/k8s/bootstrap/registry/init/images_list.sizes.tsv`](deploy/k8s/bootstrap/registry/init/images_list.sizes.tsv); 88 of its images carry a per-image point in the scatter pages below.
+Dataset: [`deploy/k8s/config/imagelist/dataset_a_91_sizes.tsv`](deploy/k8s/config/imagelist/dataset_a_91_sizes.tsv).
 
 **Recreate scenario** (all 10 RIID pods pull simultaneously):
 
@@ -83,10 +83,6 @@ pinned with sizes, digests and capture timestamps in
 [`deploy/k8s/config/imagelist/dataset_top20_sizes.tsv`](deploy/k8s/config/imagelist/dataset_top20_sizes.tsv).
 Each arm is 10 pods × 20 images, all pods starting together (`recreate`).
 
-The reported number is the **sum of per-image cluster wall-clock** — first pod start to last
-pod finish, summed over the 20 images. A per-pod median is not used: it hides stragglers, and
-a rollout is finished only when its last pod is.
-
 | Engine | Source | Wall-clock | Registry TX | Run |
 |--------|--------|-----------:|------------:|-----|
 | containerd | registry, direct | TBD | TBD | `bare-containerd.agent117-20260910-2248` |
@@ -96,12 +92,8 @@ a rollout is finished only when its last pod is.
 | podman | Dragonfly via dfinit | TBD | TBD | `dfinit-podman.agent119-20260912-2004` |
 | podman | RIID + Dragonfly | TBD | TBD | `riid-podman.agent120-20260912-1620` |
 
-Numbers are withheld until all six arms exist on a single cluster. Each listed run is real and
-its raw measurements are published in
-[`deploy/k8s/performance/results/`](deploy/k8s/performance/results/), but they were taken on
-three different clusters, and the same arm re-measured on another cluster has drifted by up to
-46% — more than the effects being compared. The containerd row also still needs its prefix-import
-variant. See [`deploy/k8s/performance/results/README.md`](deploy/k8s/performance/results/README.md).
+Numbers are pending a single-cluster series. Metric, why they are withheld and the raw runs:
+**[deploy/k8s/README.md — Top-20 dataset](deploy/k8s/README.md#top-20-dataset-2-engines--3-sources)**.
 
 Full cluster setup, test methodology: **[deploy/k8s/README.md](deploy/k8s/README.md)**
 

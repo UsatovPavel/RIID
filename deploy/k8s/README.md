@@ -96,7 +96,7 @@ All 10 RIID pods pulling 91 images simultaneously (Kubernetes `Recreate` deploym
 - **Sum of aggregates**: сумма максимумов (wall-clock времени кластера на каждый образ)
 - Recreate сценарий демонстрирует лучшую эффективность P2P при одновременной нагрузке
 
-Датасет обоих сценариев: `bootstrap/registry/init/images_list.sizes.tsv`.
+Датасет обоих сценариев (91 образ): `config/imagelist/dataset_a_91_sizes.tsv`.
 
 ### Top-20 dataset (2 engines × 3 sources)
 
