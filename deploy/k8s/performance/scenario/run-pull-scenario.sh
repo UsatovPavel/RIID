@@ -39,7 +39,10 @@ ENGINE="${ENGINE:-}"
 # Arm label in the TSV: source plus engine. Without the engine the arms of the
 # matrix are indistinguishable in the summaries — "bare" reads the same for
 # podman and for containerd.
-BACKEND_LABEL="$BACKEND${ENGINE:+-$ENGINE}"
+# Overridable so a variant arm (riid-containerd-noprefix) labels its own rows:
+# without it the TSV would say riid-containerd and the two arms would be
+# indistinguishable in the data, which is what validate-arm.sh has to catch.
+BACKEND_LABEL="${BACKEND_LABEL:-$BACKEND${ENGINE:+-$ENGINE}}"
 OUTPUT_TSV="${OUTPUT_TSV:-${OUTPUT_CSV:-}}"
 BACKEND_CMD="$BACKEND_DIR/${BACKEND}.sh"
 DATASET_FILE="${DATASET_FILE:-}"

@@ -61,10 +61,24 @@ spec:
             - |
               set -e
               chroot /host /bin/sh -ec '
+                export DEBIAN_FRONTEND=noninteractive
+                # MKS apt proxy is host-netns only; confold skips the prompt on
+                # registries.conf, which dfinit and the baseline copy below edit.
+                APT_OPT="-o Acquire::http::Proxy=false -o Acquire::https::Proxy=false -o Dpkg::Options::=--force-confold"
                 if ! command -v podman >/dev/null 2>&1; then
-                  export DEBIAN_FRONTEND=noninteractive
-                  apt-get update
-                  apt-get install -y --no-install-recommends podman
+                  apt-get $APT_OPT update
+                  apt-get $APT_OPT install -y --no-install-recommends podman
+                fi
+                # With the Calico conflist present podman picks CNI and shares
+                # /etc/cni/net.d - a prune took 9 nodes NotReady. netavark is off
+                # PATH. Keep apostrophes out: this block is one quoted argument.
+                if ! dpkg -s netavark >/dev/null 2>&1; then
+                  apt-get $APT_OPT update
+                  apt-get $APT_OPT install -y --no-install-recommends netavark aardvark-dns
+                fi
+                if ! grep -q "^network_backend" /etc/containers/containers.conf 2>/dev/null; then
+                  mkdir -p /etc/containers
+                  printf "\n[network]\nnetwork_backend = \"netavark\"\n" >> /etc/containers/containers.conf
                 fi
                 systemctl enable --now podman.socket
                 # A pristine copy, taken before dfinit ever edits this file, so
@@ -72,6 +86,21 @@ spec:
                 if [ ! -f /etc/containers/registries.conf.riid-baseline ] \
                    && [ -f /etc/containers/registries.conf ]; then
                   cp /etc/containers/registries.conf /etc/containers/registries.conf.riid-baseline
+                fi
+                # daemonset.yaml mounts /run/portod.socket (Socket); no Porto here.
+                if [ ! -S /run/portod.socket ]; then
+                  command -v socat >/dev/null 2>&1 || { apt-get $APT_OPT update; apt-get $APT_OPT install -y --no-install-recommends socat; }
+                  printf "%s\n" \
+                    "[Unit]" "Description=Placeholder /run/portod.socket (no Porto on this stand)" "" \
+                    "[Service]" "ExecStartPre=/usr/bin/rm -f /run/portod.socket" \
+                    "ExecStart=/usr/bin/socat UNIX-LISTEN:/run/portod.socket,fork /dev/null" "Restart=always" "" \
+                    "[Install]" "WantedBy=multi-user.target" > /etc/systemd/system/riid-portod-stub.service
+                  systemctl daemon-reload
+                  systemctl enable --now riid-portod-stub.service
+                fi
+                # MKS ships ctr at /usr/local/bin; daemonset.yaml mounts /usr/bin/ctr.
+                if [ ! -e /usr/bin/ctr ] && [ -e /usr/local/bin/ctr ]; then
+                  ln -s /usr/local/bin/ctr /usr/bin/ctr
                 fi
               '
               # AGENT-99 wants the environment recorded, not remembered: the

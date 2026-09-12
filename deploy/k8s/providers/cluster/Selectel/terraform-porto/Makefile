@@ -27,7 +27,13 @@ export NODES
 SSH_OPTS := -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
 NODE_READY_TIMEOUT ?= 1800
 
-.PHONY: help init fmt validate plan apply destroy output project-id stand stand-6 stand-12 \
+# Scope of purge-volumes; mirrors var.cluster_name, which purge cannot read back
+# once the stand is destroyed. tf.sh turns it into TF_VAR_cluster_name.
+CLUSTER_NAME ?= riid-porto
+
+export CLUSTER_NAME
+
+.PHONY: help init fmt validate plan apply destroy purge-volumes output project-id stand stand-6 stand-12 \
         ssh-key kubeconfig wait ssh smoke nodes bootstrap
 
 help:
@@ -43,6 +49,7 @@ help:
 	@echo "make ssh           — shell on the control plane"
 	@echo "make bootstrap     — bootstrap install-all against this stand"
 	@echo "make destroy       — delete the stand"
+	@echo "make purge-volumes — list this stand's leftover disks (CONFIRM=yes to delete)"
 
 init:
 	$(TF) init -input=false
@@ -65,6 +72,12 @@ apply:
 destroy:
 	$(TF) plan -destroy -input=false -out=tfplan-destroy
 	$(TF) apply -input=false tfplan-destroy
+
+# This module sets delete_on_termination on its own instances, so its own boot
+# volumes are already cleaned up - this is a backstop for named leftovers of
+# this stand only. MKS leftovers are purged from terraform/, not from here.
+purge-volumes:
+	@CONFIRM="$(CONFIRM)" STAND_PREFIX="$(CLUSTER_NAME)" bash "$(COMMON_DIR)/purge-stand-volumes.sh"
 
 output:
 	$(TF) output

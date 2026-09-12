@@ -26,6 +26,10 @@ metadata:
     app.kubernetes.io/name: local-registry
 spec:
   replicas: 1
+  # RWO volume: RollingUpdate deadlocks, because the new pod waits for a disk the
+  # old one still holds and the old one waits for the new to be Ready.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: local-registry
@@ -36,10 +40,28 @@ spec:
     spec:
       nodeSelector:
         riid.registry: "true"
+      # The registry node is tainted so nothing else lands there; the registry
+      # itself, the dataset loader and the tx probe are the only tolerated pods.
+      tolerations:
+        - key: riid.registry
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: registry
           image: performance.local_registry
           imagePullPolicy: IfNotPresent
+          # Both ends of this were measured on 2026-09-11. With no limit the page
+          # cache from one 2.4 GiB blob filled the node's 5.86 GiB allocatable and
+          # kubelet evicted the registry itself; at 4Gi the cgroup starved under a
+          # riid-podman arm (10 pods x 4 concurrent fetches) until exec could not
+          # even start. 5Gi bounds the cache and still leaves the node headroom.
+          # No CPU limit: throttling here would land inside the measured pull.
+          resources:
+            requests:
+              cpu: 200m
+              memory: 2Gi
+            limits:
+              memory: 5Gi
           ports:
             - name: http
               containerPort: 5000

@@ -34,9 +34,10 @@ DRAGONFLY_CHART_VERSION="${DRAGONFLY_CHART_VERSION:-1.6.26}"
 TMP_VALUES="$(mktemp)"
 TMP_MERGED=""
 TMP_PROVIDER_MERGED=""
+TMP_INFRA_MERGED=""
 
 cleanup() {
-  rm -f "${TMP_VALUES}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}"
+  rm -f "${TMP_VALUES}" "${TMP_MERGED}" "${TMP_PROVIDER_MERGED}" "${TMP_INFRA_MERGED}"
 }
 trap cleanup EXIT
 
@@ -112,10 +113,32 @@ if ! kubectl cluster-info &>/dev/null; then
   exit 1
 fi
 
-# dfinit rewrites one engine's registry config, but the chart values hold only one
-# answer and dfinit.enable is unconditional - a containerd block left in values.yaml
-# is live for EVERY arm. It once crashlooped the whole client DaemonSet ("failed to
-# run container runtime: Is a directory"). Render the requested engine, null the other.
+# The control plane always goes on its own tainted nodes: a manager, scheduler
+# or MySQL that lands on a measured worker silently distorts the arm. Missing
+# labels mean the node group never applied them - stop rather than install an
+# unpinned stand that still looks healthy.
+DEDICATED_INFRA_VALUES="${SCRIPT_DIR}/values-dedicated-infra.yaml"
+[[ -f "${DEDICATED_INFRA_VALUES}" ]] || {
+  echo "install-dragonfly.sh: missing ${DEDICATED_INFRA_VALUES}" >&2
+  exit 1
+}
+for label in riid.dragonfly.manager riid.dragonfly.scheduler; do
+  [[ -n "$(kubectl get nodes -l "${label}" -o name 2>/dev/null)" ]] || {
+    echo "install-dragonfly.sh: no node carries ${label}." >&2
+    echo "  The Selectel node group sets it (terraform local.infra_roles); a kubectl" >&2
+    echo "  label/taint on MKS does not stick. Re-apply terraform before installing." >&2
+    exit 1
+  }
+done
+TMP_INFRA_MERGED="$(mktemp)"
+yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' "${HELM_VALUES}" "${DEDICATED_INFRA_VALUES}" >"${TMP_INFRA_MERGED}"
+HELM_VALUES="${TMP_INFRA_MERGED}"
+echo ">>> Dragonfly Helm: control plane pinned to the infra nodes (${DEDICATED_INFRA_VALUES})" >&2
+
+# dfinit rewrites one engine's registry config, and the chart values hold only one
+# answer - so scripts/values.yaml keeps dfinit off and carries no containerd/crio
+# block at all. Both are rendered here, for the requested engine only: a static
+# containerd block once crashlooped the whole client DaemonSet on a riid-* arm.
 DFINIT_ENGINE="${RIID_DFINIT_ENGINE:-}"
 if [ "$DFINIT_ENGINE" = "containerd" ]; then
   DFINIT_OVERRIDE="$(mktemp)"
@@ -124,6 +147,8 @@ if [ "$DFINIT_ENGINE" = "containerd" ]; then
   cat > "$DFINIT_OVERRIDE" <<DFEOF
 client:
   dfinit:
+    enable: true
+    restartContainerRuntime: true
     config:
       containerRuntime:
         crio: null
@@ -136,6 +161,45 @@ client:
               capabilities: ["pull", "resolve"]
 DFEOF
   echo ">>> dfinit engine: containerd (crio handler disabled for this install)"
+  DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
+elif [ "$DFINIT_ENGINE" = "podman" ]; then
+  # podman reads /etc/containers/registries.conf, same as CRI-O - dfinit has no
+  # podman handler, so this uses the crio one (AGENT-99 finding). Both the crio
+  # block and the proxy upstream are static leftovers pinned to an old stand's
+  # registry (10.96.5.146); this renders the real registry for this cluster.
+  DFINIT_OVERRIDE="$(mktemp)"
+  cleanup_dfinit_override() { rm -f "$DFINIT_OVERRIDE"; }
+  trap cleanup_dfinit_override EXIT
+  cat > "$DFINIT_OVERRIDE" <<DFEOF
+# registries.conf carries no per-request upstream the way containerd's certs.d
+# header does, so every dfdaemon that may fetch from source has to be told the
+# registry in its own config. Both the client (podman talks to it) and the seed
+# (it is the one going back to source) default to https://index.docker.io, which
+# is why a pull missed and podman silently fell back to the direct address.
+client:
+  config:
+    proxy:
+      registryMirror:
+        addr: http://${RIID_DFINIT_REGISTRY:-}
+  dfinit:
+    enable: true
+    restartContainerRuntime: true
+    config:
+      containerRuntime:
+        containerd: null
+        crio:
+          configPath: /etc/containers/registries.conf
+          unqualifiedSearchRegistries: ["cr.selcloud.ru"]
+          registries:
+            - prefix: ${RIID_DFINIT_REGISTRY:-}
+              location: ${RIID_DFINIT_REGISTRY:-}
+seedClient:
+  config:
+    proxy:
+      registryMirror:
+        addr: http://${RIID_DFINIT_REGISTRY:-}
+DFEOF
+  echo ">>> dfinit engine: podman (crio handler, containerd disabled for this install)"
   DFINIT_HELM_ARGS="-f ${DFINIT_OVERRIDE}"
 else
   DFINIT_HELM_ARGS=""
