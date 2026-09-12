@@ -9,7 +9,10 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO"
 PERF=deploy/k8s/performance
 BOOT=deploy/k8s/bootstrap
-KC="$REPO/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml"
+# Overridable so the same driver runs a porto series: that stand is self-managed
+# and writes serverConfig-porto.yaml next to the MKS one, and both may exist at
+# the same time.
+KC="${RIID_KUBECONFIG:-$REPO/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml}"
 export KUBECONFIG="$KC"
 ARMS="$*"
 STAMP_ROOT="$(date +%Y%m%d-%H%M)"
@@ -124,6 +127,31 @@ registry_reachable() {
   esac
 }
 
+# Every measured pull opens with kubectl, so network trouble on the path to the
+# API is charged to duration_ms and sets the arm's AGGREGATE: on 2026-09-12
+# three pods absorbed 30-140s of TCP connect stalls that way. Probe that path
+# first; a stall that only starts mid-arm still has to be caught in the TSV.
+api_path_healthy() {
+  local server probes worst=0 fails=0 i t0 t1 ms
+  probes="${RIID_API_PROBES:-10}"
+  server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)
+  [ -n "$server" ] || { say "  API path probe: no server in $KC, skipping"; return 0; }
+  # A whole API round-trip, not a TCP connect: this workstation runs a local
+  # TLS-terminating proxy that answers a connect to any address, blackholes
+  # included, in 0.1s - so connect timing here measures nothing at all.
+  for i in $(seq 1 "$probes"); do
+    t0=$(date +%s%N)
+    if kubectl get --raw=/livez --request-timeout="${RIID_API_PROBE_TIMEOUT:-5s}" >/dev/null 2>&1; then
+      t1=$(date +%s%N); ms=$(( (t1 - t0) / 1000000 ))
+      [ "$ms" -gt "$worst" ] && worst=$ms
+    else
+      fails=$((fails + 1))
+    fi
+  done
+  say "  API path probe: $server, $probes calls, $fails failed, worst ${worst}ms"
+  [ "$fails" -eq 0 ] && [ "$worst" -le "${RIID_API_PROBE_MAX_MS:-1500}" ]
+}
+
 # A podman pull through the dfinit mirror blocks forever - no error, no timeout -
 # if the scheduler moves after the pull began: on 2026-09-12 ten pulls sat 35 min
 # with zero dfdaemon tasks. So the control plane must be final before an arm runs,
@@ -229,6 +257,12 @@ export_logs() {
 for arm in $ARMS; do
   stamp=$(date +%Y%m%d-%H%M)
   say "=== $arm ($stamp) ==="
+  # Before the cache clear, which needs the same path and would be wasted.
+  if ! api_path_healthy; then
+    say "$arm: SKIPPED - the API path is unstable, an arm run now would measure it"
+    say "  if this stand's address is routed into a tunnel: make -C <tf module> bypass-api"
+    continue
+  fi
   if ! clear_for_arm "$arm" "$stamp"; then
     say "$arm: SKIPPED - cache not cleared"
     continue
