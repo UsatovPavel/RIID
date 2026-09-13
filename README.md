@@ -59,6 +59,8 @@ Results are presented in the interactive chart:
 
 ### P2P cluster benchmark — dataset A (91 images, Selectel cluster)
 
+Dataset: [`deploy/k8s/config/imagelist/dataset_a_91_sizes.tsv`](deploy/k8s/config/imagelist/dataset_a_91_sizes.tsv).
+
 **Recreate scenario** (all 10 RIID pods pull simultaneously):
 
 | Metric | Formula | RIID+Dragonfly | Podman (baseline) | Ratio |
@@ -73,6 +75,32 @@ On big images riid keep **p2p advantage** and overcome podman
 **[Interactive scatter: RIID P2P vs Podman — recreate scenario](docs/images/riid-p2p-vs-podman-scatter-recreate.html)**
 
 **Rolling scenario** (concurrency-limited sequential pulls) showed comparable download speed with **−82.6% registry traffic** reduction (19.7 GiB vs 112.6 GiB). See **[deploy/k8s/README.md](deploy/k8s/README.md)** for detailed methodology and rolling scenario results.
+
+### P2P cluster benchmark — top-20 dataset (containerd, podman, Porto)
+
+A second, smaller dataset: the 20 most-pulled Docker Hub images by `pull_count × size_bytes`,
+pinned with sizes, digests and capture timestamps in
+[`deploy/k8s/config/imagelist/dataset_top20_sizes.tsv`](deploy/k8s/config/imagelist/dataset_top20_sizes.tsv).
+Each scenario is 10 pods × 20 images, all pods starting together (`recreate`), RIID v0.4.14.
+Cluster time: for each image, the time until it is downloaded on every cluster node, summed
+over the 20 images.
+
+| Engine | Source | Cluster time | Registry TX |
+|--------|--------|-----------:|------------:|
+| containerd | registry, direct | 836.0 s | 117.4 GiB |
+| containerd | Dragonfly via dfinit | **397.3 s** (−52.5%) | **11.8 GiB** (−89.9%) |
+| containerd | RIID + Dragonfly, prefix import | 619.8 s (−25.9%) | **11.8 GiB** (−89.9%) |
+| containerd | RIID + Dragonfly, archive import | 631.8 s (−24.4%) | **11.8 GiB** (−89.9%) |
+| podman | registry, direct | 764.2 s | 117.4 GiB |
+| podman | Dragonfly via dfinit | **366.7 s** (−52.0%) | **11.8 GiB** (−89.9%) |
+| podman | RIID + Dragonfly | 685.1 s (−10.3%) | **11.8 GiB** (−89.9%) |
+| Porto | registry, direct | 871.3 s | 120.1 GiB |
+| Porto | RIID + Dragonfly, layer-by-layer import | **430.6 s** (−50.6%) | **12.1 GiB** (−90.0%) |
+
+Percentages are against the `registry, direct` scenario of the same engine. Each engine was measured
+as one series on one cluster; the engines were not, so compare within a row group only.
+Porto ran on its own kubeadm cluster, about 10% slower than the other two by a `bare-containerd` anchor.
+Per-run data, stands and caveats: **[deploy/k8s/README.md — Top-20 dataset](deploy/k8s/README.md#top-20-dataset-containerd-podman-porto)**.
 
 Full cluster setup, test methodology: **[deploy/k8s/README.md](deploy/k8s/README.md)**
 
