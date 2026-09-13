@@ -20,11 +20,11 @@ BOOTSTRAP_DIR := $(K8S_ROOT)/bootstrap
 BOOTSTRAP_CONFIG_FILE := ../providers/cluster/Selectel/$(notdir $(KUBECONFIG_OUT))
 
 # Same single source of truth as the MKS stand: cluster_topology in config.yaml.
-NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers + .cluster_topology.registry_nodes' "$(CONFIG_YAML)" 2>/dev/null)
+NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers + .cluster_topology.registry_nodes + (.cluster_topology.dragonfly_infra_nodes // 0)' "$(CONFIG_YAML)" 2>/dev/null)
 
 export NODES
 
-SSH_OPTS := -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
+SSH_OPTS := -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
 NODE_READY_TIMEOUT ?= 1800
 
 # Scope of purge-volumes; mirrors var.cluster_name, which purge cannot read back
@@ -34,7 +34,7 @@ CLUSTER_NAME ?= riid-porto
 export CLUSTER_NAME
 
 .PHONY: help init fmt validate plan apply destroy purge-volumes output project-id stand stand-6 stand-12 \
-        ssh-key kubeconfig wait ssh smoke nodes bootstrap
+        ssh-key kubeconfig bypass-api wait ssh smoke nodes bootstrap
 
 help:
 	@echo "make init          — download the openstack provider"
@@ -44,6 +44,7 @@ help:
 	@echo "make stand-6       — plan + apply + wait + kubeconfig on 6 workers"
 	@echo "make stand-12      — the same on 12 workers"
 	@echo "make kubeconfig    — write $(KUBECONFIG_OUT)"
+	@echo "make bypass-api    — keep this stand's API off the tunnel (needs sudo)"
 	@echo "make wait          — block until every node is Ready"
 	@echo "make smoke         — portoctl --version on every worker"
 	@echo "make ssh           — shell on the control plane"
@@ -121,6 +122,14 @@ kubeconfig: ssh-key
 	ssh $(SSH_OPTS) -i "$(SSH_KEY)" "$$user@$$ip" 'sudo cat /etc/kubernetes/admin.conf' \
 	  | sed -E "s#server: https://[^:]+:6443#server: https://$$ip:6443#" > "$(KUBECONFIG_OUT)"
 	@echo "kubeconfig: $(KUBECONFIG_OUT)"
+	@$(MAKE) -C "$(TF_DIR)" bypass-api
+
+# This stand is reached by the floating ip rewritten above, so it needs the same
+# registration as MKS. Never fatal: a machine without the split tunnel needs
+# nothing here, and a missing sudo ticket must not fail `make stand` - the
+# script then prints the command to run by hand.
+bypass-api:
+	@bash "$(COMMON_DIR)/bypass-tunnel-for-api.sh" "$(KUBECONFIG_OUT)" || true
 
 nodes:
 	@KUBECONFIG="$(KUBECONFIG_OUT)" kubectl get nodes -o wide

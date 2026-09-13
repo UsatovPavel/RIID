@@ -29,7 +29,7 @@ make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset \
 make -C deploy/k8s/performance debug-registry-node
 ## Тестирование: Dataset(A, B), источник (riid | bare | dfinit) x движок (podman | containerd)
 make -C deploy/k8s/bootstrap/registry registry-apply-test-profile
-make -C deploy/k8s/performance clear-cluster-cache
+make -C deploy/k8s/performance clear-cache-dfinit
 #### На самом деле что в YandexCloud что в Kubernetes очистка кэша не работает для riid. Проще кластер перезапустить для запуска с чистого листа чем дебажить.
 #### (возможно из-за выполнения рекомендаций Клода)
 ### Recreate — единственный сценарий; шесть армов матрицы AGENT-99

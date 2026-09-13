@@ -1,7 +1,7 @@
 #cloud-config
 # Воркер стенда: та же база, что у control plane, плюс Porto и вход в кластер.
 
-# This image boots cgroup2 as the sole unified hierarchy, but Porto 5.3.41 mounts
+# This image boots cgroup2 as the sole unified hierarchy, but Porto 5.3.x mounts
 # its own cgroup v1 tree per controller and crash-loops there ("Cannot mount
 # cgroup: Device or resource busy"). The layout is fixed at kernel init, so it needs
 # systemd.unified_cgroup_hierarchy=0 and a reboot; the /proc/cmdline check is idempotent.
@@ -42,6 +42,12 @@ write_files:
           - name: node-labels
             value: "${node_labels}"
 %{ endif ~}
+%{ if node_taint_key != "" ~}
+        taints:
+          - key: ${node_taint_key}
+            value: "true"
+            effect: NoSchedule
+%{ endif ~}
 
   # Пакет создаёт /etc/portod.conf.d и мержит оттуда *.conf по алфавиту, поэтому
   # настройка кладётся drop-in'ом и не спорит с файлом пакета. Написан до runcmd:
@@ -52,7 +58,7 @@ write_files:
       # docker_images_support выключен по умолчанию, а без него portoctl
       # docker-pull / docker-images / docker-rmi недоступны целиком — на них
       # держится арм Porto в performance/backend/engine/porto.inc.sh.
-      container {
+      daemon {
           docker_images_support: true
 %{ for registry in porto_insecure ~}
           docker_insecure_registry: "${registry}"
@@ -70,7 +76,7 @@ write_files:
       # build-depends и минуты времени на каждой ноде, а пакет ставит бинарники
       # в /usr/sbin и сам включает porto.service.
       curl -fsSLo /opt/riid/porto.deb \
-        "https://github.com/ten-nancy/porto/releases/download/v${porto_version}/porto_jammy_${porto_version}_amd64.deb"
+        "https://github.com/${porto_release_repo}/releases/download/v${porto_version}/porto_jammy_${porto_version}_amd64.deb"
       apt-get install -y /opt/riid/porto.deb
       systemctl enable --now porto
       portoctl --version

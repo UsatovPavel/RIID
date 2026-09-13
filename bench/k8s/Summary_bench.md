@@ -387,3 +387,17 @@ OCI layout build failed → HTTP 500
 пришёл по P2P, и прогон, где он дотягивался из реестра, стоят принципиально
 разного трафика.
 
+
+## AGENT-132 — Porto, стенд Selectel `terraform-porto` (13.09)
+
+10 воркеров + 4 инфраноды, датасет top-20, по 10 подов на арм. Сеть 186.67 МиБ/с. Вердикт `validate-arm.sh`, логи прочитаны отдельно.
+
+| арка | AGGREGATE | среднее по подам | egress | вердикт |
+|---|---|---|---|---|
+| `bare-porto` | 871.3 с | 860.8 с | 120.10 GiB | VALID |
+| `riid-porto` | 430.6 с | 389.1 с | 12.06 GiB | VALID |
+| `bare-containerd` | 921.8 с | 882.3 с | 120.14 GiB | VALID |
+
+**bare-porto.** `portoctl docker-pull` через TLS-вход к тому же реестру: Porto 5.3.58 качает слои только по https. Холодный старт доказан по containerd и по хранилищу Porto на 10/10 нод. Пик `/place` 35.2 GiB на ноду.
+**riid-porto.** 2200/2200 слоёв из P2P, `layer.import` 2190, запасного rootfs-импорта нет, 0 ошибок, 0 повторов; NeedBackToSource 221. Против bare-porto: −50.6% AGGREGATE, −90.0% egress. Образ, загруженный RIID, запускается контейнером Porto (python:latest, HTTP 200).
+**bare-containerd.** Якорь к MKS: 921.8 с против 836.0 с на стенде agent130 — стенд на ~10% медленнее. Около 12.8 с AGGREGATE дали 4 холодных повтора `fluent-bit` после обрыва API-стрима.

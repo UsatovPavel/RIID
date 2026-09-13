@@ -51,11 +51,12 @@ RUN apt-get update \
 # /run/portod.socket). Installed via apt so its runtime deps resolve; the package's
 # postinst starts porto.service, meaningless here and fatal without a policy-rc.d
 # shim, so one is installed first. Same jammy release as terraform-porto cloud-init.
-ARG PORTO_VERSION=5.3.41
+ARG PORTO_RELEASE_REPO=UsatovPavel/porto
+ARG PORTO_VERSION=5.3.58
 RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
  && chmod +x /usr/sbin/policy-rc.d \
  && curl -fsSLo /tmp/porto.deb \
-      "https://github.com/ten-nancy/porto/releases/download/v${PORTO_VERSION}/porto_jammy_${PORTO_VERSION}_amd64.deb" \
+      "https://github.com/${PORTO_RELEASE_REPO}/releases/download/v${PORTO_VERSION}/porto_jammy_${PORTO_VERSION}_amd64.deb" \
  && apt-get update \
  && apt-get install -y --no-install-recommends /tmp/porto.deb \
  && rm -rf /tmp/porto.deb /var/lib/apt/lists/* /usr/sbin/policy-rc.d

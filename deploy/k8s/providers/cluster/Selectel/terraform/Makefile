@@ -30,7 +30,7 @@ CLUSTER_NAME ?= riid-bench
 export CLUSTER_NAME
 
 .PHONY: help init fmt validate plan apply destroy delete-pvcs purge-volumes output project-id kubeconfig \
-        stand stand-6 stand-12 wait nodes
+        bypass-api stand stand-6 stand-12 wait nodes
 
 help:
 	@echo "make stand         — init + plan + apply + kubeconfig + wait + nodes (NODES=$(NODES))"
@@ -41,6 +41,7 @@ help:
 	@echo "make plan          — what would be created in Selectel (NODES=$(NODES))"
 	@echo "make apply         — create the cluster and the node group"
 	@echo "make kubeconfig    — write $(KUBECONFIG_OUT)"
+	@echo "make bypass-api    — keep this stand's API off the tunnel (needs sudo)"
 	@echo "make wait          — block until every node is Ready"
 	@echo "make nodes         — kubectl get nodes through the written kubeconfig"
 	@echo "make destroy       — delete this stand's PVCs, the stand, then its disks"
@@ -98,6 +99,14 @@ project-id:
 kubeconfig:
 	@umask 077 && $(TF) output -raw kubeconfig > "$(KUBECONFIG_OUT)"
 	@echo "kubeconfig: $(KUBECONFIG_OUT)"
+	@$(MAKE) -C "$(TF_DIR)" bypass-api
+
+# Never fatal: a machine without the split tunnel needs nothing here, and a
+# missing sudo ticket must not fail `make stand` - the script then prints the
+# command to run by hand. The bench refuses to measure if this was skipped and
+# the path really is tunnelled.
+bypass-api:
+	@bash "$(COMMON_DIR)/bypass-tunnel-for-api.sh" "$(KUBECONFIG_OUT)" || true
 
 # One button: from an empty project to a cluster whose nodes are Ready and whose
 # kubeconfig is on disk, ready for `make -C bootstrap install-all`.

@@ -58,7 +58,8 @@ The control plane then runs `kubeadm init` and applies flannel, patched to the
 port 6443 on the control plane and runs `kubeadm join`.
 
 Workers also get `/etc/portod.conf.d/10-riid-bench.conf` with
-`docker_images_support: true`, without which `portoctl docker-pull` — the whole
+`daemon { docker_images_support: true }` — a `TDaemonCfg` field: under `container {}`
+portod only logs "has no field" and keeps docker-pull off — without which `portoctl docker-pull` — the whole
 basis of the Porto bench arm — is unavailable. An HTTP registry has to be listed
 in `porto_insecure_registries`: Porto has no per-command equivalent of podman's
 `--tls-verify=false` or ctr's `--plain-http`. Note that portod resolves names in
@@ -67,6 +68,25 @@ address will not work for that arm.
 
 The join address is fixed before anything exists (`cidrhost(subnet_cidr, 10)`,
 pinned on a Neutron port), so no worker has to look up where to join.
+
+## Infra nodes
+
+With `dedicated_infra_nodes = true` (default) four of `NODES` become tainted
+`riid.monitoring`, `riid.registry`, `riid.dragonfly.scheduler` and
+`riid.dragonfly.manager` nodes, the same roles as on the MKS stand; the taint comes
+from `kubeadm join` and sticks here. The registry node takes `infra_flavor_names`
+(`SL1.8-16384`): `local-registry` is limited to 10Gi and serves ten nodes at once.
+
+## Known limits
+
+- Porto 5.3.x needs the legacy cgroup hierarchy, and kubelet 1.35+ refuses cgroup v1
+  by default, so `kube_series` stays at 1.34.
+- There is no Cinder CSI: PVCs are `local-path` directories on the boot disks. On MKS
+  the Dragonfly seed, mysql and redis PVCs are separate volumes; AGENT-132 attached
+  equivalent volumes by hand to keep the stands comparable.
+- Porto 5.3.58 fetches image blobs over https only, whatever `docker_insecure_registry`
+  says; bare-porto reaches the plain-HTTP registry through
+  `performance/registry/porto-registry-tls.sh`.
 
 ## Credentials
 

@@ -9,7 +9,7 @@ make -C deploy/k8s/bootstrap/registry install-local-registry
 make -C deploy/k8s/bootstrap/registry wait-local-registry
 make -C deploy/k8s/bootstrap/registry load-performance-registry-dataset
 ## Testing
-make -C deploy/k8s/performance clear-cluster-cache
+make -C deploy/k8s/performance clear-cache-dfinit
 make -C deploy/k8s/performance riid-podman DATASET=A SCENARIO=prep
 make -C deploy/k8s/performance bare-podman DATASET=A SCENARIO=prep
 make -C deploy/k8s/performance metrics

@@ -5,9 +5,11 @@
 #
 # Three caches, three scripts, because the pull path grows one layer at a time:
 #
-#   bare-*    engine pulls from the registry                        -> engines
-#   dfinit-*  engine pulls through the dfdaemon proxy               -> engines + dragonfly
-#   riid-*    RIID pulls (via dragonfly), then imports into engine  -> all three
+#   bare-*   / engine   engine pulls from the registry              -> engines
+#   dfinit-* / dfinit   engine pulls through the dfdaemon proxy      -> engines + dragonfly
+#   riid-*   / riid     RIID pulls, then imports into the engine     -> all three
+#
+# The bare case word is what the Makefile passes, so the mapping lives only here.
 #
 # Clearing less than the arm uses leaves a warm layer that no timing will reveal;
 # clearing more only costs time, so an unknown arm name clears everything.
@@ -18,7 +20,11 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-usage() { echo "usage: clear-cache.sh <arm> | clear-cache.sh --caches engines,dragonfly,riid" >&2; exit 2; }
+usage() {
+  echo "usage: clear-cache.sh <arm|riid|dfinit|engine>" >&2
+  echo "       clear-cache.sh --caches engines,dragonfly,riid" >&2
+  exit 2
+}
 
 caches=""
 case "${1:-}" in
@@ -29,9 +35,9 @@ case "${1:-}" in
   *)
     arm="$1"
     case "$arm" in
-      bare-*)   caches="engines" ;;
-      dfinit-*) caches="engines,dragonfly" ;;
-      riid-*)   caches="engines,dragonfly,riid" ;;
+      engine|bare|bare-*) caches="engines" ;;
+      dfinit|dfinit-*)    caches="engines,dragonfly" ;;
+      riid|riid-*)        caches="engines,dragonfly,riid" ;;
       *)
         echo "clear-cache: unknown arm '$arm', clearing everything" >&2
         caches="engines,dragonfly,riid" ;;

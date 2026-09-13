@@ -9,8 +9,14 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO"
 PERF=deploy/k8s/performance
 BOOT=deploy/k8s/bootstrap
-KC="$REPO/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml"
+# Overridable so the same driver runs a porto series: that stand is self-managed
+# and writes serverConfig-porto.yaml next to the MKS one, and both may exist at
+# the same time.
+KC="${RIID_KUBECONFIG:-$REPO/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml}"
 export KUBECONFIG="$KC"
+# performance/Makefile sets KUBECONFIG from CONFIG_FILE and ignores the env one,
+# so without this every make call of a porto series would hit the MKS stand.
+export CONFIG_FILE="$KC"
 ARMS="$*"
 STAMP_ROOT="$(date +%Y%m%d-%H%M)"
 # Which ticket these artifacts belong to. Hardcoding it once mislabelled an
@@ -28,16 +34,22 @@ say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 # through both (45s/image + 45min base) so other dataset sizes scale too.
 arm_timeout_seconds() {
   local dataset="$PERF/input/dataset_a.tsv" n
+  if [ -n "${RIID_ARM_TIMEOUT:-}" ]; then echo "$RIID_ARM_TIMEOUT"; return; fi
   n=$(tail -n +2 "$dataset" 2>/dev/null | grep -c '[^[:space:]]')
   [ "$n" -gt 0 ] 2>/dev/null || n=20
   echo $(( 2700 + 45 * n ))
 }
 
-# cache-clear/dfinit-enable restart dragonfly-client, which bounces
-# containerd; riid pods' hostPath containerd.sock mount then goes stale
-# forever (confirmed: node ctr works, pod ctr refuses, recreating the pod
-# fixes it - waiting never does).
-wait_for_containerd() {
+# shellcheck source=scenario/dragonfly-control-plane.inc.sh
+source "$PERF/scenario/dragonfly-control-plane.inc.sh"
+
+# Only these arms pull through Dragonfly; bare-* never touches it.
+p2p_arm() { case "$1" in riid-*|dfinit-*) return 0 ;; esac; return 1; }
+
+# A dragonfly-client restart bounces containerd, and a portod restart does the same
+# to /run/portod.socket: the riid pods' hostPath socket mounts stay stale until the
+# pod is recreated - waiting never fixes it (node ctr works, pod ctr refuses).
+restart_riid_pods() {
   say "  rolling riid DaemonSet (its containerd.sock mount goes stale on every restart)"
   kubectl -n riid-system rollout restart daemonset/riid >/dev/null 2>&1
   if kubectl -n riid-system rollout status daemonset/riid --timeout=180s >/dev/null 2>&1; then
@@ -47,63 +59,6 @@ wait_for_containerd() {
   fi
 }
 
-# Every scheduler restart inserts a new manager.scheduler row and never
-# cleans up the old one (11 accumulated once, crashlooping every client
-# before it reached the live entry). The manager caches this list at its own
-# startup, so purging the DB alone does nothing until it restarts again.
-purge_stale_scheduler_rows() {
-  local live_ip
-  live_ip=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 -o jsonpath='{.status.podIP}' 2>/dev/null)
-  [ -n "$live_ip" ] || { say "  purge_stale_scheduler_rows: no live scheduler IP, skipping"; return; }
-  kubectl -n dragonfly-system exec dragonfly-mysql-0 -- \
-    mysql -uroot -pdragonfly-root -e "DELETE FROM manager.scheduler WHERE ip != '$live_ip';" >/dev/null 2>&1
-  say "  scheduler table pruned to live IP $live_ip - restarting manager to pick it up"
-  local before_restarts
-  before_restarts=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
-    -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo 0)
-  kubectl -n dragonfly-system rollout restart deployment/dragonfly-manager >/dev/null 2>&1
-  kubectl -n dragonfly-system rollout status deployment/dragonfly-manager --timeout=120s >/dev/null 2>&1
-  # The scheduler dies with the manager: announcer.New dials manager:65003 at
-  # startup and exits 1 on timeout. On 2026-09-12 it did exactly that 4 min into
-  # dfinit-podman, came back on a new pod IP, and left ten dfdaemons wedged on
-  # the dead one - ten podman pulls hung 35 min with no error.
-  kubectl -n dragonfly-system rollout status statefulset/dragonfly-scheduler --timeout=300s >/dev/null 2>&1
-  local after_restarts new_ip
-  after_restarts=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
-    -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo 0)
-  new_ip=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 -o jsonpath='{.status.podIP}' 2>/dev/null)
-  if [ "$after_restarts" != "$before_restarts" ] || [ "$new_ip" != "$live_ip" ]; then
-    say "  scheduler restarted with the manager (restarts $before_restarts->$after_restarts, ip $live_ip->$new_ip)"
-    kubectl -n dragonfly-system exec dragonfly-mysql-0 -- \
-      mysql -uroot -pdragonfly-root -e "DELETE FROM manager.scheduler WHERE ip != '$new_ip';" >/dev/null 2>&1
-    restart_dragonfly_data_plane
-    return
-  fi
-  local ok=0
-  for _ in $(seq 1 20); do
-    local total ready
-    total=$(kubectl -n dragonfly-system get pods -l app=dragonfly,component=client --no-headers 2>/dev/null | wc -l)
-    ready=$(kubectl -n dragonfly-system get pods -l app=dragonfly,component=client --no-headers 2>/dev/null | awk '$2=="1/1"' | wc -l)
-    [ "$total" -gt 0 ] && [ "$total" = "$ready" ] && { ok=1; break; }
-    sleep 5
-  done
-  [ "$ok" = 1 ] && say "  dragonfly-client stable" || say "  WARNING: dragonfly-client not all Ready after 100s, continuing anyway"
-}
-
-# A dfdaemon keeps talking to the scheduler pod IP it first connected to, so a
-# scheduler that moved leaves every client stuck there until it is bounced.
-restart_dragonfly_data_plane() {
-  say "  bouncing the data plane so no client keeps the dead scheduler address"
-  kubectl -n dragonfly-system rollout restart daemonset/dragonfly-client >/dev/null 2>&1
-  kubectl -n dragonfly-system rollout restart statefulset/dragonfly-seed-client >/dev/null 2>&1
-  kubectl -n dragonfly-system rollout status daemonset/dragonfly-client --timeout=300s >/dev/null 2>&1
-  kubectl -n dragonfly-system rollout status statefulset/dragonfly-seed-client --timeout=300s >/dev/null 2>&1
-  local rows
-  rows=$(kubectl -n dragonfly-system exec dragonfly-mysql-0 -- \
-    mysql -uroot -pdragonfly-root -N -e \
-    "SELECT ip FROM manager.scheduler WHERE state='active';" 2>/dev/null | tr -d '\r')
-  say "  active scheduler rows after the bounce: $(echo "$rows" | tr '\n' ' ')"
-}
 # The registry keeps server-side connections of a killed arm and can end up
 # pinned at its memory limit, answering /v2/ in minutes instead of milliseconds.
 # Three killed runs did that on 2026-09-12 and every later pull hung with no
@@ -124,39 +79,29 @@ registry_reachable() {
   esac
 }
 
-# A podman pull through the dfinit mirror blocks forever - no error, no timeout -
-# if the scheduler moves after the pull began: on 2026-09-12 ten pulls sat 35 min
-# with zero dfdaemon tasks. So the control plane must be final before an arm runs,
-# not merely "all clients Ready", which it was in both hung runs.
-wait_p2p_settled() {
-  local tries="${1:-60}" stable=0 prev_ip="" prev_restarts=""
-  while [ "$tries" -gt 0 ]; do
-    tries=$((tries - 1))
-    local ip restarts ready total active
-    ip=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
-      -o jsonpath='{.status.podIP}' 2>/dev/null)
-    restarts=$(kubectl -n dragonfly-system get pod dragonfly-scheduler-0 \
-      -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
-    ready=$(kubectl -n dragonfly-system get pods --no-headers 2>/dev/null | awk '$2=="1/1"' | wc -l)
-    total=$(kubectl -n dragonfly-system get pods --no-headers 2>/dev/null | wc -l)
-    active=$(kubectl -n dragonfly-system exec dragonfly-mysql-0 -- mysql -uroot -pdragonfly-root -N \
-      -e "SELECT ip FROM manager.scheduler WHERE state='active';" 2>/dev/null | tr -d '\r' | tr '\n' ' ')
-    active="${active% }"
-    if [ -n "$ip" ] && [ "$total" -gt 0 ] && [ "$ready" = "$total" ] \
-       && [ "$active" = "$ip" ] && [ "$ip" = "$prev_ip" ] && [ "$restarts" = "$prev_restarts" ]; then
-      stable=$((stable + 1))
-      if [ "$stable" -ge 3 ]; then
-        say "  P2P settled: scheduler $ip, $ready/$total dragonfly pods Ready"
-        return 0
-      fi
+# Every measured pull opens with kubectl, so network trouble on the path to the
+# API is charged to duration_ms and sets the arm's AGGREGATE: on 2026-09-12
+# three pods absorbed 30-140s of TCP connect stalls that way. Probe that path
+# first; a stall that only starts mid-arm still has to be caught in the TSV.
+api_path_healthy() {
+  local server probes worst=0 fails=0 i t0 t1 ms
+  probes="${RIID_API_PROBES:-10}"
+  server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)
+  [ -n "$server" ] || { say "  API path probe: no server in $KC, skipping"; return 0; }
+  # A whole API round-trip, not a TCP connect: this workstation runs a local
+  # TLS-terminating proxy that answers a connect to any address, blackholes
+  # included, in 0.1s - so connect timing here measures nothing at all.
+  for i in $(seq 1 "$probes"); do
+    t0=$(date +%s%N)
+    if kubectl get --raw=/livez --request-timeout="${RIID_API_PROBE_TIMEOUT:-5s}" >/dev/null 2>&1; then
+      t1=$(date +%s%N); ms=$(( (t1 - t0) / 1000000 ))
+      [ "$ms" -gt "$worst" ] && worst=$ms
     else
-      stable=0
+      fails=$((fails + 1))
     fi
-    prev_ip="$ip"; prev_restarts="$restarts"
-    sleep 10
   done
-  say "  P2P did not settle (scheduler still moving or manager row stale)"
-  return 1
+  say "  API path probe: $server, $probes calls, $fails failed, worst ${worst}ms"
+  [ "$fails" -eq 0 ] && [ "$worst" -le "${RIID_API_PROBE_MAX_MS:-1500}" ]
 }
 
 # One wrapper decides which of the three caches the arm uses: bare-* the engine,
@@ -173,6 +118,7 @@ clear_for_arm() {
     return 1
   fi
   say "  nodes reported empty: $(grep -cE 'node containerd images left: 0 ' "$log" 2>/dev/null)"
+  case "$arm" in *-porto) say "  porto stores empty on: $(grep -cE 'node porto images left: 0 layers left: 0$' "$log" 2>/dev/null) node(s)" ;; esac
   say "  riid scratch empty on: $(grep -cE 'riid scratch left: 0 bytes' "$log" 2>/dev/null) pod(s)"
 }
 
@@ -226,16 +172,40 @@ export_logs() {
   say "  logs exported to $out"
 }
 
+# Before the series, not per arm: a stand where p2p serves nothing produces a
+# full matrix of numbers that all mean the same thing. SKIP_P2P_SMOKE=1 is for
+# re-running a single arm on a stand already proven this session.
+if [ "${SKIP_P2P_SMOKE:-0}" != 1 ]; then
+  say "=== p2p smoke ==="
+  smoke_engine="${ARMS##*-}"
+  if ENGINE="$smoke_engine" bash "$PERF/scenario/p2p-smoke.sh" \
+       > "$RUNLOG_DIR/p2p-smoke.${STAMP_ROOT}.log" 2>&1; then
+    say "  p2p smoke OK"
+  else
+    say "  p2p smoke FAILED - not running the series. Tail:"
+    tail -6 "$RUNLOG_DIR/p2p-smoke.${STAMP_ROOT}.log" | sed 's/^/    /'
+    exit 1
+  fi
+fi
+
 for arm in $ARMS; do
   stamp=$(date +%Y%m%d-%H%M)
   say "=== $arm ($stamp) ==="
+  # Before the cache clear, which needs the same path and would be wasted.
+  if ! api_path_healthy; then
+    say "$arm: SKIPPED - the API path is unstable, an arm run now would measure it"
+    say "  if this stand's address is routed into a tunnel: make -C <tf module> bypass-api"
+    continue
+  fi
   if ! clear_for_arm "$arm" "$stamp"; then
     say "$arm: SKIPPED - cache not cleared"
     continue
   fi
-  say "pruning stale scheduler rows and waiting for containerd"
-  purge_stale_scheduler_rows
-  wait_for_containerd
+  say "preparing Dragonfly and the riid pods"
+  roll_data_plane=0
+  p2p_arm "$arm" && roll_data_plane=1
+  dragonfly_prepare "$roll_data_plane"
+  restart_riid_pods
   case "$arm" in dfinit-*)
     engine="${arm#dfinit-}"
     say "dfinit-enable ENGINE=$engine"
@@ -244,22 +214,19 @@ for arm in $ARMS; do
       tail -15 "$RUNLOG_DIR/${arm}.${stamp}.dfinit-enable.log" | sed 's/^/    /'
       continue
     fi
-    say "pruning stale scheduler rows and waiting for containerd"
-    purge_stale_scheduler_rows
-    wait_for_containerd;;
+    # The data plane was re-pointed above; this pass only prunes what dfinit-enable left.
+    say "preparing Dragonfly again after dfinit-enable"
+    dragonfly_prepare 0
+    restart_riid_pods;;
   esac
   if ! registry_reachable; then
     say "$arm: SKIPPED - the registry is not answering, restart local-registry first"
     continue
   fi
-  # bare-* never touches Dragonfly, so only the P2P arms need the settle gate.
-  case "$arm" in
-    riid-*|dfinit-*)
-      if ! wait_p2p_settled; then
-        say "$arm: SKIPPED - P2P control plane not settled"
-        continue
-      fi ;;
-  esac
+  if p2p_arm "$arm" && ! dragonfly_wait_settled; then
+    say "$arm: SKIPPED - P2P control plane not settled"
+    continue
+  fi
   tsv="$PERF/output/${arm}.tsv"
   before=$(stat -c %Y "$tsv" 2>/dev/null || echo 0)
   arm_timeout=$(arm_timeout_seconds)

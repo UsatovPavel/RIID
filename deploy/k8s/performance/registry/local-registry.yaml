@@ -72,10 +72,46 @@ spec:
             # ~90 minute re-mirror over the WAN before the next arm can run.
             - name: data
               mountPath: /var/lib/registry
+        # bare-porto only: Porto fetches blobs over https, so a second server on the
+        # same store answers TLS on 5443; porto-registry-tls.sh issues the cert.
+        # Without that Secret it idles, and stands without Porto see no change.
+        - name: registry-tls
+          image: performance.local_registry
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - if [ -s /certs/tls.crt ]; then exec registry serve /etc/docker/registry/config.yml; else exec sleep 2147483647; fi
+          env:
+            - name: REGISTRY_HTTP_ADDR
+              value: ":5443"
+            - name: REGISTRY_HTTP_TLS_CERTIFICATE
+              value: /certs/tls.crt
+            - name: REGISTRY_HTTP_TLS_KEY
+              value: /certs/tls.key
+          resources:
+            requests:
+              cpu: 200m
+              memory: 2Gi
+            limits:
+              memory: 10Gi
+          ports:
+            - name: https
+              containerPort: 5443
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+            - name: tls
+              mountPath: /certs
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: local-registry-data
+        - name: tls
+          secret:
+            secretName: local-registry-tls
+            optional: true
 ---
 apiVersion: v1
 kind: Service
@@ -91,4 +127,8 @@ spec:
     - name: http
       port: 5000
       targetPort: http
+      protocol: TCP
+    - name: https
+      port: 5443
+      targetPort: https
       protocol: TCP

@@ -32,17 +32,26 @@ _podman_tls_verify() {
   printf '%s\n' "$v"
 }
 
-_podman_node_exec() {
-  local riid_pod="$1" node node_pod
-  shift
+# Cached per RIID pod in a local file: run-pull-scenario.sh starts the driver as a
+# new process for every image, and resolving the podman-node pod each time put two
+# API reads inside every measured pull - 4 calls against containerd's 2, and twice
+# the exposure to a control-path stall.
+_podman_node_pod_cache_file() {
+  local dir="${RIID_PODMAN_NODE_CACHE_DIR:-${TMPDIR:-/tmp}/riid-podman-node-pods}"
+  mkdir -p "$dir" 2>/dev/null || return 1
+  printf '%s/%s.%s\n' "$dir" "$NS" "$1"
+}
+
+_podman_resolve_node_pod() {
+  local riid_pod="$1" node node_pod attempt=1
   # riid_kubectl, not bare kubectl: it retries only failures to *reach* the API
   # (timeout/refused/no route/TLS), where the command never ran, so a retried pull
   # is still cold. A mid-stream break still fails. Nine rows of a dfinit-podman arm
   # died on API drops through a full-tunnel VPN on 2026-09-12 for want of this.
-  node="$(riid_kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')"
+  node="$(riid_kubectl -n "$NS" get pod "$riid_pod" -o jsonpath='{.spec.nodeName}')" || return 1
+  [[ -n "$node" ]] || { echo "RIID pod=$riid_pod has no node" >&2; return 1; }
   # Two pure reads, so an empty answer is retried as well: a slow API returned no
   # podman-node for a node whose pod was Running all along.
-  local attempt=1
   while :; do
     node_pod="$(riid_kubectl -n "$NS" get pods -l app.kubernetes.io/name=podman-node \
       --field-selector "spec.nodeName=$node,status.phase=Running" \
@@ -55,13 +64,47 @@ _podman_node_exec() {
     attempt=$((attempt + 1))
     sleep 3
   done
-  # nsenter into PID 1's netns (hostPID is on), not just chroot: dfinit points
-  # podman at the dfdaemon proxy on 127.0.0.1:4001, which lives in the HOST
-  # netns. From the pod's own netns that port is closed, podman reports
-  # "connection refused" and falls back to the registry without failing - which
-  # is how a whole dfinit-podman arm measured a plain pull on 2026-09-11 while
-  # `podman info` still listed the mirror, because reading config needs no socket.
+  printf '%s\n' "$node_pod"
+}
+
+# nsenter into PID 1's netns (hostPID is on), not just chroot: dfinit points
+# podman at the dfdaemon proxy on 127.0.0.1:4001, which lives in the HOST
+# netns. From the pod's own netns that port is closed, podman reports
+# "connection refused" and falls back to the registry without failing - which
+# is how a whole dfinit-podman arm measured a plain pull on 2026-09-11 while
+# `podman info` still listed the mirror, because reading config needs no socket.
+_podman_exec_on() {
+  local node_pod="$1"
+  shift
   riid_kubectl -n "$NS" exec -c installer "$node_pod" -- nsenter -t 1 -n chroot /host "$@"
+}
+
+_podman_node_exec() {
+  local riid_pod="$1" cache node_pod="" err rc=0
+  shift
+  cache="$(_podman_node_pod_cache_file "$riid_pod")" || cache=""
+  [[ -n "$cache" ]] && node_pod="$(cat "$cache" 2>/dev/null || true)"
+  if [[ -z "$node_pod" ]]; then
+    node_pod="$(_podman_resolve_node_pod "$riid_pod")" || return 1
+    [[ -z "$cache" ]] || printf '%s\n' "$node_pod" > "$cache" 2>/dev/null || true
+  fi
+  err="$(mktemp)"
+  _podman_exec_on "$node_pod" "$@" 2>"$err" || rc=$?
+  # A cached podman-node pod can be gone, restarted between images; the API then
+  # refuses the exec before anything runs, so re-resolving keeps the retry cold.
+  # Matched on kubectl's wording only: podman's own "404 page not found" means the
+  # pull did run, and retrying that would measure it warm.
+  if ((rc != 0)) && grep -qE '^Error from server \(NotFound\): pods "|unable to upgrade connection: (container not found|pod does not exist)' "$err"; then
+    echo "podman-node pod $node_pod is gone, resolving again for RIID pod=$riid_pod" >&2
+    [[ -z "$cache" ]] || rm -f "$cache"
+    node_pod="$(_podman_resolve_node_pod "$riid_pod")" || { rm -f "$err"; return 1; }
+    [[ -z "$cache" ]] || printf '%s\n' "$node_pod" > "$cache" 2>/dev/null || true
+    rc=0
+    _podman_exec_on "$node_pod" "$@" 2>"$err" || rc=$?
+  fi
+  cat "$err" >&2
+  rm -f "$err"
+  return "$rc"
 }
 
 # What the daemon resolved, not what some file says: this is the engine's own
@@ -107,14 +150,22 @@ engine_ref() {
   fi
 }
 
+# Driver hook for riid_pull_with_retry: a killed pull leaves partial blobs, and
+# podman resumes them, so the retry has to start from no image at all.
+engine_drop_image() {
+  _podman_node_exec "$1" podman rmi -f "$2" >/dev/null 2>&1 || true
+}
+
 engine_pull() {
   local pod="$1" ref="$2"
-  _podman_node_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
+  riid_pull_with_retry "$pod" "$ref" \
+    _podman_node_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
 }
 
 engine_pull_mirrored() {
   local pod="$1" ref="$2"
-  _podman_node_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
+  riid_pull_with_retry "$pod" "$ref" \
+    _podman_node_exec "$pod" podman pull --tls-verify="$(_podman_tls_verify)" "$ref" >/dev/null
 }
 
 # Whether the registry under test is mirrored - not whether the file mentions the
@@ -123,7 +174,7 @@ engine_pull_mirrored() {
 # so every stand gets a mirror for a registry it does not use. A substring check
 # passes on that and the arm measures a plain pull, which is how every recorded
 # dfinit-podman run ended up with baseline egress.
-_podman_mirror_of() {
+engine_mirror_location() {
   local pod="$1" host
   host="$(riid_registry_node_host)" || return 1
   [ -n "$host" ] || { echo "registry host is empty, set REGISTRY_PULL_HOST" >&2; return 1; }
@@ -142,64 +193,13 @@ print(",".join(m.get("Location", "") for m in (entry.get("Mirrors") or [])))
 '
 }
 
-# Configured is not the same as reachable. `podman info` parses a file and needs
-# no socket, so it kept reporting the mirror while every pull got "connection
-# refused" from it and fell back to the registry. Probe the proxy from the same
-# netns the pull runs in, which is the only place its reachability matters.
-_podman_mirror_reachable() {
-  local pod="$1" loc="$RIID_DFINIT_PROXY_LOCATION"
-  _podman_node_exec "$pod" sh -ec "
-    h=\${0%%:*}; p=\${0##*:}
-    (command -v nc >/dev/null 2>&1 && nc -z -w5 \"\$h\" \"\$p\") ||
-    (command -v curl >/dev/null 2>&1 && curl -s -o /dev/null --max-time 5 \"http://\$h:\$p/v2/\")
-  " "$loc"
-}
+# The pull runs on the node, so the proxy probe has to run there too.
+engine_exec_where_pull_runs() { _podman_node_exec "$@"; }
 
-engine_mirror_check() {
-  local pod="$1" host mirrors
-  host="$(riid_registry_node_host)"
-  mirrors="$(_podman_mirror_of "$pod")" || return 1
-  case ",$mirrors," in
-    *",$RIID_DFINIT_PROXY_LOCATION,"*)
-      if ! _podman_mirror_reachable "$pod"; then
-        echo "dfinit mirror '$RIID_DFINIT_PROXY_LOCATION' is configured for '$host' but" >&2
-        echo "  unreachable from where the pull runs: podman would log 'connection refused'" >&2
-        echo "  and silently fall back to the registry, measuring a plain pull." >&2
-        echo "  The dfdaemon proxy listens in the HOST netns - check that the engine" >&2
-        echo "  command enters it (nsenter -t 1 -n), not just chroot /host." >&2
-        return 1
-      fi
-      return 0 ;;
-  esac
-  echo "dfinit mirror not found for the registry under test: pod=$pod, registry='$host'" >&2
-  echo "  its mirrors: [${mirrors:-none}], expected '$RIID_DFINIT_PROXY_LOCATION'" >&2
-  echo "  dfinit writes /etc/containers/registries.conf on the NODE; check client.dfinit" >&2
-  echo "  in values - a block pinned to another address mirrors the wrong registry" >&2
-  return 1
-}
+# dfinit edits the node's own registries.conf, the same file the baseline reads,
+# so the baseline has to assert the mirror is absent. See mirror-check.inc.sh.
+engine_no_mirror_check() { riid_no_mirror_check "$@"; }
 
-# The mirror image of the check above, for the baseline arm. Scoped to the same
-# registry: a stale block for some other address does not route our pulls, so it
-# must not fail the baseline - only a mirror on the registry under test does.
-engine_no_mirror_check() {
-  local pod="$1" host mirrors
-  host="$(riid_registry_node_host)"
-  mirrors="$(_podman_mirror_of "$pod")" || return 1
-  case ",$mirrors," in
-    *",$RIID_DFINIT_PROXY_LOCATION,"*) ;;
-    *) return 0 ;;
-  esac
-  echo "baseline arm is contaminated: pod=$pod still mirrors registry '$host' through" >&2
-  echo "  '$RIID_DFINIT_PROXY_LOCATION'. Disable client.dfinit and restore the node's" >&2
-  echo "  /etc/containers/registries.conf from the pristine copy taken at install:" >&2
-  echo "  /etc/containers/registries.conf.riid-baseline (src/engines/podman-node.yaml)" >&2
-  return 1
-}
-
-# --volumes: a pull creates no anonymous volumes, so it does not affect the
-# measurement, but it matches scenario/clear/clear-cache-engines.sh —
-# one meaning of "clean". Now wipes the node's store, which is the store both
-# the baseline and the RIID import write into.
 engine_clear_cache() {
   _podman_node_exec "$1" podman system prune -af --volumes >/dev/null
 }

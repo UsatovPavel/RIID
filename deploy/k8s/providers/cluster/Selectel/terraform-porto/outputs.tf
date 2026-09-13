@@ -13,6 +13,11 @@ output "worker_ips" {
   value       = [for s in openstack_compute_instance_v2.worker : s.access_ip_v4]
 }
 
+output "infra_ips" {
+  description = "Private address of every infra node, keyed by role."
+  value       = { for role, s in openstack_compute_instance_v2.infra : role => s.access_ip_v4 }
+}
+
 output "worker_names" {
   description = "Hostname of every worker, which is also its Kubernetes node name."
   value       = [for s in openstack_compute_instance_v2.worker : s.name]

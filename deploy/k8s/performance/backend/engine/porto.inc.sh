@@ -6,7 +6,7 @@
 # portod itself talks to the registry through `portoctl docker-pull`, which puts
 # two requirements on the stand that podman and containerd do not have:
 #
-#   1. /etc/portod.conf must carry `container { docker_images_support: true }` —
+#   1. /etc/portod.conf must carry `daemon { docker_images_support: true }` —
 #      without it docker-pull/docker-images/docker-rmi are disabled entirely.
 #   2. An HTTP registry is listed there too, in `docker_insecure_registry`: Porto
 #      has no command-level flag like podman's --tls-verify=false or ctr's
@@ -50,7 +50,7 @@ engine_preflight() {
   # very first image, in the middle of a measurement. Cheaper to learn it here.
   if ! riid_engine_exec "$pod" portoctl docker-images "${place[@]}" >/dev/null 2>&1; then
     echo "porto: docker images support is off in pod=$pod" >&2
-    echo "  add to /etc/portod.conf: container { docker_images_support: true } and restart porto" >&2
+    echo "  add to /etc/portod.conf: daemon { docker_images_support: true } (TDaemonCfg, not container) and restart porto" >&2
     return 1
   fi
 }
@@ -59,7 +59,10 @@ engine_preflight() {
 # unqualified-search-registries like podman nor anything similar.
 engine_ref() {
   local repo="$1" tag="$2" host
-  host="$(riid_registry_node_host)" || return 1
+  # Porto fetches blobs over https only, so the plain-HTTP registry needs the TLS
+  # entry from registry/porto-registry-tls.sh; it prints the value to set here.
+  host="${PORTO_REGISTRY_HOST:-}"
+  [[ -n "$host" ]] || host="$(riid_registry_node_host)" || return 1
   if [[ -z "$host" ]]; then
     echo "porto: registry host is empty, set REGISTRY_PULL_HOST (portoctl docker-pull needs a fully qualified ref)" >&2
     return 2
@@ -80,9 +83,10 @@ engine_pull() {
   # docker-pull prints the image id — harmless for the measurement, but it has
   # no place in the TSV.
   if [[ -n "${DOCKER_TOKEN:-}" ]]; then
-    riid_engine_exec "$pod" env "DOCKER_TOKEN=$DOCKER_TOKEN" "${args[@]}" "$ref" >/dev/null
+    riid_pull_with_retry "$pod" "$ref" \
+      riid_engine_exec "$pod" env "DOCKER_TOKEN=$DOCKER_TOKEN" "${args[@]}" "$ref" >/dev/null
   else
-    riid_engine_exec "$pod" "${args[@]}" "$ref" >/dev/null
+    riid_pull_with_retry "$pod" "$ref" riid_engine_exec "$pod" "${args[@]}" "$ref" >/dev/null
   fi
 }
 
@@ -99,6 +103,15 @@ _porto_no_dfinit() {
 
 engine_pull_mirrored() { _porto_no_dfinit; }
 engine_mirror_check() { _porto_no_dfinit; }
+
+# docker-pull may keep what it fetched before a broken exec stream; dropping the
+# ref makes riid_pull_with_retry's retry as cold as the first attempt.
+engine_drop_image() {
+  local pod="$1" ref="$2"
+  local -a place
+  mapfile -t place < <(_porto_place_flags)
+  riid_engine_exec "$pod" portoctl docker-rmi "${place[@]}" "$ref" >/dev/null 2>&1 || true
+}
 
 # docker-images prints an "ID           NAME" header and one line per tag; the
 # tag is what gets removed, because docker-rmi takes an image name.
