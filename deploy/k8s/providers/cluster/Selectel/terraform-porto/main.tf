@@ -212,6 +212,10 @@ resource "openstack_networking_floatingip_v2" "control_plane" {
 resource "openstack_networking_floatingip_associate_v2" "control_plane" {
   floating_ip = openstack_networking_floatingip_v2.control_plane.address
   port_id     = openstack_networking_port_v2.control_plane.id
+
+  # Neutron refuses the association (ExternalGatewayForFloatingIPNotFound) until the
+  # subnet is attached to the router; nothing else orders the two.
+  depends_on = [openstack_networking_router_interface_v2.stand]
 }
 
 resource "openstack_compute_instance_v2" "control_plane" {
