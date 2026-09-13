@@ -25,6 +25,8 @@ SMOKE_MIN_GAIN="${SMOKE_MIN_GAIN:-1.0}"
 OUT_DIR="${SMOKE_OUT_DIR:-$PERF_DIR/output}"
 
 say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+# shellcheck source=dragonfly-control-plane.inc.sh
+source "$SCRIPT_DIR/dragonfly-control-plane.inc.sh"
 
 # Wall clock for the one image: the AGGREGATE row is first pod start to last pod
 # finish, which is when the flight is actually ready. A median over pods would
@@ -40,6 +42,15 @@ run_arm() {
       >"$tsv.clear.log" 2>&1; then
     say "  clear-cache FAILED - see $tsv.clear.log"
     return 1
+  fi
+  # The riid clear restarts the Dragonfly scheduler, often onto a new pod IP; the
+  # dfdaemons keep the dead one and every piece goes back to source (AGENT-132:
+  # smoke egress equal to bare). Same re-pointing the series does before an arm.
+  if [ "$backend" = riid ]; then
+    dragonfly_prepare 1 >>"$tsv.clear.log" 2>&1
+    dragonfly_wait_settled >>"$tsv.clear.log" 2>&1 || { say "  P2P did not settle - see $tsv.clear.log"; return 1; }
+    kubectl -n riid-system rollout restart daemonset/riid >/dev/null 2>&1
+    kubectl -n riid-system rollout status daemonset/riid --timeout=300s >/dev/null 2>&1
   fi
   say "  pulling $PROBE_IMAGE:$PROBE_TAG through $backend-$ENGINE"
   make -C "$PERF_DIR" run \
