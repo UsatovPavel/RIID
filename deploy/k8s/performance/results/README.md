@@ -1,21 +1,25 @@
 # Published bench results — 20-image dataset
 
-The final run of each arm of the AGENT-117/118/119/120 matrix, copied verbatim out of
-`../output/` (which stays untracked scratch: every retry lands there, only the runs below
-are published). Dataset: [`dataset_top20_sizes.tsv`](../../config/imagelist/dataset_top20_sizes.tsv).
+The final run of each arm of the containerd and podman matrix (AGENT-130 and the AGENT-119/120
+rebench), copied verbatim out of `../output/`. That directory stays untracked scratch: every
+retry lands there, only the runs below are published.
+Dataset: [`dataset_top20_sizes.tsv`](../../config/imagelist/dataset_top20_sizes.tsv).
 
 ## Files
 
 | Arm | Engine | Source | File | Stand |
 |-----|--------|--------|------|-------|
-| `bare-containerd` | containerd | registry, direct | `bare-containerd.agent117-20260910-2248.tsv` | A |
-| `dfinit-containerd` | containerd | Dragonfly via dfinit mirror | `dfinit-containerd.agent117-20260910-2228.tsv` | A |
-| `riid-containerd-noprefix` | containerd | RIID + Dragonfly, archive import | `riid-containerd-noprefix.agent118-20260911-1956.tsv` | **B** |
-| `bare-podman` | podman | registry, direct | `bare-podman.agent119-20260912-1647.tsv` | C |
-| `dfinit-podman` | podman | Dragonfly via dfinit mirror | `dfinit-podman.agent119-20260912-2004.tsv` | C |
-| `riid-podman` | podman | RIID + Dragonfly | `riid-podman.agent120-20260912-1620.tsv` | C |
+| `bare-containerd` | containerd | registry, direct | `bare-containerd.agent130-20260913-0016.tsv` | A |
+| `dfinit-containerd` | containerd | Dragonfly via dfinit mirror | `dfinit-containerd.agent130-20260913-0108.tsv` | A |
+| `riid-containerd-noprefix` | containerd | RIID + Dragonfly, archive import | `riid-containerd-noprefix.agent130-20260913-0128.tsv` | A |
+| `riid-containerd` | containerd | RIID + Dragonfly, prefix import | `riid-containerd.agent130-20260913-0201.tsv` | A |
+| `bare-podman` | podman | registry, direct | `bare-podman.agent119120-20260913-1329.tsv` | B |
+| `dfinit-podman` | podman | Dragonfly via dfinit mirror | `dfinit-podman.agent119120-20260913-1407.tsv` | B |
+| `riid-podman` | podman | RIID + Dragonfly, archive import | `riid-podman.agent119120-20260913-1344.tsv` | B |
 
-Every run is 10 pods × 20 images, `recreate` mode (all pods start together).
+Every run is 10 pods × 20 images, `recreate` mode (all pods start together), RIID v0.4.14.
+All seven passed `../summarize/validate-arm.sh`: 20/20 images, zero failed pulls, cold start on
+every node. Podman has no prefix-import arm: over the libpod socket RIID imports whole images.
 
 ## Format
 
@@ -26,8 +30,8 @@ Comma-separated despite the `.tsv` name — this is what the run driver writes a
 
 - `pod` is a pod name, except for the **`AGGREGATE`** row emitted once per image: first pod
   start to last pod finish, i.e. the cluster wall-clock for that image. Summing `AGGREGATE`
-  over the 20 images gives the number to report. A median or mean over pods is a second
-  number at best — it hides stragglers, and the flight is only ready when the last pod is.
+  over the 20 images gives the number to report. A mean over pods is a second number at best —
+  it hides stragglers, and the fleet is only ready when the last pod is.
 - `backend` holds the arm label, the same on every row of a file.
 - Trailer lines `# registry_tx_bytes_before/after/delta` carry registry egress in bytes;
   `delta` is the traffic the run caused.
@@ -35,15 +39,15 @@ Comma-separated despite the `.tsv` name — this is what the run driver writes a
 Read one file with `bash ../summarize/scenario-metrics.sh <file>`; compare two with
 `bash ../summarize/cluster-aggregate-time.sh <a> <b>`.
 
-## Why the stand column matters
+## Stands
 
-A stand is one Terraform-created cluster; the letters above are distinct clusters, identified
-by their node sets. The same arm re-measured on a different stand has drifted by up to 46%
-(`dfinit-containerd`: 623.1 s vs 426.9 s), which is larger than most effects being measured.
-So arms are only comparable **within one stand letter**.
+A stand is one Terraform-created cluster; A and B are distinct clusters, identified by their
+node sets. Each engine row was measured as one series on one stand, so arms compare cleanly
+**within a row**. Across rows they do not: the same arm re-measured on another stand has
+drifted by up to 46% (`dfinit-containerd`, 623.1 s vs 426.9 s in earlier runs), more than
+most of the effects measured here.
 
-That makes the podman row a like-for-like triple (all C) and the containerd baselines a valid
-pair (both A), but `riid-containerd-noprefix` sits alone on B: it has no same-stand baseline
-to be compared against, and it is the no-prefix variant, not the prefix import arm. Closing
-that cell needs `bare-containerd`, `dfinit-containerd` and `riid-containerd` re-run as one
-series on one stand — until then the matrix in the top-level READMEs is left unfilled.
+Two limits of these numbers. `bare-containerd` measured twice on stand A gave 878.0 s and
+836.0 s (4.8%), which is larger than the prefix-versus-archive gap of 1.9%. Also, egress is
+the robust result: `dfinit-podman` egress matched to 0.2% on three separate stands, where its
+time did not.

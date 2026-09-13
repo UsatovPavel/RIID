@@ -98,30 +98,42 @@ All 10 RIID pods pulling 91 images simultaneously (Kubernetes `Recreate` deploym
 
 Датасет обоих сценариев (91 образ): `config/imagelist/dataset_a_91_sizes.tsv`.
 
-### Top-20 dataset (2 engines × 3 sources)
+### Top-20 dataset (containerd, podman)
 
 Второй, меньший датасет: 20 самых скачиваемых образов Docker Hub по `pull_count × size_bytes`,
 с размерами, дайджестами и временем снятия — `config/imagelist/dataset_top20_sizes.tsv`.
-Каждый арм: 10 подов × 20 образов, все поды стартуют одновременно (`recreate`).
+Каждый арм: 10 подов × 20 образов, все поды стартуют одновременно (`recreate`), RIID v0.4.14.
 
 Отчётное число — **сумма wall-clock по образам** (строка `AGGREGATE`: от старта первого пода
-до финиша последнего), а не медиана по подам: медиана прячет отстающих, а готовность флота
-определяет последний под.
+до финиша последнего). Среднее по подам — вторым числом: оно прячет отстающих, а готовность
+флота определяет последний под.
 
-| Engine | Source | Wall-clock | Registry TX | Run |
-|--------|--------|-----------:|------------:|-----|
-| containerd | registry, direct | TBD | TBD | `bare-containerd.agent117-20260910-2248` |
-| containerd | Dragonfly via dfinit | TBD | TBD | `dfinit-containerd.agent117-20260910-2228` |
-| containerd | RIID + Dragonfly | TBD | TBD | `riid-containerd-noprefix.agent118-20260911-1956` |
-| podman | registry, direct | TBD | TBD | `bare-podman.agent119-20260912-1647` |
-| podman | Dragonfly via dfinit | TBD | TBD | `dfinit-podman.agent119-20260912-2004` |
-| podman | RIID + Dragonfly | TBD | TBD | `riid-podman.agent120-20260912-1620` |
+| Engine | Source | Wall-clock | Среднее по подам | Registry TX | Run |
+|--------|--------|-----------:|-----------------:|------------:|-----|
+| containerd | registry, direct | 836.0 с | 812.7 с | 117.41 ГиБ | `bare-containerd.agent130-20260913-0016` |
+| containerd | Dragonfly via dfinit | **397.3 с** | 346.2 с | **11.84 ГиБ** | `dfinit-containerd.agent130-20260913-0108` |
+| containerd | RIID + Dragonfly, prefix | 619.8 с | 540.1 с | **11.82 ГиБ** | `riid-containerd.agent130-20260913-0201` |
+| containerd | RIID + Dragonfly, archive | 631.8 с | 555.6 с | **11.82 ГиБ** | `riid-containerd-noprefix.agent130-20260913-0128` |
+| podman | registry, direct | 764.2 с | 753.4 с | 117.42 ГиБ | `bare-podman.agent119120-20260913-1329` |
+| podman | Dragonfly via dfinit | **366.7 с** | 342.7 с | **11.82 ГиБ** | `dfinit-podman.agent119120-20260913-1407` |
+| podman | RIID + Dragonfly | 685.1 с | 644.2 с | **11.82 ГиБ** | `riid-podman.agent119120-20260913-1344` |
 
-Числа не проставлены, пока все шесть армов не сняты на одном стенде. Сами прогоны реальны и
-опубликованы в [`performance/results/`](performance/results/), но сняты на трёх разных
-стендах, а один и тот же арм между стендами расходится до 46% — больше сравниваемого эффекта.
-Containerd-строке вдобавок не хватает варианта с префиксным импортом. Подробности —
-[`performance/results/README.md`](performance/results/README.md).
+Каждая строка движка снята одной серией на одном стенде (containerd — 13.09 ночью, podman —
+13.09 днём), все семь армов прошли `validate-arm.sh`. Сравнивать армы можно **внутри движка**;
+между движками стенды разные, а один и тот же арм между стендами расходится до 46%.
+
+Как читать:
+- **Трафик.** RIID и dfinit неразличимы: оба отдают реестру одну копию датасета вместо десяти
+  (−89.9% на обоих движках). Egress `dfinit-podman` совпал до 0.2% на трёх разных стендах.
+- **Время.** dfinit быстрее RIID на обоих движках: он отдаёт слои прямо движку, а RIID сначала
+  собирает образ и потом импортирует его. На podman разрыв больше (−10.3% против −52.0% к bare,
+  на containerd −25.9% против −52.5%): Libpod `images/load` сначала пишет присланный архив
+  во временный файл и только потом импортирует, а `ctr images import` читает поток напрямую.
+- **Prefix против archive на containerd** — 619.8 против 631.8 с (−1.9%). Это меньше разброса
+  самого стенда: `bare-containerd` на нём снят дважды, 878.0 и 836.0 с (4.8%). Считать префикс
+  быстрее по одной точке нельзя.
+
+Сырые прогоны и формат файлов — [`performance/results/`](performance/results/).
 
 ## Change test registry_provider:
 Change config.yaml
