@@ -24,7 +24,7 @@ NODES ?= $(shell yq -r '.cluster_topology.workers + .cluster_topology.observers 
 
 export NODES
 
-SSH_OPTS := -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
+SSH_OPTS := -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
 NODE_READY_TIMEOUT ?= 1800
 
 # Scope of purge-volumes; mirrors var.cluster_name, which purge cannot read back
