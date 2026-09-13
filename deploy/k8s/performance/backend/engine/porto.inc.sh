@@ -59,7 +59,10 @@ engine_preflight() {
 # unqualified-search-registries like podman nor anything similar.
 engine_ref() {
   local repo="$1" tag="$2" host
-  host="$(riid_registry_node_host)" || return 1
+  # Porto fetches blobs over https only, so the plain-HTTP registry needs the TLS
+  # entry from registry/porto-registry-tls.sh; it prints the value to set here.
+  host="${PORTO_REGISTRY_HOST:-}"
+  [[ -n "$host" ]] || host="$(riid_registry_node_host)" || return 1
   if [[ -z "$host" ]]; then
     echo "porto: registry host is empty, set REGISTRY_PULL_HOST (portoctl docker-pull needs a fully qualified ref)" >&2
     return 2
