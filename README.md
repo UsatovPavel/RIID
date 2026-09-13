@@ -81,10 +81,11 @@ On big images riid keep **p2p advantage** and overcome podman
 A second, smaller dataset: the 20 most-pulled Docker Hub images by `pull_count × size_bytes`,
 pinned with sizes, digests and capture timestamps in
 [`deploy/k8s/config/imagelist/dataset_top20_sizes.tsv`](deploy/k8s/config/imagelist/dataset_top20_sizes.tsv).
-Each arm is 10 pods × 20 images, all pods starting together (`recreate`), RIID v0.4.14.
-Wall-clock is the sum over images of first pod start to last pod finish.
+Each scenario is 10 pods × 20 images, all pods starting together (`recreate`), RIID v0.4.14.
+Cluster time: for each image, the time until it is downloaded on every cluster node, summed
+over the 20 images.
 
-| Engine | Source | Wall-clock | Registry TX |
+| Engine | Source | Cluster time | Registry TX |
 |--------|--------|-----------:|------------:|
 | containerd | registry, direct | 836.0 s | 117.4 GiB |
 | containerd | Dragonfly via dfinit | **397.3 s** (−52.5%) | **11.8 GiB** (−89.9%) |
@@ -94,7 +95,7 @@ Wall-clock is the sum over images of first pod start to last pod finish.
 | podman | Dragonfly via dfinit | **366.7 s** (−52.0%) | **11.8 GiB** (−89.9%) |
 | podman | RIID + Dragonfly | 685.1 s (−10.3%) | **11.8 GiB** (−89.9%) |
 
-Percentages are against the `registry, direct` arm of the same engine. Each engine was measured
+Percentages are against the `registry, direct` scenario of the same engine. Each engine was measured
 as one series on one cluster; the two engines were not, so compare within a row group only.
 Per-run data, stands and caveats: **[deploy/k8s/README.md — Top-20 dataset](deploy/k8s/README.md#top-20-dataset-containerd-podman)**.
 
