@@ -65,7 +65,7 @@ variable "availability_zone" {
 }
 
 variable "nodes_count" {
-  description = "Worker count: 6 for the preparation stand, 12 for the production run. The control plane is extra and is not counted, exactly as with the MKS node group."
+  description = "Whole stand except the control plane: workers plus, with dedicated_infra_nodes, the four infra nodes carved out of it (same meaning as NODES on the MKS stand)."
   type        = number
   default     = 6
 
@@ -153,15 +153,56 @@ variable "kube_series" {
   }
 }
 
+variable "dedicated_infra_nodes" {
+  description = "Carve tainted monitoring, registry, scheduler and manager nodes out of nodes_count, as on the MKS stand."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = !var.dedicated_infra_nodes || var.nodes_count >= 5
+    error_message = "dedicated_infra_nodes takes 4 nodes out of nodes_count, so nodes_count must be at least 5."
+  }
+}
+
+variable "infra_flavor_names" {
+  description = "Flavor per infra role; roles absent here use flavor_name. The registry serves 10 nodes at once and needs 16 GiB (local-registry memory limit is 10Gi)."
+  type        = map(string)
+  default = {
+    registry = "SL1.8-16384"
+  }
+}
+
+variable "infra_volume_gb" {
+  description = "Boot disk per infra node, GiB, keyed by role. Same sizes as the MKS stand."
+  type        = map(number)
+  default = {
+    monitoring = 40
+    registry   = 40
+    scheduler  = 20
+    manager    = 30
+  }
+
+  validation {
+    condition     = alltrue([for k in ["monitoring", "registry", "scheduler", "manager"] : contains(keys(var.infra_volume_gb), k)])
+    error_message = "infra_volume_gb must set all four infra roles: monitoring, registry, scheduler, manager."
+  }
+}
+
 variable "porto_version" {
-  description = "Release tag of ten-nancy/porto to install, without the leading v. The jammy deb of that release is what lands on every node."
+  description = "Release tag of porto_release_repo to install, without the leading v. The jammy deb of that release lands on every node and must match portoctl in the RIID image."
   type        = string
-  default     = "5.3.41"
+  default     = "5.3.58"
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.porto_version))
-    error_message = "porto_version must look like 5.3.41."
+    error_message = "porto_version must look like 5.3.58."
   }
+}
+
+variable "porto_release_repo" {
+  description = "GitHub owner/repo whose releases carry the Porto jammy deb. Same fork CI installs from."
+  type        = string
+  default     = "UsatovPavel/porto"
 }
 
 variable "porto_insecure_registries" {

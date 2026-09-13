@@ -4,7 +4,7 @@
 # Stand agnostic: workers are ssh targets in PORTO_WORKERS and readiness comes
 # from KUBECONFIG, so the local stand and a Selectel one use this one file.
 
-# NOT SAFE TO RUN UNATTENDED. Porto 5.3.41 crash-loops on a pure-unified host
+# NOT SAFE TO RUN UNATTENDED. Porto 5.3.x crash-loops on a pure-unified host
 # ("Cannot mount cgroup: Device or resource busy"); the cgroup layout is fixed at
 # kernel init, so the fix is a GRUB parameter plus a REBOOT of every worker.
 # It cannot be done live, and every node here needs it.
@@ -15,7 +15,8 @@
 # comparable to each other. Env: PORTO_WORKERS, PORTO_SSH_PASSWORD, PORTO_REGISTRY.
 set -uo pipefail
 
-PORTO_VERSION="${PORTO_VERSION:-5.3.41}"
+PORTO_VERSION="${PORTO_VERSION:-5.3.58}"
+PORTO_RELEASE_REPO="${PORTO_RELEASE_REPO:-UsatovPavel/porto}"
 DEB="${PORTO_DEB:-}"
 WORKERS="${PORTO_WORKERS:-}"
 SSH_PASSWORD="${PORTO_SSH_PASSWORD:-}"
@@ -83,7 +84,7 @@ if [ -z "$DEB" ]; then
   # The nodes are noble (24.04) and the only published deb is jammy (22.04). Its
   # dependencies are satisfied on noble, but each install is verified per node.
   [ -f "$DEB" ] || curl -fsSL -m 600 -o "$DEB" \
-    "https://github.com/ten-nancy/porto/releases/download/v${PORTO_VERSION}/porto_jammy_${PORTO_VERSION}_amd64.deb" \
+    "https://github.com/${PORTO_RELEASE_REPO}/releases/download/v${PORTO_VERSION}/porto_jammy_${PORTO_VERSION}_amd64.deb" \
     || die "cannot fetch the porto deb"
 fi
 say "using $DEB ($(du -h "$DEB" | cut -f1))"

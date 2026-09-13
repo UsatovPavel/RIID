@@ -17,6 +17,11 @@ data "openstack_compute_flavor_v2" "control_plane" {
   name = var.control_plane_flavor_name
 }
 
+data "openstack_compute_flavor_v2" "infra" {
+  for_each = var.dedicated_infra_nodes ? local.infra_roles : {}
+  name     = lookup(var.infra_flavor_names, each.key, var.flavor_name)
+}
+
 data "openstack_networking_network_v2" "external" {
   name     = "external-network"
   external = true
@@ -32,6 +37,16 @@ locals {
   kubeadm_token = "${random_string.token_id.result}.${random_string.token_secret.result}"
 
   node_labels = join(",", [for k, v in var.labels : "${k}=${v}"])
+
+  # Same roles and labels as the MKS stand (../terraform/main.tf). Here the taint
+  # comes from kubeadm join and sticks: no managed control plane reconciles it.
+  infra_roles = {
+    monitoring = { label = "riid.monitoring" }
+    registry   = { label = "riid.registry" }
+    scheduler  = { label = "riid.dragonfly.scheduler" }
+    manager    = { label = "riid.dragonfly.manager" }
+  }
+  worker_nodes_count = var.dedicated_infra_nodes ? var.nodes_count - length(local.infra_roles) : var.nodes_count
 
   # Общая часть подготовки ноды рендерится один раз и вкладывается в оба
   # cloud-init, чтобы containerd и kubeadm ставились ровно одинаково.
@@ -241,7 +256,7 @@ resource "openstack_compute_instance_v2" "control_plane" {
 # --- Workers ---
 
 resource "openstack_compute_instance_v2" "worker" {
-  count = var.nodes_count
+  count = local.worker_nodes_count
 
   name              = format("%s-w%02d", var.cluster_name, count.index + 1)
   flavor_id         = data.openstack_compute_flavor_v2.worker.id
@@ -264,21 +279,75 @@ resource "openstack_compute_instance_v2" "worker" {
   }
 
   user_data = templatefile("${path.module}/cloud-init/worker.yaml.tftpl", {
-    common         = local.common_node_script
-    ssh_public_key = trimspace(tls_private_key.stand.public_key_openssh)
-    api_endpoint   = "${local.control_plane_ip}:6443"
-    api_host       = local.control_plane_ip
-    api_port       = 6443
-    kubeadm_token  = local.kubeadm_token
-    porto_version  = var.porto_version
-    porto_insecure = var.porto_insecure_registries
-    node_labels    = local.node_labels
+    common             = local.common_node_script
+    ssh_public_key     = trimspace(tls_private_key.stand.public_key_openssh)
+    api_endpoint       = "${local.control_plane_ip}:6443"
+    api_host           = local.control_plane_ip
+    api_port           = 6443
+    kubeadm_token      = local.kubeadm_token
+    porto_version      = var.porto_version
+    porto_release_repo = var.porto_release_repo
+    porto_insecure     = var.porto_insecure_registries
+    node_labels        = local.node_labels
+    node_taint_key     = ""
   })
 
   # security_groups is attached at boot by Neutron, but the provider cannot read it
   # back for a Neutron-networked instance, so every plan sees empty state and calls
   # addSecurityGroup again - 400 "Duplicate items in the list". Ignore it rather than
   # fight a provider round-trip gap that has no effect on real state.
+  lifecycle {
+    ignore_changes = [user_data, security_groups]
+  }
+
+  depends_on = [
+    openstack_networking_router_interface_v2.stand,
+    openstack_compute_instance_v2.control_plane,
+  ]
+}
+
+# --- Infra nodes: monitoring, registry, Dragonfly scheduler and manager ---
+
+# The same cloud-init as a worker (Porto included, harmless), plus a role label and
+# a NoSchedule taint, so nothing measured shares these machines.
+resource "openstack_compute_instance_v2" "infra" {
+  for_each = var.dedicated_infra_nodes ? local.infra_roles : {}
+
+  name              = format("%s-%s", var.cluster_name, each.key)
+  flavor_id         = data.openstack_compute_flavor_v2.infra[each.key].id
+  key_pair          = openstack_compute_keypair_v2.stand.name
+  availability_zone = var.availability_zone
+  security_groups   = [openstack_networking_secgroup_v2.stand.name]
+
+  block_device {
+    uuid                  = data.openstack_images_image_v2.node.id
+    source_type           = "image"
+    destination_type      = "volume"
+    volume_size           = var.infra_volume_gb[each.key]
+    volume_type           = local.volume_type
+    boot_index            = 0
+    delete_on_termination = true
+  }
+
+  network {
+    uuid = openstack_networking_network_v2.stand.id
+  }
+
+  user_data = templatefile("${path.module}/cloud-init/worker.yaml.tftpl", {
+    common             = local.common_node_script
+    ssh_public_key     = trimspace(tls_private_key.stand.public_key_openssh)
+    api_endpoint       = "${local.control_plane_ip}:6443"
+    api_host           = local.control_plane_ip
+    api_port           = 6443
+    kubeadm_token      = local.kubeadm_token
+    porto_version      = var.porto_version
+    porto_release_repo = var.porto_release_repo
+    porto_insecure     = var.porto_insecure_registries
+    node_labels        = join(",", [for k, v in merge(var.labels, { (each.value.label) = "true" }) : "${k}=${v}"])
+    node_taint_key     = each.value.label
+  })
+
+  # Same provider round-trip gap as the workers, see there.
   lifecycle {
     ignore_changes = [user_data, security_groups]
   }
