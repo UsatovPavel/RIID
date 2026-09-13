@@ -78,6 +78,11 @@ case "$ARM" in
         # .isEmpty(), and the DaemonSet always sets CONTAINER_HOST. Demanding
         # layer.import>0 here would fail a correct arm for a mode podman cannot
         # reach; whole-image import over the socket is its only one.
+        # Porto has one import path, layer by layer, and ignores prefixImport. Zero
+        # means every image fell back to the flat rootfs import (chain over 4000 B).
+        riid-porto*)
+          [ "$li" -gt 0 ] && ok "porto layer-by-layer import: layer.import=$li" \
+            || bad "layer.import=0 - every image took the flat rootfs fallback" ;;
         *-noprefix|riid-podman*)
           [ "$li" -eq 0 ] && ok "prefix import off: layer.import=0" \
             || bad "layer.import=$li - prefixImport was ON, this arm measured prefix mode" ;;
@@ -103,7 +108,7 @@ if [ -n "$LOGDIR" ] && [ -f "$LOGDIR/cache-clear.log" ]; then
   nodes_clean=$(grep -cE 'node containerd images left: 0 ' "$LOGDIR/cache-clear.log" 2>/dev/null)
   nodes_dirty=$(grep -cE 'node containerd images left: [1-9]' "$LOGDIR/cache-clear.log" 2>/dev/null)
   left=$(grep -cE 'images left in [^:]+: [1-9]' "$LOGDIR/cache-clear.log" 2>/dev/null)
-  failed_clean=$(grep -cE 'FAILED (containerd|podman) ' "$LOGDIR/cache-clear.log" 2>/dev/null)
+  failed_clean=$(grep -cE 'FAILED (containerd|podman|porto) ' "$LOGDIR/cache-clear.log" 2>/dev/null)
   # Every pod that pulled must sit on a node the clear actually reached.
   pods=$(awk -F, 'NR>1 && $4!="AGGREGATE"{print $4}' "$TSV" | sort -u | grep -c .)
   if [ "$nodes_clean" -ge "$pods" ] && [ "$nodes_dirty" -eq 0 ] && [ "$left" -eq 0 ] \
@@ -112,6 +117,20 @@ if [ -n "$LOGDIR" ] && [ -f "$LOGDIR/cache-clear.log" ]; then
   else
     bad "cold start not proven: $nodes_clean node(s) empty vs $pods pod(s), $nodes_dirty node(s) and $left namespace(s) still holding images, $failed_clean cleanup failure(s)"
   fi
+
+  # A Porto arm lands in portod's own stores, which the containerd verdict never
+  # sees: every pulling node must report both of them empty.
+  case "$ARM" in
+    *-porto)
+      porto_clean=$(grep -cE 'node porto images left: 0 layers left: 0$' "$LOGDIR/cache-clear.log" 2>/dev/null)
+      porto_dirty=$(grep -cE 'node porto images left: ([1-9]|0 layers left: [1-9])' "$LOGDIR/cache-clear.log" 2>/dev/null)
+      if [ "$porto_clean" -ge "$pods" ] && [ "$porto_dirty" -eq 0 ]; then
+        ok "porto cold start: $porto_clean node(s) with no images and no riid layers"
+      else
+        bad "porto cold start not proven: $porto_clean node(s) empty vs $pods pod(s), $porto_dirty node(s) still holding images or layers"
+      fi
+      ;;
+  esac
 
   # RIID's own scratch, reported in bytes: a killed arm leaves an oci-layout-*
   # tree behind, and the old name-matched check called that clean.

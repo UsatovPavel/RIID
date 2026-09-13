@@ -11,7 +11,7 @@
 
 # Env:
 #   PROBE_IMAGE / PROBE_TAG  default confluentinc/cp-kafka:latest
-#   ENGINE                   podman | containerd (default containerd)
+#   ENGINE                   podman | containerd | porto (default containerd)
 #   SMOKE_MIN_GAIN           RIID must beat bare by this factor (1.0 = merely faster)
 set -uo pipefail
 

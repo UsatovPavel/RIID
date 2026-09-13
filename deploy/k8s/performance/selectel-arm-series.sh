@@ -14,6 +14,9 @@ BOOT=deploy/k8s/bootstrap
 # the same time.
 KC="${RIID_KUBECONFIG:-$REPO/deploy/k8s/providers/cluster/Selectel/serverConfig.yaml}"
 export KUBECONFIG="$KC"
+# performance/Makefile sets KUBECONFIG from CONFIG_FILE and ignores the env one,
+# so without this every make call of a porto series would hit the MKS stand.
+export CONFIG_FILE="$KC"
 ARMS="$*"
 STAMP_ROOT="$(date +%Y%m%d-%H%M)"
 # Which ticket these artifacts belong to. Hardcoding it once mislabelled an
@@ -31,6 +34,7 @@ say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 # through both (45s/image + 45min base) so other dataset sizes scale too.
 arm_timeout_seconds() {
   local dataset="$PERF/input/dataset_a.tsv" n
+  if [ -n "${RIID_ARM_TIMEOUT:-}" ]; then echo "$RIID_ARM_TIMEOUT"; return; fi
   n=$(tail -n +2 "$dataset" 2>/dev/null | grep -c '[^[:space:]]')
   [ "$n" -gt 0 ] 2>/dev/null || n=20
   echo $(( 2700 + 45 * n ))
@@ -42,9 +46,9 @@ source "$PERF/scenario/dragonfly-control-plane.inc.sh"
 # Only these arms pull through Dragonfly; bare-* never touches it.
 p2p_arm() { case "$1" in riid-*|dfinit-*) return 0 ;; esac; return 1; }
 
-# A dragonfly-client restart bounces containerd, and the riid pods' hostPath
-# containerd.sock mount then stays stale until the pod is recreated - waiting
-# never fixes it (node ctr works, pod ctr refuses).
+# A dragonfly-client restart bounces containerd, and a portod restart does the same
+# to /run/portod.socket: the riid pods' hostPath socket mounts stay stale until the
+# pod is recreated - waiting never fixes it (node ctr works, pod ctr refuses).
 restart_riid_pods() {
   say "  rolling riid DaemonSet (its containerd.sock mount goes stale on every restart)"
   kubectl -n riid-system rollout restart daemonset/riid >/dev/null 2>&1
@@ -114,6 +118,7 @@ clear_for_arm() {
     return 1
   fi
   say "  nodes reported empty: $(grep -cE 'node containerd images left: 0 ' "$log" 2>/dev/null)"
+  case "$arm" in *-porto) say "  porto stores empty on: $(grep -cE 'node porto images left: 0 layers left: 0$' "$log" 2>/dev/null) node(s)" ;; esac
   say "  riid scratch empty on: $(grep -cE 'riid scratch left: 0 bytes' "$log" 2>/dev/null) pod(s)"
 }
 

@@ -101,6 +101,15 @@ _porto_no_dfinit() {
 engine_pull_mirrored() { _porto_no_dfinit; }
 engine_mirror_check() { _porto_no_dfinit; }
 
+# docker-pull may keep what it fetched before a broken exec stream; dropping the
+# ref makes riid_pull_with_retry's retry as cold as the first attempt.
+engine_drop_image() {
+  local pod="$1" ref="$2"
+  local -a place
+  mapfile -t place < <(_porto_place_flags)
+  riid_engine_exec "$pod" portoctl docker-rmi "${place[@]}" "$ref" >/dev/null 2>&1 || true
+}
+
 # docker-images prints an "ID           NAME" header and one line per tag; the
 # tag is what gets removed, because docker-rmi takes an image name.
 engine_clear_cache() {

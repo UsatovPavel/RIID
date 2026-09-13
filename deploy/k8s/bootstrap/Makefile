@@ -40,7 +40,7 @@ PODMAN_NODE_WAIT_TIMEOUT ?= 900
 # in performance/backend/engine/common.inc.sh (RIID_LOCAL_REGISTRY_HOST) so that
 # dfinit mirrors exactly the address the arms use.
 REGISTRY_PULL_HOST ?=
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable ensure-dragonfly-pull-secret restore-registries-conf repair-cni
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable porto-registry-conf ensure-dragonfly-pull-secret restore-registries-conf repair-cni
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -250,6 +250,8 @@ ensure-dragonfly-pull-secret:
 
 dfinit-enable: ensure-dragonfly-pull-secret
 	@[ -n "$(strip $(ENGINE))" ] || { echo "set ENGINE=podman|containerd"; exit 1; }
+	@case "$(strip $(ENGINE))" in podman|containerd) ;; \
+	  *) echo "dfinit-enable: ENGINE=$(ENGINE) is not supported - dfinit drives podman|containerd only, Porto has no mirror config"; exit 1 ;; esac
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
@@ -342,7 +344,8 @@ wait-riid-ready:
 	  sleep $(RIID_WAIT_INTERVAL); \
 	done
 
-# Проверка инструментов и прямого доступа к Podman API (без podman CLI в образе).
+# Проверка инструментов и доступа к движку ноды: на Porto-стенде portod (podman там
+# заглушка), иначе Podman API (без podman CLI в образе).
 verify-riid-pod-tooling:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -354,12 +357,38 @@ verify-riid-pod-tooling:
 	  echo ">>> $$pod"; \
 	  kubectl -n riid-system exec -c riid "$$pod" -- sh -c \
 	    '! command -v podman >/dev/null 2>&1 \
-	      && test -S /run/podman/podman.sock \
-	      && test "$$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)" = OK \
+	      && if timeout 10 portoctl list >/dev/null 2>&1; then \
+	           echo "porto stand: portod answers"; portoctl --version | head -n2; \
+	         else test -S /run/podman/podman.sock \
+	           && test "$$(curl --fail --silent --show-error --unix-socket /run/podman/podman.sock http://d/_ping)" = OK; fi \
 	      && command -v curl >/dev/null && curl --version | head -n1 \
 	      && command -v jq >/dev/null && jq --version'; \
 	done; \
 	echo "verify-riid-pod-tooling: ok"
+
+# Porto has no --plain-http and portod resolves names in the host netns, so the
+# in-cluster registry is written into portod as a ClusterIP once it exists. The
+# portod restart leaves the socket in RIID pods stale, hence the rollout after it.
+porto-registry-conf:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	REG=$$(RIID_K8S_ROOT="$(K8S)" REGISTRY_PULL_HOST="$(REGISTRY_PULL_HOST)" bash -c '. "$(K8S)/performance/backend/engine/common.inc.sh"; REGISTRY_PULL_HOST="$${REGISTRY_PULL_HOST:-$$RIID_LOCAL_REGISTRY_HOST}"; riid_registry_node_host') || exit 1; \
+	[ -n "$$REG" ] || { echo "porto-registry-conf: empty registry address"; exit 1; }; \
+	pods=$$(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); \
+	[ -n "$$pods" ] || { echo "porto-registry-conf: no podman-node pods"; exit 1; }; \
+	for pod in $$pods; do \
+	  kubectl -n riid-system exec -c installer "$$pod" -- nsenter -t 1 -n chroot /host env REG="$$REG" sh -ec ' \
+	    [ -x /usr/sbin/portod ] || { echo "no portod on $$(hostname)"; exit 1; }; \
+	    printf "container {\n    docker_insecure_registry: \"%s\"\n}\n" "$$REG" > /etc/portod.conf.d/20-riid-registry.conf; \
+	    systemctl restart porto; \
+	    for i in $$(seq 1 30); do portoctl list >/dev/null 2>&1 && break; sleep 1; done; \
+	    portoctl docker-images >/dev/null; \
+	    code=$$(curl -s -o /dev/null -m 10 -w "%{http_code}" "http://$$REG/v2/"); \
+	    echo "$$(hostname): portod restarted, registry $$REG /v2/ -> $$code"; \
+	    [ "$$code" = 200 ]' || exit 1; \
+	done; \
+	kubectl -n riid-system rollout restart daemonset/riid; \
+	kubectl -n riid-system rollout status daemonset/riid --timeout=300s
 
 # vmagent (DaemonSet) для сбора метрик по prometheus-аннотациям pod/service.
 install-metrics-collector:
