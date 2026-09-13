@@ -98,7 +98,7 @@ All 10 RIID pods pulling 91 images simultaneously (Kubernetes `Recreate` deploym
 
 Датасет обоих сценариев (91 образ): `config/imagelist/dataset_a_91_sizes.tsv`.
 
-### Top-20 dataset (containerd, podman)
+### Top-20 dataset (containerd, podman, Porto)
 
 Второй, меньший датасет: 20 самых скачиваемых образов Docker Hub по `pull_count × size_bytes`,
 с размерами, дайджестами и временем снятия — `config/imagelist/dataset_top20_sizes.tsv`.
@@ -133,6 +133,32 @@ All 10 RIID pods pulling 91 images simultaneously (Kubernetes `Recreate` deploym
 - **Prefix против archive на containerd** — 619.8 против 631.8 с (−1.9%). Это меньше разброса
   самого стенда: `bare-containerd` на нём снят дважды, 878.0 и 836.0 с (4.8%). Считать префикс
   быстрее по одной точке нельзя.
+
+#### Porto (AGENT-132)
+
+Porto не запускается на MKS, поэтому снят на отдельном стенде `terraform-porto`: kubeadm на
+Ubuntu 22.04, cgroup v1, Porto 5.3.58, те же flavor и диски, 10 воркеров + 4 инфраноды. Все три
+сценария прошли `validate-arm.sh`. Сценария dfinit у Porto нет.
+
+| Engine | Source | Метрика 1: весь кластер | Метрика 2: среднее на ноду | Registry TX | Run |
+|--------|--------|-----------:|-----------------:|------------:|-----|
+| Porto | registry, direct (TLS-вход) | 871.3 с | 860.8 с | 120.10 ГиБ | `bare-porto.agent132-20260913-1627` |
+| Porto | RIID + Dragonfly, послойный импорт | **430.6 с** (−50.6%) | **389.1 с** (−54.8%) | **12.06 ГиБ** (−90.0%) | `riid-porto.agent132-20260913-1718` |
+| containerd (якорь) | registry, direct | 921.8 с | 882.3 с | 120.14 ГиБ | `bare-containerd.agent132-20260913-1700` |
+
+- Porto-сценарии сравнимы только между собой. С MKS стенд связывает якорь `bare-containerd`:
+  921.8 с здесь против 836.0 с на MKS, то есть стенд примерно на 10% медленнее (по метрике 2 +8.6%).
+  Около 12.8 с этой разницы — четыре холодных повтора `fluent-bit` после обрыва exec-стрима к API.
+- Porto 5.3.58 качает блобы только по https, поэтому `bare-porto` шёл через TLS-вход к тому же
+  хранилищу реестра; RIID ходит по http.
+- `riid-porto`: все 2200 слоёв из P2P, `layer.import` 2190, без отката на rootfs. Образ,
+  импортированный RIID, запускается контейнером Porto (python:latest, HTTP 200).
+- Скорость `riid-porto` проверена по логам, это не кэш и не пропуск импорта. Перед прогоном на
+  нодах 0 слоёв Porto, scratch RIID и хранилища Dragonfly (включая seed) пусты. Выполнено 2000
+  `portoctl layer -I` (200 уникальных слоёв × 10 нод), ни одного «слой уже есть». Размеры слоёв
+  побайтно совпадают с `riid-containerd`. Скачивание такое же, как у `riid-containerd`: 1932 с
+  против 1938 с суммарно по всем запросам. Разница в импорте: после скачивания 191 с на Porto против 331 с
+  на containerd (сумма медиан по образам). Импорт — около половины запроса RIID и на Porto.
 
 Сырые прогоны и формат файлов — [`performance/results/`](performance/results/).
 
