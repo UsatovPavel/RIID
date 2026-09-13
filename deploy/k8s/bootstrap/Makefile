@@ -379,7 +379,7 @@ porto-registry-conf:
 	for pod in $$pods; do \
 	  kubectl -n riid-system exec -c installer "$$pod" -- nsenter -t 1 -n chroot /host env REG="$$REG" sh -ec ' \
 	    [ -x /usr/sbin/portod ] || { echo "no portod on $$(hostname)"; exit 1; }; \
-	    printf "container {\n    docker_insecure_registry: \"%s\"\n}\n" "$$REG" > /etc/portod.conf.d/20-riid-registry.conf; \
+	    printf "daemon {\n    docker_insecure_registry: \"%s\"\n}\n" "$$REG" > /etc/portod.conf.d/20-riid-registry.conf; \
 	    systemctl restart porto; \
 	    for i in $$(seq 1 30); do portoctl list >/dev/null 2>&1 && break; sleep 1; done; \
 	    portoctl docker-images >/dev/null; \

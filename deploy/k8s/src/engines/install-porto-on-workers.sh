@@ -95,7 +95,7 @@ cat >"$conf" <<CONF
 # docker_images_support is off by default, and without it portoctl docker-pull /
 # docker-images / docker-rmi are unavailable entirely - the Porto arm in
 # performance/backend/engine/porto.inc.sh is built on them.
-container {
+daemon {
     docker_images_support: true
     docker_insecure_registry: "${REGISTRY}"
 }

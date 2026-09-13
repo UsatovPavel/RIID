@@ -58,7 +58,7 @@ write_files:
       # docker_images_support выключен по умолчанию, а без него portoctl
       # docker-pull / docker-images / docker-rmi недоступны целиком — на них
       # держится арм Porto в performance/backend/engine/porto.inc.sh.
-      container {
+      daemon {
           docker_images_support: true
 %{ for registry in porto_insecure ~}
           docker_insecure_registry: "${registry}"
