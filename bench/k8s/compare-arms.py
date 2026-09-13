@@ -32,7 +32,7 @@ def score(path):
 
 def arm_of(path):
     # dfinit-containerd-zstd.agent99-20260905-2343.tsv -> dfinit-containerd-zstd
-    return re.split(r"\.(agent99|tsv)", os.path.basename(path))[0]
+    return re.split(r"\.(agent\d+|tsv)", os.path.basename(path))[0]
 
 def main() -> int:
     if len(sys.argv) < 2:
@@ -43,7 +43,7 @@ def main() -> int:
         # with a timestamp once the arm is done, so a glob picks up the newest
         # run twice - which shows as a fake n and a zero-width range. Count the
         # stamped copies only; the bare one is either a duplicate or in flight.
-        if not re.search(r"\.agent99-\d{8}-\d{4}", os.path.basename(f)):
+        if not re.search(r"\.agent\d+-\d{8}-\d{4}", os.path.basename(f)):
             continue
         t, g = score(f)
         if t: by[arm_of(f)].append((t, g))

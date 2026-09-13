@@ -19,6 +19,7 @@ ENGINE ?= podman
 export SCENARIO ?= pr18
 DATASET ?= A
 DATASET_FILE ?=
+BACKEND_LABEL ?=
 OUTPUT_TSV ?=
 CLEAR_CACHE_BEFORE_PULL ?= 0
 # Local in-cluster registry; leave empty to pull from the Selectel registry.
@@ -27,6 +28,7 @@ REGISTRY_PULL_HOST = local-registry.registry-system.svc.cluster.local:5000
 OUTPUT_DIR ?= $(PERF_DIR)/output
 METRICS_SCRIPT := $(PERF_DIR)/summarize/scenario-metrics.sh
 AGGREGATE_SCRIPT := $(PERF_DIR)/summarize/cluster-aggregate-time.sh
+VALIDATE_SCRIPT := $(PERF_DIR)/summarize/validate-arm.sh
 SUMMARY_OUT := $(OUTPUT_DIR)/summary.tsv
 # Which arm to report metrics for; defaults to the arm this Makefile would run.
 METRICS_TSV ?= $(OUTPUT_DIR)/$(BACKEND)-$(ENGINE).tsv
@@ -42,12 +44,18 @@ ifeq ($(DATASET_FILE),)
   endif
 endif
 
-.PHONY: run riid-podman riid-containerd riid-porto bare-podman bare-containerd bare-porto \
+.PHONY: run riid-podman riid-containerd riid-containerd-noprefix riid-porto bare-podman bare-containerd bare-porto \
         dfinit-podman dfinit-containerd \
-        clear-cluster-cache delete-local-registry-dataset debug-registry-node \
+        clear-cache clear-cluster-cache clear-engine-cache clear-riid-cache delete-local-registry-dataset debug-registry-node validate-arm \
         registry-node-tc-apply registry-node-tc-clear registry-node-tc-check metrics summarize-aggregate
 
-CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-all-riid-pods.sh
+# Three caches, one script each, and a wrapper that picks by arm name: bare-*
+# touches only the engine, dfinit-* adds Dragonfly, riid-* adds RIID's own scratch.
+# Clearing less leaves a warm layer no timing reveals; clearing more only costs time.
+CLEAR_SCRIPT         := $(PERF_DIR)/scenario/clear/clear-cache.sh
+CLEAR_CLUSTER_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-dragonfly.sh
+CLEAR_ENGINES_SCRIPT := $(PERF_DIR)/scenario/clear/clear-cache-engines.sh
+CLEAR_RIID_SCRIPT    := $(PERF_DIR)/scenario/clear/clear-cache-riid.sh
 DELETE_REGISTRY_SCRIPT := $(PERF_DIR)/registry/delete-dataset-from-local-registry.sh
 # Удаление тегов из local-registry по TSV (см. delete-dataset-from-local-registry.sh).
 # DATASET / DATASET_FILE — как у цели run.
@@ -68,6 +76,7 @@ run:
 	if [ -n "$(strip $(EXPECTED_RIID_PODS))" ]; then export EXPECTED_RIID_PODS="$(EXPECTED_RIID_PODS)"; fi; \
 	BACKEND="$(BACKEND)" \
 	ENGINE="$(ENGINE)" \
+	BACKEND_LABEL="$(BACKEND_LABEL)" \
 	DATASET_FILE="$(DATASET_FILE)" \
 	CLEAR_CACHE_BEFORE_PULL="$(CLEAR_CACHE_BEFORE_PULL)" \
 	REGISTRY_PULL_HOST="$(REGISTRY_PULL_HOST)" \
@@ -82,8 +91,22 @@ run:
 riid-podman:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=podman
 
+# Sets the mode explicitly rather than trusting whatever the previous arm left
+# behind: after a -noprefix run the config still says false, and this arm would
+# silently measure noprefix a second time.
 riid-containerd:
+	@bash "$(PERF_DIR)/scenario/set-prefix-import.sh" true
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=containerd
+
+# AGENT-118: the only cell of the matrix never measured — every recorded
+# riid-containerd* run was prefix mode, since the code default is true.
+# The switch lives in RIID's config, so the arm sets it and restarts the
+# DaemonSet before measuring; validate-arm.sh then proves the mode from the logs.
+riid-containerd-noprefix:
+	@bash "$(PERF_DIR)/scenario/set-prefix-import.sh" false
+	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=riid ENGINE=containerd \
+	  BACKEND_LABEL=riid-containerd-noprefix \
+	  OUTPUT_TSV="$(OUTPUT_DIR)/riid-containerd-noprefix.tsv"
 
 bare-podman:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=podman
@@ -107,12 +130,38 @@ riid-porto:
 bare-porto:
 	@$(MAKE) -C "$(PERF_DIR)" run BACKEND=bare ENGINE=porto
 
+# clear-cache ARM=<name> picks the caches the arm actually uses.
+clear-cache:
+	@[ -n "$(strip $(ARM))" ] || { echo "set ARM=<arm name>, e.g. ARM=riid-containerd"; exit 1; }
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(CLEAR_SCRIPT)" "$(ARM)"
+
+# Individual caches, for when you know exactly which one you want.
+clear-riid-cache:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(CLEAR_RIID_SCRIPT)"
+
+# Dragonfly only: dfdaemon and seed stores plus the control-plane reset.
 clear-cluster-cache:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	bash "$(CLEAR_CLUSTER_SCRIPT)"
+
+# For bare-* arms: podman store and the containerd riid-bench namespace, nothing else.
+clear-engine-cache:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	bash "$(CLEAR_ENGINES_SCRIPT)"
 
 delete-local-registry-dataset:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
@@ -180,6 +229,14 @@ metrics:
 	else \
 	  bash "$(METRICS_SCRIPT)" "$(METRICS_TSV)"; \
 	fi
+
+# Does an arm measure what its name claims? Checks images, exit codes and — for
+# riid-*/dfinit-* — that dfdaemon actually finished tasks and the seed tier took
+# part. Needed on Selectel, where bench/k8s's queue does not run.
+# ARM=<name> [ARM_TSV=path] [ARM_LOGDIR=dir]
+validate-arm:
+	@bash "$(VALIDATE_SCRIPT)" "$(ARM)" \
+	  "$${ARM_TSV:-$(OUTPUT_DIR)/$(ARM).tsv}" "$(ARM_LOGDIR)"
 
 # Cluster wall-clock from the AGGREGATE rows — the main summary for recreate.
 summarize-aggregate:

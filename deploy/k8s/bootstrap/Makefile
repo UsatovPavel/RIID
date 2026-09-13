@@ -40,7 +40,7 @@ PODMAN_NODE_WAIT_TIMEOUT ?= 900
 # in performance/backend/engine/common.inc.sh (RIID_LOCAL_REGISTRY_HOST) so that
 # dfinit mirrors exactly the address the arms use.
 REGISTRY_PULL_HOST ?=
-.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable
+.PHONY: connect nodes validate-cluster-state mark-monitoring-node-auto mark-registry-node-auto storage-default install-dragonfly install-podman-node wait-podman-node verify-riid-pod-tooling install-riid wait-riid-ready install-metrics-collector wait-metrics-collector sync-monitoring-observer-chart install-monitoring-observer wait-monitoring-observer smoke-download smoke-download-all install-all dragonfly-ready rollout-riid-image-from-manifest provider-apply-k8s-manifests dfinit-enable dfinit-disable ensure-dragonfly-pull-secret restore-registries-conf repair-cni
 
 # Подключает контекст из current-context в kubeconfig, затем shell с тем же KUBECONFIG.
 connect:
@@ -63,7 +63,7 @@ nodes:
 	kubectl get nodes -o wide
 
 # Проверяет, что число нод без control-plane/master совпадает с суммой
-# cluster_topology.(workers + observers + registry_nodes) в config.yaml.
+# cluster_topology.(workers + observers + registry_nodes + dragonfly_infra_nodes).
 #
 # This target and the two node-auto-pick targets below used to read
 # node-role.kubernetes.io/control-plane's jsonpath *value* to detect the
@@ -85,17 +85,34 @@ validate-cluster-state:
 	W=$$(yq e '.cluster_topology.workers // 0' "$(GLOBAL_CONFIG_FILE)"); \
 	O=$$(yq e '.cluster_topology.observers // 0' "$(GLOBAL_CONFIG_FILE)"); \
 	R=$$(yq e '.cluster_topology.registry_nodes // 0' "$(GLOBAL_CONFIG_FILE)"); \
+	D=$$(yq e '.cluster_topology.dragonfly_infra_nodes // 0' "$(GLOBAL_CONFIG_FILE)"); \
 	[ "$$W" != "null" ] && [ -n "$$W" ] || W=0; \
 	[ "$$O" != "null" ] && [ -n "$$O" ] || O=0; \
 	[ "$$R" != "null" ] && [ -n "$$R" ] || R=0; \
-	EXPECTED_TOTAL=$$((W + O + R)); \
-	[ "$$EXPECTED_TOTAL" -gt 0 ] || { echo "cluster_topology sum (workers+observers+registry_nodes) is 0 in $(GLOBAL_CONFIG_FILE)"; exit 1; }; \
+	[ "$$D" != "null" ] && [ -n "$$D" ] || D=0; \
+	EXPECTED_TOTAL=$$((W + O + R + D)); \
+	[ "$$EXPECTED_TOTAL" -gt 0 ] || { echo "cluster_topology sum (workers+observers+registry_nodes+dragonfly_infra_nodes) is 0 in $(GLOBAL_CONFIG_FILE)"; exit 1; }; \
 	ACTUAL_WORKERS=$$(kubectl get nodes --no-headers -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' | wc -l); \
-	echo "validate-cluster-state: non-control-plane nodes actual=$$ACTUAL_WORKERS expected=$$EXPECTED_TOTAL (config workers=$$W observers=$$O registry_nodes=$$R)"; \
-	[ "$$ACTUAL_WORKERS" -eq "$$EXPECTED_TOTAL" ] || { echo "node count mismatch: expected=$$EXPECTED_TOTAL (W+O+R) actual=$$ACTUAL_WORKERS"; exit 1; }
+	echo "validate-cluster-state: non-control-plane nodes actual=$$ACTUAL_WORKERS expected=$$EXPECTED_TOTAL (config workers=$$W observers=$$O registry_nodes=$$R dragonfly_infra=$$D)"; \
+	[ "$$ACTUAL_WORKERS" -eq "$$EXPECTED_TOTAL" ] || { echo "node count mismatch: expected=$$EXPECTED_TOTAL (W+O+R+D) actual=$$ACTUAL_WORKERS"; exit 1; }
 
 # Автовыбор monitoring-ноды: последняя worker-нода (не control-plane/master).
 # Если задан MONITORING_NODE, используется он.
+# A kubectl taint sticks on a self-managed stand (Porto) but NOT on MKS, which
+# reconciles node spec and drops it within the same second. There the taint has to
+# come from the node group (terraform dedicated_infra_nodes), so verify and say
+# which of the two happened instead of reporting a taint that is already gone.
+define riid_taint_node
+kubectl taint nodes --all $(2):NoSchedule- >/dev/null 2>&1 || true; \
+kubectl taint nodes "$(1)" $(2)=true:NoSchedule --overwrite >/dev/null 2>&1 || true; \
+if kubectl get node "$(1)" -o jsonpath='{.spec.taints[*].key}' 2>/dev/null | tr ' ' '\n' | grep -qx "$(2)"; then \
+  echo "  taint $(2)=true:NoSchedule active on $(1)"; \
+else \
+  echo "  WARNING: $(2) taint did not stick on $(1) - managed control plane strips it." >&2; \
+  echo "  Nothing is kept off this node. Recreate the stand with dedicated_infra_nodes=true." >&2; \
+fi
+endef
+
 mark-monitoring-node-auto:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -103,18 +120,25 @@ mark-monitoring-node-auto:
 	kubectl config use-context "$$CTX"; \
 	if [ -n "$(MONITORING_NODE)" ]; then \
 	  NODE="$(MONITORING_NODE)"; \
+	elif NODE=$$(kubectl get nodes -l riid.monitoring=true -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) && [ -n "$$NODE" ]; then \
+	  echo "monitoring node already labelled by its node group: $$NODE"; \
 	else \
 	  NODE=$$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' \
 	    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | tail -n1); \
 	fi; \
 	[ -n "$$NODE" ] || { echo "mark-monitoring-node-auto: no worker node found"; exit 1; }; \
-	kubectl label node --all riid.monitoring- >/dev/null 2>&1 || true; \
+	for OLD in $$(kubectl get nodes -l riid.monitoring=true -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do \
+	  [ "$$OLD" = "$$NODE" ] && continue; \
+	  echo "  moving riid.monitoring off $$OLD"; \
+	  kubectl label node "$$OLD" riid.monitoring- >/dev/null 2>&1 || true; \
+	done; \
 	kubectl label node "$$NODE" riid.monitoring=true --overwrite; \
+	$(call riid_taint_node,$$NODE,riid.monitoring); \
 	echo "monitoring node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.monitoring/p'
 
 # Автовыбор registry-ноды: первый worker, который не помечен как monitoring.
-# Если задан REGISTRY_NODE, используется он.
+# Если задан REGISTRY_NODE, используется он, и метка снимается с прежней ноды.
 mark-registry-node-auto:
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
@@ -122,14 +146,21 @@ mark-registry-node-auto:
 	kubectl config use-context "$$CTX"; \
 	if [ -n "$(REGISTRY_NODE)" ]; then \
 	  NODE="$(REGISTRY_NODE)"; \
+	elif NODE=$$(kubectl get nodes -l riid.registry=true -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) && [ -n "$$NODE" ]; then \
+	  echo "registry node already labelled by its node group: $$NODE"; \
 	else \
 	  NODE=$$(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' \
 	    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.riid\.monitoring}{"\n"}{end}' \
 	    | awk '$$2!="true" {print $$1}' | head -n1); \
 	fi; \
 	[ -n "$$NODE" ] || { echo "mark-registry-node-auto: no worker node (excluding monitoring) found"; exit 1; }; \
-	kubectl label node --all riid.registry- >/dev/null 2>&1 || true; \
+	for OLD in $$(kubectl get nodes -l riid.registry=true -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do \
+	  [ "$$OLD" = "$$NODE" ] && continue; \
+	  echo "  moving riid.registry off $$OLD"; \
+	  kubectl label node "$$OLD" riid.registry- >/dev/null 2>&1 || true; \
+	done; \
 	kubectl label node "$$NODE" riid.registry=true --overwrite; \
+	$(call riid_taint_node,$$NODE,riid.registry); \
 	echo "registry node: $$NODE"; \
 	kubectl get node "$$NODE" --show-labels | sed -n '1p;/riid.registry/p'
 
@@ -206,7 +237,18 @@ install-podman-node:
 # node, so the switch is a Helm re-install, not a bench knob. The mirrored address
 # comes from the same function the bench uses, so the two cannot drift apart.
 # dfinit-disable is required: a leftover mirror makes the baseline a 2nd dfinit run.
-dfinit-enable:
+# Both targets call install-dragonfly.sh directly (not registry-apply-profile), so
+# they must ensure the pull secret themselves - a helm upgrade here does not
+# recreate it, and a stand where it was never (re)created leaves every dragonfly-*
+# pod in ImagePullBackOff with no other symptom (found the hard way on AGENT-117).
+ensure-dragonfly-pull-secret:
+	@if [ "$(DRAGONFLY_PROFILE)" = dockerhub ]; then \
+	  $(MAKE) -C "$(SELECTEL_DIR)/registry" dragonfly-dockerhub-pull-secret K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"; \
+	else \
+	  $(MAKE) -C "$(SELECTEL_DIR)/registry" dragonfly-selectel-registry-pull-secret K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"; \
+	fi
+
+dfinit-enable: ensure-dragonfly-pull-secret
 	@[ -n "$(strip $(ENGINE))" ] || { echo "set ENGINE=podman|containerd"; exit 1; }
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
@@ -219,16 +261,38 @@ dfinit-enable:
 	DRAGONFLY_REGISTRY_PROFILE="$(DRAGONFLY_PROFILE)" \
 	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"
 
-dfinit-disable:
+dfinit-disable: ensure-dragonfly-pull-secret
 	@export KUBECONFIG="$(KUBECONFIG)"; \
 	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG (override CONFIG_FILE=...)"; exit 1; }; \
 	CTX=$$(kubectl config current-context) || exit 1; \
 	kubectl config use-context "$$CTX"; \
 	DRAGONFLY_REGISTRY_PROFILE="$(DRAGONFLY_PROFILE)" \
 	  bash "$(K8S)/src/dragonfly/install-dragonfly.sh"; \
-	echo "dfinit-disable: dfinit is off; the node keeps whatever registries.conf dfinit last wrote"; \
-	echo "  restore the pristine copy on every worker if the baseline arm still sees a mirror:"; \
-	echo "  cp /etc/containers/registries.conf.riid-baseline /etc/containers/registries.conf"
+	$(MAKE) -C "$(SELECTEL_DIR)" restore-registries-conf K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"
+
+# dfinit edits the node's /etc/containers/registries.conf and turning dfinit off
+# does not undo that, so a baseline arm would keep pulling through the mirror and
+# quietly become a second dfinit run. podman-node.yaml keeps a pristine copy from
+# before dfinit ever touched the file; this puts it back on every worker.
+restore-registries-conf:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	fail=0; done_n=0; \
+	for p in $$(kubectl -n riid-system get pods -l app.kubernetes.io/name=podman-node \
+	    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do \
+	  [ -n "$$p" ] || continue; \
+	  if kubectl -n riid-system exec -c installer "$$p" -- chroot /host sh -ec '\
+	       [ -f /etc/containers/registries.conf.riid-baseline ] || { echo "no pristine copy"; exit 1; }; \
+	       cp /etc/containers/registries.conf.riid-baseline /etc/containers/registries.conf'; then \
+	    done_n=$$((done_n+1)); \
+	  else \
+	    echo "restore-registries-conf: FAILED on $$p" >&2; fail=1; \
+	  fi; \
+	done; \
+	echo "restore-registries-conf: restored on $$done_n node(s)"; \
+	[ "$$fail" = 0 ] || { echo "restore-registries-conf: a node kept the mirror - the baseline arm would measure dfinit" >&2; exit 1; }
 
 # Ждём готовности podman на всех нодах и печатаем версии — окружение AGENT-99
 # должно быть записано, а не запомнено.
@@ -252,7 +316,26 @@ wait-podman-node:
 	  sleep $(RIID_WAIT_INTERVAL); \
 	done; \
 	echo ">>> engine versions per node:"; \
-	kubectl -n riid-system logs -l app.kubernetes.io/name=podman-node --tail=3 --prefix
+	kubectl -n riid-system logs -l app.kubernetes.io/name=podman-node --tail=3 --prefix; \
+	$(MAKE) -C "$(SELECTEL_DIR)" repair-cni K8S="$(K8S)" KUBECONFIG="$(KUBECONFIG)"
+
+# Installing podman drops containernetworking-plugins into /etc/cni/net.d, which
+# belongs to the cluster CNI - nodes have gone NotReady with "cni plugin not
+# initialized" minutes after the package landed. Rolling calico-node puts its
+# conflist back. Cheap, idempotent, and the alternative is noticing by hand.
+repair-cni:
+	@export KUBECONFIG="$(KUBECONFIG)"; \
+	[ -f "$$KUBECONFIG" ] || { echo "kubeconfig not found: $$KUBECONFIG"; exit 1; }; \
+	CTX=$$(kubectl config current-context) || exit 1; \
+	kubectl config use-context "$$CTX"; \
+	echo ">>> repair-cni: rolling calico-node after the engine install"; \
+	kubectl -n kube-system rollout restart daemonset/calico-node >/dev/null; \
+	kubectl -n kube-system rollout status daemonset/calico-node --timeout=10m; \
+	notready=$$(kubectl get nodes --no-headers | awk '$$2 != "Ready"' | wc -l); \
+	[ "$$notready" -eq 0 ] || { \
+	  echo "repair-cni: $$notready node(s) still not Ready:" >&2; \
+	  kubectl get nodes --no-headers | awk '$$2 != "Ready"' >&2; exit 1; }; \
+	echo "repair-cni: every node Ready"
 
 install-riid:
 	@$(RUN_PROVIDER_APPLY)

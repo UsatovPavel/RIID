@@ -1,0 +1,54 @@
+# Pins Dragonfly's control plane to the tainted infra nodes of the bench stand.
+# Kept out of scripts/values.yaml on purpose: CI installs the same chart on a
+# single-node minikube where these labels do not exist, and every pinned pod
+# stayed Pending until helm timed out.
+# install-dragonfly.sh always merges it and refuses to install without the nodes.
+manager:
+  nodeSelector:
+    riid.dragonfly.manager: "true"
+  tolerations:
+    - key: riid.dragonfly.manager
+      operator: Exists
+      effect: NoSchedule
+scheduler:
+  nodeSelector:
+    riid.dragonfly.scheduler: "true"
+  tolerations:
+    - key: riid.dragonfly.scheduler
+      operator: Exists
+      effect: NoSchedule
+  # The chart ships requests: 0, so nothing is reserved and the kube scheduler
+  # packs this next to anything. It answers an RPC per downloaded piece - 2072/s
+  # at peak on 2026-09-11 - so it is the one component needing guaranteed CPU.
+  resources:
+    requests:
+      cpu: "2"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 6Gi
+# The manager's datastores follow it onto the same node: they serve only the
+# manager, which our logs show is contacted every 5 minutes, not per piece.
+mysql:
+  primary:
+    nodeSelector:
+      riid.dragonfly.manager: "true"
+    tolerations:
+      - key: riid.dragonfly.manager
+        operator: Exists
+        effect: NoSchedule
+redis:
+  master:
+    nodeSelector:
+      riid.dragonfly.manager: "true"
+    tolerations:
+      - key: riid.dragonfly.manager
+        operator: Exists
+        effect: NoSchedule
+  replica:
+    nodeSelector:
+      riid.dragonfly.manager: "true"
+    tolerations:
+      - key: riid.dragonfly.manager
+        operator: Exists
+        effect: NoSchedule

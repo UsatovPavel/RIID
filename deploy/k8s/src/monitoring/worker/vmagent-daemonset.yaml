@@ -18,6 +18,13 @@ spec:
       labels:
         app.kubernetes.io/name: vmagent
     spec:
+      # vmagent scrapes every node, so it is the one metrics component that must
+      # tolerate the monitoring taint. It gets no registry toleration on purpose:
+      # the registry node carries the engine, the images and the tx probe, nothing else.
+      tolerations:
+        - key: riid.monitoring
+          operator: Exists
+          effect: NoSchedule
       serviceAccountName: vmagent
       containers:
         - name: vmagent

@@ -57,10 +57,16 @@ if ! command -v kubectl >/dev/null 2>&1; then
   exit 2
 fi
 
-if ! kubectl get namespace "$NS" >/dev/null 2>&1; then
-  echo "namespace not found: $NS" >&2
+# Separating "namespace is absent" from "the API did not answer": a dropped
+# connection used to be reported as a missing namespace, which sent the reader
+# looking for a deleted cluster while the cluster was fine.
+ns_err="$(kubectl get namespace "$NS" 2>&1 >/dev/null)" || {
+  case "$ns_err" in
+    *NotFound*|*not\ found*) echo "namespace not found: $NS" >&2 ;;
+    *) echo "cannot reach the API to check namespace $NS: $ns_err" >&2 ;;
+  esac
   exit 2
-fi
+}
 
 if ! [[ "$FILE_SIZE_MB" =~ ^[1-9][0-9]*$ ]]; then
   echo "FILE_SIZE_MB must be a positive integer, got: $FILE_SIZE_MB" >&2
@@ -72,7 +78,18 @@ if ! [[ "$ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-mapfile -t workers < <(kubectl get nodes -l '!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+# Bench workers only: every infra node is tainted and carries its own load, so a
+# pair landing on one measures something other than the channel the arms use.
+# Keep this list in step with infra_roles in the Selectel terraform module.
+RIID_INFRA_LABELS="${RIID_INFRA_LABELS:-riid.monitoring,riid.registry,riid.dragonfly.scheduler,riid.dragonfly.manager}"
+_worker_selector="!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master"
+_OLD_IFS="$IFS"; IFS=,
+for _l in $RIID_INFRA_LABELS; do
+  [ -n "$_l" ] && _worker_selector="$_worker_selector,!$_l"
+done
+IFS="$_OLD_IFS"
+mapfile -t workers < <(kubectl get nodes -l "$_worker_selector" \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 if ((${#workers[@]} < 2)); then
   echo "need at least 2 worker nodes (found ${#workers[@]})" >&2
   exit 2

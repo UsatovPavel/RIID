@@ -67,10 +67,9 @@ if [[ "${REGISTRY_MIRROR_TSV_ONLY:-}" != 1 ]] && [[ ! -f "$JAVA_LIST" ]]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+# shellcheck source=../../../providers/cluster/Selectel/stand-common/load-env.inc.sh
+. "$REPO_ROOT/deploy/k8s/providers/cluster/Selectel/stand-common/load-env.inc.sh"
+riid_load_env "$ENV_FILE"
 
 # shellcheck source=../registry-prefix-from-env.inc.sh
 source "$DIR/../registry-prefix-from-env.inc.sh"

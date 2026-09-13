@@ -19,10 +19,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 0
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+# shellcheck source=../../../providers/cluster/Selectel/stand-common/load-env.inc.sh
+. "$K8S_DIR/providers/cluster/Selectel/stand-common/load-env.inc.sh"
+riid_load_env "$ENV_FILE"
 
 if [[ -z "${RIID_SELECTEL_USER:-}" ]]; then
   echo "setup-selectel-registry-pull-secret: RIID_SELECTEL_USER empty in $ENV_FILE (skip)." >&2

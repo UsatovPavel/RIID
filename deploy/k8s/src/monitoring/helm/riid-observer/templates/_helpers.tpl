@@ -21,3 +21,10 @@ nodeAffinity:
             operator: DoesNotExist
 {{- end }}
 {{- end }}
+
+{{- define "riid-observer.monitoringTolerations" -}}
+tolerations:
+  - key: riid.monitoring
+    operator: Exists
+    effect: NoSchedule
+{{- end }}

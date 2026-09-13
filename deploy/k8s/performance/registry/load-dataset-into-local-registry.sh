@@ -41,10 +41,9 @@ if [[ "$LOAD_TEST_IMAGELIST" == 1 ]]; then
     ENV_FILE=""
   fi
   if [[ -n "$ENV_FILE" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$ENV_FILE"
-    set +a
+    # shellcheck source=../../providers/cluster/Selectel/stand-common/load-env.inc.sh
+    . "$K8S_DIR/providers/cluster/Selectel/stand-common/load-env.inc.sh"
+    riid_load_env "$ENV_FILE"
   fi
 else
   if [[ ! -f "$DATASET_FILE" ]]; then
@@ -58,10 +57,9 @@ else
     exit 1
   fi
 
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
+  # shellcheck source=../../providers/cluster/Selectel/stand-common/load-env.inc.sh
+  . "$K8S_DIR/providers/cluster/Selectel/stand-common/load-env.inc.sh"
+  riid_load_env "$ENV_FILE"
 
   # shellcheck source=../../bootstrap/registry/registry-prefix-from-env.inc.sh
   source "$K8S_DIR/bootstrap/registry/registry-prefix-from-env.inc.sh"
@@ -109,6 +107,9 @@ metadata:
 spec:
   restartPolicy: Never
   nodeName: ${REGISTRY_NODE}
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
   containers:
     - name: loader
       image: ${LOADER_IMAGE}

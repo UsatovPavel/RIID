@@ -40,10 +40,10 @@ REF="$(engine_ref "$IMAGE_REPOSITORY" "$IMAGE_REFERENCE")"
 # process for every image.
 if [[ "${DFINIT_SKIP_MIRROR_CHECK:-0}" != "1" ]]; then
   MARKER="/tmp/.riid-dfinit-mirror-ok-${ENGINE}"
-  if ! kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- test -f "$MARKER" 2>/dev/null; then
+  if ! riid_kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- test -f "$MARKER" 2>/dev/null; then
     engine_preflight "$POD"
     engine_mirror_check "$POD"
-    kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- touch "$MARKER" >/dev/null
+    riid_kubectl -n "$NS" exec -c "$CONTAINER" "$POD" -- touch "$MARKER" >/dev/null
   fi
 fi
 

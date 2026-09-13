@@ -22,11 +22,37 @@
 # containerd takes --hosts-dir as an argument. Hence two separate functions
 # instead of one with a boolean flag.
 
+# The workstation reaches the MKS API over the public internet, and one dropped
+# TCP handshake there kills a whole arm: two AGENT-117 runs died on a single pod
+# out of ten with "dial tcp <api>:6443: connect: connection timed out".
+# Retried ONLY when kubectl could not establish the connection - the exec never
+# reached the pod, so nothing ran and no real failure is hidden. A command that
+# did run and exited non-zero passes through untouched, because masking that is
+# precisely what summarize/validate-arm.sh exists to catch.
+riid_kubectl() {
+  local attempt=1 max="${RIID_KUBECTL_CONNECT_RETRIES:-3}" err rc
+  err="$(mktemp)"
+  while :; do
+    rc=0
+    kubectl "$@" 2>"$err" || rc=$?
+    cat "$err" >&2
+    if ((rc != 0)) && ((attempt < max)) && grep -qE \
+        'connect: connection (timed out|refused)|connect: no route to host|Unable to connect to the server|TLS handshake timeout' "$err"; then
+      echo "riid_kubectl: API unreachable, attempt $attempt/$max failed, retrying in 5s" >&2
+      attempt=$((attempt + 1))
+      sleep 5
+      continue
+    fi
+    rm -f "$err"
+    return "$rc"
+  done
+}
+
 # kubectl exec into the bench pod. Every engine command goes through it.
 riid_engine_exec() {
   local pod="$1"
   shift
-  kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- "$@"
+  riid_kubectl -n "$NS" exec -c "$CONTAINER" "$pod" -- "$@"
 }
 
 # Reads a single value from config/.env literally.

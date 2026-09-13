@@ -35,10 +35,9 @@ fi
 
 mkdir -p "$(dirname "${OUT}")"
 if [[ -n "${ENV_FILE}" && -f "${ENV_FILE}" && -r "${ENV_FILE}" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-  set +a
+  # shellcheck source=../../cluster/Selectel/stand-common/load-env.inc.sh
+  . "${SCRIPT_DIR}/../../cluster/Selectel/stand-common/load-env.inc.sh"
+  riid_load_env "${ENV_FILE}"
 fi
 
 python3 "${EMIT}" "${SELECTEL_YAML}" >"${OUT}"

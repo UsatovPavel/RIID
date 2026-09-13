@@ -5,6 +5,8 @@ cluster_topology:
   workers: 10
   observers: 1
   registry_nodes: 1
+  # Выделенные ноды под control plane Dragonfly: scheduler и manager+MySQL+Redis.
+  dragonfly_infra_nodes: 2
 dragonfly:
   seed_clients: 3
 network_parameters:

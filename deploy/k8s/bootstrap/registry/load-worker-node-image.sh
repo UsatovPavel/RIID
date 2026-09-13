@@ -23,14 +23,12 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
+# shellcheck source=../../providers/cluster/Selectel/stand-common/load-env.inc.sh
+. "$REPO_ROOT/deploy/k8s/providers/cluster/Selectel/stand-common/load-env.inc.sh"
+riid_load_env "$ENV_FILE"
 if [[ -n "$EXTRA_ENV_FILE" && "$EXTRA_ENV_FILE" != "$ENV_FILE" && -f "$EXTRA_ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  source "$EXTRA_ENV_FILE"
+  riid_load_env "$EXTRA_ENV_FILE"
 fi
-set +a
 
 # shellcheck source=registry-prefix-from-env.inc.sh
 source "$DIR/registry-prefix-from-env.inc.sh"

@@ -47,10 +47,9 @@ PROFILE_YAML="$PROFILE_DIR/${PROFILE}.yaml"
   exit 1
 }
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+# shellcheck source=../../providers/cluster/Selectel/stand-common/load-env.inc.sh
+. "$K8S_DIR/providers/cluster/Selectel/stand-common/load-env.inc.sh"
+riid_load_env "$ENV_FILE"
 
 case "$PROFILE" in
   dockerhub)

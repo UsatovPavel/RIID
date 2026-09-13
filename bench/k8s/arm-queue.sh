@@ -201,15 +201,36 @@ set_podman_cli_mode() {
   say "  podman CLI mode=${want}"
 }
 
+# kubectl logs serves only the *current* container log file and kubelet rotates
+# that at 10Mi, so AGENT-117 kept 87s of a 427s arm. Dragonfly keeps its own
+# rotating copy under /var/log/dragonfly (6 files); take that too. Verified:
+# client v1.3.8 and scheduler v2.4.4-rc.1 both ship tar.
+export_file_logs() {
+  local ns="$1" pod="$2" container="$3" dest="$4"
+  mkdir -p "$dest"
+  kube -n "$ns" exec "$pod" -c "$container" -- \
+    tar cf - -C /var/log/dragonfly . 2>/dev/null | tar xf - -C "$dest" 2>/dev/null
+  if [ -z "$(find "$dest" -type f -size +0c -print -quit 2>/dev/null)" ]; then
+    rm -rf "$dest"
+    say "  no on-disk log from $pod ($container); only the stdout copy survives"
+  fi
+}
+
 export_logs() {
   local arm="$1" out="$2/$1"
   mkdir -p "$out"/{dfdaemon,scheduler,seed,riid}
   for p in $(kube -n dragonfly-system get pods -l app=dragonfly,component=client -o name 2>/dev/null); do
-    kube -n dragonfly-system logs "${p#pod/}" -c client --tail=1000000 --timestamps > "$out/dfdaemon/${p#pod/}.log" 2>/dev/null; done
+    kube -n dragonfly-system logs "${p#pod/}" -c client --tail=1000000 --timestamps > "$out/dfdaemon/${p#pod/}.log" 2>/dev/null
+    export_file_logs dragonfly-system "${p#pod/}" client "$out/dfdaemon-files/${p#pod/}"
+  done
   for p in $(kube -n dragonfly-system get pods -l app=dragonfly,component=scheduler -o name 2>/dev/null); do
-    kube -n dragonfly-system logs "${p#pod/}" -c scheduler --tail=1000000 --timestamps > "$out/scheduler/${p#pod/}.log" 2>/dev/null; done
+    kube -n dragonfly-system logs "${p#pod/}" -c scheduler --tail=1000000 --timestamps > "$out/scheduler/${p#pod/}.log" 2>/dev/null
+    export_file_logs dragonfly-system "${p#pod/}" scheduler "$out/scheduler-files/${p#pod/}"
+  done
   for p in $(kube -n dragonfly-system get pods -l app=dragonfly,component=seed-client -o name 2>/dev/null); do
-    kube -n dragonfly-system logs "${p#pod/}" -c seed-client --tail=1000000 --timestamps > "$out/seed/${p#pod/}.log" 2>/dev/null; done
+    kube -n dragonfly-system logs "${p#pod/}" -c seed-client --tail=1000000 --timestamps > "$out/seed/${p#pod/}.log" 2>/dev/null
+    export_file_logs dragonfly-system "${p#pod/}" seed-client "$out/seed-files/${p#pod/}"
+  done
   for p in $(kube -n riid-system get pods -l app.kubernetes.io/name=riid -o name 2>/dev/null); do
     kube -n riid-system logs "${p#pod/}" -c riid --tail=1000000 --timestamps > "$out/riid/${p#pod/}.log" 2>/dev/null
     # A pod that died mid-arm is replaced, and the export then captures the
@@ -224,8 +245,8 @@ export_logs() {
   kube -n riid-system get events --sort-by=.lastTimestamp > "$out/riid/events.txt" 2>/dev/null
   kube get nodes -o wide > "$out/riid/nodes.txt" 2>/dev/null
   { echo "# $arm"; echo "captured: $(date -Is)"; echo;
-    find "$out" -type f -name '*.log' -printf '%p %s bytes\n' | sort; } > "$out/README.md"
-  ( cd "$out" && find . -type f -name '*.log' -exec sha256sum {} + > SHA256SUMS 2>/dev/null )
+    find "$out" -type f \( -name '*.log*' -o -path '*-files/*' \) -printf '%p %s bytes\n' | sort; } > "$out/README.md"
+  ( cd "$out" && find . -type f \( -name '*.log*' -o -path '*-files/*' \) -exec sha256sum {} + > SHA256SUMS 2>/dev/null )
 }
 
 # A failed stand is not a failed arm. Cycling to the next arm just burns another
@@ -436,26 +457,15 @@ run_one() {
   # A zstd arm already writes to its own arm-named file via OUTPUT_TSV, so the
   # arm-named copy would be the file onto itself.
   [ "$tsv" = "$PERF/output/${arm}.tsv" ] || cp "$tsv" "$PERF/output/${arm}.tsv"
-  say "  images=$(awk -F, 'NR>1 && $4=="AGGREGATE"' "$tsv" | wc -l)/20 failures=$(awk -F, 'NR>1 && $9!=0 && $9!=""' "$tsv" | wc -l)"
-  awk -F, 'NR>1 && $4=="AGGREGATE"{s+=$8} END{if(s>0) printf "  sum AGGREGATE: %.1f s\n", s/1000}' "$tsv"
-  grep registry_tx_bytes_delta "$tsv" | awk -F'\t' '{printf "  egress: %.2f GiB\n", $2/1073741824}'
-  case "$arm" in riid-*|dfinit-*)
-    say "  p2p=$(grep -ho 'Source fetched: p2p' "$log/$arm"/riid/*.log 2>/dev/null | wc -l) registry=$(grep -ho 'Source fetched: registry' "$log/$arm"/riid/*.log 2>/dev/null | wc -l)"
-    # One line per event, but the substring occurs twice inside it (once as the
-    # prefix of NeedBackToSourceResponse, once in its description), so grep -o
-    # doubles the count. Match the line instead of the substring and the /2 that
-    # used to compensate is no longer needed. These events land in the SEED logs:
-    # a zero here means the seed tier never fetched anything, which is what
-    # separated dfinit-containerd (0, egress x1.83) from riid-containerd (222,
-    # egress x1.25) - the counter is a seed-participation signal, not noise.
-    say "  NeedBackToSource(tx)=$(grep -hc 'need back to source response' "$log/$arm"/seed/*.log "$log/$arm"/dfdaemon/*.log 2>/dev/null | paste -sd+ | bc)"
-    # A throw from the puller's close() discards an already-finished P2P
-    # download, and the layer is then paid for a second time from the registry.
-    # The rate is a race, not a property of the arm, so it has to be reported
-    # next to the timing or two riid arms are comparing noise.
-    say "  p2p-discarded-after-download=$(grep -ho 'failed to close dragonfly puller' "$log/$arm"/riid/*.log 2>/dev/null | wc -l)"
-    ;;
-  esac
+  # One gate, shared with a Selectel run that has no queue around it:
+  # deploy/k8s/performance/summarize/validate-arm.sh. An arm that fails it is not
+  # marked done, so the queue retries it instead of recording a plain pull as P2P.
+  vout=$(bash "$PERF/summarize/validate-arm.sh" "$arm" "$tsv" "$log/$arm" 2>&1); vrc=$?
+  printf '%s\n' "$vout" | while IFS= read -r vline; do say "$vline"; done
+  if [ "$vrc" -ne 0 ]; then
+    say "$arm: not marked done - see the failed checks above"
+    return 1
+  fi
   touch "$STATE/$arm.done"
   say "  riid image: $(kube -n riid-system get ds riid -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
   say "$arm: DONE -> ${arm}.agent99-${stamp}.tsv"
