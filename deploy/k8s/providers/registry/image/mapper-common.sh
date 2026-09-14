@@ -34,10 +34,11 @@ resolve_registry_prefix() {
     return 1
   fi
 
-  set -a
-  # shellcheck disable=SC1090
-  source "$env_file"
-  set +a
+  # Not `set -a; source`: bash expands $, ` and < inside unquoted values, so a
+  # password containing them is truncated or interpreted as a redirect.
+  # shellcheck source=../../cluster/Selectel/stand-common/load-env.inc.sh
+  source "${MAPPER_COMMON_DIR}/../../cluster/Selectel/stand-common/load-env.inc.sh"
+  riid_load_env "$env_file"
 
   local sel_raw="${REGISTRY_SELECTEL_NAME:-}"
   : "${sel_raw:?mapper: REGISTRY_SELECTEL_NAME is required in $env_file for selectel overlay (imagelist/selectel.yaml)}"

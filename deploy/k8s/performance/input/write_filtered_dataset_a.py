@@ -25,15 +25,17 @@ PROVIDER_REPO_PREFIX = {"dockerhub": "", "selectel": "riid", "local": "riid"}
 def provider_repo(canonical_repo: str, provider: str) -> str:
     """Maps a filter.tsv canonical repo to the --source file's repository column.
 
-    Matches the convention already baked into dataset_selectel_a.tsv /
-    dataset_local_a.tsv: drop a leading "library/" (Docker Hub's implicit
-    namespace), then prepend the provider's registry namespace, if any.
+    dataset_selectel_a.tsv / dataset_local_a.tsv replace Docker Hub's implicit
+    "library/" namespace with their own prefix, so it is dropped only when a
+    prefix is added; dataset_dockerhub_a.tsv keeps "library/" and is matched verbatim.
     """
+    prefix = PROVIDER_REPO_PREFIX.get(provider, "")
+    if not prefix:
+        return canonical_repo
     repo = canonical_repo
     if repo.startswith("library/"):
         repo = repo[len("library/") :]
-    prefix = PROVIDER_REPO_PREFIX.get(provider, "")
-    return f"{prefix}/{repo}" if prefix else repo
+    return f"{prefix}/{repo}"
 
 
 def read_tsv_rows(path: Path) -> list[tuple[str, ...]]:

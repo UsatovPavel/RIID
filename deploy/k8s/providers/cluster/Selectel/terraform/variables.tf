@@ -114,6 +114,26 @@ variable "volume_gb" {
 # data at all); registry's dataset and monitoring's VictoriaMetrics+Grafana
 # emptyDir are the only infra roles that actually write to the node's own disk,
 # and even registry's dataset lives in its own 30Gi PVC, not the boot disk.
+# registry:2 holds the whole burst in its Go heap, not in page cache: 10 nodes x
+# 33 layers of one image are 330 concurrent back-to-source range reads, and on
+# 2026-09-13 that grew anon to 5050 MiB against a 5 GiB cgroup. It never OOMed,
+# it stalled - memory.pressure full avg10 89.6%, 652 hits on memory.max.
+variable "infra_cpus" {
+  description = "vCPU per infra node, keyed by role. Roles absent here fall back to var.cpus. Ignored when flavor_id is set."
+  type        = map(number)
+  default = {
+    registry = 8
+  }
+}
+
+variable "infra_ram_mb" {
+  description = "RAM per infra node in MiB, keyed by role. Roles absent here fall back to var.ram_mb. Ignored when flavor_id is set."
+  type        = map(number)
+  default = {
+    registry = 16384
+  }
+}
+
 variable "infra_volume_gb" {
   description = "Boot disk per infra node, GiB, keyed by role (monitoring/registry/scheduler/manager). Only used when dedicated_infra_nodes is true."
   type        = map(number)

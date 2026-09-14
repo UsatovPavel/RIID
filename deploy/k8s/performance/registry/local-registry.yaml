@@ -50,18 +50,18 @@ spec:
         - name: registry
           image: performance.local_registry
           imagePullPolicy: IfNotPresent
-          # Both ends of this were measured on 2026-09-11. With no limit the page
-          # cache from one 2.4 GiB blob filled the node's 5.86 GiB allocatable and
-          # kubelet evicted the registry itself; at 4Gi the cgroup starved under a
-          # riid-podman arm (10 pods x 4 concurrent fetches) until exec could not
-          # even start. 5Gi bounds the cache and still leaves the node headroom.
+          # The burst lives in registry:2's Go heap, not in page cache: 10 nodes x
+          # 33 layers = 330 concurrent back-to-source reads grew anon to 5050 MiB
+          # and 5Gi stalled it (memory.pressure full avg10 89.6%, 652 hits on
+          # memory.max, no OOM kill, never recovered). The registry node is 8 vCPU
+          # / 16 GiB for this; 10Gi leaves the heap room and the node headroom.
           # No CPU limit: throttling here would land inside the measured pull.
           resources:
             requests:
               cpu: 200m
               memory: 2Gi
             limits:
-              memory: 5Gi
+              memory: 10Gi
           ports:
             - name: http
               containerPort: 5000

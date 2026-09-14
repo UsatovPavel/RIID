@@ -99,8 +99,8 @@ resource "selectel_mks_nodegroup_v1" "infra" {
   volume_type = local.volume_type
 
   flavor_id = var.flavor_id
-  cpus      = var.flavor_id == null ? var.cpus : null
-  ram_mb    = var.flavor_id == null ? var.ram_mb : null
+  cpus      = var.flavor_id == null ? lookup(var.infra_cpus, each.key, var.cpus) : null
+  ram_mb    = var.flavor_id == null ? lookup(var.infra_ram_mb, each.key, var.ram_mb) : null
 
   install_nvidia_device_plugin = false
   labels                       = merge(var.labels, { (each.value.label) = "true" })
